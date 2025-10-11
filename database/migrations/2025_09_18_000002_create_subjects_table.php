@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('subjects', function (Blueprint $table) {
             $table->id();
             $table->foreignId('grade_id')->constrained()->onDelete('cascade');
-            $table->unsignedBigInteger('created_by')->nullable(); // tutor id
+            $table->unsignedBigInteger('created_by')->nullable(); // quiz-master id
             $table->string('name');
             $table->text('description')->nullable();
             $table->boolean('is_approved')->default(false);

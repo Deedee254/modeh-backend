@@ -1,16 +1,16 @@
 <?php
 
-namespace App\Filament\Resources\Students\Schemas;
+namespace App\Filament\Resources\quizees\Schemas;
 
 use Filament\Schemas\Schema;
 
-class StudentForm
+class quizeeForm
 {
     public static function configure(Schema $schema): Schema
     {
         return $schema
             ->components([
-                \Filament\Forms\Components\Section::make('Student Information')
+                \Filament\Forms\Components\Section::make('quizee Information')
                     ->schema([
                         \Filament\Forms\Components\TextInput::make('user.name')
                             ->required()

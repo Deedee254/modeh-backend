@@ -23,7 +23,7 @@ class QuestionController extends Controller
         // the request explicitly asks for banked/random questions (used by
         // battles/daily-challenge). When `for_battle=1` or `random=1` or
         // `banked=1` is present we return banked/global questions and ignore
-        // the created_by restriction so non-admin students can fetch the
+        // the created_by restriction so non-admin quizees can fetch the
         // public question bank.
         $user = $request->user();
         $query = Question::query();
@@ -59,12 +59,12 @@ class QuestionController extends Controller
 
     /**
      * Public question bank endpoint: returns global banked/random questions
-     * with optional filters. This keeps tutor listing (`index`) separate.
+     * with optional filters. This keeps quiz-master listing (`index`) separate.
      */
     public function bank(Request $request)
     {
         $query = Question::query();
-        // The public question bank is independent of any tutor-set `for_battle` flag.
+        // The public question bank is independent of any quiz-master-set `for_battle` flag.
         // We intentionally do not filter by `for_battle` here.
         if ($grade = $request->get('grade_id')) $query->where('grade_id', $grade);
         if ($subject = $request->get('subject_id')) $query->where('subject_id', $subject);
@@ -80,7 +80,7 @@ class QuestionController extends Controller
 
         // When fetching the public bank, exclude the requesting user's own
         // banked questions to match the expectations of client code and tests
-        // which assume the tutor won't receive their own questions in this
+        // which assume the quiz-master won't receive their own questions in this
         // public listing.
         $user = $request->user();
         if ($user) {
@@ -112,7 +112,7 @@ class QuestionController extends Controller
             'topic_id' => 'nullable|exists:topics,id',
             'grade_id' => 'nullable|exists:grades,id',
             'for_battle' => 'nullable|boolean',
-            'is_tutor_marked' => 'nullable|boolean',
+            'is_quiz-master_marked' => 'nullable|boolean',
             'difficulty' => 'nullable|integer|min:1|max:5',
             'media' => 'nullable|file|max:10240|mimes:jpeg,png,jpg,gif,mp3,wav,ogg,m4a,mp4,webm',
             'youtube_url' => 'nullable|string|regex:/^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/',
@@ -202,7 +202,7 @@ class QuestionController extends Controller
             'youtube_url' => $youtubeUrl,
             'media_metadata' => $mediaMetadata,
             'difficulty' => $request->get('difficulty', 3),
-            'is_tutor_marked' => $request->get('is_tutor_marked', false),
+            'is_quiz-master_marked' => $request->get('is_quiz-master_marked', false),
             'is_approved' => false,
             'tags' => $request->get('tags'),
             'hint' => $request->get('hint'),
@@ -246,7 +246,7 @@ class QuestionController extends Controller
             'topic_id' => 'nullable|exists:topics,id',
             'grade_id' => 'nullable|exists:grades,id',
             'for_battle' => 'nullable|boolean',
-            'is_tutor_marked' => 'nullable|boolean',
+            'is_quiz-master_marked' => 'nullable|boolean',
             'difficulty' => 'nullable|integer|min:1|max:5',
             'media' => 'nullable|file|max:10240',
         ]);
@@ -266,7 +266,7 @@ class QuestionController extends Controller
         $question->fill($request->only(['type', 'body', 'options', 'difficulty']));
         if (!is_null($answers)) $question->answers = $answers;
         // additional fields
-        foreach (['tags','hint','solution_steps','subject_id','topic_id','grade_id','for_battle','is_tutor_marked'] as $f) {
+        foreach (['tags','hint','solution_steps','subject_id','topic_id','grade_id','for_battle','is_quiz-master_marked'] as $f) {
             if ($request->has($f)) $question->{$f} = $request->get($f);
         }
         $question->save();

@@ -18,7 +18,7 @@ class TopicController extends Controller
         $this->middleware('auth:sanctum')->except(['index']);
     }
 
-    // Tutor uploads an image for a topic
+    // quiz-master uploads an image for a topic
     public function uploadImage(Request $request, Topic $topic)
     {
         $user = $request->user();
@@ -88,7 +88,7 @@ class TopicController extends Controller
             return response()->json(['topics' => $data]);
     }
 
-    // Tutor creates a topic under a subject (subject must be approved)
+    // quiz-master creates a topic under a subject (subject must be approved)
     public function store(Request $request)
     {
         $v = Validator::make($request->all(), [

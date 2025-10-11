@@ -22,9 +22,9 @@ class UserBadge extends Model
         'earned_at' => 'datetime',
     ];
 
-    public function student()
+    public function quizee()
     {
-        return $this->belongsTo(Student::class);
+        return $this->belongsTo(quizee::class);
     }
 
     public function badge()

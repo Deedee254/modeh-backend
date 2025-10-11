@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Quiz;
-use App\Models\Tutor;
+use App\Models\quiz-master;
 use Illuminate\Support\Facades\DB;
 
 class InteractionController extends Controller
@@ -25,17 +25,17 @@ class InteractionController extends Controller
         return response()->json(['liked' => false]);
     }
 
-    public function followTutor(Request $request, $tutorId)
+    public function followquiz-master(Request $request, $quiz-masterId)
     {
         $user = $request->user();
-        DB::table('tutor_follows')->updateOrInsert(['tutor_id' => $tutorId, 'user_id' => $user->id], ['created_at' => now(), 'updated_at' => now()]);
+        DB::table('quiz-master_follows')->updateOrInsert(['quiz-master_id' => $quiz-masterId, 'user_id' => $user->id], ['created_at' => now(), 'updated_at' => now()]);
         return response()->json(['following' => true]);
     }
 
-    public function unfollowTutor(Request $request, $tutorId)
+    public function unfollowquiz-master(Request $request, $quiz-masterId)
     {
         $user = $request->user();
-        DB::table('tutor_follows')->where(['tutor_id' => $tutorId, 'user_id' => $user->id])->delete();
+        DB::table('quiz-master_follows')->where(['quiz-master_id' => $quiz-masterId, 'user_id' => $user->id])->delete();
         return response()->json(['following' => false]);
     }
 }

@@ -23,7 +23,7 @@ class WalletController extends Controller
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
-        $q = Transaction::query()->where('tutor_id', $user->id)->orderBy('created_at', 'desc');
+        $q = Transaction::query()->where('quiz-master_id', $user->id)->orderBy('created_at', 'desc');
         if ($request->filled('quiz_id')) $q->where('quiz_id', $request->quiz_id);
         if ($request->filled('from')) $q->where('created_at', '>=', $request->from);
         if ($request->filled('to')) $q->where('created_at', '<=', $request->to);
@@ -46,9 +46,9 @@ class WalletController extends Controller
         $wallet->available = bcsub($wallet->available, $amount, 2);
         $wallet->save();
 
-        $wr = WithdrawalRequest::create(['tutor_id' => $user->id, 'amount' => $amount, 'method' => $request->input('method', 'mpesa'), 'status' => 'pending', 'meta' => $request->input('meta', [])]);
+        $wr = WithdrawalRequest::create(['quiz-master_id' => $user->id, 'amount' => $amount, 'method' => $request->input('method', 'mpesa'), 'status' => 'pending', 'meta' => $request->input('meta', [])]);
 
-        // Broadcast new withdrawal request to tutor (and admins if needed)
+        // Broadcast new withdrawal request to quiz-master (and admins if needed)
         try {
             event(new \App\Events\WithdrawalRequestUpdated($wr->toArray(), $user->id));
         } catch (\Throwable $e) {
@@ -62,12 +62,12 @@ class WalletController extends Controller
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
-        $list = WithdrawalRequest::where('tutor_id', $user->id)->orderBy('created_at', 'desc')->get();
+        $list = WithdrawalRequest::where('quiz-master_id', $user->id)->orderBy('created_at', 'desc')->get();
         return response()->json(['ok' => true, 'withdrawals' => $list]);
     }
 
     /**
-     * Return rewards summary for the authenticated student
+     * Return rewards summary for the authenticated quizee
      * { points, vouchers, nextThreshold, package (optional) }
      */
     public function rewardsMy()

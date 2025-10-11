@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Filament\Resources\Tutors\Schemas;
+namespace App\Filament\Resources\quiz-masters\Schemas;
 
 use Filament\Schemas\Schema;
 
-class TutorInfolist
+class quiz-masterInfolist
 {
     public static function configure(Schema $schema): Schema
     {

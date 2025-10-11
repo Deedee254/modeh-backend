@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Resources\Students\Tables;
+namespace App\Filament\Resources\quizees\Tables;
 
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -8,7 +8,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Table;
 
-class StudentsTable
+class quizeesTable
 {
     public static function configure(Table $table): Table
     {

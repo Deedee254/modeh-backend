@@ -35,8 +35,8 @@ class DailyChallenge extends Model
         return $this->belongsTo(Subject::class);
     }
 
-    public function students()
+    public function quizees()
     {
-        return $this->belongsToMany(Student::class, 'user_daily_challenges')->withPivot('completed_at')->withTimestamps();
+        return $this->belongsToMany(quizee::class, 'user_daily_challenges')->withPivot('completed_at')->withTimestamps();
     }
 }

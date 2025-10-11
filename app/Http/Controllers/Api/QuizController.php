@@ -52,7 +52,7 @@ class QuizController extends Controller
         return response()->json(['quizzes' => $data]);
     }
 
-    // Tutor creates a quiz under a topic (topic must be approved)
+    // quiz-master creates a quiz under a topic (topic must be approved)
     public function store(Request $request)
     {
         $user = $request->user();
@@ -157,7 +157,7 @@ class QuizController extends Controller
                         'media_path' => $mediaPath,
                         'media_type' => $mediaType,
                         'difficulty' => $q['difficulty'] ?? 3,
-                        'is_tutor_marked' => true,
+                        'is_quiz-master_marked' => true,
                         'is_approved' => false,
                         'is_banked' => $isBanked,
                         'tags' => $q['tags'] ?? null,

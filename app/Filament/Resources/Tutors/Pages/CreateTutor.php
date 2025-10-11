@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Filament\Resources\Tutors\Pages;
+namespace App\Filament\Resources\quiz-masters\Pages;
 
-use App\Filament\Resources\Tutors\TutorResource;
+use App\Filament\Resources\quiz-masters\quiz-masterResource;
 use Filament\Resources\Pages\CreateRecord;
 
-class CreateTutor extends CreateRecord
+class Createquiz-master extends CreateRecord
 {
-    protected static string $resource = TutorResource::class;
+    protected static string $resource = quiz-masterResource::class;
 }

@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('topic_id')->constrained()->onDelete('cascade');
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->unsignedBigInteger('created_by')->nullable(); // tutor id
+            $table->unsignedBigInteger('created_by')->nullable(); // quiz-master id
             $table->string('title');
             $table->text('description')->nullable();
             $table->string('youtube_url')->nullable();

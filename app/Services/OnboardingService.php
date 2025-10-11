@@ -38,8 +38,8 @@ class OnboardingService
                 case 'institution':
                     $onboarding->institution_added = true;
                     break;
-                case 'role_student':
-                case 'role_tutor':
+                case 'role_quizee':
+                case 'role_quiz-master':
                     $onboarding->role_selected = true;
                     break;
                 case 'grade':

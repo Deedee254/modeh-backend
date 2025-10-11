@@ -77,11 +77,11 @@ class SocialAuthController extends Controller
         // Based on role, determine next step
         $completedSteps = $onboarding->completed_steps ?? [];
 
-        if (in_array('role_student', $completedSteps) && !$onboarding->grade_selected) {
+        if (in_array('role_quizee', $completedSteps) && !$onboarding->grade_selected) {
             return 'grade';
         }
 
-        if (in_array('role_tutor', $completedSteps) && !$onboarding->subject_selected) {
+        if (in_array('role_quiz-master', $completedSteps) && !$onboarding->subject_selected) {
             return 'subjects';
         }
 

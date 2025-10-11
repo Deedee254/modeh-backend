@@ -1,15 +1,15 @@
 <?php
 
-namespace App\Filament\Resources\Tutors\Pages;
+namespace App\Filament\Resources\quiz-masters\Pages;
 
-use App\Filament\Resources\Tutors\TutorResource;
+use App\Filament\Resources\quiz-masters\quiz-masterResource;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
 
-class EditTutor extends EditRecord
+class Editquiz-master extends EditRecord
 {
-    protected static string $resource = TutorResource::class;
+    protected static string $resource = quiz-masterResource::class;
 
     protected function getHeaderActions(): array
     {

@@ -53,7 +53,7 @@ class SubjectController extends Controller
         return response()->json(['subjects' => $data]);
     }
 
-    // Tutor proposes a subject under a grade
+    // quiz-master proposes a subject under a grade
     public function store(Request $request)
     {
         $v = Validator::make($request->all(), [
@@ -97,7 +97,7 @@ class SubjectController extends Controller
         return response()->json(['subject' => $subject]);
     }
 
-    // Tutor/admin can upload an icon for a subject
+    // quiz-master/admin can upload an icon for a subject
     public function uploadIcon(Request $request, Subject $subject)
     {
         $user = $request->user();

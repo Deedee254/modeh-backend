@@ -4,25 +4,25 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\User;
-use App\Models\Student;
+use App\Models\quizee;
 use Illuminate\Support\Facades\Hash;
 
-class StudentSeeder extends Seeder
+class quizeeSeeder extends Seeder
 {
     public function run()
     {
         $user = User::updateOrCreate([
-            'email' => 'student@example.com',
+            'email' => 'quizee@example.com',
         ],[
-            'name' => 'Student One',
+            'name' => 'quizee One',
             'password' => Hash::make('password123'),
-            'role' => 'student',
+            'role' => 'quizee',
         ]);
 
-        Student::updateOrCreate([
+        quizee::updateOrCreate([
             'user_id' => $user->id,
         ],[
-            'profile' => 'Seeded student',
+            'profile' => 'Seeded quizee',
         ]);
     }
 }

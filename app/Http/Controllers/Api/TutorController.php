@@ -7,53 +7,53 @@ use App\Models\User;
 use App\Models\Subject;
 use Illuminate\Http\Request;
 
-class TutorController extends Controller
+class quiz-masterController extends Controller
 {
     /**
-     * Display a listing of public tutor profiles.
+     * Display a listing of public quiz-master profiles.
      */
     public function index()
     {
-        // Get users who have a tutor profile, eager-load it, and paginate.
-        $tutors = User::whereHas('tutorProfile')->with('tutorProfile')->paginate(12);
+        // Get users who have a quiz-master profile, eager-load it, and paginate.
+        $quiz-masters = User::whereHas('quiz-masterProfile')->with('quiz-masterProfile')->paginate(12);
 
         // Transform the collection for the frontend.
-        $tutors->getCollection()->transform(function ($user) {
+        $quiz-masters->getCollection()->transform(function ($user) {
             return [
                 'id' => $user->id,
                 'name' => $user->name,
                 'avatar' => $user->social_avatar,
-                'headline' => $user->tutorProfile->headline ?? 'Experienced Tutor',
+                'headline' => $user->quiz-masterProfile->headline ?? 'Experienced quiz-master',
             ];
         });
 
-        return response()->json($tutors);
+        return response()->json($quiz-masters);
     }
 
     /**
-     * Display a single public tutor profile.
+     * Display a single public quiz-master profile.
      */
     public function show(string $id)
     {
         // Find the user and eager-load all necessary relationships.
-        $user = User::with(['tutorProfile', 'quizzes.topic'])->findOrFail($id);
+        $user = User::with(['quiz-masterProfile', 'quizzes.topic'])->findOrFail($id);
 
-        // Ensure the user has a tutor profile.
-        if (!$user->tutorProfile) {
-            return response()->json(['message' => 'Tutor not found'], 404);
+        // Ensure the user has a quiz-master profile.
+        if (!$user->quiz-masterProfile) {
+            return response()->json(['message' => 'quiz-master not found'], 404);
         }
 
-        // The 'subjects' field on the tutor profile is a JSON array of subject IDs.
+        // The 'subjects' field on the quiz-master profile is a JSON array of subject IDs.
         // We need to fetch the full subject models for the frontend.
-        $subjectIds = $user->tutorProfile->subjects ?? [];
+        $subjectIds = $user->quiz-masterProfile->subjects ?? [];
         $subjects = Subject::whereIn('id', $subjectIds)->get(['id', 'name']);
 
         return response()->json(['data' => [
             'id' => $user->id,
             'name' => $user->name,
             'avatar' => $user->social_avatar,
-            'headline' => $user->tutorProfile->headline ?? 'Experienced Tutor',
-            'bio' => $user->tutorProfile->bio,
+            'headline' => $user->quiz-masterProfile->headline ?? 'Experienced quiz-master',
+            'bio' => $user->quiz-masterProfile->bio,
             'subjects' => $subjects, // Now an array of objects
             'quizzes' => $user->quizzes->map(function ($quiz) {
                 return [

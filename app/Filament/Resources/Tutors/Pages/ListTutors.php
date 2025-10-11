@@ -1,14 +1,14 @@
 <?php
 
-namespace App\Filament\Resources\Tutors\Pages;
+namespace App\Filament\Resources\quiz-masters\Pages;
 
-use App\Filament\Resources\Tutors\TutorResource;
+use App\Filament\Resources\quiz-masters\quiz-masterResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
-class ListTutors extends ListRecords
+class Listquiz-masters extends ListRecords
 {
-    protected static string $resource = TutorResource::class;
+    protected static string $resource = quiz-masterResource::class;
 
     protected function getHeaderActions(): array
     {

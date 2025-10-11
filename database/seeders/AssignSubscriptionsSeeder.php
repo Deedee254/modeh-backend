@@ -4,13 +4,13 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\Package;
-use App\Models\Student;
+use App\Models\quizee;
 use App\Models\Subscription;
 
 class AssignSubscriptionsSeeder extends Seeder
 {
     /**
-     * Assign every student a subscription to a default package (idempotent).
+     * Assign every quizee a subscription to a default package (idempotent).
      */
     public function run()
     {
@@ -22,13 +22,13 @@ class AssignSubscriptionsSeeder extends Seeder
             return;
         }
 
-        $students = Student::with('user')->get();
-        $this->command->info('Found '.$students->count().' student records. Assigning subscriptions...');
+        $quizees = quizee::with('user')->get();
+        $this->command->info('Found '.$quizees->count().' quizee records. Assigning subscriptions...');
 
-        foreach ($students as $student) {
-            $user = $student->user;
+        foreach ($quizees as $quizee) {
+            $user = $quizee->user;
             if (!$user) {
-                $this->command->warn('Student id '.$student->id.' has no linked user; skipping.');
+                $this->command->warn('quizee id '.$quizee->id.' has no linked user; skipping.');
                 continue;
             }
 

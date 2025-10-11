@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('tutors', function (Blueprint $table) {
+        Schema::create('quiz-masters', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
             $table->string('first_name')->nullable();
@@ -21,6 +21,6 @@ return new class extends Migration {
 
     public function down(): void
     {
-        Schema::dropIfExists('tutors');
+        Schema::dropIfExists('quiz-masters');
     }
 };

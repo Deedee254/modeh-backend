@@ -9,18 +9,18 @@ class Transaction extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['tx_id','user_id','tutor_id','quiz_id','amount','tutor_share','platform_share','gateway','meta','status'];
+    protected $fillable = ['tx_id','user_id','quiz-master_id','quiz_id','amount','quiz-master_share','platform_share','gateway','meta','status'];
 
     protected $casts = [
         'meta' => 'array',
         'amount' => 'decimal:2',
-        'tutor_share' => 'decimal:2',
+        'quiz-master_share' => 'decimal:2',
         'platform_share' => 'decimal:2',
     ];
 
-    public function tutor()
+    public function quiz-master()
     {
-        return $this->belongsTo(User::class, 'tutor_id');
+        return $this->belongsTo(User::class, 'quiz-master_id');
     }
 
     public function user()

@@ -1,16 +1,16 @@
 <?php
 
-namespace App\Filament\Resources\Tutors\Schemas;
+namespace App\Filament\Resources\quiz-masters\Schemas;
 
 use Filament\Schemas\Schema;
 
-class TutorForm
+class quiz-masterForm
 {
     public static function configure(Schema $schema): Schema
     {
         return $schema
             ->components([
-                \Filament\Forms\Components\Section::make('Tutor Information')
+                \Filament\Forms\Components\Section::make('quiz-master Information')
                     ->schema([
                         \Filament\Forms\Components\TextInput::make('user.name')
                             ->required()

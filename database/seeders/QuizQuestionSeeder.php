@@ -15,13 +15,13 @@ class QuizQuestionSeeder extends Seeder
 {
     public function run()
     {
-        // 1. Ensure the Tutor user exists
-        $tutor = User::firstOrCreate(
-            ['email' => 'tutor@example.com'],
+        // 1. Ensure the quiz-master user exists
+        $quiz-master = User::firstOrCreate(
+            ['email' => 'quiz-master@example.com'],
             [
-                'name' => 'Tutor One',
+                'name' => 'quiz-master One',
                 'password' => Hash::make('password123'),
-                'role' => 'tutor'
+                'role' => 'quiz-master'
             ]
         );
 
@@ -29,18 +29,18 @@ class QuizQuestionSeeder extends Seeder
         $grade = Grade::firstOrCreate(['name' => 'General Knowledge']);
         $subject = Subject::firstOrCreate(
             ['name' => 'Geography', 'grade_id' => $grade->id],
-            ['created_by' => $tutor->id, 'is_approved' => true]
+            ['created_by' => $quiz-master->id, 'is_approved' => true]
         );
         $topic = Topic::firstOrCreate(
             ['name' => 'World Capitals', 'subject_id' => $subject->id],
-            ['created_by' => $tutor->id, 'is_approved' => true]
+            ['created_by' => $quiz-master->id, 'is_approved' => true]
         );
 
         // 3. Create the main Quiz
         $quiz = Quiz::create([
             'topic_id' => $topic->id,
-            'user_id' => $tutor->id,
-            'created_by' => $tutor->id,
+            'user_id' => $quiz-master->id,
+            'created_by' => $quiz-master->id,
             'title' => 'A Tour of World Capitals',
             'description' => 'A quiz covering famous capital cities around the globe.',
             'is_approved' => true,
@@ -92,7 +92,7 @@ class QuizQuestionSeeder extends Seeder
         foreach ($questions as $questionData) {
             Question::create(array_merge($questionData, [
                 'quiz_id' => $quiz->id,
-                'created_by' => $tutor->id,
+                'created_by' => $quiz-master->id,
                 'is_approved' => true,
                 'is_banked' => true, // Add to question bank
                 'subject_id' => $subject->id,

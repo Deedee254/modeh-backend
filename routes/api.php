@@ -5,8 +5,8 @@ use App\Http\Controllers\Auth\SocialAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/register/student', [AuthController::class, 'registerStudent']);
-Route::post('/register/tutor', [AuthController::class, 'registerTutor']);
+Route::post('/register/quizee', [AuthController::class, 'registerquizee']);
+Route::post('/register/quiz-master', [AuthController::class, 'registerquiz-master']);
 
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.
@@ -33,8 +33,8 @@ Route::get('/grades', [\App\Http\Controllers\Api\GradeController::class, 'index'
 Route::get('/sponsors', [\App\Http\Controllers\Api\SponsorController::class, 'index']);
 // Public packages listing for pricing page
 Route::get('/packages', [\App\Http\Controllers\Api\PackageController::class, 'index']);
-Route::get('/tutors', [\App\Http\Controllers\Api\TutorController::class, 'index']);
-Route::get('/tutors/{id}', [\App\Http\Controllers\Api\TutorController::class, 'show']);
+Route::get('/quiz-masters', [\App\Http\Controllers\Api\quiz-masterController::class, 'index']);
+Route::get('/quiz-masters/{id}', [\App\Http\Controllers\Api\quiz-masterController::class, 'show']);
 
 // Public recommendations (grade-filtered, randomized) - available to anonymous users
 Route::get('/recommendations/quizzes', [\App\Http\Controllers\Api\RecommendationController::class, 'quizzes']);
@@ -52,16 +52,16 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/me/theme', [\App\Http\Controllers\Api\UserController::class, 'setTheme']);
     Route::get('/me/theme', [\App\Http\Controllers\Api\UserController::class, 'getTheme']);
 
-    // Tutor Quiz endpoints
+    // quiz-master Quiz endpoints
     Route::post('/quizzes', [\App\Http\Controllers\Api\QuizController::class, 'store']);
     // Admin approve quiz
     Route::post('/quizzes/{quiz}/approve', [\App\Http\Controllers\Api\QuizController::class, 'approve']);
 
-    // Student quiz take endpoints (show quiz without answers, submit answers)
+    // quizee quiz take endpoints (show quiz without answers, submit answers)
     Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\QuizAttemptController::class, 'submit']);
     // Fetch a user's attempt details
     Route::get('/quiz-attempts/{attempt}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'showAttempt']);
-    // List authenticated user's quiz attempts (student)
+    // List authenticated user's quiz attempts (quizee)
     Route::get('/quiz-attempts', [\App\Http\Controllers\Api\QuizAttemptController::class, 'index']);
     
     // Daily Challenge endpoints
@@ -86,7 +86,7 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/questions/{question}/approve', [\App\Http\Controllers\Api\QuestionController::class, 'approve']);
     Route::post('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'update']);
 
-    // Approval requests (tutor -> admin)
+    // Approval requests (quiz-master -> admin)
     Route::post('/{resource}/{id}/request-approval', [\App\Http\Controllers\Api\ApprovalRequestController::class, 'store']);
     
     // Notifications
@@ -137,13 +137,13 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
         Route::post('/admin/echo/prune', [\App\Http\Controllers\Api\EchoAdminController::class, 'prune']);
     });
     
-    // Wallet (tutor)
+    // Wallet (quiz-master)
     Route::get('/wallet', [\App\Http\Controllers\Api\WalletController::class, 'mine']);
     Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'transactions']);
     Route::post('/wallet/withdraw', [\App\Http\Controllers\Api\WalletController::class, 'requestWithdrawal']);
     Route::get('/wallet/withdrawals', [\App\Http\Controllers\Api\WalletController::class, 'myWithdrawals']);
     
-    // Student rewards endpoint (points, vouchers, next threshold)
+    // quizee rewards endpoint (points, vouchers, next threshold)
     Route::get('/rewards/my', [\App\Http\Controllers\Api\WalletController::class, 'rewardsMy']);
     
     // Packages & subscriptions
@@ -159,8 +159,8 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // Interactions
     Route::post('/quizzes/{quiz}/like', [\App\Http\Controllers\Api\InteractionController::class, 'likeQuiz']);
     Route::post('/quizzes/{quiz}/unlike', [\App\Http\Controllers\Api\InteractionController::class, 'unlikeQuiz']);
-    Route::post('/tutors/{tutor}/follow', [\App\Http\Controllers\Api\InteractionController::class, 'followTutor']);
-    Route::post('/tutors/{tutor}/unfollow', [\App\Http\Controllers\Api\InteractionController::class, 'unfollowTutor']);
+    Route::post('/quiz-masters/{quiz-master}/follow', [\App\Http\Controllers\Api\InteractionController::class, 'followquiz-master']);
+    Route::post('/quiz-masters/{quiz-master}/unfollow', [\App\Http\Controllers\Api\InteractionController::class, 'unfollowquiz-master']);
 
     // Direct Messages
     Route::get('/messages/contacts', [\App\Http\Controllers\Api\MessageController::class, 'contacts']);

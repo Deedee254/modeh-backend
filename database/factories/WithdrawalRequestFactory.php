@@ -12,7 +12,7 @@ class WithdrawalRequestFactory extends Factory
     public function definition(): array
     {
         return [
-            'tutor_id' => null,
+            'quiz-master_id' => null,
             'amount' => 0,
             'method' => null,
             'status' => 'pending',

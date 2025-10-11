@@ -1,29 +1,29 @@
 <?php
 
-namespace App\Filament\Resources\Tutors;
+namespace App\Filament\Resources\quiz-masters;
 
-use App\Filament\Resources\Tutors\Pages\CreateTutor;
-use App\Filament\Resources\Tutors\Pages\EditTutor;
-use App\Filament\Resources\Tutors\Pages\ListTutors;
-use App\Filament\Resources\Tutors\Pages\ViewTutor;
-use App\Filament\Resources\Tutors\Schemas\TutorForm;
-use App\Filament\Resources\Tutors\Schemas\TutorInfolist;
-use App\Filament\Resources\Tutors\Tables\TutorsTable;
-use App\Models\Tutor;
+use App\Filament\Resources\quiz-masters\Pages\Createquiz-master;
+use App\Filament\Resources\quiz-masters\Pages\Editquiz-master;
+use App\Filament\Resources\quiz-masters\Pages\Listquiz-masters;
+use App\Filament\Resources\quiz-masters\Pages\Viewquiz-master;
+use App\Filament\Resources\quiz-masters\Schemas\quiz-masterForm;
+use App\Filament\Resources\quiz-masters\Schemas\quiz-masterInfolist;
+use App\Filament\Resources\quiz-masters\Tables\quiz-mastersTable;
+use App\Models\quiz-master;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
-class TutorResource extends Resource
+class quiz-masterResource extends Resource
 {
-    protected static ?string $model = Tutor::class;
+    protected static ?string $model = quiz-master::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Briefcase;
-    protected static ?string $navigationLabel = 'Tutors';
-    protected static ?string $modelLabel = 'Tutor';
-    protected static ?string $pluralLabel = 'Tutors';
+    protected static ?string $navigationLabel = 'quiz-masters';
+    protected static ?string $modelLabel = 'quiz-master';
+    protected static ?string $pluralLabel = 'quiz-masters';
     protected static ?string $recordTitleAttribute = 'name';
 
     public static function getNavigationGroup(): ?string
@@ -33,17 +33,17 @@ class TutorResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return TutorForm::configure($schema);
+        return quiz-masterForm::configure($schema);
     }
 
     public static function infolist(Schema $schema): Schema
     {
-        return TutorInfolist::configure($schema);
+        return quiz-masterInfolist::configure($schema);
     }
 
     public static function table(Table $table): Table
     {
-        return TutorsTable::configure($table);
+        return quiz-mastersTable::configure($table);
     }
 
     public static function getRelations(): array
@@ -56,10 +56,10 @@ class TutorResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => ListTutors::route('/'),
-            'create' => CreateTutor::route('/create'),
-            'view' => ViewTutor::route('/{record}'),
-            'edit' => EditTutor::route('/{record}/edit'),
+            'index' => Listquiz-masters::route('/'),
+            'create' => Createquiz-master::route('/create'),
+            'view' => Viewquiz-master::route('/{record}'),
+            'edit' => Editquiz-master::route('/{record}/edit'),
         ];
     }
 }

@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Filament\Resources\Students\Pages;
+namespace App\Filament\Resources\quizees\Pages;
 
-use App\Filament\Resources\Students\StudentResource;
+use App\Filament\Resources\quizees\quizeeResource;
 use Filament\Resources\Pages\CreateRecord;
 
-class CreateStudent extends CreateRecord
+class Createquizee extends CreateRecord
 {
-    protected static string $resource = StudentResource::class;
+    protected static string $resource = quizeeResource::class;
 }

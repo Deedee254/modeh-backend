@@ -22,8 +22,8 @@ class Badge extends Model
         'criteria' => 'json',
     ];
 
-    public function students()
+    public function quizees()
     {
-        return $this->belongsToMany(Student::class, 'user_badges')->withPivot('earned_at', 'attempt_id')->withTimestamps();
+        return $this->belongsToMany(quizee::class, 'user_badges')->withPivot('earned_at', 'attempt_id')->withTimestamps();
     }
 }

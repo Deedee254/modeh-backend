@@ -23,7 +23,7 @@ class QuestionFactory extends Factory
             'answers' => json_encode([0]),
             'media_path' => null,
             'difficulty' => 3,
-            'is_tutor_marked' => false,
+            'is_quiz-master_marked' => false,
             'is_approved' => true,
             'is_banked' => false,
             'media_type' => null,

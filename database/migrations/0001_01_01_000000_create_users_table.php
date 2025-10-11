@@ -18,7 +18,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             // consolidated columns from later migrations
-            $table->enum('role', ['student', 'tutor', 'admin'])->default('student');
+            $table->enum('role', ['quizee', 'quiz-master', 'admin'])->default('quizee');
             $table->string('social_id')->nullable();
             $table->string('social_provider')->nullable();
             $table->string('social_avatar')->nullable();

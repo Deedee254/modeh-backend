@@ -31,7 +31,7 @@ class DailyChallengeController extends Controller
 
         // Create completion record
         $udc = UserDailyChallenge::create([
-            'student_id' => $user->id,
+            'quizee_id' => $user->id,
             'daily_challenge_id' => $challenge->id,
             'completed_at' => now(),
             'score' => $data['score']

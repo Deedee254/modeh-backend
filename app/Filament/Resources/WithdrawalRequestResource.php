@@ -19,7 +19,7 @@ class WithdrawalRequestResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('tutor_id')->disabled(),
+            TextInput::make('quiz-master_id')->disabled(),
             TextInput::make('amount')->disabled(),
             TextInput::make('method')->disabled(),
             TextInput::make('status'),
@@ -29,7 +29,7 @@ class WithdrawalRequestResource extends Resource
     public static function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('tutor.name')->label('Tutor'),
+            TextColumn::make('quiz-master.name')->label('quiz-master'),
             TextColumn::make('amount')->money('KES'),
             TextColumn::make('method'),
             TextColumn::make('status'),

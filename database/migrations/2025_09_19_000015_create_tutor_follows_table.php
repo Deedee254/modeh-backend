@@ -8,16 +8,16 @@ return new class extends Migration
 {
     public function up()
     {
-        Schema::create('tutor_follows', function (Blueprint $table) {
-            $table->unsignedBigInteger('tutor_id')->index();
+        Schema::create('quiz-master_follows', function (Blueprint $table) {
+            $table->unsignedBigInteger('quiz-master_id')->index();
             $table->unsignedBigInteger('user_id')->index();
             $table->timestamps();
-            $table->primary(['tutor_id', 'user_id']);
+            $table->primary(['quiz-master_id', 'user_id']);
         });
     }
 
     public function down()
     {
-        Schema::dropIfExists('tutor_follows');
+        Schema::dropIfExists('quiz-master_follows');
     }
 };

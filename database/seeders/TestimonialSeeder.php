@@ -42,8 +42,8 @@ class TestimonialSeeder extends Seeder
         Testimonial::updateOrCreate([
             'name' => 'Emily White'
         ], [
-            'quote' => "As a student, I love the variety of quizzes available. It's a fun way to learn and challenge myself.",
-            'role' => 'Student',
+            'quote' => "As a quizee, I love the variety of quizzes available. It's a fun way to learn and challenge myself.",
+            'role' => 'quizee',
             'rating' => 5,
             'avatar' => '/images/testimonials/emily.png',
             'is_active' => true,

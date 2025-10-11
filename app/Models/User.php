@@ -56,9 +56,9 @@ class User extends Authenticatable
         ];
     }
 
-    public function tutorProfile()
+    public function quiz-masterProfile()
     {
-        return $this->hasOne(Tutor::class);
+        return $this->hasOne(quiz-master::class);
     }
 
     public function quizzes()

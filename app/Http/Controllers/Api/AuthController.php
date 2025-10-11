@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Admin;
-use App\Models\Student;
-use App\Models\Tutor;
+use App\Models\quizee;
+use App\Models\quiz-master;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
-    public function registerStudent(Request $request)
+    public function registerquizee(Request $request)
     {
         $v = Validator::make($request->all(), [
             'email' => 'required|email|unique:users,email',
@@ -32,19 +32,19 @@ class AuthController extends Controller
             'name' => $name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'student',
+            'role' => 'quizee',
         ]);
 
-        $student = Student::create([
+        $quizee = quizee::create([
             'user_id' => $user->id,
             'first_name' => $request->first_name,
             'last_name' => $request->last_name,
         ]);
 
-        return response()->json(['user' => $user, 'student' => $student], 201);
+        return response()->json(['user' => $user, 'quizee' => $quizee], 201);
     }
 
-    public function registerTutor(Request $request)
+    public function registerquiz-master(Request $request)
     {
         $v = Validator::make($request->all(), [
             'email' => 'required|email|unique:users,email',
@@ -62,16 +62,16 @@ class AuthController extends Controller
             'name' => $name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'tutor',
+            'role' => 'quiz-master',
         ]);
 
-        $tutor = Tutor::create([
+        $quiz-master = quiz-master::create([
             'user_id' => $user->id,
             'first_name' => $request->first_name,
             'last_name' => $request->last_name,
         ]);
 
-        return response()->json(['user' => $user, 'tutor' => $tutor], 201);
+        return response()->json(['user' => $user, 'quiz-master' => $quiz-master], 201);
     }
 
     public function login(Request $request)

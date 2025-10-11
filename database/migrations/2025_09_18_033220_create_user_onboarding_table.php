@@ -17,8 +17,8 @@ return new class extends Migration
             $table->boolean('profile_completed')->default(false);
             $table->boolean('institution_added')->default(false);
             $table->boolean('role_selected')->default(false);
-            $table->boolean('subject_selected')->default(false); // For tutors
-            $table->boolean('grade_selected')->default(false); // For students
+            $table->boolean('subject_selected')->default(false); // For quiz-masters
+            $table->boolean('grade_selected')->default(false); // For quizees
             $table->json('completed_steps')->nullable();
             $table->timestamp('last_step_completed_at')->nullable();
             $table->timestamps();

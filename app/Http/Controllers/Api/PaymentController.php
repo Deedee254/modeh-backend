@@ -76,20 +76,20 @@ class PaymentController extends Controller
                 // stored revenue_share is percent to platform
                 $platformSharePct = (float)$setting->revenue_share;
             }
-            $tutorPercent = 100.0 - $platformSharePct;
-            $tutorShare = round(($amount * $tutorPercent) / 100.0, 2);
-            $platformShare = round($amount - $tutorShare, 2);
+            $quiz-masterPercent = 100.0 - $platformSharePct;
+            $quiz-masterShare = round(($amount * $quiz-masterPercent) / 100.0, 2);
+            $platformShare = round($amount - $quiz-masterShare, 2);
 
-            // Attempt to determine tutor_id and quiz_id from meta (allowing unlock-by-quiz flow)
+            // Attempt to determine quiz-master_id and quiz_id from meta (allowing unlock-by-quiz flow)
             $meta = $request->input('meta', []);
             if (empty($meta) && is_array($sub->gateway_meta)) $meta = array_merge($meta, $sub->gateway_meta ?? []);
             $quizId = $meta['quiz_id'] ?? null;
-            $tutorId = $meta['tutor_id'] ?? null;
+            $quiz-masterId = $meta['quiz-master_id'] ?? null;
 
-            // If we have a quiz id, try to find its tutor
-            if (!$tutorId && $quizId) {
+            // If we have a quiz id, try to find its quiz-master
+            if (!$quiz-masterId && $quizId) {
                 $quiz = \App\Models\Quiz::find($quizId);
-                if ($quiz) $tutorId = $quiz->created_by ?? null;
+                if ($quiz) $quiz-masterId = $quiz->created_by ?? null;
             }
 
             // Idempotency: do not create duplicate transaction for same tx id
@@ -103,10 +103,10 @@ class PaymentController extends Controller
             $transaction = \App\Models\Transaction::create([
                 'tx_id' => $txId,
                 'user_id' => $sub->user_id,
-                'tutor_id' => $tutorId,
+                'quiz-master_id' => $quiz-masterId,
                 'quiz_id' => $quizId,
                 'amount' => $amount,
-                'tutor_share' => $tutorShare,
+                'quiz-master_share' => $quiz-masterShare,
                 'platform_share' => $platformShare,
                 'gateway' => 'mpesa',
                 'meta' => $meta,
@@ -124,16 +124,16 @@ class PaymentController extends Controller
                 try { Log::warning('Subscription notification failed: '.$e->getMessage()); } catch (\Throwable $_) {}
             }
 
-            // Update tutor wallet if tutor exists
-            if ($tutorId) {
-                $wallet = \App\Models\Wallet::firstOrCreate(['user_id' => $tutorId], ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
-                $wallet->available = bcadd($wallet->available, $tutorShare, 2);
-                $wallet->lifetime_earned = bcadd($wallet->lifetime_earned, $tutorShare, 2);
+            // Update quiz-master wallet if quiz-master exists
+            if ($quiz-masterId) {
+                $wallet = \App\Models\Wallet::firstOrCreate(['user_id' => $quiz-masterId], ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
+                $wallet->available = bcadd($wallet->available, $quiz-masterShare, 2);
+                $wallet->lifetime_earned = bcadd($wallet->lifetime_earned, $quiz-masterShare, 2);
                 $wallet->save();
 
-                // Broadcast wallet update to tutor
+                // Broadcast wallet update to quiz-master
                 try {
-                    event(new \App\Events\WalletUpdated($wallet->toArray(), $tutorId));
+                    event(new \App\Events\WalletUpdated($wallet->toArray(), $quiz-masterId));
                 } catch (\Throwable $e) {
                     // don't block webhook on broadcast failures
                     try { Log::warning('WalletUpdated broadcast failed: '.$e->getMessage()); } catch (\Throwable $_) {}
