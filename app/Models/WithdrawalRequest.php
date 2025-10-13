@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
 
 class WithdrawalRequest extends Model
 {
@@ -16,7 +17,7 @@ class WithdrawalRequest extends Model
         'amount' => 'decimal:2',
     ];
 
-    public function quiz-master()
+    public function quizMaster()
     {
         return $this->belongsTo(User::class, 'quiz-master_id');
     }

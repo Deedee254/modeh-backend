@@ -19,6 +19,50 @@ class DailyChallengeController extends Controller
     }
 
     /**
+     * Get today's daily challenge
+     */
+    public function today(Request $request)
+    {
+        $user = $request->user();
+        $today = now()->toDateString();
+
+        // Migration stores the date in `challenge_date` (see migration), so query that column.
+        $challenge = DailyChallenge::whereDate('challenge_date', $today)
+            ->where('is_active', true)
+            ->with('grade', 'subject')
+            ->first();
+
+        if (!$challenge) {
+            return response()->json(['challenge' => null, 'completion' => null]);
+        }
+
+        // Check if user has completed it
+        $completion = UserDailyChallenge::where('quizee_id', $user->id)
+            ->where('daily_challenge_id', $challenge->id)
+            ->first();
+
+        return response()->json([
+            'challenge' => $challenge,
+            'completion' => $completion
+        ]);
+    }
+
+    /**
+     * Get user's daily challenge history
+     */
+    public function history(Request $request)
+    {
+        $user = $request->user();
+
+        $completions = UserDailyChallenge::where('quizee_id', $user->id)
+            ->with('dailyChallenge')
+            ->orderBy('completed_at', 'desc')
+            ->get();
+
+        return response()->json($completions);
+    }
+
+    /**
      * Submit a daily challenge attempt
      */
     public function submit(Request $request, DailyChallenge $challenge)

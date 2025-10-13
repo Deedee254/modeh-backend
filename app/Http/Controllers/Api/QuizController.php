@@ -22,7 +22,9 @@ class QuizController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Quiz::query()->with('topic');
+    // Eager-load topic->subject so frontend can access subject data directly
+    // and include a questions_count for each quiz using withCount
+    $query = Quiz::query()->with(['topic.subject'])->withCount('questions');
 
         // search
         if ($q = $request->get('q')) {

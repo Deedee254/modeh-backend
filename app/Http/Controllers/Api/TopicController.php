@@ -14,8 +14,8 @@ class TopicController extends Controller
 {
     public function __construct()
     {
-        // Protect most endpoints but allow public listing (index)
-        $this->middleware('auth:sanctum')->except(['index']);
+        // Protect most endpoints but allow public listing and show (index, show)
+        $this->middleware('auth:sanctum')->except(['index', 'show']);
     }
 
     // quiz-master uploads an image for a topic
@@ -86,6 +86,21 @@ class TopicController extends Controller
             });
 
             return response()->json(['topics' => $data]);
+    }
+
+    // Show a single topic (public-safe view)
+    public function show(Topic $topic)
+    {
+        $topic->load('subject');
+        // Attach image url if present
+        $orig = $topic->getAttribute('image') ?? null;
+        $topic->image = null;
+        if (!empty($orig)) {
+            try { $topic->image = Storage::url($orig); } catch (\Exception $e) { $topic->image = null; }
+        }
+        // quiz count
+        $topic->quizzes_count = Quiz::where('topic_id', $topic->id)->count();
+        return response()->json(['topic' => $topic]);
     }
 
     // quiz-master creates a topic under a subject (subject must be approved)

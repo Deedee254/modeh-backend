@@ -44,7 +44,7 @@ class DailyChallengeResource extends Resource
                 ->relationship('subject', 'name')
                 ->required(),
             TextInput::make('points_reward')->numeric()->default(0),
-            DatePicker::make('date')->required(),
+            DatePicker::make('challenge_date')->required(),
             Toggle::make('is_active')->default(true),
         ]);
     }
@@ -58,7 +58,7 @@ class DailyChallengeResource extends Resource
                 TextColumn::make('grade.name')->label('Grade')->searchable()->sortable(),
                 TextColumn::make('subject.name')->label('Subject')->searchable()->sortable(),
                 TextColumn::make('points_reward')->label('Points')->numeric()->sortable(),
-                TextColumn::make('date')->date()->sortable(),
+                TextColumn::make('challenge_date')->date()->sortable(),
                 BooleanColumn::make('is_active')->label('Active'),
             ])
             ->filters([

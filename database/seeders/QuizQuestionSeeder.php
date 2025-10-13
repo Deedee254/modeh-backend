@@ -16,7 +16,7 @@ class QuizQuestionSeeder extends Seeder
     public function run()
     {
         // 1. Ensure the quiz-master user exists
-        $quiz-master = User::firstOrCreate(
+        $quizMaster = User::firstOrCreate(
             ['email' => 'quiz-master@example.com'],
             [
                 'name' => 'quiz-master One',
@@ -29,18 +29,18 @@ class QuizQuestionSeeder extends Seeder
         $grade = Grade::firstOrCreate(['name' => 'General Knowledge']);
         $subject = Subject::firstOrCreate(
             ['name' => 'Geography', 'grade_id' => $grade->id],
-            ['created_by' => $quiz-master->id, 'is_approved' => true]
+            ['created_by' => $quizMaster->id, 'is_approved' => true]
         );
         $topic = Topic::firstOrCreate(
             ['name' => 'World Capitals', 'subject_id' => $subject->id],
-            ['created_by' => $quiz-master->id, 'is_approved' => true]
+            ['created_by' => $quizMaster->id, 'is_approved' => true]
         );
 
         // 3. Create the main Quiz
         $quiz = Quiz::create([
             'topic_id' => $topic->id,
-            'user_id' => $quiz-master->id,
-            'created_by' => $quiz-master->id,
+            'user_id' => $quizMaster->id,
+            'created_by' => $quizMaster->id,
             'title' => 'A Tour of World Capitals',
             'description' => 'A quiz covering famous capital cities around the globe.',
             'is_approved' => true,
@@ -92,7 +92,7 @@ class QuizQuestionSeeder extends Seeder
         foreach ($questions as $questionData) {
             Question::create(array_merge($questionData, [
                 'quiz_id' => $quiz->id,
-                'created_by' => $quiz-master->id,
+                'created_by' => $quizMaster->id,
                 'is_approved' => true,
                 'is_banked' => true, // Add to question bank
                 'subject_id' => $subject->id,

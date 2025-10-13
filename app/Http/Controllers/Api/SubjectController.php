@@ -53,6 +53,19 @@ class SubjectController extends Controller
         return response()->json(['subjects' => $data]);
     }
 
+    // Show a single subject with topics and representative image
+    public function show(Subject $subject)
+    {
+        $subject->load(['topics' => function($q) { $q->where('is_approved', true)->withCount('quizzes'); }]);
+        // representative image
+        $orig = $subject->getAttribute('image') ?? null;
+        $subject->image = null;
+        if (!empty($orig)) {
+            try { $subject->image = Storage::url($orig); } catch (\Exception $e) { $subject->image = null; }
+        }
+        return response()->json(['subject' => $subject]);
+    }
+
     // quiz-master proposes a subject under a grade
     public function store(Request $request)
     {

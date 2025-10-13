@@ -16,12 +16,12 @@ class DailyChallenge extends Model
         'grade_id',
         'subject_id',
         'points_reward',
-        'date',
+        'challenge_date',
         'is_active',
     ];
 
     protected $casts = [
-        'date' => 'date',
+        'challenge_date' => 'date',
         'is_active' => 'boolean',
     ];
 

@@ -1,15 +1,15 @@
 <?php
 
-namespace App\Filament\Resources\quizees\Pages;
+namespace App\Filament\Resources\QuizMasters\Pages;
 
-use App\Filament\Resources\quizees\quizeeResource;
+use App\Filament\Resources\QuizMasters\QuizMasterResource;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
 
-class Editquizee extends EditRecord
+class EditQuizMaster extends EditRecord
 {
-    protected static string $resource = quizeeResource::class;
+    protected static string $resource = QuizMasterResource::class;
 
     protected function getHeaderActions(): array
     {

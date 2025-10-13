@@ -4,12 +4,12 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\User;
-use App\Models\quiz-master;
+use App\Models\QuizMaster;
 use App\Models\Subject;
 use Illuminate\Support\Facades\Hash;
 use Faker\Factory as Faker;
 
-class quiz-masterSeeder extends Seeder
+class QuizMasterSeeder extends Seeder
 {
     public function run()
     {
@@ -32,7 +32,7 @@ class quiz-masterSeeder extends Seeder
             'social_avatar' => 'https://i.pravatar.cc/300?u=quiz-master@example.com',
         ]);
 
-        quiz-master::updateOrCreate([
+        QuizMaster::updateOrCreate([
             'user_id' => $user->id,
         ],[
             'headline' => 'Your friendly neighborhood quiz-master.',
@@ -51,7 +51,7 @@ class quiz-masterSeeder extends Seeder
                 'social_avatar' => 'https://i.pravatar.cc/300?u=' . $faker->unique()->uuid,
             ]);
 
-            quiz-master::create([
+            QuizMaster::create([
                 'user_id' => $user->id,
                 'headline' => $faker->sentence(6),
                 'bio' => $faker->paragraphs(3, true),

@@ -1,14 +1,14 @@
 <?php
 
-namespace App\Filament\Resources\quizees\Pages;
+namespace App\Filament\Resources\Quizees\Pages;
 
-use App\Filament\Resources\quizees\quizeeResource;
+use App\Filament\Resources\Quizees\QuizeeResource;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 
-class Viewquizee extends ViewRecord
+class ViewQuizee extends ViewRecord
 {
-    protected static string $resource = quizeeResource::class;
+    protected static string $resource = QuizeeResource::class;
 
     protected function getHeaderActions(): array
     {

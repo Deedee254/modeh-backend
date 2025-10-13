@@ -76,20 +76,20 @@ class PaymentController extends Controller
                 // stored revenue_share is percent to platform
                 $platformSharePct = (float)$setting->revenue_share;
             }
-            $quiz-masterPercent = 100.0 - $platformSharePct;
-            $quiz-masterShare = round(($amount * $quiz-masterPercent) / 100.0, 2);
+            $quizMasterPercent = 100.0 - $platformSharePct;
+            $quizMasterShare = round(($amount * $quizMasterPercent) / 100.0, 2);
             $platformShare = round($amount - $quiz-masterShare, 2);
 
             // Attempt to determine quiz-master_id and quiz_id from meta (allowing unlock-by-quiz flow)
             $meta = $request->input('meta', []);
             if (empty($meta) && is_array($sub->gateway_meta)) $meta = array_merge($meta, $sub->gateway_meta ?? []);
             $quizId = $meta['quiz_id'] ?? null;
-            $quiz-masterId = $meta['quiz-master_id'] ?? null;
+            $quizMasterId = $meta['quiz-master_id'] ?? null;
 
             // If we have a quiz id, try to find its quiz-master
-            if (!$quiz-masterId && $quizId) {
+            if (!$quizMasterId && $quizId) {
                 $quiz = \App\Models\Quiz::find($quizId);
-                if ($quiz) $quiz-masterId = $quiz->created_by ?? null;
+                if ($quiz) $quizMasterId = $quiz->created_by ?? null;
             }
 
             // Idempotency: do not create duplicate transaction for same tx id
@@ -103,10 +103,10 @@ class PaymentController extends Controller
             $transaction = \App\Models\Transaction::create([
                 'tx_id' => $txId,
                 'user_id' => $sub->user_id,
-                'quiz-master_id' => $quiz-masterId,
+                'quiz-master_id' => $quizMasterId,
                 'quiz_id' => $quizId,
                 'amount' => $amount,
-                'quiz-master_share' => $quiz-masterShare,
+                'quiz-master_share' => $quizMasterShare,
                 'platform_share' => $platformShare,
                 'gateway' => 'mpesa',
                 'meta' => $meta,
@@ -125,10 +125,10 @@ class PaymentController extends Controller
             }
 
             // Update quiz-master wallet if quiz-master exists
-            if ($quiz-masterId) {
-                $wallet = \App\Models\Wallet::firstOrCreate(['user_id' => $quiz-masterId], ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
-                $wallet->available = bcadd($wallet->available, $quiz-masterShare, 2);
-                $wallet->lifetime_earned = bcadd($wallet->lifetime_earned, $quiz-masterShare, 2);
+            if ($quizMasterId) {
+                $wallet = \App\Models\Wallet::firstOrCreate(['user_id' => $quizMasterId], ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
+                $wallet->available = bcadd($wallet->available, $quizMasterShare, 2);
+                $wallet->lifetime_earned = bcadd($wallet->lifetime_earned, $quizMasterShare, 2);
                 $wallet->save();
 
                 // Broadcast wallet update to quiz-master

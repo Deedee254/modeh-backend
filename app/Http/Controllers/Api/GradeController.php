@@ -33,4 +33,12 @@ class GradeController extends Controller
         });
         return response()->json(['grades' => $grades]);
     }
+
+    // Show a single grade with subjects and counts
+    public function show(Grade $grade)
+    {
+        $grade->load(['subjects' => function($q) { $q->where('is_approved', true)->withCount('topics as quizzes_count'); }]);
+        $grade->quizzes_count = $grade->subjects->sum('quizzes_count');
+        return response()->json(['grade' => $grade]);
+    }
 }

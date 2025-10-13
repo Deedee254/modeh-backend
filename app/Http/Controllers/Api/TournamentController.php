@@ -17,7 +17,7 @@ class TournamentController extends Controller
     public function __construct(AchievementService $achievementService)
     {
         $this->achievementService = $achievementService;
-        $this->middleware('auth:sanctum');
+        $this->middleware('auth:sanctum')->except(['index', 'show']);
     }
 
     public function index(Request $request)

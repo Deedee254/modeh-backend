@@ -1,20 +1,23 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Middleware\SetSessionCookie;
 use App\Http\Controllers\Auth\SocialAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/register/quizee', [AuthController::class, 'registerquizee']);
-Route::post('/register/quiz-master', [AuthController::class, 'registerquiz-master']);
+Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster']);
 
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.
-Route::post('/login', [AuthController::class, 'login'])->middleware('web');
+// The SetSessionCookie middleware ensures the correct session cookie name is set
+// for each request before the session middleware runs.
+Route::post('/login', [AuthController::class, 'login'])->middleware([SetSessionCookie::class, 'web']);
 
 // Logout and authenticated routes also need the session middleware.
 // Social authentication routes
-Route::middleware('web')->group(function () {
+Route::middleware([SetSessionCookie::class, 'web'])->group(function () {
     Route::get('auth/{provider}/redirect', [SocialAuthController::class, 'redirect']);
     Route::get('auth/{provider}/callback', [SocialAuthController::class, 'callback']);
 });
@@ -29,17 +32,25 @@ Route::get('/subjects', [\App\Http\Controllers\Api\SubjectController::class, 'in
 Route::get('/topics', [\App\Http\Controllers\Api\TopicController::class, 'index']);
 // Public grades listing for frontend
 Route::get('/grades', [\App\Http\Controllers\Api\GradeController::class, 'index']);
+// Public show endpoints for detail pages
+Route::get('/grades/{grade}', [\App\Http\Controllers\Api\GradeController::class, 'show']);
+Route::get('/topics/{topic}', [\App\Http\Controllers\Api\TopicController::class, 'show']);
+Route::get('/subjects/{subject}', [\App\Http\Controllers\Api\SubjectController::class, 'show']);
 // Sponsors for homepage carousel
 Route::get('/sponsors', [\App\Http\Controllers\Api\SponsorController::class, 'index']);
 // Public packages listing for pricing page
 Route::get('/packages', [\App\Http\Controllers\Api\PackageController::class, 'index']);
-Route::get('/quiz-masters', [\App\Http\Controllers\Api\quiz-masterController::class, 'index']);
-Route::get('/quiz-masters/{id}', [\App\Http\Controllers\Api\quiz-masterController::class, 'show']);
+Route::get('/quiz-masters', [\App\Http\Controllers\Api\QuizMasterController::class, 'index']);
+Route::get('/quiz-masters/{id}', [\App\Http\Controllers\Api\QuizMasterController::class, 'show']);
 
 // Public recommendations (grade-filtered, randomized) - available to anonymous users
 Route::get('/recommendations/quizzes', [\App\Http\Controllers\Api\RecommendationController::class, 'quizzes']);
 
-Route::middleware(['web', 'auth:sanctum'])->group(function () {
+// Public tournament routes for listing and viewing
+Route::get('/tournaments', [\App\Http\Controllers\Api\TournamentController::class, 'index']);
+Route::get('/tournaments/{tournament}', [\App\Http\Controllers\Api\TournamentController::class, 'show']);
+
+Route::middleware([SetSessionCookie::class, 'web', 'auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::get('/me', function (Request $request) {
@@ -65,6 +76,8 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::get('/quiz-attempts', [\App\Http\Controllers\Api\QuizAttemptController::class, 'index']);
     
     // Daily Challenge endpoints
+    Route::get('/daily-challenges/today', [\App\Http\Controllers\Api\DailyChallengeController::class, 'today']);
+    Route::get('/user/daily-challenges', [\App\Http\Controllers\Api\DailyChallengeController::class, 'history']);
     Route::post('/daily-challenges/{challenge}/submit', [\App\Http\Controllers\Api\DailyChallengeController::class, 'submit']);
 
     // Subjects
@@ -159,8 +172,8 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // Interactions
     Route::post('/quizzes/{quiz}/like', [\App\Http\Controllers\Api\InteractionController::class, 'likeQuiz']);
     Route::post('/quizzes/{quiz}/unlike', [\App\Http\Controllers\Api\InteractionController::class, 'unlikeQuiz']);
-    Route::post('/quiz-masters/{quiz-master}/follow', [\App\Http\Controllers\Api\InteractionController::class, 'followquiz-master']);
-    Route::post('/quiz-masters/{quiz-master}/unfollow', [\App\Http\Controllers\Api\InteractionController::class, 'unfollowquiz-master']);
+    Route::post('/quiz-masters/{quiz-master}/follow', [\App\Http\Controllers\Api\InteractionController::class, 'followQuizMaster']);
+    Route::post('/quiz-masters/{quiz-master}/unfollow', [\App\Http\Controllers\Api\InteractionController::class, 'unfollowQuizMaster']);
 
     // Direct Messages
     Route::get('/messages/contacts', [\App\Http\Controllers\Api\MessageController::class, 'contacts']);
@@ -178,8 +191,6 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/battles/{battle}/join', [\App\Http\Controllers\Api\BattleController::class, 'join']);
 
     // Tournaments
-    Route::get('/tournaments', [\App\Http\Controllers\Api\TournamentController::class, 'index']);
-    Route::get('/tournaments/{tournament}', [\App\Http\Controllers\Api\TournamentController::class, 'show']);
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);
     Route::post('/tournaments/battles/{battle}/submit', [\App\Http\Controllers\Api\TournamentController::class, 'submitBattle']);
     Route::get('/tournaments/{tournament}/battles/{battle}/result', [\App\Http\Controllers\Api\TournamentController::class, 'result']);
