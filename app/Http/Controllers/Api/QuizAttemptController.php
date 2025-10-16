@@ -314,6 +314,20 @@ class QuizAttemptController extends Controller
                 });
         }
 
+        // Calculate rank for this quiz
+        $rank = null;
+        $totalParticipants = 0;
+        if ($attempt->quiz_id) {
+            $totalParticipants = QuizAttempt::where('quiz_id', $attempt->quiz_id)
+                ->whereNotNull('score')
+                ->distinct('user_id')
+                ->count('user_id');
+
+            $higherScores = QuizAttempt::where('quiz_id', $attempt->quiz_id)
+                ->where('score', '>', $attempt->score)->distinct('user_id')->count('user_id');
+            $rank = $higherScores + 1;
+        }
+
         return response()->json([
             'ok' => true,
             'attempt' => [
@@ -326,6 +340,8 @@ class QuizAttemptController extends Controller
             ],
             'badges' => $badges,
             'points' => $user->points ?? 0,
+            'rank' => $rank,
+            'total_participants' => $totalParticipants,
         ]);
     }
 

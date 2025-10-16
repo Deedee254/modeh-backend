@@ -14,13 +14,10 @@ return [
     | and production domains which access your API via a frontend SPA.
     |
     */
-    // Read stateful SPA domains from env (comma-separated). If not provided,
-    // provide a sensible default that includes common local dev hosts and
-    // the production frontend domain (modeh.co.ke).
-    'stateful' => array_filter(array_map('trim', explode(',', env(
-        'SANCTUM_STATEFUL_DOMAINS',
-        'localhost,localhost:3000,127.0.0.1,127.0.0.1:3000,127.0.0.1:5173,http://localhost:3000,https://modeh.co.ke'
-    )))),
+    'stateful' => array_filter(
+        explode(',', env('SANCTUM_STATEFUL_DOMAINS', '')),
+        'trim'
+    ),
 
     /*
     |--------------------------------------------------------------------------
