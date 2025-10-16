@@ -5,8 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ChatMetricsSettingResource\Pages;
 use App\Models\ChatMetricsSetting;
 use Filament\Resources\Resource;
-use BackedEnum;
-use Filament\Schemas\Schema;
+// avoid importing Filament\Forms\Form to prevent signature mismatches
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
@@ -14,11 +13,13 @@ use Filament\Tables\Columns\TextColumn;
 class ChatMetricsSettingResource extends Resource
 {
     protected static ?string $model = ChatMetricsSetting::class;
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-server';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-server';
+    protected static \UnitEnum|string|null $navigationGroup = 'User Engagement';
+    protected static ?int $navigationSort = 2;
 
-    public static function form(Schema $schema): Schema
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
-        return $schema->components([
+        return $schema->schema([
             TextInput::make('retention_days')->label('Retention (days)')->numeric()->minValue(1)->required()->default(30),
         ]);
     }
@@ -28,6 +29,14 @@ class ChatMetricsSettingResource extends Resource
         return $table->columns([
             TextColumn::make('retention_days'),
             TextColumn::make('updated_at')->date(),
+        ])
+        ->actions([
+            \Filament\Tables\Actions\ViewAction::make(),
+            \Filament\Tables\Actions\EditAction::make(),
+            \Filament\Tables\Actions\DeleteAction::make(),
+        ])
+        ->bulkActions([
+            \Filament\Tables\Actions\DeleteBulkAction::make(),
         ]);
     }
 
@@ -36,6 +45,7 @@ class ChatMetricsSettingResource extends Resource
         return [
             'index' => Pages\ListChatMetricsSettings::route('/'),
             'edit' => Pages\EditChatMetricsSetting::route('/{record}/edit'),
+            'view' => Pages\ViewChatMetricsSetting::route('/{record}'),
         ];
     }
 }

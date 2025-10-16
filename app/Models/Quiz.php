@@ -10,7 +10,7 @@ class Quiz extends Model
     use HasFactory;
 
     // Include user_id so tests and factory-created quizzes can set the owning user
-    protected $fillable = ['topic_id', 'user_id', 'created_by', 'title', 'description', 'youtube_url', 'cover_image', 'is_paid', 'timer_seconds', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'difficulty', 'is_approved', 'is_draft', 'approval_requested_at'];
+    protected $fillable = ['topic_id', 'user_id', 'created_by', 'title', 'description', 'youtube_url', 'cover_image', 'is_paid', 'one_off_price', 'timer_seconds', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'difficulty', 'is_approved', 'is_draft', 'approval_requested_at'];
 
     protected $casts = [
         'is_paid' => 'boolean',
@@ -20,10 +20,25 @@ class Quiz extends Model
         'difficulty' => 'float',
         'approval_requested_at' => 'datetime',
         'scheduled_at' => 'datetime',
+        'one_off_price' => 'decimal:2',
     ];
     public function topic()
     {
         return $this->belongsTo(Topic::class);
+    }
+
+    public function author()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * Return the QuizMaster profile for the quiz author (if any).
+     * This assumes quizzes.user_id matches quiz_masters.user_id.
+     */
+    public function quizMaster()
+    {
+        return $this->hasOne(QuizMaster::class, 'user_id', 'user_id');
     }
 
     public function questions()

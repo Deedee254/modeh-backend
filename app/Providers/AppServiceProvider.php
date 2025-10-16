@@ -10,6 +10,8 @@ use App\Models\Battle;
 use App\Observers\UserBadgeObserver;
 use App\Observers\UserDailyChallengeObserver;
 use App\Observers\BattleObserver;
+use App\Observers\QuizObserver;
+use App\Models\Quiz;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -34,5 +36,6 @@ class AppServiceProvider extends ServiceProvider
         UserBadge::observe(UserBadgeObserver::class);
         UserDailyChallenge::observe(UserDailyChallengeObserver::class);
         Battle::observe(BattleObserver::class);
+    Quiz::observe(QuizObserver::class);
     }
 }

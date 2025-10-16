@@ -12,7 +12,7 @@ class UserDailyChallenge extends Model
     protected $table = 'user_daily_challenges';
 
     protected $fillable = [
-        'quizee_id',
+        'user_id',
         'daily_challenge_id',
         'completed_at',
     ];
@@ -23,7 +23,7 @@ class UserDailyChallenge extends Model
 
     public function quizee()
     {
-        return $this->belongsTo(quizee::class);
+        return $this->belongsTo(quizee::class, 'user_id');
     }
 
     public function dailyChallenge()

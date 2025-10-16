@@ -6,20 +6,16 @@ use App\Filament\Resources\TournamentBattleResource\Pages;
 use App\Models\TournamentBattle;
 use Filament\Forms;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
- 
-use UnitEnum;
-use BackedEnum;
 use Filament\Tables\Table;
 
 class TournamentBattleResource extends Resource
 {
     protected static ?string $model = TournamentBattle::class;
 
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-rectangle-stack';
-    protected static UnitEnum|string|null $navigationGroup = 'Competition';
-
-    public static function form(Schema $schema): Schema
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static \UnitEnum|string|null $navigationGroup = 'Tournaments';
+    protected static ?int $navigationSort = 2;
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
             Forms\Components\Card::make()->schema([
@@ -43,29 +39,33 @@ class TournamentBattleResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return $table->columns([
-            Tables\Columns\TextColumn::make('id')->sortable(),
-            Tables\Columns\TextColumn::make('tournament.name')->label('Tournament')->searchable(),
-            Tables\Columns\TextColumn::make('round')->sortable(),
-            Tables\Columns\TextColumn::make('player1.name')->label('Player 1')->searchable(),
-            Tables\Columns\TextColumn::make('player2.name')->label('Player 2')->searchable(),
-            Tables\Columns\TextColumn::make('player1_score')->sortable(),
-            Tables\Columns\TextColumn::make('player2_score')->sortable(),
-            Tables\Columns\TextColumn::make('winner.name')->label('Winner')->searchable(),
-            Tables\Columns\TextColumn::make('status')->badge()->sortable(),
-            Tables\Columns\TextColumn::make('scheduled_at')->dateTime(),
-        ])->filters([
-            Tables\Filters\SelectFilter::make('status')->options([
-                'scheduled' => 'Scheduled',
-                'in_progress' => 'In Progress',
-                'completed' => 'Completed',
-            ]),
-        ])->actions([
-            Tables\Actions\EditAction::make(),
-            Tables\Actions\DeleteAction::make(),
-        ])->bulkActions([
-            Tables\Actions\DeleteBulkAction::make(),
-        ]);
+        return $table
+            ->columns([
+                \Filament\Tables\Columns\TextColumn::make('id')->sortable(),
+                \Filament\Tables\Columns\TextColumn::make('tournament.name')->label('Tournament')->searchable(),
+                \Filament\Tables\Columns\TextColumn::make('round')->sortable(),
+                \Filament\Tables\Columns\TextColumn::make('player1.name')->label('Player 1')->searchable(),
+                \Filament\Tables\Columns\TextColumn::make('player2.name')->label('Player 2')->searchable(),
+                \Filament\Tables\Columns\TextColumn::make('player1_score')->sortable(),
+                \Filament\Tables\Columns\TextColumn::make('player2_score')->sortable(),
+                \Filament\Tables\Columns\TextColumn::make('winner.name')->label('Winner')->searchable(),
+                \Filament\Tables\Columns\TextColumn::make('status')->badge()->sortable(),
+                \Filament\Tables\Columns\TextColumn::make('scheduled_at')->dateTime(),
+            ])
+            ->filters([
+                \Filament\Tables\Filters\SelectFilter::make('status')->options([
+                    'scheduled' => 'Scheduled',
+                    'in_progress' => 'In Progress',
+                    'completed' => 'Completed',
+                ]),
+            ])
+            ->actions([
+                \Filament\Tables\Actions\EditAction::make(),
+                \Filament\Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                \Filament\Tables\Actions\DeleteBulkAction::make(),
+            ]);
     }
 
     public static function getRelations(): array

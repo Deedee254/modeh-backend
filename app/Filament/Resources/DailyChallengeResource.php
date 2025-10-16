@@ -4,16 +4,16 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\DailyChallengeResource\Pages;
 use App\Models\DailyChallenge;
-use Filament\Schemas\Schema;
+// avoid importing Filament\Forms\Form to prevent signature mismatches with installed Filament
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Tables\Columns\TextColumn;
-use BackedEnum;
 use Filament\Tables\Columns\BooleanColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
@@ -23,11 +23,13 @@ class DailyChallengeResource extends Resource
 {
     protected static ?string $model = DailyChallenge::class;
 
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-calendar-days';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-calendar-days';
+    protected static \UnitEnum|string|null $navigationGroup = 'Content Management';
+    protected static ?int $navigationSort = 5;
 
-    public static function form(Schema $schema): Schema
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
-        return $schema->components([
+        return $schema->schema([
             TextInput::make('title')->required(),
             Textarea::make('description'),
             Select::make('difficulty')
@@ -60,6 +62,14 @@ class DailyChallengeResource extends Resource
                 TextColumn::make('points_reward')->label('Points')->numeric()->sortable(),
                 TextColumn::make('challenge_date')->date()->sortable(),
                 BooleanColumn::make('is_active')->label('Active'),
+            ])
+            ->actions([
+                Tables\Actions\ViewAction::make(),
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make(),
             ])
             ->filters([
                 SelectFilter::make('difficulty')
@@ -95,6 +105,7 @@ class DailyChallengeResource extends Resource
             'index' => Pages\ListDailyChallenges::route('/'),
             'create' => Pages\CreateDailyChallenge::route('/create'),
             'edit' => Pages\EditDailyChallenge::route('/{record}/edit'),
+            'view' => Pages\ViewDailyChallenge::route('/{record}'),
         ];
     }
 }

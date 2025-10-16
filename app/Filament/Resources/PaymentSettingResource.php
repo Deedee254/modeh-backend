@@ -4,23 +4,25 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PaymentSettingResource\Pages;
 use App\Models\PaymentSetting;
-use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Tables\Columns\TextColumn;
 use BackedEnum;
+use UnitEnum;
 
 class PaymentSettingResource extends Resource
 {
     protected static ?string $model = PaymentSetting::class;
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-cog';
-
-    public static function form(Schema $schema): Schema
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-cog';
+    protected static \UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
+    protected static ?int $navigationSort = 3;
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
-        return $schema->components([
+        return $schema->schema([
             TextInput::make('gateway')->required(),
             Select::make('config.environment')->options(['sandbox' => 'Sandbox', 'live' => 'Live'])->required()->default('sandbox'),
             TextInput::make('config.consumer_key')->label('Consumer Key'),
@@ -40,6 +42,14 @@ class PaymentSettingResource extends Resource
             TextColumn::make('gateway'),
             TextColumn::make('revenue_share')->suffix('%'),
             TextColumn::make('updated_at')->date(),
+        ])
+        ->actions([
+            Tables\Actions\ViewAction::make(),
+            Tables\Actions\EditAction::make(),
+            Tables\Actions\DeleteAction::make(),
+        ])
+        ->bulkActions([
+            Tables\Actions\DeleteBulkAction::make(),
         ]);
     }
 
@@ -49,6 +59,7 @@ class PaymentSettingResource extends Resource
             'index' => Pages\ListPaymentSettings::route('/'),
             'create' => Pages\CreatePaymentSetting::route('/create'),
             'edit' => Pages\EditPaymentSetting::route('/{record}/edit'),
+            'view' => Pages\ViewPaymentSetting::route('/{record}'),
         ];
     }
 }

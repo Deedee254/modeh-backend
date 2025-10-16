@@ -7,7 +7,6 @@ use App\Models\Subject;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
-use BackedEnum;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\FileUpload;
 use Filament\Tables\Columns\TextColumn;
@@ -18,7 +17,9 @@ class SubjectResource extends Resource
 {
     protected static ?string $model = Subject::class;
 
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-s-book-open';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-s-book-open';
+    protected static \UnitEnum|string|null $navigationGroup = 'Content Management';
+    protected static ?int $navigationSort = 2;
 
     public static function table(Table $table): Table
     {
@@ -33,12 +34,27 @@ class SubjectResource extends Resource
             ->actions([]);
     }
 
-    public static function form(Schema $schema): Schema
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
-        return $schema->components([
-            TextInput::make('name')->required(),
-            TextInput::make('grade_id')->required()->numeric(),
-            FileUpload::make('icon')->image()->directory('subjects/icons')->maxSize(2048),
+        return $schema->schema([
+            Forms\Components\TextInput::make('name')
+                ->required()
+                ->maxLength(255),
+                
+            Forms\Components\Select::make('grade_id')
+                ->relationship('grade', 'name')
+                ->required()
+                ->searchable()
+                ->preload(),
+                
+            Forms\Components\FileUpload::make('icon')
+                ->image()
+                ->directory('subjects/icons')
+                ->maxSize(2048),
+                
+            Forms\Components\Toggle::make('is_active')
+                ->required()
+                ->default(true),
         ]);
     }
 

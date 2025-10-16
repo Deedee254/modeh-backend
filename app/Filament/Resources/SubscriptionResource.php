@@ -12,15 +12,15 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Schemas\Schema;
 
 class SubscriptionResource extends Resource
 {
     protected static ?string $model = Subscription::class;
-
-    public static function schema(Schema $schema): Schema
+    protected static \UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
+    protected static ?int $navigationSort = 2;
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
-        return $schema->components([
+        return $schema->schema([
             Select::make('user_id')->relationship('user', 'name')->required(),
             Select::make('package_id')->relationship('package', 'title')->required(),
             Select::make('status')->options([
@@ -58,7 +58,13 @@ class SubscriptionResource extends Resource
                     $record->started_at = now();
                     $record->ends_at = now()->addDays($days);
                     $record->save();
-                })
+                }),
+                \Filament\Tables\Actions\ViewAction::make(),
+                \Filament\Tables\Actions\EditAction::make(),
+                \Filament\Tables\Actions\DeleteAction::make(),
+        ])
+        ->bulkActions([
+            \Filament\Tables\Actions\DeleteBulkAction::make(),
         ]);
     }
 
@@ -66,7 +72,9 @@ class SubscriptionResource extends Resource
     {
         return [
             'index' => Pages\ListSubscriptions::route('/'),
+            // 'create' page not present in Pages; omit to avoid autoload errors
             'edit' => Pages\EditSubscription::route('/{record}/edit'),
+            'view' => Pages\ViewSubscription::route('/{record}'),
         ];
     }
 }

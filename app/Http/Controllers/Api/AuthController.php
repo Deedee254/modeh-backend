@@ -90,16 +90,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-        // Ensure session cookie name is set for this role before regenerating session
-        $user = $request->user();
-        if ($user && ($role = $user->role ?? null)) {
-            // Set role cookie name so session uses a role-scoped cookie
-            // The SetSessionCookie middleware and this helper use the same naming scheme.
-            $app = \Illuminate\Support\Str::slug(config('app.name', 'laravel'));
-            $suffix = $role === 'quiz-master' ? 'quizmaster' : $role;
-            config(['session.cookie' => "{$app}-session-{$suffix}"]);
-        }
+        // Obtain the authenticated user
+        $user = Auth::user();
 
+        // Regenerate session id for security (uses the configured single session cookie)
         $request->session()->regenerate();
 
         return response()->json(['role' => $user->role, 'user' => $user]);

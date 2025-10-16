@@ -299,4 +299,22 @@ class QuestionController extends Controller
 
         return response()->json(['question' => $question]);
     }
+
+    /**
+     * Delete a question (owner or admin)
+     */
+    public function destroy(Request $request, Question $question)
+    {
+        $user = $request->user();
+        if ($question->created_by !== $user->id && (!isset($user->is_admin) || !$user->is_admin)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        try {
+            $question->delete();
+            return response()->json(['message' => 'Deleted'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to delete'], 500);
+        }
+    }
 }

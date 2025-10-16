@@ -12,6 +12,7 @@ class Question extends Model
     protected $fillable = [
         'quiz_id', 'created_by', 'type', 'body', 'options', 'answers', 
         'media_path', 'media_type', 'youtube_url', 'media_metadata',
+        'explanation',
         'difficulty', 'is_quiz-master_marked', 'is_approved', 'is_banked', 
         'tags', 'hint', 'solution_steps'
     ];
@@ -22,6 +23,7 @@ class Question extends Model
         'tags' => 'array',
         'solution_steps' => 'array',
         'media_metadata' => 'array',
+    'explanation' => 'string',
         'is_quiz-master_marked' => 'boolean',
         'is_approved' => 'boolean',
         'is_banked' => 'boolean',

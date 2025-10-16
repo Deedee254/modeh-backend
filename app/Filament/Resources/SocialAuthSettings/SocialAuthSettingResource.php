@@ -20,16 +20,13 @@ class SocialAuthSettingResource extends Resource
 {
     protected static ?string $model = SocialAuthSetting::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::Key;
+    protected static \BackedEnum|string|null $navigationIcon = Heroicon::Key;
 
     protected static ?string $navigationLabel = 'Social Login Settings';
     protected static ?string $modelLabel = 'Social Login Provider';
     protected static ?string $pluralLabel = 'Social Login Providers';
-
-    public static function getNavigationGroup(): ?string
-    {
-        return 'Settings';
-    }
+    protected static \UnitEnum|string|null $navigationGroup = 'System Settings';
+    protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema
     {

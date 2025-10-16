@@ -10,12 +10,15 @@ class WithdrawalRequest extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['quiz-master_id','amount','method','status','meta'];
+    protected $fillable = ['quiz-master_id','amount','method','status','meta','processed_by_admin_id'];
 
     protected $casts = [
         'meta' => 'array',
         'amount' => 'decimal:2',
     ];
+
+    protected $dates = ['paid_at'];
+
 
     public function quizMaster()
     {

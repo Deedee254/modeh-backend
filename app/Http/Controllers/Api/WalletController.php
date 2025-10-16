@@ -8,6 +8,7 @@ use App\Models\Wallet;
 use App\Models\Transaction;
 use App\Models\WithdrawalRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class WalletController extends Controller
 {
@@ -42,13 +43,29 @@ class WalletController extends Controller
         $wallet = Wallet::firstOrCreate(['user_id' => $user->id], ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
         if ($amount > $wallet->available) return response()->json(['ok' => false, 'message' => 'Insufficient balance'], 400);
 
-        // debit available and create withdrawal request
-        $wallet->available = bcsub($wallet->available, $amount, 2);
-        $wallet->save();
+        // Perform debit and withdrawal creation atomically in a DB transaction
+        $wr = null;
+        try {
+            DB::transaction(function () use (&$wr, $wallet, $amount, $request, $user) {
+                // debit available
+                $wallet->available = bcsub($wallet->available, $amount, 2);
+                $wallet->save();
 
-        $wr = WithdrawalRequest::create(['quiz-master_id' => $user->id, 'amount' => $amount, 'method' => $request->input('method', 'mpesa'), 'status' => 'pending', 'meta' => $request->input('meta', [])]);
+                // create withdrawal request
+                $wr = WithdrawalRequest::create([
+                    'quiz-master_id' => $user->id,
+                    'amount' => $amount,
+                    'method' => $request->input('method', 'mpesa'),
+                    'status' => 'pending',
+                    'meta' => $request->input('meta', []),
+                ]);
+            });
+        } catch (\Throwable $e) {
+            // If the transaction failed, roll back and return an error
+            return response()->json(['ok' => false, 'message' => 'Failed to create withdrawal request'], 500);
+        }
 
-        // Broadcast new withdrawal request to quiz-master (and admins if needed)
+        // Broadcast new withdrawal request to quiz-master (and admins if needed) after commit
         try {
             event(new \App\Events\WithdrawalRequestUpdated($wr->toArray(), $user->id));
         } catch (\Throwable $e) {
@@ -64,6 +81,55 @@ class WalletController extends Controller
         if (!$user) return response()->json(['ok' => false], 401);
         $list = WithdrawalRequest::where('quiz-master_id', $user->id)->orderBy('created_at', 'desc')->get();
         return response()->json(['ok' => true, 'withdrawals' => $list]);
+    }
+
+    // Admin: settle pending funds into available for a specific quiz-master
+    public function settlePending(Request $request, $quizMasterId)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['ok' => false], 401);
+        if (!isset($user->is_admin) || !$user->is_admin) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+
+        $amount = $request->input('amount', null); // optional amount to settle; if null settle full pending
+
+        $wallet = null;
+        try {
+            DB::transaction(function () use (&$wallet, $quizMasterId, $amount) {
+                // lock wallet row
+                $w = Wallet::where('user_id', $quizMasterId)->lockForUpdate()->first();
+                if (!$w) {
+                    $w = Wallet::create(['user_id' => $quizMasterId, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
+                }
+
+                $pending = (float)$w->pending;
+                $toSettle = $amount !== null ? (float)$amount : $pending;
+                if ($toSettle <= 0) {
+                    // nothing to do
+                    $wallet = $w;
+                    return;
+                }
+                if ($toSettle > $pending) {
+                    // cap at pending
+                    $toSettle = $pending;
+                }
+
+                // move from pending -> available
+                $w->pending = bcsub($w->pending, $toSettle, 2);
+                $w->available = bcadd($w->available, $toSettle, 2);
+                $w->save();
+
+                $wallet = $w;
+            });
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'message' => 'Failed to settle pending funds'], 500);
+        }
+
+        // broadcast wallet update
+        try {
+            event(new \App\Events\WalletUpdated($wallet->toArray(), $quizMasterId));
+        } catch (\Throwable $_) {}
+
+        return response()->json(['ok' => true, 'wallet' => $wallet]);
     }
 
     /**

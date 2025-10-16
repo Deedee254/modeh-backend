@@ -30,6 +30,8 @@ class User extends Authenticatable
         'social_refresh_token',
         'social_expires_at',
         'is_profile_completed',
+        // Allow role to be mass assigned when creating/updating users
+        'role',
     ];
 
     /**
@@ -47,14 +49,32 @@ class User extends Authenticatable
      *
      * @return array<string, string>
      */
-    protected function casts(): array
+    /**
+     * The attributes that should be cast to native types.
+     *
+     * @var array<string,string>
+     */
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+        'social_expires_at' => 'datetime',
+        'is_profile_completed' => 'boolean',
+    ];
+
+    /**
+     * Helper to check admin role (used throughout the codebase).
+     */
+    public function isAdmin(): bool
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'social_expires_at' => 'datetime',
-            'is_profile_completed' => 'boolean',
-        ];
+        return ($this->role ?? '') === 'admin';
+    }
+
+    /**
+     * Backwards-compatible accessor so `$user->is_admin` works.
+     */
+    public function getIsAdminAttribute(): bool
+    {
+        return $this->isAdmin();
     }
 
     public function quizMasterProfile()

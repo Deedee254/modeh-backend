@@ -8,10 +8,6 @@ use Filament\Forms;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
-use UnitEnum;
-use BackedEnum;
-use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -19,10 +15,10 @@ class TournamentResource extends Resource
 {
     protected static ?string $model = Tournament::class;
 
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';
-    protected static UnitEnum|string|null $navigationGroup = 'Competition';
-
-    public static function form(Schema $schema): Schema
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';
+    protected static \UnitEnum|string|null $navigationGroup = 'Tournaments';
+    protected static ?int $navigationSort = 1;
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
             Forms\Components\Section::make()
@@ -129,19 +125,19 @@ class TournamentResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')
+                \Filament\Tables\Columns\TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('sponsor.name')
+                \Filament\Tables\Columns\TextColumn::make('sponsor.name')
                     ->searchable()
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('start_date')
+                \Filament\Tables\Columns\TextColumn::make('start_date')
                     ->dateTime()
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('status')
+                \Filament\Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->sortable()
                     ->color(fn (string $state): string => match ($state) {
@@ -151,42 +147,42 @@ class TournamentResource extends Resource
                         default => 'gray',
                     }),
 
-                Tables\Columns\TextColumn::make('prize_pool')
+                \Filament\Tables\Columns\TextColumn::make('prize_pool')
                     ->money()
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('participants_count')
+                \Filament\Tables\Columns\TextColumn::make('participants_count')
                     ->counts('participants')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('grade.name')
+                \Filament\Tables\Columns\TextColumn::make('grade.name')
                     ->searchable()
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('subject.name')
+                \Filament\Tables\Columns\TextColumn::make('subject.name')
                     ->searchable()
                     ->sortable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('status')
+                \Filament\Tables\Filters\SelectFilter::make('status')
                     ->options([
                         'upcoming' => 'Upcoming',
                         'active' => 'Active',
                         'completed' => 'Completed',
                     ]),
 
-                Tables\Filters\SelectFilter::make('grade')
+                \Filament\Tables\Filters\SelectFilter::make('grade')
                     ->relationship('grade', 'name'),
 
-                Tables\Filters\SelectFilter::make('subject')
+                \Filament\Tables\Filters\SelectFilter::make('subject')
                     ->relationship('subject', 'name'),
 
-                Tables\Filters\SelectFilter::make('sponsor')
+                \Filament\Tables\Filters\SelectFilter::make('sponsor')
                     ->relationship('sponsor', 'name'),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\Action::make('generate_matches')
+                \Filament\Tables\Actions\EditAction::make(),
+                \Filament\Tables\Actions\Action::make('generate_matches')
                     ->action(fn (Tournament $record) => $record->generateMatches())
                     ->requiresConfirmation()
                     ->visible(fn (Tournament $record): bool => $record->status === 'upcoming')
@@ -194,7 +190,7 @@ class TournamentResource extends Resource
                     ->icon('heroicon-o-play'),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Tables\Actions\DeleteBulkAction::make(),
             ]);
     }
 

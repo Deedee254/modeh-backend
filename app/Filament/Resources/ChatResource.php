@@ -24,12 +24,10 @@ class ChatResource extends Resource
 
     // For Filament v4, navigationIcon can be string|BackedEnum|null
     // Use the Heroicons v2+ name for the outline "chat-bubble-left" icon set
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-chat-bubble-left';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-chat-bubble-left';
 
-    public static function getNavigationGroup(): ?string
-    {
-        return 'Communication';
-    }
+    protected static \UnitEnum|string|null $navigationGroup = 'Community';
+    protected static ?int $navigationSort = 1;
 
 
     public static function getRelations(): array

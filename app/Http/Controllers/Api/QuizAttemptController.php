@@ -8,6 +8,8 @@ use App\Models\Quiz;
 use App\Models\Question;
 use App\Models\QuizAttempt;
 use App\Services\AchievementService;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class QuizAttemptController extends Controller
 {
@@ -49,14 +51,15 @@ class QuizAttemptController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
 
+        // allow missing or partial answers (accept empty submissions)
         $payload = $request->validate([
-            'answers' => 'required|array'
+            'answers' => 'nullable|array'
         ]);
 
-        $answers = $payload['answers'];
+        $answers = $payload['answers'] ?? [];
 
-        $results = [];
-        $correct = 0;
+    $results = [];
+    $correct = 0;
         foreach ($answers as $a) {
             $qid = intval($a['question_id'] ?? 0);
             $selected = $a['selected'] ?? null;
@@ -77,32 +80,62 @@ class QuizAttemptController extends Controller
             $results[] = ['question_id' => $qid, 'correct' => $isCorrect];
         }
 
-        $score = count($answers) ? round($correct / count($answers) * 100, 1) : 0;
+        // Compute score relative to attempted questions (so skipped questions are ignored in scoring)
+        $attempted = max(0, count($answers));
+        if ($attempted > 0) {
+            $score = round($correct / $attempted * 100, 1);
+        } else {
+            $score = 0;
+        }
+
+        // Allow submit to only persist answers and defer marking (score calculation, points, achievements)
+        $defer = $request->boolean('defer_marking', false);
 
         // persist attempt
         try {
-            // simple points calculation: scale score by number of questions
-            $num = count($answers);
-            $pointsEarned = round(($score / 100) * ($num * 10), 2); // e.g., each question worth 10 points scaled by accuracy
+            DB::beginTransaction();
 
-            $attempt = QuizAttempt::create([
-                'user_id' => $user->id,
-                'quiz_id' => $quiz->id,
-                'answers' => $answers,
-                'score' => $score,
-                'points_earned' => $pointsEarned,
-            ]);
+            if ($defer) {
+                // persist attempt without scoring/points; marking will be performed later via markAttempt
+                $attempt = QuizAttempt::create([
+                    'user_id' => $user->id,
+                    'quiz_id' => $quiz->id,
+                    'answers' => $answers,
+                    'score' => null,
+                    'points_earned' => null,
+                ]);
+            } else {
+                // simple points calculation: scale score by number of attempted questions (each attempted question worth 10 points)
+                $pointsEarned = round(($score / 100) * ($attempted * 10), 2);
 
-            // persist points to user
-            if ($attempt && method_exists($user, 'increment')) {
-                $user->increment('points', $pointsEarned);
+                $attempt = QuizAttempt::create([
+                    'user_id' => $user->id,
+                    'quiz_id' => $quiz->id,
+                    'answers' => $answers,
+                    'score' => $score,
+                    'points_earned' => $pointsEarned,
+                ]);
+
+                // persist points to user atomically; don't let missing column break the attempt
+                if ($attempt && method_exists($user, 'increment')) {
+                    try {
+                        $user->increment('points', $pointsEarned);
+                    } catch (\Exception $e) {
+                        // log and continue; some test DBs may not have a points column
+                        Log::warning('Could not increment user points: ' . $e->getMessage());
+                    }
+                }
             }
+
+            DB::commit();
         } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed saving quiz attempt: ' . $e->getMessage());
             $attempt = null;
         }
 
-        // Check achievements and associate any awarded achievements with this attempt
-        if ($attempt) {
+        // Check achievements only when marking occurred (not deferred)
+        if ($attempt && !$defer) {
             $this->achievementService->checkStreakAchievements($user, $request->input('streak', 0), $attempt->id ?? null);
             $this->achievementService->checkScoreAchievements($user, $score, $attempt->id ?? null);
             $this->achievementService->checkCompletionAchievements(
@@ -112,7 +145,108 @@ class QuizAttemptController extends Controller
             );
         }
 
-        return response()->json(['ok' => true, 'results' => $results, 'score' => $score, 'attempt_id' => $attempt?->id ?? null, 'points_delta' => $attempt?->points_earned ?? 0]);
+        // Return attempt id (if created) and details. If attempt creation failed, return 500 so client knows to retry.
+        if (!$attempt) {
+            return response()->json(['ok' => false, 'message' => 'Failed to persist attempt'], 500);
+        }
+
+        return response()->json(['ok' => true, 'results' => $results, 'score' => $defer ? null : $score, 'attempt_id' => $attempt->id ?? null, 'points_delta' => $attempt->points_earned ?? 0, 'deferred' => $defer]);
+    }
+
+    /**
+     * Mark a previously saved (possibly deferred) attempt and return enriched result.
+     * Requires an active subscription before revealing results.
+     */
+    public function markAttempt(Request $request, QuizAttempt $attempt)
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+
+        if ($attempt->user_id !== $user->id) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        // Subscription or one-off purchase check
+        $activeSub = \App\Models\Subscription::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->where(function($q) {
+                $now = now();
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
+            })
+            ->orderByDesc('started_at')
+            ->first();
+
+        $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
+            ->where('item_type', 'quiz')
+            ->where('item_id', $attempt->quiz_id)
+            ->where('status', 'confirmed')
+            ->exists();
+
+        if (!$activeSub && !$hasOneOff) {
+            return response()->json(['ok' => false, 'message' => 'Subscription or one-off purchase required'], 403);
+        }
+
+        // Recompute score from stored answers
+        $answers = $attempt->answers ?? [];
+        $quiz = $attempt->quiz()->with('questions')->first();
+        $correct = 0;
+        $results = [];
+        foreach ($answers as $a) {
+            $qid = intval($a['question_id'] ?? 0);
+            $selected = $a['selected'] ?? null;
+            $q = $quiz->questions->firstWhere('id', $qid);
+            if (!$q) continue;
+
+            $isCorrect = false;
+            $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+            if (is_array($selected)) {
+                $isCorrect = array_values($selected) == array_values($correctAnswers);
+            } else {
+                $isCorrect = in_array($selected, $correctAnswers);
+            }
+
+            if ($isCorrect) $correct++;
+            $results[] = ['question_id' => $qid, 'correct' => $isCorrect];
+        }
+
+        $attempted = max(0, count($answers));
+        $score = $attempted > 0 ? round($correct / $attempted * 100, 1) : 0;
+        $pointsEarned = round(($score / 100) * ($attempted * 10), 2);
+
+        try {
+            DB::beginTransaction();
+
+            $attempt->score = $score;
+            $attempt->points_earned = $pointsEarned;
+            $attempt->save();
+
+            // award points to user
+            if (method_exists($user, 'increment')) {
+                try {
+                    $user->increment('points', $pointsEarned);
+                } catch (\Exception $e) {
+                    Log::warning('Could not increment user points on marking: ' . $e->getMessage());
+                }
+            }
+
+            // achievements
+            $this->achievementService->checkStreakAchievements($user, $request->input('streak', 0), $attempt->id ?? null);
+            $this->achievementService->checkScoreAchievements($user, $score, $attempt->id ?? null);
+            $this->achievementService->checkCompletionAchievements(
+                $user,
+                100 * (count($answers) / $quiz->questions()->count()),
+                $attempt->id ?? null
+            );
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed marking quiz attempt: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'message' => 'Failed to mark attempt'], 500);
+        }
+
+        // Reuse showAttempt logic to build details and badges
+        return $this->showAttempt($request, $attempt);
     }
 
     /**
@@ -122,6 +256,19 @@ class QuizAttemptController extends Controller
     {
         $user = $request->user();
         if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+
+        // Subscription check
+        $activeSub = \App\Models\Subscription::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->where(function($q) {
+                $now = now();
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
+            })
+            ->orderByDesc('started_at')
+            ->first();
+        if (!$activeSub) {
+            return response()->json(['ok' => false, 'message' => 'Subscription required'], 403);
+        }
 
         if ($attempt->user_id !== $user->id) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);

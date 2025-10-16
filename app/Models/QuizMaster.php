@@ -26,4 +26,9 @@ class QuizMaster extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function quizzes()
+    {
+        return $this->hasMany(Quiz::class, 'user_id', 'user_id');
+    }
 }

@@ -81,10 +81,53 @@ class AchievementService
 
         $user->achievements()->attach($achievement->id, $payload);
 
-        // Add points from achievement
-        $user->increment('points', $achievement->points);
+        // Add points from achievement (defensive: wrap in try/catch to avoid failing when points column missing)
+        try {
+            $user->increment('points', $achievement->points);
+        } catch (\Throwable $e) {
+            // Log and continue; we don't want achievements to fail due to points column issues
+            try { \Log::warning('Could not increment user points for achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+        }
 
         // Broadcast achievement
         event(new AchievementUnlocked($user, $achievement));
+    }
+
+    /**
+     * Generic achievements checker used by battles, tournaments, and daily challenges.
+     * Accepts either a User instance or a user id and a payload with keys like 'type', 'score', 'total'.
+     * This finds achievements that match the given type and criteria and awards them.
+     *
+     * @param User|int $userOrId
+     * @param array $payload
+     * @return void
+     */
+    public function checkAchievements($userOrId, array $payload): void
+    {
+        $user = $userOrId instanceof User ? $userOrId : User::find($userOrId);
+        if (!$user) return;
+
+        $type = $payload['type'] ?? null;
+        if (!$type) return;
+
+        // Build a query for achievements matching this type and criteria
+        $query = Achievement::where('type', $type);
+
+        // If the payload contains a numeric score/total, use criteria_value comparisons
+        if (isset($payload['score']) && is_numeric($payload['score'])) {
+            $query->where('criteria_value', '<=', $payload['score']);
+        } elseif (isset($payload['total']) && is_numeric($payload['total'])) {
+            $query->where('criteria_value', '<=', $payload['total']);
+        }
+
+        $achievements = $query->whereDoesntHave('users', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+        })->get();
+
+        foreach ($achievements as $a) {
+            // attempt_id may be present in payload
+            $attemptId = $payload['attempt_id'] ?? null;
+            $this->awardAchievement($user, $a, $attemptId);
+        }
     }
 }

@@ -4,22 +4,24 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PackageResource\Pages;
 use App\Models\Package;
-use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\FileUpload;
 use Filament\Tables\Columns\TextColumn;
+use UnitEnum;
 
 class PackageResource extends Resource
 {
     protected static ?string $model = Package::class;
-
-    public static function schema(Schema $schema): Schema
+    protected static \UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
+    protected static ?int $navigationSort = 1;
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
-        return $schema->components([
+        return $schema->schema([
             TextInput::make('title')->required(),
             Textarea::make('description'),
             TextInput::make('price')->numeric()->required(),
@@ -37,6 +39,14 @@ class PackageResource extends Resource
             TextColumn::make('price')->money('currency'),
             TextColumn::make('duration_days')->label('Days'),
             TextColumn::make('created_at')->date(),
+        ])
+        ->actions([
+            Tables\Actions\ViewAction::make(),
+            Tables\Actions\EditAction::make(),
+            Tables\Actions\DeleteAction::make(),
+        ])
+        ->bulkActions([
+            Tables\Actions\DeleteBulkAction::make(),
         ]);
     }
 
@@ -46,6 +56,7 @@ class PackageResource extends Resource
             'index' => Pages\ListPackages::route('/'),
             'create' => Pages\CreatePackage::route('/create'),
             'edit' => Pages\EditPackage::route('/{record}/edit'),
+            'view' => Pages\ViewPackage::route('/{record}'),
         ];
     }
 }

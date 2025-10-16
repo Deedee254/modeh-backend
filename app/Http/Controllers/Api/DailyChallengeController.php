@@ -37,7 +37,7 @@ class DailyChallengeController extends Controller
         }
 
         // Check if user has completed it
-        $completion = UserDailyChallenge::where('quizee_id', $user->id)
+        $completion = UserDailyChallenge::where('user_id', $user->id)
             ->where('daily_challenge_id', $challenge->id)
             ->first();
 
@@ -54,7 +54,7 @@ class DailyChallengeController extends Controller
     {
         $user = $request->user();
 
-        $completions = UserDailyChallenge::where('quizee_id', $user->id)
+        $completions = UserDailyChallenge::where('user_id', $user->id)
             ->with('dailyChallenge')
             ->orderBy('completed_at', 'desc')
             ->get();
@@ -75,7 +75,7 @@ class DailyChallengeController extends Controller
 
         // Create completion record
         $udc = UserDailyChallenge::create([
-            'quizee_id' => $user->id,
+            'user_id' => $user->id,
             'daily_challenge_id' => $challenge->id,
             'completed_at' => now(),
             'score' => $data['score']

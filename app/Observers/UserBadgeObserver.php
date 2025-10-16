@@ -15,7 +15,7 @@ class UserBadgeObserver
             // persist a notification record for history
             try {
                 AppNotification::create([
-                    'user_id' => $userBadge->quizee_id,
+                    'user_id' => $userBadge->user_id,
                     'type' => 'badge_awarded',
                     'data' => ['badge' => $badge],
                 ]);
@@ -23,7 +23,7 @@ class UserBadgeObserver
                 // ignore create errors
             }
 
-            event(new BadgeAwarded($userBadge->quizee_id, $badge));
+            event(new BadgeAwarded($userBadge->user_id, $badge));
         } catch (\Exception $e) {
             // don't break application flow if broadcasting fails
         }

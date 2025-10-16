@@ -23,7 +23,23 @@ return new class extends Migration
             // consolidated columns from later migrations
             $table->boolean('is_banked')->default(false);
             $table->string('media_type')->nullable();
+            // additional metadata added here so base migration is complete
+            $table->json('tags')->nullable();
+            $table->text('hint')->nullable();
+            $table->json('solution_steps')->nullable();
+            $table->unsignedBigInteger('subject_id')->nullable();
+            $table->unsignedBigInteger('topic_id')->nullable();
+            $table->unsignedBigInteger('grade_id')->nullable();
+            $table->string('youtube_url')->nullable();
+            $table->json('media_metadata')->nullable()->comment('Store additional media information like duration, dimensions, etc.');
+            $table->text('explanation')->nullable();
             $table->timestamp('approval_requested_at')->nullable();
+
+            // indexes & foreign keys
+            $table->index(['subject_id','topic_id','grade_id']);
+            $table->foreign('subject_id')->references('id')->on('subjects')->onDelete('set null');
+            $table->foreign('topic_id')->references('id')->on('topics')->onDelete('set null');
+            $table->foreign('grade_id')->references('id')->on('grades')->onDelete('set null');
 
             $table->timestamps();
         });

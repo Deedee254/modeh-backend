@@ -6,10 +6,11 @@ use App\Filament\Resources\BattleResource\Pages;
 use App\Models\Battle;
 use BackedEnum;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
+use Filament\Tables\Actions;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\DateTimePicker;
@@ -20,12 +21,14 @@ use Filament\Forms\Components\DatePicker;
 class BattleResource extends Resource
 {
     protected static ?string $model = Battle::class;
+    protected static \UnitEnum|string|null $navigationGroup = 'User Engagement';
+    protected static ?int $navigationSort = 1;
 
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-sparkles';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-sparkles';
 
-    public static function form(Schema $schema): Schema
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
-        return $schema->components([
+        return $schema->schema([
             Select::make('initiator_id')->relationship('initiator', 'id')->searchable()->required()->label('Initiator'),
             Select::make('opponent_id')->relationship('opponent', 'id')->searchable()->required()->label('Opponent'),
             Select::make('status')
@@ -40,6 +43,12 @@ class BattleResource extends Resource
             TextInput::make('initiator_points')->numeric()->default(0),
             TextInput::make('opponent_points')->numeric()->default(0),
             TextInput::make('rounds_completed')->numeric()->default(0),
+            // One-off purchase price (optional)
+            TextInput::make('one_off_price')
+                ->numeric()
+                ->label('One-off Price')
+                ->min(0)
+                ->step(0.01),
             DateTimePicker::make('completed_at'),
         ]);
     }
@@ -51,6 +60,10 @@ class BattleResource extends Resource
                 TextColumn::make('id')->sortable(),
                 TextColumn::make('initiator.id')->label('Initiator')->searchable(),
                 TextColumn::make('opponent.id')->label('Opponent')->searchable(),
+                TextColumn::make('one_off_price')
+                    ->label('One-off Price')
+                    ->formatStateUsing(fn($state) => $state !== null ? number_format($state, 2) : '-')
+                    ->sortable(),
                 BadgeColumn::make('status')
                     ->colors([
                         'warning' => 'pending',
@@ -67,6 +80,14 @@ class BattleResource extends Resource
                 TextColumn::make('rounds_completed')->label('Rounds')->numeric()->sortable(),
                 TextColumn::make('completed_at')->dateTime()->since()->sortable(),
                 TextColumn::make('created_at')->dateTime()->since()->sortable(),
+            ])
+            ->actions([
+                Tables\Actions\ViewAction::make(),
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make(),
             ])
             ->filters([
                 SelectFilter::make('status')->options([
@@ -95,6 +116,7 @@ class BattleResource extends Resource
             'index' => Pages\ListBattles::route('/'),
             'create' => Pages\CreateBattle::route('/create'),
             'edit' => Pages\EditBattle::route('/{record}/edit'),
+            'view' => Pages\ViewBattle::route('/{record}'),
         ];
     }
 }

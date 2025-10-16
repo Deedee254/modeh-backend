@@ -12,7 +12,8 @@ return new class extends Migration
             // If the messages table doesn't exist yet (migration ordering in some environments),
             // skip altering here to avoid errors during migrate:fresh. The backfill will be
             // handled by a subsequent deployment step or a follow-up migration.
-            \Log::warning('Skipping add_direct_messaging_fields_to_messages migration: messages table not present yet.');
+            // Log at info level to avoid noisy warnings in test environments.
+            \Log::info('Skipping add_direct_messaging_fields_to_messages migration: messages table not present yet.');
             return;
         }
 

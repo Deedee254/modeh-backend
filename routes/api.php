@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Middleware\SetSessionCookie;
 use App\Http\Controllers\Auth\SocialAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -11,13 +10,11 @@ Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster
 
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.
-// The SetSessionCookie middleware ensures the correct session cookie name is set
-// for each request before the session middleware runs.
-Route::post('/login', [AuthController::class, 'login'])->middleware([SetSessionCookie::class, 'web']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('web');
 
 // Logout and authenticated routes also need the session middleware.
 // Social authentication routes
-Route::middleware([SetSessionCookie::class, 'web'])->group(function () {
+Route::middleware('web')->group(function () {
     Route::get('auth/{provider}/redirect', [SocialAuthController::class, 'redirect']);
     Route::get('auth/{provider}/callback', [SocialAuthController::class, 'callback']);
 });
@@ -50,7 +47,7 @@ Route::get('/recommendations/quizzes', [\App\Http\Controllers\Api\Recommendation
 Route::get('/tournaments', [\App\Http\Controllers\Api\TournamentController::class, 'index']);
 Route::get('/tournaments/{tournament}', [\App\Http\Controllers\Api\TournamentController::class, 'show']);
 
-Route::middleware([SetSessionCookie::class, 'web', 'auth:sanctum'])->group(function () {
+Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::get('/me', function (Request $request) {
@@ -70,6 +67,8 @@ Route::middleware([SetSessionCookie::class, 'web', 'auth:sanctum'])->group(funct
 
     // quizee quiz take endpoints (show quiz without answers, submit answers)
     Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\QuizAttemptController::class, 'submit']);
+    // mark a previously saved attempt (requires subscription)
+    Route::post('/quiz-attempts/{attempt}/mark', [\App\Http\Controllers\Api\QuizAttemptController::class, 'markAttempt']);
     // Fetch a user's attempt details
     Route::get('/quiz-attempts/{attempt}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'showAttempt']);
     // List authenticated user's quiz attempts (quizee)
@@ -98,6 +97,12 @@ Route::middleware([SetSessionCookie::class, 'web', 'auth:sanctum'])->group(funct
     // Admin approve question
     Route::post('/questions/{question}/approve', [\App\Http\Controllers\Api\QuestionController::class, 'approve']);
     Route::post('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'update']);
+    // Support PATCH for updates (clients may use PATCH) and allow deleting questions
+    Route::patch('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'update']);
+    Route::delete('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'destroy']);
+
+    // Generic uploads helper (used by frontend to upload files before attaching URLs)
+    Route::post('/uploads', [\App\Http\Controllers\Api\UploadController::class, 'store']);
 
     // Approval requests (quiz-master -> admin)
     Route::post('/{resource}/{id}/request-approval', [\App\Http\Controllers\Api\ApprovalRequestController::class, 'store']);
@@ -155,6 +160,8 @@ Route::middleware([SetSessionCookie::class, 'web', 'auth:sanctum'])->group(funct
     Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'transactions']);
     Route::post('/wallet/withdraw', [\App\Http\Controllers\Api\WalletController::class, 'requestWithdrawal']);
     Route::get('/wallet/withdrawals', [\App\Http\Controllers\Api\WalletController::class, 'myWithdrawals']);
+    // Admin: settle pending funds into available for a quiz-master
+    Route::post('/wallet/settle/{quizMasterId}', [\App\Http\Controllers\Api\WalletController::class, 'settlePending']);
     
     // quizee rewards endpoint (points, vouchers, next threshold)
     Route::get('/rewards/my', [\App\Http\Controllers\Api\WalletController::class, 'rewardsMy']);
@@ -167,6 +174,9 @@ Route::middleware([SetSessionCookie::class, 'web', 'auth:sanctum'])->group(funct
     Route::get('/subscriptions/status', [\App\Http\Controllers\Api\SubscriptionController::class, 'statusByTx']);
     Route::get('/subscriptions/{subscription}/status', [\App\Http\Controllers\Api\SubscriptionController::class, 'status']);
     Route::post('/payments/subscriptions/{subscription}/mpesa/initiate', [\App\Http\Controllers\Api\PaymentController::class, 'initiateMpesa']);
+    // One-off purchases (pay-to-unlock a single quiz or battle)
+    Route::post('/one-off-purchases', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'store']);
+    Route::get('/one-off-purchases/{purchase}', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'show']);
     Route::get('/subscriptions/mine', [\App\Http\Controllers\Api\SubscriptionController::class, 'mine']);
     Route::get('/subscriptions/mine', [\App\Http\Controllers\Api\SubscriptionController::class, 'mine']);
     // Interactions
@@ -186,6 +196,7 @@ Route::middleware([SetSessionCookie::class, 'web', 'auth:sanctum'])->group(funct
 
     // Battles
     Route::get('/battles', [\App\Http\Controllers\Api\BattleController::class, 'index']);
+    Route::get('/me/battles', [\App\Http\Controllers\Api\BattleController::class, 'myBattles']);
     Route::post('/battles', [\App\Http\Controllers\Api\BattleController::class, 'store']);
     Route::get('/battles/{battle}', [\App\Http\Controllers\Api\BattleController::class, 'show']);
     Route::post('/battles/{battle}/join', [\App\Http\Controllers\Api\BattleController::class, 'join']);
@@ -205,8 +216,10 @@ Route::middleware([SetSessionCookie::class, 'web', 'auth:sanctum'])->group(funct
         Route::delete('/admin/tournaments/{tournament}', [\App\Http\Controllers\Api\AdminTournamentController::class, 'destroy']);
     });
     Route::post('/battles/{battle}/submit', [\App\Http\Controllers\Api\BattleController::class, 'submit']);
+    Route::post('/battles/{battle}/mark', [\App\Http\Controllers\Api\BattleController::class, 'mark']);
     Route::get('/battles/{battle}/result', [\App\Http\Controllers\Api\BattleController::class, 'result']);
     Route::post('/battles/{battle}/attach-questions', [\App\Http\Controllers\Api\BattleController::class, 'attachQuestions']);
+    Route::post('/battles/{battle}/solo-complete', [\App\Http\Controllers\Api\BattleController::class, 'soloComplete']);
 });
 
 // Public webhook for mpesa callbacks

@@ -5,10 +5,12 @@ use App\Http\Controllers\AuthWebController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
 
-Route::get('/', [AuthWebController::class, 'showLogin'])->name('login');
-Route::get('/login', [AuthWebController::class, 'showLogin']);
-Route::post('/login', [AuthWebController::class, 'login']);
-Route::post('/logout', [AuthWebController::class, 'logout']);
+Route::middleware('web')->group(function () {
+    Route::get('/', [AuthWebController::class, 'showLogin'])->name('login');
+    Route::get('/login', [AuthWebController::class, 'showLogin']);
+    Route::post('/login', [AuthWebController::class, 'login']);
+    Route::post('/logout', [AuthWebController::class, 'logout']);
+});
 
 Route::get('/dashboard', [AuthWebController::class, 'dashboard'])->middleware('auth');
 

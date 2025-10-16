@@ -4,24 +4,25 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\BadgeResource\Pages;
 use App\Models\Badge;
-use Filament\Schemas\Schema;
+// Note: avoid importing Filament\Forms\Form directly to prevent signature conflicts with installed Filament version
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Tables\Columns\TextColumn;
-use BackedEnum;
 
 class BadgeResource extends Resource
 {
     protected static ?string $model = Badge::class;
+    protected static \UnitEnum|string|null $navigationGroup = 'Content Management';
+    protected static ?int $navigationSort = 4;
 
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';
 
-    public static function form(Schema $schema): Schema
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
-        return $schema->components([
+        return $schema->schema([
             TextInput::make('name')->required(),
             Textarea::make('description'),
             TextInput::make('icon'),
@@ -44,6 +45,14 @@ class BadgeResource extends Resource
             TextColumn::make('type'),
             TextColumn::make('points_reward'),
             TextColumn::make('created_at')->date(),
+        ])
+        ->actions([
+            Tables\Actions\ViewAction::make(),
+            Tables\Actions\EditAction::make(),
+            Tables\Actions\DeleteAction::make(),
+        ])
+        ->bulkActions([
+            Tables\Actions\DeleteBulkAction::make(),
         ]);
     }
 
@@ -53,6 +62,7 @@ class BadgeResource extends Resource
             'index' => Pages\ListBadges::route('/'),
             'create' => Pages\CreateBadge::route('/create'),
             'edit' => Pages\EditBadge::route('/{record}/edit'),
+            'view' => Pages\ViewBadge::route('/{record}'),
         ];
     }
 }

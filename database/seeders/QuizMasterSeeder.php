@@ -30,6 +30,7 @@ class QuizMasterSeeder extends Seeder
             'name' => 'quiz-master One',
             'password' => Hash::make('password123'),
             'social_avatar' => 'https://i.pravatar.cc/300?u=quiz-master@example.com',
+            'role' => 'quiz-master',
         ]);
 
         QuizMaster::updateOrCreate([
@@ -40,19 +41,23 @@ class QuizMasterSeeder extends Seeder
             'subjects' => $faker->randomElements($subjectIds, rand(2, 3)),
         ]);
 
-        // Create 5 additional quiz-masters
-        for ($i = 0; $i < 5; $i++) {
-            // Use unique emails but guard against duplicates if ran multiple times
-            $email = $faker->unique()->safeEmail;
-            $user = User::create([
-                'name' => $faker->name,
+        // Create 5 additional quiz-masters (idempotent)
+        // Use deterministic emails so running the seeder multiple times won't create duplicates.
+        for ($i = 2; $i <= 6; $i++) {
+            $email = "quiz-master-{$i}@example.com";
+
+            $user = User::updateOrCreate([
                 'email' => $email,
+            ],[
+                'name' => $faker->name,
                 'password' => Hash::make('password123'),
-                'social_avatar' => 'https://i.pravatar.cc/300?u=' . $faker->unique()->uuid,
+                'social_avatar' => 'https://i.pravatar.cc/300?u=' . $email,
+                'role' => 'quiz-master',
             ]);
 
-            QuizMaster::create([
+            QuizMaster::updateOrCreate([
                 'user_id' => $user->id,
+            ],[
                 'headline' => $faker->sentence(6),
                 'bio' => $faker->paragraphs(3, true),
                 'subjects' => $faker->randomElements($subjectIds, rand(2, 4)),

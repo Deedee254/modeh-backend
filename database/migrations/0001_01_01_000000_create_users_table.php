@@ -28,6 +28,8 @@ return new class extends Migration
             $table->boolean('is_profile_completed')->default(false);
 
             $table->rememberToken();
+            // points column consolidated from later migrations
+            $table->decimal('points', 10, 2)->default(0);
             $table->timestamps();
         });
 

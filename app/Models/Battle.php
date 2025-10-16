@@ -29,12 +29,14 @@ class Battle extends Model
         'rounds_completed',
         'completed_at',
         'name',
+        'one_off_price',
         'settings',
     ];
 
     protected $casts = [
         'completed_at' => 'datetime',
         'settings' => 'array',
+        'one_off_price' => 'decimal:2',
     ];
 
     public function initiator()
