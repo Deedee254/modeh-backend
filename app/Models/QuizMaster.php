@@ -43,4 +43,10 @@ class QuizMaster extends Model
     {
         return Subject::whereIn('id', $this->subjects ?? [])->get();
     }
+
+    // Backwards-compatibility: controller expects $profile->subjectModels (camelCase, singular)
+    public function getSubjectModelsAttribute()
+    {
+        return $this->getSubjectsModelsAttribute();
+    }
 }
