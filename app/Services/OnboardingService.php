@@ -37,6 +37,11 @@ class OnboardingService
             switch ($step) {
                 case 'institution':
                     $onboarding->institution_added = true;
+                    if ($user->role === 'quiz-master' && !empty($data['institution'])) {
+                        $user->quizMasterProfile->update(['institution' => $data['institution']]);
+                    } elseif ($user->role === 'quizee' && !empty($data['institution'])) {
+                        $user->quizeeProfile->update(['institution' => $data['institution']]);
+                    }
                     break;
                 case 'role_quizee':
                 case 'role_quiz-master':
@@ -44,9 +49,19 @@ class OnboardingService
                     break;
                 case 'grade':
                     $onboarding->grade_selected = true;
+                    if ($user->role === 'quiz-master' && !empty($data['grade_id'])) {
+                        $user->quizMasterProfile->update(['grade_id' => $data['grade_id']]);
+                    } elseif ($user->role === 'quizee' && !empty($data['grade_id'])) {
+                        $user->quizeeProfile->update(['grade_id' => $data['grade_id']]);
+                    }
                     break;
                 case 'subjects':
                     $onboarding->subject_selected = true;
+                    if ($user->role === 'quiz-master' && !empty($data['subjects'])) {
+                        $user->quizMasterProfile->update(['subjects' => $data['subjects']]);
+                    } elseif ($user->role === 'quizee' && !empty($data['subjects'])) {
+                        $user->quizeeProfile->update(['subjects' => $data['subjects']]);
+                    }
                     break;
                 case 'profile_complete':
                     // explicit completion request

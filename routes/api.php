@@ -23,20 +23,28 @@ Route::middleware('web')->group(function () {
 Route::get('/quizzes', [\App\Http\Controllers\Api\QuizController::class, 'index']);
 // Public quiz show (safe for anonymous users; attempt payload strips answers)
 Route::get('/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'show']);
+// Public grades listing for frontend
+Route::get('/grades', [\App\Http\Controllers\Api\GradeController::class, 'index']);
 // Public testimonials listing for homepage
 Route::get('/testimonials', [\App\Http\Controllers\Api\TestimonialController::class, 'index']);
 Route::get('/subjects', [\App\Http\Controllers\Api\SubjectController::class, 'index']);
 Route::get('/topics', [\App\Http\Controllers\Api\TopicController::class, 'index']);
-// Public grades listing for frontend
-Route::get('/grades', [\App\Http\Controllers\Api\GradeController::class, 'index']);
+// Public topics listing for frontend
+Route::get('/topics', [\App\Http\Controllers\Api\TopicController::class, 'index']);
+// Get quizzes by topic
+Route::get('/topics/{topic}/quizzes', [\App\Http\Controllers\Api\TopicController::class, 'quizzes']);
 // Public show endpoints for detail pages
 Route::get('/grades/{grade}', [\App\Http\Controllers\Api\GradeController::class, 'show']);
 Route::get('/topics/{topic}', [\App\Http\Controllers\Api\TopicController::class, 'show']);
 Route::get('/subjects/{subject}', [\App\Http\Controllers\Api\SubjectController::class, 'show']);
+// Get topics by subject
+Route::get('/subjects/{subject}/topics', [\App\Http\Controllers\Api\SubjectController::class, 'topics']);
 // Sponsors for homepage carousel
 Route::get('/sponsors', [\App\Http\Controllers\Api\SponsorController::class, 'index']);
 // Public packages listing for pricing page
 Route::get('/packages', [\App\Http\Controllers\Api\PackageController::class, 'index']);
+// Public subscription status check (by transaction id) - available to anonymous users for frontend polling
+Route::get('/subscriptions/status', [\App\Http\Controllers\Api\SubscriptionController::class, 'statusByTx']);
 Route::get('/quiz-masters', [\App\Http\Controllers\Api\QuizMasterController::class, 'index']);
 Route::get('/quiz-masters/{id}', [\App\Http\Controllers\Api\QuizMasterController::class, 'show']);
 
@@ -46,6 +54,12 @@ Route::get('/recommendations/quizzes', [\App\Http\Controllers\Api\Recommendation
 // Public tournament routes for listing and viewing
 Route::get('/tournaments', [\App\Http\Controllers\Api\TournamentController::class, 'index']);
 Route::get('/tournaments/{tournament}', [\App\Http\Controllers\Api\TournamentController::class, 'show']);
+// Global public leaderboard (supports pagination, sorting and search)
+Route::get('/leaderboard', [\App\Http\Controllers\Api\LeaderboardController::class, 'index']);
+// Public badges endpoint
+Route::get('/badges', [\App\Http\Controllers\Api\BadgeController::class, 'index']);
+// Public daily challenge leaderboard
+Route::get('/daily-challenges/leaderboard', [\App\Http\Controllers\Api\DailyChallengeController::class, 'leaderboard']);
 
 Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -54,8 +68,12 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
         return $request->user();
     });
 
-    // Profile update and password change
+    // Profile updates
     Route::patch('/me', [\App\Http\Controllers\Api\UserController::class, 'update']);
+    Route::patch('/profile/quiz-master', [\App\Http\Controllers\Api\ProfileController::class, 'updateQuizMasterProfile']);
+    Route::patch('/profile/quizee', [\App\Http\Controllers\Api\ProfileController::class, 'updateQuizeeProfile']);
+    
+    // Password change
     Route::post('/me/password', [\App\Http\Controllers\Api\UserController::class, 'changePassword']);
     Route::post('/me/theme', [\App\Http\Controllers\Api\UserController::class, 'setTheme']);
     Route::get('/me/theme', [\App\Http\Controllers\Api\UserController::class, 'getTheme']);
@@ -171,14 +189,14 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/packages/{package}/subscribe', [\App\Http\Controllers\Api\PackageController::class, 'subscribe']);
     Route::post('/subscriptions', [\App\Http\Controllers\Api\SubscriptionApiController::class, 'store']);
     // subscription status check endpoints
-    Route::get('/subscriptions/status', [\App\Http\Controllers\Api\SubscriptionController::class, 'statusByTx']);
     Route::get('/subscriptions/{subscription}/status', [\App\Http\Controllers\Api\SubscriptionController::class, 'status']);
     Route::post('/payments/subscriptions/{subscription}/mpesa/initiate', [\App\Http\Controllers\Api\PaymentController::class, 'initiateMpesa']);
     // One-off purchases (pay-to-unlock a single quiz or battle)
     Route::post('/one-off-purchases', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'store']);
     Route::get('/one-off-purchases/{purchase}', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'show']);
     Route::get('/subscriptions/mine', [\App\Http\Controllers\Api\SubscriptionController::class, 'mine']);
-    Route::get('/subscriptions/mine', [\App\Http\Controllers\Api\SubscriptionController::class, 'mine']);
+
+    
     // Interactions
     Route::post('/quizzes/{quiz}/like', [\App\Http\Controllers\Api\InteractionController::class, 'likeQuiz']);
     Route::post('/quizzes/{quiz}/unlike', [\App\Http\Controllers\Api\InteractionController::class, 'unlikeQuiz']);

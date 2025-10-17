@@ -21,6 +21,10 @@ class AuthController extends Controller
             'password' => 'required|min:6',
             'first_name' => 'nullable|string',
             'last_name' => 'nullable|string',
+            'institution' => 'nullable|string',
+            'grade_id' => 'nullable|exists:grades,id',
+            'subjects' => 'nullable|array',
+            'subjects.*' => 'exists:subjects,id',
         ]);
 
         if ($v->fails()) {
@@ -39,6 +43,9 @@ class AuthController extends Controller
             'user_id' => $user->id,
             'first_name' => $request->first_name,
             'last_name' => $request->last_name,
+            'institution' => $request->institution,
+            'grade_id' => $request->grade_id,
+            'subjects' => $request->subjects ?? [],
         ]);
 
         return response()->json(['user' => $user, 'quizee' => $quizee], 201);
@@ -51,6 +58,10 @@ class AuthController extends Controller
             'password' => 'required|min:6',
             'first_name' => 'nullable|string',
             'last_name' => 'nullable|string',
+            'institution' => 'nullable|string',
+            'grade_id' => 'nullable|exists:grades,id',
+            'subjects' => 'nullable|array',
+            'subjects.*' => 'exists:subjects,id',
         ]);
 
         if ($v->fails()) {
@@ -69,6 +80,9 @@ class AuthController extends Controller
             'user_id' => $user->id,
             'first_name' => $request->first_name,
             'last_name' => $request->last_name,
+            'institution' => $request->institution,
+            'grade_id' => $request->grade_id,
+            'subjects' => $request->subjects ?? [],
         ]);
 
         return response()->json(['user' => $user, 'quizMaster' => $quizMaster], 201);

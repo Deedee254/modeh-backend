@@ -20,6 +20,13 @@ class quizee extends Model
         'current_streak',
         'longest_streak',
         'subject_progress',
+        'institution',
+        'subjects',
+    ];
+
+    protected $casts = [
+        'subjects' => 'array',
+        'subject_progress' => 'array',
     ];
 
     public function user()

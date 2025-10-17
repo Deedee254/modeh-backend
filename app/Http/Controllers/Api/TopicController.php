@@ -103,6 +103,42 @@ class TopicController extends Controller
         return response()->json(['topic' => $topic]);
     }
 
+    // Get quizzes for a specific topic
+    public function quizzes(Request $request, Topic $topic)
+    {
+        $query = Quiz::where('topic_id', $topic->id)
+                    ->where('is_approved', true)
+                    ->with(['topic', 'subject', 'grade', 'creator'])
+                    ->withCount(['attempts', 'likes']);
+
+        $perPage = min(100, max(1, (int)$request->get('per_page', 10)));
+        $data = $query->paginate($perPage);
+
+        // Attach storage URLs for any cover images
+        $data->getCollection()->transform(function ($quiz) {
+            if ($quiz->cover_image) {
+                try {
+                    $quiz->cover_image = Storage::url($quiz->cover_image);
+                } catch (\Exception $e) {
+                    $quiz->cover_image = null;
+                }
+            }
+            return $quiz;
+        });
+
+        return response()->json([
+            'quizzes' => $data->items(),
+            'meta' => [
+                'current_page' => $data->currentPage(),
+                'from' => $data->firstItem(),
+                'last_page' => $data->lastPage(),
+                'per_page' => $data->perPage(),
+                'to' => $data->lastItem(),
+                'total' => $data->total()
+            ]
+        ]);
+    }
+
     // quiz-master creates a topic under a subject (subject must be approved)
     public function store(Request $request)
     {

@@ -16,6 +16,8 @@ class GradeController extends Controller
     // Return list of grades with subjects count (and optional search)
     public function index(Request $request)
     {
+        \Log::info('Accessing grades index');
+        
         $query = Grade::query()
             ->withCount('subjects')
             ->with(['subjects' => function($q) {

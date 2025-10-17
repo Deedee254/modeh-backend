@@ -15,11 +15,17 @@ class UserDailyChallenge extends Model
         'user_id',
         'daily_challenge_id',
         'completed_at',
+        'score',
     ];
 
     protected $casts = [
         'completed_at' => 'datetime',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function quizee()
     {

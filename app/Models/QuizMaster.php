@@ -16,6 +16,8 @@ class QuizMaster extends Model
         'headline',
         'subjects',
         'bio',
+        'grade_id',
+        'institution',
     ];
 
     protected $casts = [
@@ -30,5 +32,15 @@ class QuizMaster extends Model
     public function quizzes()
     {
         return $this->hasMany(Quiz::class, 'user_id', 'user_id');
+    }
+
+    public function grade()
+    {
+        return $this->belongsTo(Grade::class);
+    }
+
+    public function getSubjectsModelsAttribute()
+    {
+        return Subject::whereIn('id', $this->subjects ?? [])->get();
     }
 }

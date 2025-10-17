@@ -23,6 +23,25 @@ class QuizMasterSeeder extends Seeder
             $subjectIds = Subject::pluck('id')->toArray();
         }
 
+        // Get all grade IDs to assign to quiz-masters
+        $gradeIds = \App\Models\Grade::pluck('id')->toArray();
+        if (empty($gradeIds)) {
+            $this->command->info('No grades found. Running GradeSeeder...');
+            $this->call(GradeSeeder::class);
+            $gradeIds = \App\Models\Grade::pluck('id')->toArray();
+        }
+
+        // Example institutions
+        $institutions = [
+            'Sunshine Academy',
+            'Valley High School',
+            'Riverside Elementary',
+            'Central High',
+            'St. Mary\'s School',
+            'Heritage Academy',
+            'Mountain View High',
+        ];
+
         // Create the main quiz-master for manual testing (idempotent)
         $user = User::updateOrCreate([
             'email' => 'quiz-master@example.com',
@@ -39,6 +58,8 @@ class QuizMasterSeeder extends Seeder
             'headline' => 'Your friendly neighborhood quiz-master.',
             'bio' => 'I am a passionate educator with over 10 years of experience in helping quizees achieve their academic goals. My focus is on creating a supportive and engaging learning environment.',
             'subjects' => $faker->randomElements($subjectIds, rand(2, 3)),
+            'grade_id' => $faker->randomElement($gradeIds),
+            'institution' => $faker->randomElement($institutions),
         ]);
 
         // Create 5 additional quiz-masters (idempotent)
@@ -61,6 +82,8 @@ class QuizMasterSeeder extends Seeder
                 'headline' => $faker->sentence(6),
                 'bio' => $faker->paragraphs(3, true),
                 'subjects' => $faker->randomElements($subjectIds, rand(2, 4)),
+                'grade_id' => $faker->randomElement($gradeIds),
+                'institution' => $faker->randomElement($institutions),
             ]);
         }
     }

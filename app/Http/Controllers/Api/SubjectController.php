@@ -130,4 +130,43 @@ class SubjectController extends Controller
 
         return response()->json(['subject' => $subject]);
     }
+
+    // Get topics for a specific subject
+    public function topics(Request $request, Subject $subject)
+    {
+        $query = $subject->topics()
+            ->where('is_approved', true)
+            ->withCount('quizzes');
+
+        if ($request->has('approved')) {
+            $query->where('is_approved', (bool)$request->get('approved'));
+        }
+
+        $perPage = min(100, max(1, (int)$request->get('per_page', 10)));
+        $data = $query->paginate($perPage);
+
+        // Attach storage URLs for any images
+        $data->getCollection()->transform(function ($topic) {
+            if ($topic->image) {
+                try {
+                    $topic->image = Storage::url($topic->image);
+                } catch (\Exception $e) {
+                    $topic->image = null;
+                }
+            }
+            return $topic;
+        });
+
+        return response()->json([
+            'topics' => $data->items(),
+            'meta' => [
+                'current_page' => $data->currentPage(),
+                'from' => $data->firstItem(),
+                'last_page' => $data->lastPage(),
+                'per_page' => $data->perPage(),
+                'to' => $data->lastItem(),
+                'total' => $data->total()
+            ]
+        ]);
+    }
 }

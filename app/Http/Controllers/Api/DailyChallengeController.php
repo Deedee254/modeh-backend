@@ -15,7 +15,8 @@ class DailyChallengeController extends Controller
     public function __construct(AchievementService $achievementService)
     {
         $this->achievementService = $achievementService;
-        $this->middleware('auth:sanctum');
+        // Only require auth for non-public endpoints
+        $this->middleware('auth:sanctum')->except(['leaderboard']);
     }
 
     /**
@@ -95,5 +96,65 @@ class DailyChallengeController extends Controller
             'completion' => $udc,
             'score' => $data['score']
         ]);
+    }
+
+    /**
+     * Get daily challenge leaderboard
+     */
+    public function leaderboard(Request $request)
+    {
+        try {
+            $query = UserDailyChallenge::query()
+                ->select(
+                    'user_daily_challenges.id',
+                    'user_daily_challenges.user_id',
+                    'user_daily_challenges.score',
+                    'user_daily_challenges.completed_at',
+                    'users.name',
+                    'users.avatar'
+                )
+                ->join('users', 'users.id', '=', 'user_daily_challenges.user_id')
+                ->orderBy('user_daily_challenges.score', 'desc')
+                ->orderBy('user_daily_challenges.completed_at', 'asc');
+
+            // Filter by date if provided
+            if ($request->has('date')) {
+                $date = $request->get('date');
+                $query->whereHas('dailyChallenge', function($q) use ($date) {
+                    $q->whereDate('challenge_date', $date);
+                });
+            } else {
+                // Default to today's challenge
+                $today = now()->toDateString();
+                $query->whereHas('dailyChallenge', function($q) use ($today) {
+                    $q->whereDate('challenge_date', $today);
+                });
+            }
+
+            $perPage = min($request->get('per_page', 20), 100); // Limit max items per page
+            $leaderboard = $query->paginate($perPage);
+
+            return response()->json([
+                'data' => $leaderboard->items(),
+                'meta' => [
+                    'current_page' => $leaderboard->currentPage(),
+                    'last_page' => $leaderboard->lastPage(),
+                    'per_page' => $leaderboard->perPage(),
+                    'total' => $leaderboard->total(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching daily challenge leaderboard: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Error fetching leaderboard data',
+                'data' => [],
+                'meta' => [
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => 20,
+                    'total' => 0,
+                ]
+            ], 500);
+        }
     }
 }

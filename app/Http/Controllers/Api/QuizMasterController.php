@@ -14,16 +14,33 @@ class QuizMasterController extends Controller
      */
     public function index()
     {
-        // Get users who have a quiz master profile, eager-load it, and paginate.
-        $quizMasters = User::whereHas('quizMasterProfile')->with('quizMasterProfile')->paginate(12);
+        // Get users who have a quiz master profile, eager-load it with relations, and paginate.
+        $quizMasters = User::whereHas('quizMasterProfile')
+            ->with(['quizMasterProfile.grade'])
+            ->paginate(12);
 
         // Transform the collection for the frontend.
         $quizMasters->getCollection()->transform(function ($user) {
+            $profile = $user->quizMasterProfile;
+            $subjects = Subject::whereIn('id', $profile->subjects ?? [])->get()
+                ->map(function ($subject) {
+                    return [
+                        'id' => $subject->id,
+                        'name' => $subject->name,
+                    ];
+                });
+
             return [
                 'id' => $user->id,
                 'name' => $user->name,
                 'avatar' => $user->social_avatar,
-                'headline' => $user->quizMasterProfile->headline ?? 'Experienced quiz master',
+                'headline' => $profile->headline ?? 'An experienced quiz master',
+                'institution' => $profile->institution ?? 'Independent Educator',
+                'grade' => $profile->grade ? [
+                    'id' => $profile->grade->id,
+                    'name' => $profile->grade->name,
+                ] : null,
+                'subjects' => $subjects,
             ];
         });
 
@@ -43,18 +60,26 @@ class QuizMasterController extends Controller
             return response()->json(['message' => 'Quiz master not found'], 404);
         }
 
-        // The 'subjects' field on the quiz master profile is a JSON array of subject IDs.
-        // We need to fetch the full subject models for the frontend.
-        $subjectIds = $user->quizMasterProfile->subjects ?? [];
-        $subjects = Subject::whereIn('id', $subjectIds)->get(['id', 'name']);
+        $profile = $user->quizMasterProfile;
+        $subjects = $profile->subjectModels->map(function ($subject) {
+            return [
+                'id' => $subject->id,
+                'name' => $subject->name,
+            ];
+        });
 
         return response()->json(['data' => [
             'id' => $user->id,
             'name' => $user->name,
             'avatar' => $user->social_avatar,
-            'headline' => $user->quizMasterProfile->headline ?? 'Experienced quiz master',
-            'bio' => $user->quizMasterProfile->bio,
-            'subjects' => $subjects, // Now an array of objects
+            'headline' => $profile->headline ?? 'An experienced quiz master',
+            'bio' => $profile->bio,
+            'institution' => $profile->institution ?? 'Independent Educator',
+            'grade' => $profile->grade ? [
+                'id' => $profile->grade->id,
+                'name' => $profile->grade->name,
+            ] : null,
+            'subjects' => $subjects,
             'quizzes' => $user->quizzes->map(function ($quiz) {
                 return [
                     'id' => $quiz->id,
