@@ -41,7 +41,20 @@ class PackageController extends Controller
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
 
-        // Create pending subscription
+        // If user has an active subscription, mark it as cancelled/ended so this acts as a switch
+        $previous = Subscription::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->orderByDesc('started_at')
+            ->first();
+        if ($previous) {
+            try {
+                $previous->status = 'cancelled';
+                $previous->ends_at = now();
+                $previous->save();
+            } catch (\Throwable $_) {}
+        }
+
+        // Create pending subscription (new)
         $sub = Subscription::create([
             'user_id' => $user->id,
             'package_id' => $package->id,
@@ -62,17 +75,53 @@ class PackageController extends Controller
                 if ($res['ok']) {
                     $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], ['tx' => $res['tx'], 'initiated_at' => now()]);
                     $sub->save();
-                    return response()->json(['ok' => true, 'subscription' => $sub, 'tx' => $res['tx'], 'message' => $res['message']]);
+                    return response()->json([
+                        'ok' => true,
+                        'subscription' => $sub,
+                        'tx' => $res['tx'],
+                        'message' => $res['message'],
+                        'previous_subscription' => $previous ?? null,
+                        'package' => [
+                            'id' => $package->id,
+                            'title' => $package->title,
+                            'features' => $package->features ?? [],
+                        ]
+                    ]);
                 }
                 // initiation failed — return subscription but indicate failure
-                return response()->json(['ok' => false, 'subscription' => $sub, 'message' => 'failed to initiate mpesa'], 500);
+                return response()->json([
+                    'ok' => false,
+                    'subscription' => $sub,
+                    'message' => 'failed to initiate mpesa',
+                    'previous_subscription' => $previous ?? null,
+                    'package' => [
+                        'id' => $package->id,
+                        'title' => $package->title,
+                        'features' => $package->features ?? [],
+                    ]
+                ], 500);
             } catch (\Throwable $e) {
                 try { Log::error('Mpesa initiate error: '.$e->getMessage()); } catch (\Throwable $_) {}
-                return response()->json(['ok' => false, 'subscription' => $sub, 'message' => 'mpesa initiation error'], 500);
+                return response()->json([
+                    'ok' => false,
+                    'subscription' => $sub,
+                    'message' => 'mpesa initiation error',
+                    'previous_subscription' => $previous ?? null,
+                    'package' => [
+                        'id' => $package->id,
+                        'title' => $package->title,
+                        'features' => $package->features ?? [],
+                    ]
+                ], 500);
             }
         }
 
-        // For non-mpesa gateways just return subscription
-        return response()->json(['ok' => true, 'subscription' => $sub]);
+        // For non-mpesa gateways just return subscription; include previous subscription info and package features
+        $resp = ['ok' => true, 'subscription' => $sub, 'previous_subscription' => $previous ?? null, 'package' => [
+            'id' => $package->id,
+            'title' => $package->title,
+            'features' => $package->features ?? [],
+        ]];
+        return response()->json($resp);
     }
 }

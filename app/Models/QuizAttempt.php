@@ -10,7 +10,7 @@ class QuizAttempt extends Model
     use HasFactory;
 
     protected $table = 'quiz_attempts';
-    protected $fillable = ['user_id', 'quiz_id', 'answers', 'score'];
+    protected $fillable = ['user_id', 'quiz_id', 'answers', 'score', 'points_earned', 'total_time_seconds', 'per_question_time'];
     protected $attributes = [
         'points_earned' => null,
     ];
@@ -19,5 +19,19 @@ class QuizAttempt extends Model
         'answers' => 'array',
         'score' => 'float',
         'points_earned' => 'float',
+        'per_question_time' => 'array',
+        'total_time_seconds' => 'integer',
     ];
+
+    protected $dates = ['started_at'];
+
+    public function quiz()
+    {
+        return $this->belongsTo(Quiz::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

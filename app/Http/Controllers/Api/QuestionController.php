@@ -53,8 +53,10 @@ class QuestionController extends Controller
             $query->orderByDesc('id');
         }
 
-        $perPage = max(1, (int)$request->get('per_page', 20));
-        return response()->json(['questions' => $query->paginate($perPage)]);
+    // Allow callers to request a specific number of questions using
+    // either `question_count` (used by some clients) or `per_page`.
+    $perPage = max(1, (int)($request->get('question_count') ?? $request->get('per_page', 20)));
+    return response()->json(['questions' => $query->paginate($perPage)]);
     }
 
     /**

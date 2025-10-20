@@ -18,6 +18,95 @@ class QuizController extends Controller
         $this->middleware('auth:sanctum')->except(['index']);
     }
 
+    // Update existing quiz (used by quiz-master UI to save settings and publish)
+    public function update(Request $request, Quiz $quiz)
+    {
+        $user = $request->user();
+        // Only allow owner or admin to update
+        if ($quiz->created_by && $quiz->created_by !== $user->id && !$user->is_admin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // If questions were sent as JSON string inside multipart/form-data, decode them
+        if ($request->has('questions') && is_string($request->get('questions'))) {
+            $decoded = json_decode($request->get('questions'), true);
+            if (is_array($decoded)) {
+                $request->merge(['questions' => $decoded]);
+            }
+        }
+
+        // Log incoming payload for debugging (don't include file streams)
+        \Log::info('QuizController@update incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
+
+        $v = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'title' => 'sometimes|required|string|max:255',
+            'description' => 'sometimes|nullable|string',
+            'youtube_url' => 'sometimes|nullable|url',
+            'is_paid' => 'sometimes|boolean',
+            'timer_seconds' => 'sometimes|nullable|integer|min:0',
+            'per_question_seconds' => 'sometimes|nullable|integer|min:10',
+            'use_per_question_timer' => 'sometimes|boolean',
+            'attempts_allowed' => 'sometimes|nullable|integer|min:0',
+            'shuffle_questions' => 'sometimes|boolean',
+            'shuffle_answers' => 'sometimes|boolean',
+            'visibility' => 'sometimes|string|in:draft,published,scheduled',
+            'scheduled_at' => 'sometimes|nullable|date',
+            'is_draft' => 'sometimes|boolean',
+            'questions' => 'sometimes|array',
+            'cover' => 'sometimes|file|image|max:5120',
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
+
+        // Handle cover upload if present
+        if ($request->hasFile('cover')) {
+            $file = $request->file('cover');
+            $path = \Illuminate\Support\Facades\Storage::disk('public')->putFile('covers', $file);
+            $quiz->cover_image = \Illuminate\Support\Facades\Storage::url($path);
+        }
+
+        // Update known fields if present
+        $fields = ['title','description','youtube_url','is_paid','timer_seconds','per_question_seconds','use_per_question_timer','attempts_allowed','shuffle_questions','shuffle_answers','visibility','scheduled_at','is_draft'];
+        foreach ($fields as $f) {
+            if ($request->has($f)) {
+                $quiz->{$f} = $request->get($f);
+            }
+        }
+
+        // If questions included, reuse existing creation logic to attach them
+        if ($request->filled('questions') && is_array($request->questions)) {
+            foreach ($request->questions as $index => $q) {
+                try {
+                    $qType = $q['type'] ?? 'mcq';
+                    $body = $q['text'] ?? ($q['body'] ?? '');
+                    $options = $q['options'] ?? null;
+                    $answers = $q['answers'] ?? (isset($q['correct']) ? [$q['correct']] : null);
+
+                    \App\Models\Question::create([
+                        'quiz_id' => $quiz->id,
+                        'created_by' => $user->id,
+                        'type' => $qType,
+                        'body' => $body,
+                        'options' => $options,
+                        'answers' => $answers,
+                        'difficulty' => $q['difficulty'] ?? 3,
+                        'is_quiz-master_marked' => true,
+                        'is_approved' => false,
+                    ]);
+                } catch (\Exception $e) {
+                    // ignore per-question failures for now
+                }
+            }
+            try { $quiz->recalcDifficulty(); } catch (\Exception $e) {}
+        }
+
+        $quiz->save();
+
+        return response()->json(['quiz' => $quiz]);
+    }
+
     // Paginated list for quizzes with search and filter support
     public function index(Request $request)
     {
@@ -58,6 +147,17 @@ class QuizController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
+
+        // If questions were sent as JSON string inside multipart/form-data, decode them
+        if ($request->has('questions') && is_string($request->get('questions'))) {
+            $decoded = json_decode($request->get('questions'), true);
+            if (is_array($decoded)) {
+                $request->merge(['questions' => $decoded]);
+            }
+        }
+
+        // Log incoming payload for debugging (don't include file streams)
+        \Log::info('QuizController@store incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
 
         $v = Validator::make($request->all(), [
             'topic_id' => 'required|exists:topics,id',
@@ -102,6 +202,8 @@ class QuizController extends Controller
             // if frontend sent 'access' === 'paywall' treat as paid
             'is_paid' => $request->get('access') === 'paywall' ? true : $request->get('is_paid', false),
             'timer_seconds' => $request->timer_seconds ?? null,
+            'per_question_seconds' => $request->get('per_question_seconds') ?? null,
+            'use_per_question_timer' => (bool)$request->get('use_per_question_timer', false),
             'attempts_allowed' => $request->get('attempts_allowed') ?? null,
             'shuffle_questions' => (bool)$request->get('shuffle_questions', false),
             'shuffle_answers' => (bool)$request->get('shuffle_answers', false),
@@ -154,6 +256,8 @@ class QuizController extends Controller
                         'created_by' => $user->id,
                         'type' => $qType,
                         'body' => $body,
+                        'youtube_url' => $q['youtube_url'] ?? null,
+                        'media_metadata' => $q['media_metadata'] ?? null,
                         'options' => $options,
                         'answers' => $answers,
                         'media_path' => $mediaPath,

@@ -12,6 +12,7 @@ use App\Observers\UserDailyChallengeObserver;
 use App\Observers\BattleObserver;
 use App\Observers\QuizObserver;
 use App\Models\Quiz;
+use App\Policies\QuizPolicy;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -28,6 +29,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Register model policies
+        Gate::policy(Quiz::class, QuizPolicy::class);
         Gate::define('viewFilament', function ($user = null) {
             // Allow unauthenticated users to reach the Filament login page.
             // Filament may evaluate the gate while serving the panel route, so

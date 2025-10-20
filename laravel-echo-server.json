@@ -3,15 +3,18 @@
 	"authEndpoint": "/broadcasting/auth",
 	"clients": [
 		{
-			"appId": "9a16bf5ebe699b39",
-			"key": "dd2d325fc602112077ac0202f26dc8d3"
+			"appId": "1966525",
+			"key": "c631b05ce9d7217de73e"
 		}
 	],
-	"database": "sqlite",
+	"database": "mysql",
 	"databaseConfig": {
-		"redis": {},
-		"sqlite": {
-			"databasePath": "database/laravel-echo-server.sqlite"
+		"mysql": {
+			"host": "127.0.0.1",
+			"port": 3306,
+			"database": "quiz",
+			"username": "root",
+			"password": ""
 		}
 	},
 	"devMode": true,
@@ -26,11 +29,12 @@
 	"sslPassphrase": "",
 	"subscribers": {
 		"http": true,
-		"redis": false
+		"redis": false,
+		"mysql": true
 	},
 	"apiOriginAllow": {
 		"allowCors": true,
-		"allowOrigin": "http://127.0.0.1:3000",
+		"allowOrigin": "http://127.0.0.1:3000,https://modeh.co.ke",
 		"allowMethods": "GET, POST",
 		"allowHeaders": "Origin, Content-Type, X-Auth-Token, X-Requested-With, Accept, Authorization, X-CSRF-TOKEN, X-Socket-Id"
 	}

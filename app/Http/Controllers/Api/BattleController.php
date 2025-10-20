@@ -33,6 +33,7 @@ class BattleController extends Controller
     $data['opponent_id'] = $request->input('opponent_id', $user->id);
         $data['status'] = 'pending';
         if ($request->has('settings')) {
+            // persist settings as provided (will be cast to array by model)
             $data['settings'] = $request->input('settings');
         }
 
@@ -40,7 +41,24 @@ class BattleController extends Controller
 
         // If frontend requested atomic attach, perform selection now
         if ($request->boolean('attach_questions')) {
+            // Validate required filters before selection
+            $this->validateAttachPayload($request);
+
             $this->selectAndAttachQuestions($battle, $request->all());
+            $battle->load('questions');
+        }
+
+        // If frontend provided a total time in settings, compute and persist time_per_question so
+        // the battle payload immediately contains timing for frontends to enforce.
+        $settings = is_array($battle->settings) ? $battle->settings : (array) ($battle->settings ?? []);
+        $totalTime = $request->input('settings.time_total_seconds') ?? $request->input('settings.total_time_seconds') ?? $request->input('time_total_seconds') ?? $request->input('total_time_seconds') ?? null;
+        if ($totalTime && isset($settings['question_count']) && intval($settings['question_count']) > 0) {
+            $count = intval($settings['question_count']);
+            $per = (int) floor(intval($totalTime) / $count);
+            $settings['time_per_question'] = $per;
+            $settings['time_total_seconds'] = intval($totalTime);
+            $battle->settings = $settings;
+            $battle->save();
             $battle->load('questions');
         }
 
@@ -51,7 +69,9 @@ class BattleController extends Controller
     public function index(Request $request)
     {
         // Only show pending battles that are open for joining
-        $battles = Battle::with('initiator:id,name', 'players')
+        // select explicit existing columns from quizees to avoid SQL errors (use first_name)
+        // NOTE: there is no `players` relationship on Battle; eager-load initiator/opponent
+        $battles = Battle::with('initiator:id,first_name,profile', 'opponent:id,first_name,profile')
             ->where('status', 'pending')
             ->where(function ($query) {
                 // A battle is joinable if opponent_id is null, or if it's the same as initiator_id (placeholder)
@@ -62,6 +82,16 @@ class BattleController extends Controller
             ->limit(20)
             ->get();
 
+        // Build a simple players collection from initiator/opponent for frontend compatibility
+        $battles->each(function ($battle) {
+            $players = collect();
+            if ($battle->initiator) $players->push($battle->initiator);
+            // If opponent is set and not just the placeholder equal to initiator, include it
+            if ($battle->opponent && $battle->opponent_id !== $battle->initiator_id) $players->push($battle->opponent);
+            // set as a loaded relation so JSON serialization includes it
+            $battle->setRelation('players', $players);
+        });
+
         return response()->json(['battles' => $battles]);
     }
 
@@ -70,7 +100,7 @@ class BattleController extends Controller
         $user = $request->user();
         $battles = Battle::where('initiator_id', $user->id)
             ->orWhere('opponent_id', $user->id)
-            ->with(['initiator:id,name,avatar', 'opponent:id,name,avatar'])
+            ->with(['initiator:id,first_name,profile', 'opponent:id,first_name,profile'])
             ->latest()->paginate(15);
         return response()->json($battles);
     }
@@ -78,6 +108,11 @@ class BattleController extends Controller
     public function show(Request $request, Battle $battle)
     {
         $battle->load('questions');
+        // expose time_per_question at top-level for frontend convenience
+        $settings = is_array($battle->settings) ? $battle->settings : (array) ($battle->settings ?? []);
+        if (isset($settings['time_per_question'])) {
+            $battle->time_per_question = $settings['time_per_question'];
+        }
         return response()->json($battle);
     }
 
@@ -121,6 +156,9 @@ class BattleController extends Controller
         if ($battle->initiator_id !== $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
+        // Validate payload when attaching questions
+        $this->validateAttachPayload($request);
+
         $questions = $this->selectAndAttachQuestions($battle, $request->all());
 
         return response()->json(['attached' => count($questions), 'questions' => $questions]);
@@ -136,22 +174,46 @@ class BattleController extends Controller
      */
     private function selectAndAttachQuestions(Battle $battle, array $params)
     {
-        $perPage = intval($params['per_page'] ?? ($params['settings']['per_page'] ?? 10));
-        $topic = $params['topic'] ?? ($params['settings']['topic'] ?? null);
-        $difficulty = $params['difficulty'] ?? ($params['settings']['difficulty'] ?? null);
-        $grade = $params['grade'] ?? ($params['settings']['grade'] ?? null);
-        $random = $params['random'] ?? ($params['settings']['random'] ?? 1);
+        // Support new settings shape: settings:{ grade_id, subject_id, topic_id, difficulty, question_count }
+        $settings = $params['settings'] ?? [];
+        // normalize keys from top-level or settings
+        $perPage = intval($params['question_count'] ?? $params['number_of_questions'] ?? $settings['question_count'] ?? $settings['number_of_questions'] ?? $params['per_page'] ?? $settings['per_page'] ?? 10);
+        $topic = $params['topic_id'] ?? $settings['topic_id'] ?? $params['topic'] ?? $settings['topic'] ?? null;
+        $difficulty = $params['difficulty'] ?? $settings['difficulty'] ?? null;
+        $grade = $params['grade_id'] ?? $settings['grade_id'] ?? $params['grade'] ?? $settings['grade'] ?? null;
+        $subject = $params['subject_id'] ?? $settings['subject_id'] ?? null;
+        $random = $params['random'] ?? $settings['random'] ?? 1;
 
-        $q = Question::query();
+        // Persist the settings back to the battle so the selection can be reproduced later
+        $persistable = array_filter([
+            'grade_id' => $grade,
+            'subject_id' => $subject,
+            'topic_id' => $topic,
+            'difficulty' => $difficulty,
+            'question_count' => $perPage,
+            'random' => (bool) $random,
+        ], function ($v) { return $v !== null && $v !== ''; });
+        if (!empty($persistable)) {
+            $battle->settings = array_merge(is_array($battle->settings) ? $battle->settings : [], $persistable);
+            $battle->save();
+        }
+
+    $q = Question::query();
         // We no longer use `for_battle` filter: the bank determines eligibility.
-        if ($topic && Schema::hasColumn('questions', 'topic_id')) $q->where('topic_id', $topic);
-        if ($difficulty && Schema::hasColumn('questions', 'difficulty')) $q->where('difficulty', $difficulty);
-        if ($grade && Schema::hasColumn('questions', 'grade_id')) $q->where('grade_id', $grade);
+    if ($topic && Schema::hasColumn('questions', 'topic_id')) $q->where('topic_id', $topic);
+    if ($subject && Schema::hasColumn('questions', 'subject_id')) $q->where('subject_id', $subject);
+    if ($difficulty && Schema::hasColumn('questions', 'difficulty')) $q->where('difficulty', $difficulty);
+    if ($grade && Schema::hasColumn('questions', 'grade_id')) $q->where('grade_id', $grade);
 
         if ($random) {
             $questions = $q->inRandomOrder()->limit($perPage)->get();
         } else {
             $questions = $q->limit($perPage)->get();
+        }
+
+        // If no questions matched the filters, fall back to random questions from the full bank
+        if ($questions->isEmpty()) {
+            $questions = Question::inRandomOrder()->limit($perPage)->get();
         }
 
         // attach with position (replace any existing attachments)
@@ -165,6 +227,39 @@ class BattleController extends Controller
         }
 
         return $questions;
+    }
+
+    /**
+     * Validate payload used when attaching questions to a battle.
+     * Ensures that when attach_questions is requested, at least one taxonomy filter
+     * (grade_id, subject_id, topic_id) or difficulty is provided and question_count is a positive integer.
+     */
+    private function validateAttachPayload(Request $request)
+    {
+        $payload = $request->all();
+        $settings = $payload['settings'] ?? [];
+
+        // Merge top-level and settings for validation
+        $data = array_merge($settings, $payload);
+
+        $rules = [
+            'question_count' => 'nullable|integer|min:1',
+            'number_of_questions' => 'nullable|integer|min:1',
+            'settings.question_count' => 'nullable|integer|min:1',
+        ];
+
+        // require at least one of these when attaching
+        $hasFilter = isset($data['grade_id']) || isset($data['subject_id']) || isset($data['topic_id']) || isset($data['difficulty']) || isset($data['topic']) || isset($data['grade']);
+
+        if (!$hasFilter) {
+            abort(response()->json(['message' => 'At least one filter (grade_id, subject_id, topic_id or difficulty) is required to attach questions'], 422));
+        }
+
+        // Validate counts
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            abort(response()->json(['message' => 'Invalid payload for attaching questions', 'errors' => $validator->errors()], 422));
+        }
     }
 
     /**
@@ -265,6 +360,7 @@ class BattleController extends Controller
         });
 
         // After transaction, check achievements if completed
+        $awarded = [];
         if ($battle->status === 'completed') {
             // Check achievements for winner
             if ($battle->winner_id) {
@@ -278,17 +374,20 @@ class BattleController extends Controller
             // Check achievements for both participants
             foreach ([$battle->initiator_id, $battle->opponent_id] as $userId) {
                 $userPoints = $userId === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points;
-                $this->achievementService->checkAchievements($userId, [
+                $aw = $this->achievementService->checkAchievements($userId, [
                     'type' => 'battle_completed', 
                     'score' => $userPoints,
                     'total' => $total
                 ]);
+                if (is_array($aw) && count($aw)) $awarded = array_merge($awarded, $aw);
             }
         }
 
         $scorePercent = $total ? round($correct / $total * 100, 1) : 0;
 
-        return response()->json(['ok' => true, 'result' => ['score' => $scorePercent, 'correct' => $correct, 'total' => $total, 'questions' => $detailed], 'battle' => $battle, 'deferred' => $defer]);
+        // Include any awarded achievements and refreshed user (requesting user)
+        $refreshedUser = $user->fresh()->load('achievements');
+        return response()->json(['ok' => true, 'result' => ['score' => $scorePercent, 'correct' => $correct, 'total' => $total, 'questions' => $detailed], 'battle' => $battle, 'deferred' => $defer, 'awarded_achievements' => $awarded, 'user' => $refreshedUser]);
     }
 
     /**
@@ -317,6 +416,31 @@ class BattleController extends Controller
 
         if (!$activeSub && !$hasOneOff) {
             return response()->json(['ok' => false, 'message' => 'Subscription or one-off purchase required'], 403);
+        }
+
+        // Enforce package limits for battle results/marks
+        if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
+            $features = $activeSub->package->features;
+            $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
+            if ($limit !== null) {
+                $today = now()->startOfDay();
+                $used = Battle::where(function($q) use ($user) {
+                        $q->where('initiator_id', $user->id)->orWhere('opponent_id', $user->id);
+                    })->whereNotNull('completed_at')
+                    ->where('completed_at', '>=', $today)
+                    ->count();
+                if ($used >= intval($limit)) {
+                    return response()->json([
+                        'ok' => false,
+                        'code' => 'limit_reached',
+                        'limit' => [
+                            'type' => 'battle_results',
+                            'value' => intval($limit)
+                        ],
+                        'message' => 'Daily battle result reveal limit reached for your plan'
+                    ], 403);
+                }
+            }
         }
 
         // Only allow participants
@@ -382,13 +506,15 @@ class BattleController extends Controller
             }
 
             // Achievements for both participants
+            $awarded = [];
             foreach ([$battle->initiator_id, $battle->opponent_id] as $userId) {
                 $userPoints = $userId === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points;
-                $this->achievementService->checkAchievements($userId, [
+                $aw = $this->achievementService->checkAchievements($userId, [
                     'type' => 'battle_completed',
                     'score' => $userPoints,
                     'total' => $totalMarked
                 ]);
+                if (is_array($aw) && count($aw)) $awarded = array_merge($awarded, $aw);
             }
 
             DB::commit();
@@ -397,8 +523,18 @@ class BattleController extends Controller
             try { Log::warning('Failed to award points after battle mark: '.$e->getMessage()); } catch (\Throwable $_) {}
         }
 
-        // Reuse result to return latest view
-        return $this->result($request, $battle);
+        // Reuse result to return latest view and include awarded achievements and user
+        $res = $this->result($request, $battle);
+        // $this->result returns a JsonResponse; append awarded_achievements and user if possible
+        try {
+            $refreshedUser = $request->user()->fresh()->load('achievements');
+            $original = $res->getData(true);
+            $original['awarded_achievements'] = $awarded ?? [];
+            $original['user'] = $refreshedUser;
+            return response()->json($original);
+        } catch (\Throwable $_) {
+            return $res;
+        }
     }
 
     /**
@@ -484,15 +620,19 @@ class BattleController extends Controller
         });
 
         // achievements
+        $awarded = [];
         if ($battle->winner_id) {
-            $this->achievementService->checkAchievements($battle->winner_id, [
+            $aw = $this->achievementService->checkAchievements($battle->winner_id, [
                 'type' => 'battle_won',
                 'score' => $battle->winner_id === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points,
                 'total' => $total
             ]);
+            if (is_array($aw) && count($aw)) $awarded = array_merge($awarded, $aw);
         }
 
-        return response()->json(['ok' => true, 'result' => ['score' => $total ? round($correct / $total * 100, 1) : 0, 'correct' => $correct, 'total' => $total, 'questions' => $detailed], 'battle' => $battle]);
+        $refreshedUser = $request->user()->fresh()->load('achievements');
+
+        return response()->json(['ok' => true, 'result' => ['score' => $total ? round($correct / $total * 100, 1) : 0, 'correct' => $correct, 'total' => $total, 'questions' => $detailed], 'battle' => $battle, 'awarded_achievements' => $awarded, 'user' => $refreshedUser]);
     }
 
     /**
@@ -512,6 +652,31 @@ class BattleController extends Controller
             ->first();
         if (!$activeSub) {
             return response()->json(['ok' => false, 'message' => 'Subscription required'], 403);
+        }
+
+        // Enforce package limits for returning battle results
+        if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
+            $features = $activeSub->package->features;
+            $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
+            if ($limit !== null) {
+                $today = now()->startOfDay();
+                $used = Battle::where(function($q) use ($user) {
+                        $q->where('initiator_id', $user->id)->orWhere('opponent_id', $user->id);
+                    })->whereNotNull('completed_at')
+                    ->where('completed_at', '>=', $today)
+                    ->count();
+                if ($used >= intval($limit)) {
+                    return response()->json([
+                        'ok' => false,
+                        'code' => 'limit_reached',
+                        'limit' => [
+                            'type' => 'battle_results',
+                            'value' => intval($limit)
+                        ],
+                        'message' => 'Daily battle result reveal limit reached for your plan'
+                    ], 403);
+                }
+            }
         }
 
         $battle->load('questions');

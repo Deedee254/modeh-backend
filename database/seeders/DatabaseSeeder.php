@@ -21,13 +21,20 @@ class DatabaseSeeder extends Seeder
             QuizeeSeeder::class,
             QuizMasterSeeder::class,
             AdminSeeder::class,
+            BadgeSeeder::class,
+            AchievementSeeder::class,
+            QuizBadgeSeeder::class,
             QuizQuestionSeeder::class,
-            \Database\Seeders\PaymentSettingsSeeder::class,
-            \Database\Seeders\PackageSeeder::class,
-            \Database\Seeders\AssignSubscriptionsSeeder::class,
+            PaymentSettingsSeeder::class,
+            PackageSeeder::class,
+            AssignSubscriptionsSeeder::class,
             // Sponsors and Testimonials
-            \Database\Seeders\SponsorSeeder::class,
-            \Database\Seeders\TestimonialSeeder::class,
+            SponsorSeeder::class,
+            TestimonialSeeder::class,
+            // Chat messages
+            ChatMessageSeeder::class,
+            // Quizee Levels
+            QuizeeLevelSeeder::class,
         ]);
     }
 }

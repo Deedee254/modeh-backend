@@ -15,7 +15,15 @@ class PackageSeeder extends Seeder
             'description' => 'Starter plan gives you access to core quizzes and practice features.',
             'price' => 0,
             'currency' => 'KES',
-            'features' => ['Access to free quizzes', 'Daily practice questions'],
+            // features can be either simple list for display or a structured object with limits
+            'features' => [
+                'display' => ['Access to free quizzes', 'Daily practice questions'],
+                'limits' => [
+                    // small limits as example
+                    'quiz_results' => 5,
+                    'battle_results' => 2
+                ]
+            ],
             'is_active' => true,
             'duration_days' => 30,
         ]);
@@ -26,7 +34,14 @@ class PackageSeeder extends Seeder
             'description' => 'Pro plan unlocks premium content, progress analytics and priority support.',
             'price' => 499.00,
             'currency' => 'KES',
-            'features' => ['Unlimited quizzes', 'Detailed analytics', 'Priority support'],
+            // structured features with unlimited markers
+            'features' => [
+                'display' => ['Unlimited quizzes', 'Detailed analytics', 'Priority support'],
+                'limits' => [
+                    'quiz_results' => null, // null === unlimited
+                    'battle_results' => null
+                ]
+            ],
             'is_active' => true,
             'duration_days' => 30,
         ]);

@@ -82,19 +82,24 @@ class DailyChallengeController extends Controller
             'score' => $data['score']
         ]);
 
-        // Check achievements
-        $this->achievementService->checkAchievements($user->id, [
+        // Check achievements and collect awarded achievements
+        $awarded = $this->achievementService->checkAchievements($user->id, [
             'type' => 'daily_challenge_completed',
             'score' => $data['score'],
             'challenge_id' => $challenge->id,
         ]);
+
+        // Refresh user to include newly awarded achievements/points
+        $user = $user->fresh()->load('achievements');
 
         // Return updated challenge with completion status
         $challenge->load('grade', 'subject');
         return response()->json([
             'challenge' => $challenge,
             'completion' => $udc,
-            'score' => $data['score']
+            'score' => $data['score'],
+            'awarded_achievements' => $awarded,
+            'user' => $user,
         ]);
     }
 

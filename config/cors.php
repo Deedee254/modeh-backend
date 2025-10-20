@@ -1,14 +1,17 @@
 <?php
 
 return [
-    'paths' => ['*'],
+    'paths' => ['api/*', 'login', 'logout', 'sanctum/csrf-cookie'],
     'allowed_methods' => ['*'],
-    // Allow configuring origins from .env (comma-separated). If not set,
-    // fall back to a reasonable set of local dev and production origins.
+
+    // Load from .env, fallback to production + local dev URLs
     'allowed_origins' => array_filter(array_map('trim', explode(',', env('CORS_ALLOWED_ORIGINS',
-        'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:8000,https://modeh.co.ke,https://admin.modeh.co.ke'
+        'https://modeh.co.ke,https://admin.modeh.co.ke,http://localhost:5173,http://127.0.0.1:5173'
     )))),
-    'allowed_origins_patterns' => [],
+
+    // Optionally allow all subdomains of modeh.co.ke:
+    'allowed_origins_patterns' => ['/^https:\/\/.*\.modeh\.co\.ke$/'],
+
     'allowed_headers' => ['*'],
     'exposed_headers' => [],
     'max_age' => 0,

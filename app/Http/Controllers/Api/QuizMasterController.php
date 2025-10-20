@@ -14,10 +14,23 @@ class QuizMasterController extends Controller
      */
     public function index()
     {
-        // Get users who have a quiz master profile, eager-load it with relations, and paginate.
-        $quizMasters = User::whereHas('quizMasterProfile')
-            ->with(['quizMasterProfile.grade'])
-            ->paginate(12);
+        $request = request();
+        
+        // Start building the query for users with a quiz master profile
+        $query = User::query()->whereHas('quizMasterProfile');
+
+        // Apply filters based on request parameters
+        $query->whereHas('quizMasterProfile', function ($q) use ($request) {
+            if ($request->has('grade_id') && $request->grade_id) {
+                $q->where('grade_id', $request->grade_id);
+            }
+            if ($request->has('subject_id') && $request->subject_id) {
+                // Assumes 'subjects' is a JSON array of IDs in the profile
+                $q->whereJsonContains('subjects', (int)$request->subject_id);
+            }
+        });
+
+        $quizMasters = $query->with(['quizMasterProfile.grade'])->paginate(12);
 
         // Transform the collection for the frontend.
         $quizMasters->getCollection()->transform(function ($user) {
@@ -34,8 +47,8 @@ class QuizMasterController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'avatar' => $user->social_avatar,
-                'headline' => $profile->headline ?? 'An experienced quiz master',
-                'institution' => $profile->institution ?? 'Independent Educator',
+                'headline' => $profile->headline ?: 'An experienced quiz master',
+                'institution' => $profile->institution ?: '',
                 'grade' => $profile->grade ? [
                     'id' => $profile->grade->id,
                     'name' => $profile->grade->name,

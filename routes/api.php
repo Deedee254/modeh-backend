@@ -80,17 +80,30 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
 
     // quiz-master Quiz endpoints
     Route::post('/quizzes', [\App\Http\Controllers\Api\QuizController::class, 'store']);
+    Route::patch('/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizController::class, 'update']);
     // Admin approve quiz
     Route::post('/quizzes/{quiz}/approve', [\App\Http\Controllers\Api\QuizController::class, 'approve']);
 
+    // Quiz analytics for owners/admins
+    Route::get('/quizzes/{quiz}/analytics', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'show']);
+    // Exports (throttled)
+    Route::get('/quizzes/{quiz}/export/csv', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportCsv'])->middleware('throttle:10,1');
+    Route::get('/quizzes/{quiz}/export/pdf', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportPdf'])->middleware('throttle:5,1');
+
     // quizee quiz take endpoints (show quiz without answers, submit answers)
     Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\QuizAttemptController::class, 'submit']);
+    // server-side start attempt (creates draft attempt with server started_at)
+    Route::post('/quizzes/{quiz}/start', [\App\Http\Controllers\Api\QuizAttemptController::class, 'startAttempt']);
     // mark a previously saved attempt (requires subscription)
     Route::post('/quiz-attempts/{attempt}/mark', [\App\Http\Controllers\Api\QuizAttemptController::class, 'markAttempt']);
     // Fetch a user's attempt details
     Route::get('/quiz-attempts/{attempt}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'showAttempt']);
+    // Review attempt (returns per-question details to the attempt owner without requiring subscription)
+    Route::get('/quiz-attempts/{attempt}/review', [\App\Http\Controllers\Api\QuizAttemptController::class, 'reviewAttempt']);
     // List authenticated user's quiz attempts (quizee)
     Route::get('/quiz-attempts', [\App\Http\Controllers\Api\QuizAttemptController::class, 'index']);
+    // Aggregated quiz stats for dashboard
+    Route::get('/user/quiz-stats', [\App\Http\Controllers\Api\QuizAttemptController::class, 'getUserStats']);
     
     // Daily Challenge endpoints
     Route::get('/daily-challenges/today', [\App\Http\Controllers\Api\DailyChallengeController::class, 'today']);
@@ -139,6 +152,12 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::get('/users/find-by-email', [\App\Http\Controllers\Api\UserController::class, 'findByEmail']);
     // User badges (recent)
     Route::get('/user/badges', [\App\Http\Controllers\Api\UserController::class, 'badges']);
+    
+    // User achievements progress
+    Route::get('/achievements/progress', [\App\Http\Controllers\Api\AchievementController::class, 'progress']);
+    
+    // User stats (including level)
+    Route::get('/user/stats', [\App\Http\Controllers\Api\UserStatsController::class, 'stats']);
 
     // Onboarding endpoints (mark steps and finalize)
     Route::post('/onboarding/step', [\App\Http\Controllers\Api\OnboardingController::class, 'completeStep']);
@@ -188,6 +207,8 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // packages index is public (defined above)
     Route::post('/packages/{package}/subscribe', [\App\Http\Controllers\Api\PackageController::class, 'subscribe']);
     Route::post('/subscriptions', [\App\Http\Controllers\Api\SubscriptionApiController::class, 'store']);
+    // legacy alias used by some frontends
+    Route::get('/subscriptions/history', [\App\Http\Controllers\Api\SubscriptionController::class, 'mine']);
     // subscription status check endpoints
     Route::get('/subscriptions/{subscription}/status', [\App\Http\Controllers\Api\SubscriptionController::class, 'status']);
     Route::post('/payments/subscriptions/{subscription}/mpesa/initiate', [\App\Http\Controllers\Api\PaymentController::class, 'initiateMpesa']);

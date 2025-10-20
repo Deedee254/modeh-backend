@@ -11,12 +11,15 @@ class Achievement extends Model
     use HasFactory;
     protected $fillable = [
         'name',
+        'slug',
         'description',
         'icon',
+        'color',
         'points',
         'type',
         'criteria',
         'criteria_value',
+        'is_active',
     ];
 
     protected $casts = [

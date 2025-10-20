@@ -53,10 +53,17 @@ class QuizAttemptController extends Controller
 
         // allow missing or partial answers (accept empty submissions)
         $payload = $request->validate([
-            'answers' => 'nullable|array'
+            'answers' => 'nullable|array',
+            'question_times' => 'nullable|array',
+            'total_time_seconds' => 'nullable|numeric',
+            'started_at' => 'nullable|date',
+            'attempt_id' => 'nullable|integer',
         ]);
 
         $answers = $payload['answers'] ?? [];
+    $questionTimes = $payload['question_times'] ?? null;
+    $totalTimeSeconds = isset($payload['total_time_seconds']) ? (int)$payload['total_time_seconds'] : null;
+    $attemptId = $payload['attempt_id'] ?? null;
 
     $results = [];
     $correct = 0;
@@ -67,13 +74,35 @@ class QuizAttemptController extends Controller
             if (!$q) continue;
 
             $isCorrect = false;
-            // assume $q->answers contains array of correct options
+            // normalize both stored correct answers and submitted answers
             $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+            
+            // handle objects or ids by extracting body text
+            $normalizeValue = function($val) use ($q) {
+                if (is_array($val) && isset($val['body'])) return $val['body'];
+                if (is_array($val) && isset($val['text'])) return $val['text'];
+                return (string)$val;
+            };
+            
+            // normalize array of values
+            $normalizeArray = function($arr) use ($normalizeValue) {
+                $normalized = array_map($normalizeValue, $arr);
+                $normalized = array_map('trim', $normalized);
+                $normalized = array_map('strtolower', $normalized);
+                sort($normalized);
+                return $normalized;
+            };
+            
             if (is_array($selected)) {
-                // compare sets
-                $isCorrect = array_values($selected) == array_values($correctAnswers);
+                // normalize and sort both arrays for order-insensitive comparison
+                $submittedAnswers = $normalizeArray($selected);
+                $correctAnswers = $normalizeArray($correctAnswers);
+                $isCorrect = $submittedAnswers == $correctAnswers;
             } else {
-                $isCorrect = in_array($selected, $correctAnswers);
+                // normalize single answer
+                $submittedAnswer = strtolower(trim($normalizeValue($selected)));
+                $correctAnswers = $normalizeArray($correctAnswers);
+                $isCorrect = in_array($submittedAnswer, $correctAnswers);
             }
 
             if ($isCorrect) $correct++;
@@ -97,24 +126,50 @@ class QuizAttemptController extends Controller
 
             if ($defer) {
                 // persist attempt without scoring/points; marking will be performed later via markAttempt
-                $attempt = QuizAttempt::create([
-                    'user_id' => $user->id,
-                    'quiz_id' => $quiz->id,
-                    'answers' => $answers,
-                    'score' => null,
-                    'points_earned' => null,
-                ]);
+                if ($attemptId) {
+                    $attempt = QuizAttempt::where('id', $attemptId)->where('user_id', $user->id)->first();
+                    if ($attempt) {
+                        $attempt->answers = $answers;
+                        $attempt->total_time_seconds = $totalTimeSeconds;
+                        $attempt->per_question_time = $questionTimes;
+                        $attempt->save();
+                    }
+                } else {
+                    $attempt = QuizAttempt::create([
+                        'user_id' => $user->id,
+                        'quiz_id' => $quiz->id,
+                        'answers' => $answers,
+                        'score' => null,
+                        'points_earned' => null,
+                        'total_time_seconds' => $totalTimeSeconds,
+                        'per_question_time' => $questionTimes,
+                    ]);
+                }
             } else {
                 // simple points calculation: scale score by number of attempted questions (each attempted question worth 10 points)
                 $pointsEarned = round(($score / 100) * ($attempted * 10), 2);
 
-                $attempt = QuizAttempt::create([
-                    'user_id' => $user->id,
-                    'quiz_id' => $quiz->id,
-                    'answers' => $answers,
-                    'score' => $score,
-                    'points_earned' => $pointsEarned,
-                ]);
+                if ($attemptId) {
+                    $attempt = QuizAttempt::where('id', $attemptId)->where('user_id', $user->id)->first();
+                    if ($attempt) {
+                        $attempt->answers = $answers;
+                        $attempt->score = $score;
+                        $attempt->points_earned = $pointsEarned;
+                        $attempt->total_time_seconds = $totalTimeSeconds;
+                        $attempt->per_question_time = $questionTimes;
+                        $attempt->save();
+                    }
+                } else {
+                    $attempt = QuizAttempt::create([
+                        'user_id' => $user->id,
+                        'quiz_id' => $quiz->id,
+                        'answers' => $answers,
+                        'score' => $score,
+                        'points_earned' => $pointsEarned,
+                        'total_time_seconds' => $totalTimeSeconds,
+                        'per_question_time' => $questionTimes,
+                    ]);
+                }
 
                 // persist points to user atomically; don't let missing column break the attempt
                 if ($attempt && method_exists($user, 'increment')) {
@@ -134,15 +189,37 @@ class QuizAttemptController extends Controller
             $attempt = null;
         }
 
-        // Check achievements only when marking occurred (not deferred)
+            // Check achievements only when marking occurred (not deferred)
+        $awarded = [];
         if ($attempt && !$defer) {
-            $this->achievementService->checkStreakAchievements($user, $request->input('streak', 0), $attempt->id ?? null);
-            $this->achievementService->checkScoreAchievements($user, $score, $attempt->id ?? null);
-            $this->achievementService->checkCompletionAchievements(
-                $user,
-                100 * (count($answers) / $quiz->questions()->count()),
-                $attempt->id ?? null
-            );
+            // Get previous attempt score for improvement check
+            $previousAttempt = QuizAttempt::where('user_id', $user->id)
+                ->where('quiz_id', $quiz->id)
+                ->where('id', '!=', $attempt->id)
+                ->orderByDesc('created_at')
+                ->first();
+            
+            $achievementPayload = [
+                'type' => 'quiz',
+                'score' => $score,
+                'time' => $totalTimeSeconds,
+                'question_count' => $quiz->questions()->count(),
+                'attempt_id' => $attempt->id,
+                'quiz_id' => $quiz->id,
+                'subject_id' => $quiz->subject_id ?? null,
+                'streak' => $request->input('streak', 0),
+                'previous_score' => $previousAttempt ? $previousAttempt->score : null,
+                'total' => 100 * (count($answers) / $quiz->questions()->count())
+            ];
+
+            try {
+                $achievements = $this->achievementService->checkAchievements($user, $achievementPayload);
+                if (is_array($achievements) && count($achievements)) {
+                    $awarded = array_merge($awarded, $achievements);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Failed to check achievements: ' . $e->getMessage());
+            }
         }
 
         // Return attempt id (if created) and details. If attempt creation failed, return 500 so client knows to retry.
@@ -150,7 +227,41 @@ class QuizAttemptController extends Controller
             return response()->json(['ok' => false, 'message' => 'Failed to persist attempt'], 500);
         }
 
-        return response()->json(['ok' => true, 'results' => $results, 'score' => $defer ? null : $score, 'attempt_id' => $attempt->id ?? null, 'points_delta' => $attempt->points_earned ?? 0, 'deferred' => $defer]);
+        $refreshedUser = $user->fresh()->load('achievements');
+        return response()->json(['ok' => true, 'results' => $results, 'score' => $defer ? null : $score, 'attempt_id' => $attempt->id ?? null, 'points_delta' => $attempt->points_earned ?? 0, 'deferred' => $defer, 'awarded_achievements' => $awarded, 'user' => $refreshedUser]);
+    }
+
+    /**
+     * Server-side attempt start: create a draft attempt with started_at controlled by server.
+     * Returns attempt id which the client should include in subsequent submit calls.
+     */
+    public function startAttempt(Request $request, Quiz $quiz)
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+
+        $payload = $request->validate([
+            'meta' => 'nullable|array',
+            'settings' => 'nullable|array',
+        ]);
+
+        try {
+            $attempt = QuizAttempt::create([
+                'user_id' => $user->id,
+                'quiz_id' => $quiz->id,
+                'answers' => [],
+                'score' => null,
+                'points_earned' => null,
+                'total_time_seconds' => null,
+                'per_question_time' => null,
+                'started_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed creating server-start attempt: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'message' => 'Failed to start attempt'], 500);
+        }
+
+        return response()->json(['ok' => true, 'attempt_id' => $attempt->id, 'started_at' => $attempt->started_at]);
     }
 
     /**
@@ -184,6 +295,32 @@ class QuizAttemptController extends Controller
 
         if (!$activeSub && !$hasOneOff) {
             return response()->json(['ok' => false, 'message' => 'Subscription or one-off purchase required'], 403);
+        }
+
+        // Enforce package limits if present
+        if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
+            $features = $activeSub->package->features;
+            // limit key path: features.limits.quiz_results => integer allowed per day (or null = unlimited)
+            $limit = $features['limits']['quiz_results'] ?? $features['limits']['results'] ?? null;
+            if ($limit !== null) {
+                // compute todays usage for this user (marked attempts revealed)
+                $today = now()->startOfDay();
+                $used = QuizAttempt::where('user_id', $request->user()->id)
+                    ->whereNotNull('score')
+                    ->where('created_at', '>=', $today)
+                    ->count();
+                if ($used >= intval($limit)) {
+                    return response()->json([
+                        'ok' => false,
+                        'code' => 'limit_reached',
+                        'limit' => [
+                            'type' => 'quiz_results',
+                            'value' => intval($limit)
+                        ],
+                        'message' => 'Result access limit reached for your plan'
+                    ], 403);
+                }
+            }
         }
 
         // Recompute score from stored answers
@@ -230,13 +367,34 @@ class QuizAttemptController extends Controller
             }
 
             // achievements
-            $this->achievementService->checkStreakAchievements($user, $request->input('streak', 0), $attempt->id ?? null);
-            $this->achievementService->checkScoreAchievements($user, $score, $attempt->id ?? null);
-            $this->achievementService->checkCompletionAchievements(
-                $user,
-                100 * (count($answers) / $quiz->questions()->count()),
-                $attempt->id ?? null
-            );
+            $awarded = [];
+            $previousAttempt = QuizAttempt::where('user_id', $user->id)
+                ->where('quiz_id', $quiz->id)
+                ->where('id', '!=', $attempt->id)
+                ->orderByDesc('created_at')
+                ->first();
+
+            $achievementPayload = [
+                'type' => 'quiz',
+                'score' => $score,
+                'time' => $attempt->total_time_seconds,
+                'question_count' => $quiz->questions()->count(),
+                'attempt_id' => $attempt->id,
+                'quiz_id' => $quiz->id,
+                'subject_id' => $quiz->subject_id ?? null,
+                'streak' => $request->input('streak', 0),
+                'previous_score' => $previousAttempt ? $previousAttempt->score : null,
+                'total' => 100 * (count($answers) / $quiz->questions()->count())
+            ];
+
+            try {
+                $achievements = $this->achievementService->checkAchievements($user, $achievementPayload);
+                if (is_array($achievements) && count($achievements)) {
+                    $awarded = array_merge($awarded, $achievements);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Failed to check achievements: ' . $e->getMessage());
+            }
 
             DB::commit();
         } catch (\Exception $e) {
@@ -270,6 +428,30 @@ class QuizAttemptController extends Controller
             return response()->json(['ok' => false, 'message' => 'Subscription required'], 403);
         }
 
+        // enforce package limits (e.g. number of revealed results per day)
+        if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
+            $features = $activeSub->package->features;
+            $limit = $features['limits']['quiz_results'] ?? $features['limits']['results'] ?? null;
+            if ($limit !== null) {
+                $today = now()->startOfDay();
+                $used = QuizAttempt::where('user_id', $user->id)
+                    ->whereNotNull('score')
+                    ->where('created_at', '>=', $today)
+                    ->count();
+                if ($used >= intval($limit)) {
+                    return response()->json([
+                        'ok' => false,
+                        'code' => 'limit_reached',
+                        'limit' => [
+                            'type' => 'quiz_results',
+                            'value' => intval($limit)
+                        ],
+                        'message' => 'Daily result reveal limit reached for your plan'
+                    ], 403);
+                }
+            }
+        }
+
         if ($attempt->user_id !== $user->id) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
@@ -291,13 +473,20 @@ class QuizAttemptController extends Controller
             } else {
                 $isCorrect = in_array($provided, $correctAnswers);
             }
+            // normalize to readable text
+            $normalizeToText = function($val) {
+                if (is_array($val) && isset($val['body'])) return $val['body'];
+                if (is_array($val) && isset($val['text'])) return $val['text'];
+                return (string)$val;
+            };
+
             $details[] = [
                 'question_id' => $q->id,
                 'body' => $q->body,
                 'options' => $q->options,
-                'provided' => $provided,
+                'provided' => is_array($provided) ? array_map($normalizeToText, $provided) : $normalizeToText($provided),
                 'correct' => $isCorrect,
-                'correct_answers' => $correctAnswers,
+                'correct_answers' => array_map($normalizeToText, $correctAnswers),
                 'explanation' => $q->explanation ?? null,
             ];
         }
@@ -335,6 +524,8 @@ class QuizAttemptController extends Controller
                 'quiz_id' => $attempt->quiz_id,
                 'score' => $attempt->score,
                 'points_earned' => $attempt->points_earned ?? 0,
+                'total_time_seconds' => $attempt->total_time_seconds ?? null,
+                'per_question_time' => $attempt->per_question_time ?? null,
                 'details' => $details,
                 'created_at' => $attempt->created_at,
             ],
@@ -342,6 +533,31 @@ class QuizAttemptController extends Controller
             'points' => $user->points ?? 0,
             'rank' => $rank,
             'total_participants' => $totalParticipants,
+        ]);
+    }
+
+    /**
+     * Return only the raw attempt details for the owner so they can review answers prior to purchase/subscription.
+     * This endpoint does NOT require an active subscription but does require authentication and ownership.
+     */
+    public function reviewAttempt(Request $request, QuizAttempt $attempt)
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+
+        if ($attempt->user_id !== $user->id) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        // Return the attempt answers and any stored details without revealing computed scores or other protected data
+        return response()->json([
+            'ok' => true,
+            'attempt' => [
+                'id' => $attempt->id,
+                'quiz_id' => $attempt->quiz_id,
+                'answers' => $attempt->answers ?? [],
+                'created_at' => $attempt->created_at,
+            ]
         ]);
     }
 
@@ -369,5 +585,55 @@ class QuizAttemptController extends Controller
         });
 
         return response()->json(['ok' => true, 'data' => $data]);
+    }
+
+    /**
+     * Return aggregated quiz stats for the authenticated user
+     */
+    public function getUserStats(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+
+        $attempts = QuizAttempt::where('user_id', $user->id)->whereNotNull('score')->get();
+
+        $totalAttempts = $attempts->count();
+        $averageScore = $totalAttempts ? round($attempts->avg('score'), 1) : 0;
+        $totalTime = $attempts->sum('total_time_seconds') ?? 0;
+        $avgQuizTime = $totalAttempts ? round($attempts->avg('total_time_seconds'), 2) : 0;
+        $fastestQuizTime = $attempts->min('total_time_seconds') ?? 0;
+
+        // average question time: compute per attempt if per_question_time exists
+        $questionTimes = [];
+        foreach ($attempts as $a) {
+            $pqt = $a->per_question_time ?? null;
+            if (is_array($pqt)) {
+                $questionTimes = array_merge($questionTimes, $pqt);
+            } elseif (is_string($pqt)) {
+                // try decode
+                $decoded = json_decode($pqt, true);
+                if (is_array($decoded)) $questionTimes = array_merge($questionTimes, $decoded);
+            }
+        }
+        $avgQuestionTime = count($questionTimes) ? round(array_sum($questionTimes) / count($questionTimes), 2) : 0;
+
+        // points today
+        $today = now()->startOfDay();
+        $pointsToday = QuizAttempt::where('user_id', $user->id)
+            ->where('created_at', '>=', $today)
+            ->sum('points_earned');
+
+        return response()->json([
+            'ok' => true,
+            'total_attempts' => $totalAttempts,
+            'average_score' => $averageScore,
+            'total_time_seconds' => $totalTime,
+            'avg_quiz_time' => $avgQuizTime,
+            'fastest_quiz_time' => $fastestQuizTime,
+            'avg_question_time' => $avgQuestionTime,
+            'points_today' => $pointsToday,
+            'current_streak' => $user->current_streak ?? 0,
+            'total_points' => $user->points ?? 0,
+        ]);
     }
 }

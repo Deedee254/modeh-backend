@@ -39,6 +39,16 @@ class quizee extends Model
         return $this->belongsTo(Grade::class);
     }
 
+    /**
+     * Avatar accessor fallback — return profile or from related user if available.
+     */
+    public function getAvatarAttribute()
+    {
+        if (!empty($this->profile)) return $this->profile;
+        if ($this->relationLoaded('user') && $this->user && !empty($this->user->avatar)) return $this->user->avatar;
+        return null;
+    }
+
     public function badges()
     {
         return $this->belongsToMany(Badge::class, 'user_badges')->withPivot('earned_at', 'attempt_id')->withTimestamps();
