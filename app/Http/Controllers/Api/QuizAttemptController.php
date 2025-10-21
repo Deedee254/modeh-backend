@@ -336,10 +336,44 @@ class QuizAttemptController extends Controller
 
             $isCorrect = false;
             $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+
+            // Build option id -> body map to resolve numeric/ID answers to readable text
+            $optionMap = [];
+            if (is_array($q->options)) {
+                foreach ($q->options as $opt) {
+                    if (is_array($opt) && isset($opt['id'])) {
+                        $optionMap[(string)$opt['id']] = $opt['body'] ?? $opt['text'] ?? null;
+                    }
+                }
+            }
+
+            // normalize values: extract body/text from objects, resolve option ids to bodies when possible
+            $normalizeValue = function($val) use ($optionMap) {
+                if (is_array($val) && isset($val['body'])) return $val['body'];
+                if (is_array($val) && isset($val['text'])) return $val['text'];
+                if (!is_array($val)) {
+                    $key = (string)$val;
+                    if ($key !== '' && isset($optionMap[$key]) && $optionMap[$key] !== null) return $optionMap[$key];
+                }
+                return (string)$val;
+            };
+
+            $normalizeArray = function($arr) use ($normalizeValue) {
+                $normalized = array_map($normalizeValue, $arr ?: []);
+                $normalized = array_map('trim', $normalized);
+                $normalized = array_map('strtolower', $normalized);
+                sort($normalized);
+                return $normalized;
+            };
+
             if (is_array($selected)) {
-                $isCorrect = array_values($selected) == array_values($correctAnswers);
+                $submittedAnswers = $normalizeArray($selected);
+                $correctNormalized = $normalizeArray($correctAnswers);
+                $isCorrect = $submittedAnswers == $correctNormalized;
             } else {
-                $isCorrect = in_array($selected, $correctAnswers);
+                $submittedAnswer = strtolower(trim($normalizeValue($selected)));
+                $correctNormalized = $normalizeArray($correctAnswers);
+                $isCorrect = in_array($submittedAnswer, $correctNormalized);
             }
 
             if ($isCorrect) $correct++;
@@ -466,19 +500,37 @@ class QuizAttemptController extends Controller
             foreach ($answers as $a) {
                 if ((int)($a['question_id'] ?? 0) === (int)$q->id) { $provided = $a['selected'] ?? null; break; }
             }
+
             $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+
+            // Build a simple option id -> body map to resolve numeric/ID answers to readable text
+            $optionMap = [];
+            if (is_array($q->options)) {
+                foreach ($q->options as $opt) {
+                    if (is_array($opt) && isset($opt['id'])) {
+                        $optionMap[(string)$opt['id']] = $opt['body'] ?? $opt['text'] ?? null;
+                    }
+                }
+            }
+
+            // normalize to readable text with option-id resolution when possible
+            $normalizeToText = function($val) use ($optionMap) {
+                if (is_array($val) && isset($val['body'])) return $val['body'];
+                if (is_array($val) && isset($val['text'])) return $val['text'];
+                // if scalar and matches an option id, return the option body
+                if (!is_array($val)) {
+                    $key = (string)$val;
+                    if ($key !== '' && isset($optionMap[$key]) && $optionMap[$key] !== null) return $optionMap[$key];
+                }
+                return (string)$val;
+            };
+
             $isCorrect = false;
             if (is_array($provided)) {
                 $isCorrect = array_values($provided) == array_values($correctAnswers);
             } else {
                 $isCorrect = in_array($provided, $correctAnswers);
             }
-            // normalize to readable text
-            $normalizeToText = function($val) {
-                if (is_array($val) && isset($val['body'])) return $val['body'];
-                if (is_array($val) && isset($val['text'])) return $val['text'];
-                return (string)$val;
-            };
 
             $details[] = [
                 'question_id' => $q->id,

@@ -81,6 +81,10 @@ return new class extends Migration
 
     public function down()
     {
+        if (!Schema::hasTable('messages')) {
+            return;
+        }
+
         Schema::table('messages', function (Blueprint $table) {
             try {
                 $table->dropForeign(['sender_id']);
@@ -92,7 +96,20 @@ return new class extends Migration
             } catch (\Throwable $e) {
                 // ignore
             }
-            $table->dropColumn(['sender_id', 'recipient_id', 'content', 'is_read']);
+            // Drop columns only if they exist to avoid SQLite attempting complex
+            // table-recreation operations that can fail during test rollbacks.
+            if (Schema::hasColumn('messages', 'sender_id')) {
+                try { $table->dropColumn('sender_id'); } catch (\Throwable $e) {}
+            }
+            if (Schema::hasColumn('messages', 'recipient_id')) {
+                try { $table->dropColumn('recipient_id'); } catch (\Throwable $e) {}
+            }
+            if (Schema::hasColumn('messages', 'content')) {
+                try { $table->dropColumn('content'); } catch (\Throwable $e) {}
+            }
+            if (Schema::hasColumn('messages', 'is_read')) {
+                try { $table->dropColumn('is_read'); } catch (\Throwable $e) {}
+            }
         });
     }
 };

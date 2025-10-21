@@ -40,6 +40,8 @@ class QuizController extends Controller
 
         $v = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'title' => 'sometimes|required|string|max:255',
+            'subject_id' => 'sometimes|nullable|exists:subjects,id',
+            'grade_id' => 'sometimes|nullable|exists:grades,id',
             'description' => 'sometimes|nullable|string',
             'youtube_url' => 'sometimes|nullable|url',
             'is_paid' => 'sometimes|boolean',
@@ -74,6 +76,43 @@ class QuizController extends Controller
                 $quiz->{$f} = $request->get($f);
             }
         }
+        // allow updating taxonomy links — validate consistency if topic/subject/grade are changed
+        if ($request->has('topic_id')) {
+            $newTopic = \App\Models\Topic::find($request->get('topic_id'));
+            if (!$newTopic) return response()->json(['message' => 'Topic not found'], 422);
+            $quiz->topic_id = $newTopic->id;
+            // if subject_id supplied, ensure it matches topic; otherwise set subject to topic's subject
+            if ($request->has('subject_id')) {
+                if ((string)$newTopic->subject_id !== (string)$request->get('subject_id')) {
+                    return response()->json(['message' => 'Topic does not belong to the supplied subject'], 422);
+                }
+                $quiz->subject_id = $request->get('subject_id');
+            } else {
+                $quiz->subject_id = $newTopic->subject_id;
+            }
+        } else {
+            if ($request->has('subject_id')) {
+                $quiz->subject_id = $request->get('subject_id');
+            }
+        }
+
+        if ($request->has('subject_id')) {
+            $sub = \App\Models\Subject::find($request->get('subject_id'));
+            if (!$sub) return response()->json(['message' => 'Subject not found'], 422);
+            if ($request->has('grade_id')) {
+                if ((string)$sub->grade_id !== (string)$request->get('grade_id')) {
+                    return response()->json(['message' => 'Subject does not belong to the supplied grade'], 422);
+                }
+                $quiz->grade_id = $request->get('grade_id');
+            } else {
+                $quiz->grade_id = $sub->grade_id;
+            }
+        } else {
+            if ($request->has('grade_id')) {
+                // If grade provided without subject, only set it; subject remains unchanged
+                $quiz->grade_id = $request->get('grade_id');
+            }
+        }
 
         // If questions included, reuse existing creation logic to attach them
         if ($request->filled('questions') && is_array($request->questions)) {
@@ -84,6 +123,10 @@ class QuizController extends Controller
                     $options = $q['options'] ?? null;
                     $answers = $q['answers'] ?? (isset($q['correct']) ? [$q['correct']] : null);
 
+                    $siteSettings = \App\Models\SiteSetting::current();
+                    $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
+                    $questionIsApproved = $siteAutoQuestions || ($topic->subject->auto_approve ?? false);
+
                     \App\Models\Question::create([
                         'quiz_id' => $quiz->id,
                         'created_by' => $user->id,
@@ -93,7 +136,7 @@ class QuizController extends Controller
                         'answers' => $answers,
                         'difficulty' => $q['difficulty'] ?? 3,
                         'is_quiz-master_marked' => true,
-                        'is_approved' => false,
+                        'is_approved' => $questionIsApproved,
                     ]);
                 } catch (\Exception $e) {
                     // ignore per-question failures for now
@@ -161,6 +204,8 @@ class QuizController extends Controller
 
         $v = Validator::make($request->all(), [
             'topic_id' => 'required|exists:topics,id',
+            'subject_id' => 'nullable|exists:subjects,id',
+            'grade_id' => 'nullable|exists:grades,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'youtube_url' => 'nullable|url',
@@ -181,8 +226,32 @@ class QuizController extends Controller
         }
 
         $topic = Topic::find($request->topic_id);
-        if (!$topic->is_approved) {
-            return response()->json(['message' => 'Topic is not approved'], 403);
+        if (!$topic || !$topic->is_approved) {
+            return response()->json(['message' => 'Topic is not approved or does not exist'], 403);
+        }
+
+        // If subject_id not provided, infer from topic; otherwise ensure topic belongs to provided subject
+        $providedSubjectId = $request->get('subject_id');
+        if ($providedSubjectId) {
+            if ((string)$topic->subject_id !== (string)$providedSubjectId) {
+                return response()->json(['message' => 'Topic does not belong to the supplied subject'], 422);
+            }
+        } else {
+            $request->merge(['subject_id' => $topic->subject_id]);
+        }
+
+        // If grade_id provided, ensure subject belongs to the grade; otherwise infer from subject
+        $providedGradeId = $request->get('grade_id');
+        $subject = \App\Models\Subject::find($request->get('subject_id'));
+        if (!$subject) {
+            return response()->json(['message' => 'Subject not found'], 422);
+        }
+        if ($providedGradeId) {
+            if ((string)$subject->grade_id !== (string)$providedGradeId) {
+                return response()->json(['message' => 'Subject does not belong to the supplied grade'], 422);
+            }
+        } else {
+            $request->merge(['grade_id' => $subject->grade_id]);
         }
 
         $coverUrl = null;
@@ -193,7 +262,10 @@ class QuizController extends Controller
         }
 
         $quiz = Quiz::create([
+            'user_id' => $user->id,
             'topic_id' => $topic->id,
+            'subject_id' => $request->get('subject_id') ?? null,
+            'grade_id' => $request->get('grade_id') ?? null,
             'created_by' => $user->id,
             'title' => $request->title,
             'description' => $request->description,
@@ -266,9 +338,7 @@ class QuizController extends Controller
                         'is_quiz-master_marked' => true,
                         'is_approved' => false,
                         'is_banked' => $isBanked,
-                        'tags' => $q['tags'] ?? null,
                         'hint' => $q['hint'] ?? null,
-                        'solution_steps' => $q['solution_steps'] ?? null,
                     ]);
                 } catch (\Exception $e) {
                     // ignore per-question failures for now

@@ -23,9 +23,25 @@ return new class extends Migration
 
     public function down()
     {
+        if (!Schema::hasTable('tournaments')) return;
         Schema::table('tournaments', function (Blueprint $table) {
+            // MySQL requires dropping foreign keys/indexes before dropping columns
+            try {
+                if (Schema::hasColumn('tournaments', 'sponsor_id')) {
+                    $table->dropForeign(['sponsor_id']);
+                }
+            } catch (\Throwable $e) {
+                // ignore if key doesn't exist
+            }
+
             if (Schema::hasColumn('tournaments', 'sponsor_id')) {
-                $table->dropColumn(['sponsor_id', 'sponsor_banner', 'sponsor_details']);
+                try { $table->dropColumn('sponsor_id'); } catch (\Throwable $e) {}
+            }
+            if (Schema::hasColumn('tournaments', 'sponsor_banner')) {
+                try { $table->dropColumn('sponsor_banner'); } catch (\Throwable $e) {}
+            }
+            if (Schema::hasColumn('tournaments', 'sponsor_details')) {
+                try { $table->dropColumn('sponsor_details'); } catch (\Throwable $e) {}
             }
         });
     }

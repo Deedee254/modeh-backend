@@ -29,7 +29,7 @@ class UserDailyChallenge extends Model
 
     public function quizee()
     {
-        return $this->belongsTo(quizee::class, 'user_id');
+        return $this->belongsTo(Quizee::class, 'user_id');
     }
 
     public function dailyChallenge()

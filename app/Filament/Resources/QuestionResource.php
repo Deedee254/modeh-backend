@@ -51,6 +51,8 @@ class QuestionResource extends Resource
                 \Filament\Tables\Columns\TextColumn::make('grade.name')->label('Grade')->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('subject.name')->label('Subject')->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('topic.name')->label('Topic')->sortable(),
+                \Filament\Tables\Columns\IconColumn::make('is_approved')->boolean()->label('Approved'),
+                \Filament\Tables\Columns\TextColumn::make('user.name')->label('Author')->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('created_at')->dateTime(),
             ])
             ->filters([
@@ -61,6 +63,22 @@ class QuestionResource extends Resource
             ->actions([
                 \Filament\Tables\Actions\EditAction::make(),
                 \Filament\Tables\Actions\DeleteAction::make(),
+                \Filament\Tables\Actions\Action::make('approve')
+                    ->label('Approve')
+                    ->action(function ($record) {
+                        $record->is_approved = true;
+                        $record->approval_requested_at = null;
+                        $record->save();
+                    })
+                    ->requiresConfirmation()
+                    ->visible(fn($record) => !$record->is_approved),
+                \Filament\Tables\Actions\Action::make('toggleApprove')
+                    ->label('Toggle Approve')
+                    ->action(function ($record) {
+                        $record->is_approved = !$record->is_approved;
+                        $record->save();
+                    })
+                    ->requiresConfirmation(),
             ])
             ->bulkActions([
                 \Filament\Tables\Actions\DeleteBulkAction::make(),

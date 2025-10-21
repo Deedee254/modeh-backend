@@ -192,6 +192,9 @@ class QuestionController extends Controller
             $answers = [$answers];
         }
 
+        $siteSettings = \App\Models\SiteSetting::current();
+        $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
+
         $question = Question::create([
             'quiz_id' => $request->quiz_id,
             'created_by' => $user->id,
@@ -205,7 +208,7 @@ class QuestionController extends Controller
             'media_metadata' => $mediaMetadata,
             'difficulty' => $request->get('difficulty', 3),
             'is_quiz-master_marked' => $request->get('is_quiz-master_marked', false),
-            'is_approved' => false,
+            'is_approved' => $siteAutoQuestions,
             'tags' => $request->get('tags'),
             'hint' => $request->get('hint'),
             'solution_steps' => $request->get('solution_steps'),
@@ -226,6 +229,137 @@ class QuestionController extends Controller
         }
 
         return response()->json(['question' => $question], 201);
+    }
+
+    /**
+     * Return a single question (owner or admin) for editing
+     */
+    public function show(Request $request, Question $question)
+    {
+        $user = $request->user();
+        // allow owner or admin to fetch full question data
+        if ($question->created_by && $question->created_by !== ($user->id ?? null) && !($user->is_admin ?? false)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        return response()->json(['question' => $question]);
+    }
+
+    /**
+     * Create a question attached to a specific quiz (used by quiz-master UI)
+     */
+    public function storeForQuiz(Request $request, Quiz $quiz)
+    {
+        // merge quiz id into request then call store logic
+        $request->merge(['quiz_id' => $quiz->id]);
+        return $this->store($request);
+    }
+
+    /**
+     * Bulk update/replace questions for a quiz. Expects { questions: [...] }
+     * Frontend uses this to save all questions in one call.
+     */
+    public function bulkUpdateForQuiz(Request $request, Quiz $quiz)
+    {
+        $user = $request->user();
+        // minimal auth: only quiz owner or admin may bulk update
+        if ($quiz->created_by && $quiz->created_by !== $user->id && !($user->is_admin ?? false)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // Support multipart/form-data where 'questions' may be a JSON string
+        if ($request->has('questions') && is_string($request->get('questions'))) {
+            $decoded = json_decode($request->get('questions'), true);
+            if (is_array($decoded)) {
+                $request->merge(['questions' => $decoded]);
+            }
+        }
+
+        $payload = $request->validate([
+            'questions' => 'required|array'
+        ]);
+
+        // collect any uploaded media files keyed under question_media[index] or question_media[uid]
+        $mediaFiles = $request->file('question_media', []);
+
+        $saved = [];
+            foreach ($payload['questions'] as $idx => $q) {
+            try {
+                // normalize incoming question shape for Question::create/update
+                $qData = [
+                    'quiz_id' => $quiz->id,
+                    'type' => $q['type'] ?? ($q['question_type'] ?? 'multiple_choice'),
+                    'body' => $q['text'] ?? ($q['body'] ?? ''),
+                    'options' => $q['options'] ?? null,
+                    'answers' => $q['answers'] ?? (isset($q['corrects']) ? $q['corrects'] : null),
+                    'difficulty' => $q['difficulty'] ?? 3,
+                    'tags' => $q['tags'] ?? null,
+                    'hint' => $q['hint'] ?? null,
+                    'solution_steps' => $q['solution_steps'] ?? null,
+                    'subject_id' => $q['subject_id'] ?? $quiz->subject_id ?? null,
+                    'topic_id' => $q['topic_id'] ?? $quiz->topic_id ?? null,
+                    'grade_id' => $q['grade_id'] ?? $quiz->grade_id ?? null,
+                ];
+                    // If there's an uploaded file for this question, store it and attach metadata
+                    try {
+                        $file = null;
+                        // prefer numeric index key
+                        if (is_array($mediaFiles) && array_key_exists($idx, $mediaFiles) && $mediaFiles[$idx]) {
+                            $file = $mediaFiles[$idx];
+                        }
+                        // fallback to uid key if provided in question payload
+                        elseif (isset($q['uid']) && is_array($mediaFiles) && array_key_exists($q['uid'], $mediaFiles) && $mediaFiles[$q['uid']]) {
+                            $file = $mediaFiles[$q['uid']];
+                        }
+
+                        if ($file) {
+                            $mPath = Storage::disk('public')->putFile('question_media', $file);
+                            $mediaPath = Storage::url($mPath);
+                            $mime = $file->getClientMimeType();
+                            $mediaType = null;
+                            if (strpos($mime, 'image/') === 0) $mediaType = 'image';
+                            elseif (strpos($mime, 'audio/') === 0) $mediaType = 'audio';
+                            elseif (strpos($mime, 'video/') === 0) $mediaType = 'video';
+                            if ($mediaPath) {
+                                $qData['media_path'] = $mediaPath;
+                                $qData['media_type'] = $mediaType;
+                            }
+                        }
+                    } catch (\Exception $e) {
+                        // ignore file storage errors for per-question uploads and continue
+                    }
+
+                // If the question has an id, attempt update
+                if (!empty($q['id'])) {
+                    $existing = Question::where('id', $q['id'])->where('quiz_id', $quiz->id)->first();
+                    if ($existing) {
+                        $existing->fill($qData);
+                        if (isset($qData['answers'])) $existing->answers = $qData['answers'];
+                            // If we stored media above, ensure existing question gets the path
+                            if (isset($qData['media_path'])) $existing->media_path = $qData['media_path'];
+                            if (isset($qData['media_type'])) $existing->media_type = $qData['media_type'];
+                        $existing->save();
+                        $saved[] = $existing;
+                        continue;
+                    }
+                }
+                    // Create new question
+                    $qData['created_by'] = $user->id;
+                    // apply auto-approve settings
+                    $siteSettings = \App\Models\SiteSetting::current();
+                    $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
+                    $qData['is_approved'] = $siteAutoQuestions;
+                    $created = Question::create($qData);
+                $saved[] = $created;
+            } catch (\Throwable $e) {
+                // ignore per-question failures but continue
+            }
+        }
+
+        // recalc quiz difficulty
+        try { $quiz->recalcDifficulty(); } catch (\Exception $e) {}
+
+        return response()->json(['questions' => $saved]);
     }
 
     public function update(Request $request, Question $question)

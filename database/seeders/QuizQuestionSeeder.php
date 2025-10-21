@@ -58,6 +58,7 @@ class QuizQuestionSeeder extends Seeder
                     ],[
                         'topic_id' => $topic->id,
                         'user_id' => $quizMaster->id,
+                        'grade_id' => $grade->id ?? null,
                         'created_by' => $quizMaster->id,
                         'description' => "Seeded quiz for {$topic->name} ({$subject->name})",
                         'is_approved' => true,
@@ -74,8 +75,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => ['Lagos', 'Nairobi', 'Kigali', 'Accra'],
                         'answers' => [1],
                         'explanation' => 'Nairobi is the capital and largest city of Kenya.',
-                        'hint' => 'It is one of the largest cities in East Africa.',
-                        'solution_steps' => ['Recall African capitals', 'Identify Nairobi as Kenya\'s capital'],
                         'difficulty' => 2,
                     ];
 
@@ -86,8 +85,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => ['4', '7', '11', '15'],
                         'answers' => [1,2],
                         'explanation' => '7 and 11 are primes; 4 and 15 are composite.',
-                        'hint' => 'Primes have only two positive divisors: 1 and themselves.',
-                        'solution_steps' => ['Check divisibility of each number'],
                         'difficulty' => 3,
                     ];
 
@@ -98,8 +95,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => null,
                         'answers' => ['photosynthesis'],
                         'explanation' => 'Photosynthesis uses light energy to convert CO2 and water into glucose.',
-                        'hint' => 'Starts with "photo" meaning light.',
-                        'solution_steps' => ['Identify the biological process that uses sunlight to make food'],
                         'difficulty' => 2,
                     ];
 
@@ -110,8 +105,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => null,
                         'answers' => ['hydrogen'],
                         'explanation' => 'Hydrogen has atomic number 1.',
-                        'hint' => 'It is the lightest element.',
-                        'solution_steps' => ['Recall periodic table basics'],
                         'difficulty' => 2,
                     ];
 
@@ -122,8 +115,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => null,
                         'answers' => [84],
                         'explanation' => '12 times 7 equals 84.',
-                        'hint' => 'Multiply 10*7 then add 2*7.',
-                        'solution_steps' => ['10*7 = 70', '2*7 = 14', '70 + 14 = 84'],
                         'difficulty' => 1,
                     ];
 
@@ -134,8 +125,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => null,
                         'answers' => [13],
                         'explanation' => 'f(5) = 2*5 + 3 = 13.',
-                        'hint' => 'Substitute x = 5 into the expression.',
-                        'solution_steps' => ['Compute 2*5 = 10', 'Add 3 to get 13'],
                         'difficulty' => 2,
                     ];
 
@@ -149,8 +138,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => ['45°', '60°', '90°', '30°'],
                         'answers' => [1],
                         'explanation' => 'From the diagram the marked angle is 60°.',
-                        'hint' => 'Consider the triangle type shown.',
-                        'solution_steps' => ['Inspect diagram', 'Use triangle angle rules'],
                         'difficulty' => 3,
                     ];
 
@@ -162,8 +149,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => ['Dribbling', 'Shooting', 'Passing', 'Tackling'],
                         'answers' => [2],
                         'explanation' => 'The clip focuses on precision passing.',
-                        'hint' => 'Observe the movement of the ball between players.',
-                        'solution_steps' => ['Watch the clip', 'Identify the repeated skill shown'],
                         'difficulty' => 2,
                     ];
 
@@ -176,8 +161,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => ['Guitar', 'Violin', 'Piano', 'Flute'],
                         'answers' => [1],
                         'explanation' => 'The timbre and bowing indicate a violin.',
-                        'hint' => 'Listen for sustained bowed notes.',
-                        'solution_steps' => ['Listen to the clip', 'Match the sound characteristics to the instrument'],
                         'difficulty' => 2,
                     ];
 
@@ -188,8 +171,6 @@ class QuizQuestionSeeder extends Seeder
                         'options' => ['Triangle', 'Square', 'Rectangle', 'Circle'],
                         'answers' => [1,2],
                         'explanation' => 'Square and Rectangle have four sides.',
-                        'hint' => 'Quadrilaterals have four sides.',
-                        'solution_steps' => ['Count the sides of each shape'],
                         'difficulty' => 1,
                     ];
 
@@ -218,8 +199,7 @@ class QuizQuestionSeeder extends Seeder
                             'youtube_url' => $qtpl['youtube_url'] ?? null,
                             'media_metadata' => $qtpl['media_metadata'] ?? null,
                             'explanation' => $qtpl['explanation'] ?? null,
-                            'hint' => $qtpl['hint'] ?? null,
-                            'solution_steps' => $qtpl['solution_steps'] ?? null,
+                            // hint and solution_steps omitted per schema
                             'difficulty' => $qtpl['difficulty'] ?? 3,
                             'created_by' => $quizMaster->id,
                             'is_approved' => true,

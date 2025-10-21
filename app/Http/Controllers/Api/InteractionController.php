@@ -89,4 +89,73 @@ class InteractionController extends Controller
 
         return response()->json(['following' => false]);
     }
+
+    /**
+     * Return users who follow the authenticated quiz-master and users who
+     * have liked any quiz created by the authenticated quiz-master.
+     * Minimal payload: id, name, email, avatar
+     */
+    public function quizMasterFollowers(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user || $user->role !== 'quiz-master') {
+            return response()->json(['followers' => []]);
+        }
+
+        // IDs of users who explicitly follow this quiz-master
+        $followerIds = DB::table('quiz_master_follows')
+            ->where('quiz_master_id', $user->id)
+            ->pluck('user_id')
+            ->toArray();
+
+        // IDs of users who liked any quizzes belonging to this quiz-master
+        $quizIds = DB::table('quizzes')
+            ->where('created_by', $user->id)
+            ->pluck('id')
+            ->toArray();
+
+        $likerIds = [];
+        if (! empty($quizIds)) {
+            $likerIds = DB::table('quiz_likes')
+                ->whereIn('quiz_id', $quizIds)
+                ->pluck('user_id')
+                ->toArray();
+        }
+
+        // Build follower user objects
+        $followers = [];
+        if (! empty($followerIds)) {
+            $followers = User::whereIn('id', array_values(array_unique($followerIds)))
+                ->get(['id', 'name', 'email', 'social_avatar'])
+                ->map(function ($u) {
+                    return [
+                        'id' => $u->id,
+                        'name' => $u->name,
+                        'email' => $u->email,
+                        'avatar' => $u->social_avatar,
+                    ];
+                })->values();
+        }
+
+        // Build liker user objects
+        $likers = [];
+        if (! empty($likerIds)) {
+            $likers = User::whereIn('id', array_values(array_unique($likerIds)))
+                ->get(['id', 'name', 'email', 'social_avatar'])
+                ->map(function ($u) {
+                    return [
+                        'id' => $u->id,
+                        'name' => $u->name,
+                        'email' => $u->email,
+                        'avatar' => $u->social_avatar,
+                    ];
+                })->values();
+        }
+
+        return response()->json([
+            'followers' => $followers,
+            'likers' => $likers,
+        ]);
+    }
 }

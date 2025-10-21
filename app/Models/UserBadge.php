@@ -24,7 +24,7 @@ class UserBadge extends Model
 
     public function quizee()
     {
-        return $this->belongsTo(quizee::class);
+        return $this->belongsTo(Quizee::class);
     }
 
     public function badge()

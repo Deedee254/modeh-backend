@@ -41,17 +41,17 @@ class Battle extends Model
 
     public function initiator()
     {
-        return $this->belongsTo(quizee::class, 'initiator_id');
+        return $this->belongsTo(Quizee::class, 'initiator_id');
     }
 
     public function opponent()
     {
-        return $this->belongsTo(quizee::class, 'opponent_id');
+        return $this->belongsTo(Quizee::class, 'opponent_id');
     }
 
     public function winner()
     {
-        return $this->belongsTo(quizee::class, 'winner_id');
+        return $this->belongsTo(Quizee::class, 'winner_id');
     }
 
     public function questions()

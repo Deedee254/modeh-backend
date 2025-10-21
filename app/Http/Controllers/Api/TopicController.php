@@ -160,17 +160,23 @@ class TopicController extends Controller
 
         $user = $request->user();
 
+    // Determine whether to auto-approve based on subject.auto_approve, site runtime setting, or request hint
+    $siteSettings = \App\Models\SiteSetting::current();
+    $siteAuto = $siteSettings ? (bool)$siteSettings->auto_approve_topics : config('site.auto_approve_topics', true);
+    $autoApprove = $subject->auto_approve || $siteAuto;
+
         $topic = Topic::create([
             'subject_id' => $subject->id,
             'created_by' => $user->id,
             'name' => $request->name,
             'description' => $request->description ?? null,
-            'is_approved' => false,
+            'is_approved' => (bool)$autoApprove,
         ]);
 
-        // If subject auto_approve is true, optionally auto-approve topic too
-        if ($subject->auto_approve) {
-            $topic->is_approved = true;
+        // If not auto-approved but client requested immediate approval request, set approval_requested_at
+        // client can send `request_approval=true` in creation payload to immediately request approval
+        if (!$autoApprove && (bool)$request->get('request_approval')) {
+            $topic->approval_requested_at = now();
             $topic->save();
         }
 

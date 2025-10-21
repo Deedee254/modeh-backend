@@ -21,12 +21,17 @@ class QuizResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            TextColumn::make('title')->label('Title'),
-            \Filament\Forms\Components\TextInput::make('one_off_price')
-                ->numeric()
-                ->label('One-off Price')
-                ->min(0)
-                ->step(0.01),
+            \Filament\Forms\Components\Card::make()
+                ->schema([
+                    \Filament\Forms\Components\TextInput::make('title')->label('Title')->required(),
+                    \Filament\Forms\Components\TextInput::make('one_off_price')
+                        ->numeric()
+                        ->label('One-off Price')
+                        ->min(0)
+                        ->step(0.01),
+                    \Filament\Forms\Components\Toggle::make('is_approved')->label('Approved')->default(false),
+                ])
+                ->columns(1),
         ]);
     }
 

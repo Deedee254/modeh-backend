@@ -4,7 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\Package;
-use App\Models\quizee;
+use App\Models\Quizee;
 use App\Models\Subscription;
 
 class AssignSubscriptionsSeeder extends Seeder
@@ -22,8 +22,8 @@ class AssignSubscriptionsSeeder extends Seeder
             return;
         }
 
-        $quizees = quizee::with('user')->get();
-        $this->command->info('Found '.$quizees->count().' quizee records. Assigning subscriptions...');
+    $quizees = Quizee::with('user')->get();
+    $this->command->info('Found '.$quizees->count().' quizee records. Assigning subscriptions...');
 
         foreach ($quizees as $quizee) {
             $user = $quizee->user;

@@ -47,6 +47,7 @@ Route::get('/packages', [\App\Http\Controllers\Api\PackageController::class, 'in
 Route::get('/subscriptions/status', [\App\Http\Controllers\Api\SubscriptionController::class, 'statusByTx']);
 Route::get('/quiz-masters', [\App\Http\Controllers\Api\QuizMasterController::class, 'index']);
 Route::get('/quiz-masters/{id}', [\App\Http\Controllers\Api\QuizMasterController::class, 'show']);
+// quiz-master's followers (moved to authenticated group below)
 
 // Public recommendations (grade-filtered, randomized) - available to anonymous users
 Route::get('/recommendations/quizzes', [\App\Http\Controllers\Api\RecommendationController::class, 'quizzes']);
@@ -125,6 +126,10 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // Public question bank endpoint (global bank queries)
     Route::get('/question-bank', [\App\Http\Controllers\Api\QuestionController::class, 'bank']);
     Route::post('/questions', [\App\Http\Controllers\Api\QuestionController::class, 'store']);
+    Route::get('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'show']);
+    // Per-quiz question endpoints (used by quiz-master UI)
+    Route::post('/quizzes/{quiz}/questions', [\App\Http\Controllers\Api\QuestionController::class, 'storeForQuiz']);
+    Route::patch('/quizzes/{quiz}/questions', [\App\Http\Controllers\Api\QuestionController::class, 'bulkUpdateForQuiz']);
     // Admin approve question
     Route::post('/questions/{question}/approve', [\App\Http\Controllers\Api\QuestionController::class, 'approve']);
     Route::post('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'update']);
@@ -221,8 +226,10 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // Interactions
     Route::post('/quizzes/{quiz}/like', [\App\Http\Controllers\Api\InteractionController::class, 'likeQuiz']);
     Route::post('/quizzes/{quiz}/unlike', [\App\Http\Controllers\Api\InteractionController::class, 'unlikeQuiz']);
-    Route::post('/quiz-masters/{quiz-master}/follow', [\App\Http\Controllers\Api\InteractionController::class, 'followQuizMaster']);
-    Route::post('/quiz-masters/{quiz-master}/unfollow', [\App\Http\Controllers\Api\InteractionController::class, 'unfollowQuizMaster']);
+    Route::post('/quiz-masters/{quiz_master}/follow', [\App\Http\Controllers\Api\InteractionController::class, 'followQuizMaster']);
+    Route::post('/quiz-masters/{quiz_master}/unfollow', [\App\Http\Controllers\Api\InteractionController::class, 'unfollowQuizMaster']);
+    // quiz-master followers (authenticated)
+    Route::get('/quiz-master/followers', [\App\Http\Controllers\Api\InteractionController::class, 'quizMasterFollowers']);
 
     // Direct Messages
     Route::get('/messages/contacts', [\App\Http\Controllers\Api\MessageController::class, 'contacts']);

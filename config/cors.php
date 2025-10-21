@@ -6,7 +6,7 @@ return [
 
     // Load from .env, fallback to production + local dev URLs
     'allowed_origins' => array_filter(array_map('trim', explode(',', env('CORS_ALLOWED_ORIGINS',
-        'https://modeh.co.ke,https://admin.modeh.co.ke,http://localhost:5173,http://127.0.0.1:5173'
+        'https://modeh.co.ke,https://admin.modeh.co.ke,http://localhost:3000,http://127.0.0.1:3000'
     )))),
 
     // Optionally allow all subdomains of modeh.co.ke:

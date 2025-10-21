@@ -24,9 +24,7 @@ return new class extends Migration
             $table->boolean('is_banked')->default(false);
             $table->string('media_type')->nullable();
             // additional metadata added here so base migration is complete
-            $table->json('tags')->nullable();
-            $table->text('hint')->nullable();
-            $table->json('solution_steps')->nullable();
+
             $table->unsignedBigInteger('subject_id')->nullable();
             $table->unsignedBigInteger('topic_id')->nullable();
             $table->unsignedBigInteger('grade_id')->nullable();

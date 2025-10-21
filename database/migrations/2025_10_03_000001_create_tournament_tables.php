@@ -35,7 +35,8 @@ return new class extends Migration
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['tournament_id', 'user_id']);
+            // use explicit short index name to avoid exceeding MySQL identifier length
+            $table->unique(['tournament_id', 'user_id'], 't_participants_tournament_user_uq');
         });
 
         Schema::create('tournament_questions', function (Blueprint $table) {
@@ -45,10 +46,10 @@ return new class extends Migration
             $table->integer('position')->default(0);
             $table->timestamps();
 
-            $table->unique(['tournament_id', 'question_id']);
+            $table->unique(['tournament_id', 'question_id'], 't_questions_tournament_question_uq');
         });
 
-        Schema::create('tournament_battles', function (Blueprint $table) {
+    Schema::create('tournament_battles', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tournament_id')->constrained()->onDelete('cascade');
             $table->integer('round');
@@ -66,16 +67,8 @@ return new class extends Migration
 
     public function down()
     {
-        Schema::create('tournament_battle_questions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('tournament_battle_id')->constrained()->onDelete('cascade');
-            $table->foreignId('question_id')->constrained()->onDelete('cascade');
-            $table->integer('position')->default(0);
-            $table->timestamps();
-
-            $table->unique(['tournament_battle_id', 'question_id']);
-        });
-
+        // Tear down tournament related tables in reverse order. The up() method
+        // does not create tournament_battle_questions, so ensure safe drops.
         Schema::dropIfExists('tournament_battle_questions');
         Schema::dropIfExists('tournament_battles');
         Schema::dropIfExists('tournament_questions');

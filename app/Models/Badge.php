@@ -24,6 +24,6 @@ class Badge extends Model
 
     public function quizees()
     {
-        return $this->belongsToMany(quizee::class, 'user_badges')->withPivot('earned_at', 'attempt_id')->withTimestamps();
+        return $this->belongsToMany(Quizee::class, 'user_badges')->withPivot('earned_at', 'attempt_id')->withTimestamps();
     }
 }
