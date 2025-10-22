@@ -20,6 +20,12 @@ return new class extends Migration
 
     public function down()
     {
+        // SQLite has limited support for dropping columns; avoid dropColumn during tests against sqlite.
+        $driver = Schema::getConnection()->getDriverName();
+        if ($driver === 'sqlite') {
+            return;
+        }
+
         Schema::table('packages', function (Blueprint $table) {
             if (Schema::hasColumn('packages', 'slug')) {
                 $table->dropColumn('slug');

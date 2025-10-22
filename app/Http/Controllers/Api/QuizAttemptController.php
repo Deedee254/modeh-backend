@@ -23,7 +23,22 @@ class QuizAttemptController extends Controller
     {
         $user = $request->user();
 
-        // Load questions but strip the correct answers
+        // If the requester is authenticated and is the owner (created_by or user_id) or an admin,
+        // return the full quiz with relations so the quiz-master UI can display metadata.
+        if ($user) {
+            $isOwner = false;
+            try {
+                $isOwner = ($quiz->created_by && (string)$quiz->created_by === (string)$user->id) || ($quiz->user_id && (string)$quiz->user_id === (string)$user->id);
+            } catch (\Exception $e) {
+                $isOwner = false;
+            }
+            if ($isOwner || ($user->is_admin ?? false)) {
+                $quiz->load(['topic.subject', 'subject', 'grade', 'questions']);
+                return response()->json(['quiz' => $quiz]);
+            }
+        }
+
+        // Public / attempt view: Load questions but strip the correct answers
         $quiz->load(['topic', 'questions']);
         $questions = $quiz->questions->map(function ($q) {
             return [

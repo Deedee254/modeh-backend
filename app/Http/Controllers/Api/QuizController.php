@@ -204,13 +204,15 @@ class QuizController extends Controller
 
         $v = Validator::make($request->all(), [
             'topic_id' => 'required|exists:topics,id',
-            'subject_id' => 'nullable|exists:subjects,id',
-            'grade_id' => 'nullable|exists:grades,id',
+            'subject_id' => 'required|exists:subjects,id',
+            'grade_id' => 'required|exists:grades,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'youtube_url' => 'nullable|url',
             'is_paid' => 'boolean',
             'timer_seconds' => 'nullable|integer|min:1',
+            'per_question_seconds' => 'nullable|integer|min:10',
+            'use_per_question_timer' => 'nullable|boolean',
             'attempts_allowed' => 'nullable|integer|min:1',
             'shuffle_questions' => 'nullable|boolean',
             'shuffle_answers' => 'nullable|boolean',
