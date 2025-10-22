@@ -27,6 +27,13 @@ class QuizController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        // Normalize empty-string inputs (common from browser selects) to null for nullable numeric fields
+        foreach (['subject_id','grade_id','timer_seconds','per_question_seconds','attempts_allowed','scheduled_at'] as $k) {
+            if ($request->has($k) && $request->get($k) === '') {
+                $request->merge([$k => null]);
+            }
+        }
+
         // If questions were sent as JSON string inside multipart/form-data, decode them
         if ($request->has('questions') && is_string($request->get('questions'))) {
             $decoded = json_decode($request->get('questions'), true);
@@ -114,8 +121,20 @@ class QuizController extends Controller
             }
         }
 
+        // Ensure $topic is set for question-related logic below. If a new topic was supplied
+        // earlier we used $newTopic; prefer that otherwise fall back to the quiz's current topic.
+        $topic = null;
+        if (isset($newTopic) && $newTopic) {
+            $topic = $newTopic;
+        } else {
+            // $quiz->topic may be null if relation not loaded, try to load it
+            $topic = $quiz->topic ?? \App\Models\Topic::find($quiz->topic_id);
+        }
+
         // If questions included, reuse existing creation logic to attach them
         if ($request->filled('questions') && is_array($request->questions)) {
+            // Support per-question file uploads: keys may be numeric index or question uid
+            $mediaFiles = $request->file('question_media', []);
             foreach ($request->questions as $index => $q) {
                 try {
                     $qType = $q['type'] ?? 'mcq';
@@ -123,20 +142,45 @@ class QuizController extends Controller
                     $options = $q['options'] ?? null;
                     $answers = $q['answers'] ?? (isset($q['correct']) ? [$q['correct']] : null);
 
+                    $mediaPath = null;
+                    $mediaType = null;
+                    $file = null;
+                    // prefer numeric index key
+                    if (is_array($mediaFiles) && array_key_exists($index, $mediaFiles) && $mediaFiles[$index]) {
+                        $file = $mediaFiles[$index];
+                    }
+                    // fallback to uid key if provided in question payload
+                    elseif (isset($q['uid']) && is_array($mediaFiles) && array_key_exists($q['uid'], $mediaFiles) && $mediaFiles[$q['uid']]) {
+                        $file = $mediaFiles[$q['uid']];
+                    }
+                    // if we have a file, store it
+                    if ($file) {
+                        $mPath = Storage::disk('public')->putFile('question_media', $file);
+                        $mediaPath = Storage::url($mPath);
+                        $mediaType = $file->getClientMimeType();
+                    }
+
                     $siteSettings = \App\Models\SiteSetting::current();
                     $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
-                    $questionIsApproved = $siteAutoQuestions || ($topic->subject->auto_approve ?? false);
+                    // If topic/subject information is unavailable, default to site setting
+                    $questionIsApproved = $siteAutoQuestions || (($topic && $topic->subject) ? (bool)($topic->subject->auto_approve ?? false) : false);
 
                     \App\Models\Question::create([
                         'quiz_id' => $quiz->id,
                         'created_by' => $user->id,
                         'type' => $qType,
                         'body' => $body,
+                        'youtube_url' => $q['youtube_url'] ?? null,
+                        'media_metadata' => $q['media_metadata'] ?? null,
                         'options' => $options,
                         'answers' => $answers,
+                        'media_path' => $mediaPath,
+                        'media_type' => $mediaType,
                         'difficulty' => $q['difficulty'] ?? 3,
                         'is_quiz-master_marked' => true,
                         'is_approved' => $questionIsApproved,
+                        'is_banked' => isset($q['is_banked']) ? (bool)$q['is_banked'] : false,
+                        'hint' => $q['hint'] ?? null,
                     ]);
                 } catch (\Exception $e) {
                     // ignore per-question failures for now
@@ -190,6 +234,13 @@ class QuizController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
+
+        // Normalize empty-string inputs (common from browser selects) to null for nullable numeric fields
+        foreach (['subject_id','grade_id','timer_seconds','per_question_seconds','attempts_allowed','scheduled_at'] as $k) {
+            if ($request->has($k) && $request->get($k) === '') {
+                $request->merge([$k => null]);
+            }
+        }
 
         // If questions were sent as JSON string inside multipart/form-data, decode them
         if ($request->has('questions') && is_string($request->get('questions'))) {
