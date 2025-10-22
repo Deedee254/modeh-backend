@@ -181,12 +181,14 @@ class BattleController extends Controller
         $topic = $params['topic_id'] ?? $settings['topic_id'] ?? $params['topic'] ?? $settings['topic'] ?? null;
         $difficulty = $params['difficulty'] ?? $settings['difficulty'] ?? null;
         $grade = $params['grade_id'] ?? $settings['grade_id'] ?? $params['grade'] ?? $settings['grade'] ?? null;
+    $level = $params['level_id'] ?? $settings['level_id'] ?? null;
         $subject = $params['subject_id'] ?? $settings['subject_id'] ?? null;
         $random = $params['random'] ?? $settings['random'] ?? 1;
 
         // Persist the settings back to the battle so the selection can be reproduced later
         $persistable = array_filter([
             'grade_id' => $grade,
+            'level_id' => $level,
             'subject_id' => $subject,
             'topic_id' => $topic,
             'difficulty' => $difficulty,
@@ -204,6 +206,23 @@ class BattleController extends Controller
     if ($subject && Schema::hasColumn('questions', 'subject_id')) $q->where('subject_id', $subject);
     if ($difficulty && Schema::hasColumn('questions', 'difficulty')) $q->where('difficulty', $difficulty);
     if ($grade && Schema::hasColumn('questions', 'grade_id')) $q->where('grade_id', $grade);
+
+        // If level filter provided, constrain questions to grades that belong to that level
+        if ($level) {
+            try {
+                if (Schema::hasTable('grades') && Schema::hasColumn('grades', 'level_id') && Schema::hasColumn('questions', 'grade_id')) {
+                    $gradeIds = \App\Models\Grade::where('level_id', $level)->pluck('id')->toArray();
+                    if (!empty($gradeIds)) {
+                        $q->whereIn('grade_id', $gradeIds);
+                    } else {
+                        // no grades found for level — ensure no results to respect the filter
+                        $q->whereRaw('0 = 1');
+                    }
+                }
+            } catch (\Throwable $_) {
+                // ignore failures and fall back to unfiltered behavior
+            }
+        }
 
         if ($random) {
             $questions = $q->inRandomOrder()->limit($perPage)->get();
@@ -249,7 +268,7 @@ class BattleController extends Controller
         ];
 
         // require at least one of these when attaching
-        $hasFilter = isset($data['grade_id']) || isset($data['subject_id']) || isset($data['topic_id']) || isset($data['difficulty']) || isset($data['topic']) || isset($data['grade']);
+    $hasFilter = isset($data['grade_id']) || isset($data['subject_id']) || isset($data['topic_id']) || isset($data['difficulty']) || isset($data['topic']) || isset($data['grade']) || isset($data['level_id']);
 
         if (!$hasFilter) {
             abort(response()->json(['message' => 'At least one filter (grade_id, subject_id, topic_id or difficulty) is required to attach questions'], 422));

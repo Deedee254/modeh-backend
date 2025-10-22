@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
         // Create one of each role for development/testing
         $this->call([
             GradeSeeder::class,
+            LevelsTableSeeder::class,
             SubjectSeeder::class,
             TopicSeeder::class,
             QuizeeSeeder::class,
@@ -23,6 +24,7 @@ class DatabaseSeeder extends Seeder
             AdminSeeder::class,
             BadgeSeeder::class,
             AchievementSeeder::class,
+            LevelAchievementsSeeder::class,
             QuizBadgeSeeder::class,
             QuizQuestionSeeder::class,
             PaymentSettingsSeeder::class,

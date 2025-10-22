@@ -14,9 +14,14 @@ class GradeResource extends Resource
 {
     protected static ?string $model = Grade::class;
 
-    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-academic-cap';
-    protected static \UnitEnum|string|null $navigationGroup = 'Content Management';
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-academic-cap';
     protected static ?int $navigationSort = 1;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return 'Content Management';
+    }
+    
 
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
@@ -26,7 +31,24 @@ class GradeResource extends Resource
                     Forms\Components\TextInput::make('name')
                         ->required()
                         ->maxLength(255),
-                        
+                    Forms\Components\Select::make('level_id')
+                        ->label('Level')
+                        ->options(function () {
+                            return \App\Models\Level::orderBy('order')->pluck('name', 'id')->toArray();
+                        })
+                        ->searchable()
+                        ->nullable(),
+
+                    Forms\Components\Select::make('type')
+                        ->label('Type')
+                        ->options([
+                            'grade' => 'Grade',
+                            'course' => 'Course (Tertiary)'
+                        ])
+                        ->default('grade')
+                        ->required(),
+
+                    
                     Forms\Components\TextInput::make('display_name')
                         ->required()
                         ->maxLength(255),

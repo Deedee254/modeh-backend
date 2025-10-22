@@ -17,6 +17,7 @@ class QuizMaster extends Model
         'subjects',
         'bio',
         'grade_id',
+        'level_id',
         'institution',
     ];
 

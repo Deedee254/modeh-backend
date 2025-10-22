@@ -15,10 +15,14 @@ use Filament\Tables\Columns\TextColumn;
 class BadgeResource extends Resource
 {
     protected static ?string $model = Badge::class;
-    protected static \UnitEnum|string|null $navigationGroup = 'Content Management';
     protected static ?int $navigationSort = 4;
 
-    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-trophy';
+
+    public static function getNavigationGroup(): ?string
+    {
+        return 'Content Management';
+    }
 
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {

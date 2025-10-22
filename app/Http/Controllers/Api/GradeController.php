@@ -23,6 +23,7 @@ class GradeController extends Controller
             ->with(['subjects' => function($q) {
                 $q->where('is_approved', true)->withCount('topics as quizzes_count');
             }]);
+        $query->with('level');
 
         if ($q = $request->get('q')) {
             $query->where('name', 'like', "%{$q}%");
@@ -40,6 +41,7 @@ class GradeController extends Controller
     public function show(Grade $grade)
     {
         $grade->load(['subjects' => function($q) { $q->where('is_approved', true)->withCount('topics as quizzes_count'); }]);
+    $grade->load('level');
         $grade->quizzes_count = $grade->subjects->sum('quizzes_count');
         return response()->json(['grade' => $grade]);
     }

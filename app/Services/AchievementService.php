@@ -193,6 +193,86 @@ class AchievementService
             $awarded = array_merge($awarded, $quizAwards);
         }
 
+        // Quiz-created achievements (level/course scoped)
+        if (($payload['type'] ?? null) === 'quiz_created') {
+            $createdAwards = $this->checkQuizCreatedAchievements($user, $payload);
+            $awarded = array_merge($awarded, $createdAwards);
+        }
+
+        return $awarded;
+    }
+
+    /**
+     * Check achievements related to quiz creation that may be scoped to a level or course.
+     * Expects payload to include 'quiz_id' and may include 'level_id' and 'grade_id'.
+     */
+    private function checkQuizCreatedAchievements(User $user, array $payload): array
+    {
+        $awarded = [];
+
+        $achievements = Achievement::where('type', 'quiz_created')
+            ->whereDoesntHave('users', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            })->get();
+
+        if (!$achievements || $achievements->isEmpty()) return [];
+
+        // Determine context from payload
+        $levelId = $payload['level_id'] ?? null;
+        $gradeId = $payload['grade_id'] ?? null;
+
+        foreach ($achievements as $ach) {
+            try {
+                $criteria = $ach->criteria ?? null; // cast to array by model
+                // support either JSON string or array
+                if (is_string($criteria)) {
+                    $criteria = json_decode($criteria, true) ?: [];
+                }
+                if (!is_array($criteria)) $criteria = [];
+
+                $requiredCount = $criteria['count'] ?? ($ach->criteria_value ?? 1);
+
+                // If achievement requires a course (tertiary), ensure the quiz points to a grade of type 'course'
+                if (!empty($criteria['require_course'])) {
+                    // If gradeId isn't provided, try to infer via level+quiz_id
+                    if ($gradeId) {
+                        $g = \App\Models\Grade::find($gradeId);
+                        if (!($g && ($g->type ?? null) === 'course')) continue; // not a course quiz
+                    } else if (!empty($payload['quiz_id'])) {
+                        $q = Quiz::find($payload['quiz_id']);
+                        if (!$q || !$q->grade_id) continue;
+                        $g = \App\Models\Grade::find($q->grade_id);
+                        if (!($g && ($g->type ?? null) === 'course')) continue;
+                        // set gradeId for counting below
+                        $gradeId = $q->grade_id;
+                    } else {
+                        continue; // can't validate course requirement without grade or quiz
+                    }
+                }
+
+                // Determine counting scope: prefer grade if criteria has 'per_grade' true, else level if levelId available, else global per-user quizzes
+                $scope = 'user';
+                if (!empty($criteria['per_grade']) && $gradeId) $scope = 'grade';
+                elseif ($levelId) $scope = 'level';
+
+                $count = 0;
+                if ($scope === 'grade' && $gradeId) {
+                    $count = Quiz::where('user_id', $user->id)->where('grade_id', $gradeId)->count();
+                } elseif ($scope === 'level' && $levelId) {
+                    $count = Quiz::where('user_id', $user->id)->where('level_id', $levelId)->count();
+                } else {
+                    // fallback: count quizzes created by user (global)
+                    $count = Quiz::where('user_id', $user->id)->count();
+                }
+
+                if ($count >= $requiredCount) {
+                    $awarded[] = $this->awardAchievement($user, $ach, $payload['attempt_id'] ?? null);
+                }
+            } catch (\Throwable $e) {
+                try { \Log::warning('Failed to evaluate quiz_created achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+            }
+        }
+
         return $awarded;
     }
 

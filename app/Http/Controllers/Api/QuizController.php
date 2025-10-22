@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Quiz;
+use App\Services\AchievementService;
 use App\Models\Topic;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +17,7 @@ class QuizController extends Controller
     {
         // Protect most endpoints but allow public listing (index)
         $this->middleware('auth:sanctum')->except(['index']);
+        $this->achievementService = app(AchievementService::class);
     }
 
     // Update existing quiz (used by quiz-master UI to save settings and publish)
@@ -49,6 +51,7 @@ class QuizController extends Controller
             'title' => 'sometimes|required|string|max:255',
             'subject_id' => 'sometimes|nullable|exists:subjects,id',
             'grade_id' => 'sometimes|nullable|exists:grades,id',
+            'level_id' => 'sometimes|nullable|exists:levels,id',
             'description' => 'sometimes|nullable|string',
             'youtube_url' => 'sometimes|nullable|url',
             'is_paid' => 'sometimes|boolean',
@@ -111,13 +114,20 @@ class QuizController extends Controller
                     return response()->json(['message' => 'Subject does not belong to the supplied grade'], 422);
                 }
                 $quiz->grade_id = $request->get('grade_id');
+                // try to set level_id from grade if present
+                try {
+                    $g = \App\Models\Grade::find($request->get('grade_id'));
+                    if ($g && isset($g->level_id)) $quiz->level_id = $g->level_id;
+                } catch (\Throwable $_) {}
             } else {
                 $quiz->grade_id = $sub->grade_id;
+                try { $quiz->level_id = \App\Models\Grade::find($sub->grade_id)->level_id ?? null; } catch (\Throwable $_) {}
             }
         } else {
             if ($request->has('grade_id')) {
                 // If grade provided without subject, only set it; subject remains unchanged
                 $quiz->grade_id = $request->get('grade_id');
+                try { $quiz->level_id = \App\Models\Grade::find($request->get('grade_id'))->level_id ?? null; } catch (\Throwable $_) {}
             }
         }
 
@@ -189,9 +199,27 @@ class QuizController extends Controller
             try { $quiz->recalcDifficulty(); } catch (\Exception $e) {}
         }
 
+        if ($request->has('level_id')) $quiz->level_id = $request->get('level_id');
+
         $quiz->save();
 
-        return response()->json(['quiz' => $quiz]);
+        // Ensure relations and nested level are loaded for client
+        $quiz->load(['grade.level', 'subject', 'topic']);
+
+        // Trigger achievement checks for updating a quiz (in case level changed)
+        try {
+            if ($this->achievementService) {
+                $this->achievementService->checkAchievements(auth()->id(), [
+                    'type' => 'quiz_updated',
+                    'quiz_id' => $quiz->id,
+                    'level_id' => $quiz->level_id,
+                    'grade_id' => $quiz->grade_id,
+                    'subject_id' => $quiz->subject_id,
+                ]);
+            }
+        } catch (\Throwable $_) {}
+
+        return response()->json($quiz);
     }
 
     // Paginated list for quizzes with search and filter support
@@ -220,6 +248,16 @@ class QuizController extends Controller
         // filter by topic or approved (explicit query overrides defaults)
         if ($topic = $request->get('topic_id')) {
             $query->where('topic_id', $topic);
+        }
+        // filter by level (via the quiz's grade's level_id)
+        if ($levelId = $request->get('level_id')) {
+            $query->whereHas('grade', function ($q) use ($levelId) {
+                $q->where('level_id', $levelId);
+            });
+        }
+        // filter by grade_id explicitly
+        if ($gradeId = $request->get('grade_id')) {
+            $query->where('grade_id', $gradeId);
         }
         if (!is_null($request->get('approved'))) {
             $query->where('is_approved', (bool)$request->get('approved'));
@@ -257,6 +295,7 @@ class QuizController extends Controller
             'topic_id' => 'required|exists:topics,id',
             'subject_id' => 'required|exists:subjects,id',
             'grade_id' => 'required|exists:grades,id',
+            'level_id' => 'nullable|exists:levels,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'youtube_url' => 'nullable|url',
@@ -319,6 +358,7 @@ class QuizController extends Controller
             'topic_id' => $topic->id,
             'subject_id' => $request->get('subject_id') ?? null,
             'grade_id' => $request->get('grade_id') ?? null,
+            'level_id' => $request->get('level_id') ?? null,
             'created_by' => $user->id,
             'title' => $request->title,
             'description' => $request->description,
@@ -338,6 +378,26 @@ class QuizController extends Controller
             'is_draft' => $request->get('is_draft', false),
         ]);
 
+        // If level_id wasn't supplied explicitly, try to infer from grade
+        if (!$quiz->level_id && $quiz->grade_id) {
+            try { $quiz->level_id = \App\Models\Grade::find($quiz->grade_id)->level_id ?? null; $quiz->save(); } catch (\Throwable $_) {}
+        }
+
+        // Load relations for frontend consumption (grade with level, subject, topic)
+        $quiz->load(['grade.level', 'subject', 'topic']);
+
+        // Trigger achievement checks for creating a quiz (allows achievement rules to inspect level_id/grade_id/subject_id)
+        try {
+            if ($this->achievementService) {
+                $this->achievementService->checkAchievements($user->id, [
+                    'type' => 'quiz_created',
+                    'quiz_id' => $quiz->id,
+                    'level_id' => $quiz->level_id,
+                    'grade_id' => $quiz->grade_id,
+                    'subject_id' => $quiz->subject_id,
+                ]);
+            }
+        } catch (\Throwable $_) {}
         // If subject/topic auto-approve and settings allow, set approved
         if ($topic->subject->auto_approve) {
             $quiz->is_approved = true;

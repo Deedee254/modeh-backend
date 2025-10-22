@@ -14,9 +14,13 @@ class QuizResource extends Resource
 {
     protected static ?string $model = Quiz::class;
 
-    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-rectangle-stack';
-    protected static \UnitEnum|string|null $navigationGroup = 'Content Management';
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
     protected static ?int $navigationSort = 4;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return 'Content Management';
+    }
 
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {

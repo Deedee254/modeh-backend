@@ -25,12 +25,14 @@ Route::get('/quizzes', [\App\Http\Controllers\Api\QuizController::class, 'index'
 Route::get('/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'show']);
 // Public grades listing for frontend
 Route::get('/grades', [\App\Http\Controllers\Api\GradeController::class, 'index']);
+// Public levels listing (grouping of grades)
+Route::get('/levels', [\App\Http\Controllers\Api\LevelController::class, 'index']);
+Route::get('/levels/{level}', [\App\Http\Controllers\Api\LevelController::class, 'show']);
 // Public testimonials listing for homepage
 Route::get('/testimonials', [\App\Http\Controllers\Api\TestimonialController::class, 'index']);
 Route::get('/subjects', [\App\Http\Controllers\Api\SubjectController::class, 'index']);
 Route::get('/topics', [\App\Http\Controllers\Api\TopicController::class, 'index']);
 // Public topics listing for frontend
-Route::get('/topics', [\App\Http\Controllers\Api\TopicController::class, 'index']);
 // Get quizzes by topic
 Route::get('/topics/{topic}/quizzes', [\App\Http\Controllers\Api\TopicController::class, 'quizzes']);
 // Public show endpoints for detail pages

@@ -16,6 +16,7 @@ class Quizee extends Model
         'dob',
         'profile',
         'grade_id',
+        'level_id',
         'points',
         'current_streak',
         'longest_streak',

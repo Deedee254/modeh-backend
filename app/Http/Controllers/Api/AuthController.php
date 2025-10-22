@@ -23,6 +23,7 @@ class AuthController extends Controller
             'last_name' => 'nullable|string',
             'institution' => 'nullable|string',
             'grade_id' => 'nullable|exists:grades,id',
+            'level_id' => 'nullable|exists:levels,id',
             'subjects' => 'nullable|array',
             'subjects.*' => 'exists:subjects,id',
         ]);
@@ -45,6 +46,7 @@ class AuthController extends Controller
             'last_name' => $request->last_name,
             'institution' => $request->institution,
             'grade_id' => $request->grade_id,
+            'level_id' => $request->level_id ?? null,
             'subjects' => $request->subjects ?? [],
         ]);
 
@@ -60,6 +62,7 @@ class AuthController extends Controller
             'last_name' => 'nullable|string',
             'institution' => 'nullable|string',
             'grade_id' => 'nullable|exists:grades,id',
+            'level_id' => 'nullable|exists:levels,id',
             'subjects' => 'nullable|array',
             'subjects.*' => 'exists:subjects,id',
         ]);
@@ -82,6 +85,7 @@ class AuthController extends Controller
             'last_name' => $request->last_name,
             'institution' => $request->institution,
             'grade_id' => $request->grade_id,
+            'level_id' => $request->level_id ?? null,
             'subjects' => $request->subjects ?? [],
         ]);
 
