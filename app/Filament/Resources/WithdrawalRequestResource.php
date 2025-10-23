@@ -9,7 +9,7 @@ use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Actions\Action;
+use Filament\Actions\Action;
 use Illuminate\Support\Facades\DB;
 
 class WithdrawalRequestResource extends Resource
@@ -38,7 +38,7 @@ class WithdrawalRequestResource extends Resource
             \Filament\Tables\Columns\TextColumn::make('status'),
             \Filament\Tables\Columns\TextColumn::make('created_at')->date(),
         ])->actions([
-            \Filament\Tables\Actions\Action::make('approve')
+            \Filament\Actions\Action::make('approve')
                 ->label('Approve')
                 ->requiresConfirmation()
                 ->color('primary')
@@ -51,7 +51,7 @@ class WithdrawalRequestResource extends Resource
                     });
                     try { event(new \App\Events\WithdrawalRequestUpdated($record->quiz_master_id, $record->toArray())); } catch (\Throwable $_) {}
                 }),
-            \Filament\Tables\Actions\Action::make('reject_refund')
+            \Filament\Actions\Action::make('reject_refund')
                 ->label('Reject + Refund')
                 ->requiresConfirmation()
                 ->color('danger')
@@ -73,7 +73,7 @@ class WithdrawalRequestResource extends Resource
                     try { event(new \App\Events\WithdrawalRequestUpdated($record->quiz_master_id, $record->toArray())); } catch (\Throwable $_) {}
                     if ($wallet) { try { event(new \App\Events\WalletUpdated($wallet->toArray(), $record->quiz_master_id)); } catch (\Throwable $_) {} }
                 }),
-            \Filament\Tables\Actions\Action::make('mark_paid')
+            \Filament\Actions\Action::make('mark_paid')
                 ->label('Mark as Paid')
                 ->requiresConfirmation()
                 ->color('success')

@@ -5,8 +5,10 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\TournamentResource\Pages;
 use App\Models\Tournament;
 use Filament\Forms;
-use Filament\Forms\Get;
-use Filament\Forms\Set;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,7 +23,7 @@ class TournamentResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Forms\Components\Section::make()
+            Section::make()
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->required()
@@ -45,7 +47,7 @@ class TournamentResource extends Resource
                         ->maxLength(65535)
                         ->visible(fn (Get $get): bool => filled($get('sponsor_id'))),
 
-                    Forms\Components\Grid::make(2)
+                    Grid::make(2)
                         ->schema([
                             Forms\Components\DateTimePicker::make('start_date')
                                 ->required(),
@@ -71,7 +73,7 @@ class TournamentResource extends Resource
                 ])
                 ->columns(2),
 
-            Forms\Components\Section::make()
+            Section::make()
                 ->schema([
                     Forms\Components\Select::make('grade_id')
                         ->relationship('grade', 'name')
@@ -181,8 +183,8 @@ class TournamentResource extends Resource
                     ->relationship('sponsor', 'name'),
             ])
             ->actions([
-                \Filament\Tables\Actions\EditAction::make(),
-                \Filament\Tables\Actions\Action::make('generate_matches')
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\Action::make('generate_matches')
                     ->action(fn (Tournament $record) => $record->generateMatches())
                     ->requiresConfirmation()
                     ->visible(fn (Tournament $record): bool => $record->status === 'upcoming')
@@ -190,7 +192,7 @@ class TournamentResource extends Resource
                     ->icon('heroicon-o-play'),
             ])
             ->bulkActions([
-                \Filament\Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
 

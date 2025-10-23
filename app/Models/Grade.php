@@ -9,7 +9,11 @@ class Grade extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'description', 'level_id', 'type'];
+    protected $fillable = ['name', 'description', 'level_id', 'type', 'display_name', 'is_active'];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
 
     public function subjects()
     {

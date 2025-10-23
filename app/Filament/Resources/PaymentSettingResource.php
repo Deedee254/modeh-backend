@@ -6,7 +6,10 @@ use App\Filament\Resources\PaymentSettingResource\Pages;
 use App\Models\PaymentSetting;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
-use Filament\Tables\Actions;
+use Filament\Actions\ViewAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
@@ -44,12 +47,12 @@ class PaymentSettingResource extends Resource
             TextColumn::make('updated_at')->date(),
         ])
         ->actions([
-            Tables\Actions\ViewAction::make(),
-            Tables\Actions\EditAction::make(),
-            Tables\Actions\DeleteAction::make(),
+            ViewAction::make(),
+            EditAction::make(),
+            DeleteAction::make(),
         ])
         ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make(),
+            DeleteBulkAction::make(),
         ]);
     }
 

@@ -6,7 +6,10 @@ use App\Filament\Resources\PackageResource\Pages;
 use App\Models\Package;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
-use Filament\Tables\Actions;
+use Filament\Actions\ViewAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Repeater;
@@ -41,12 +44,12 @@ class PackageResource extends Resource
             TextColumn::make('created_at')->date(),
         ])
         ->actions([
-            Tables\Actions\ViewAction::make(),
-            Tables\Actions\EditAction::make(),
-            Tables\Actions\DeleteAction::make(),
+            ViewAction::make(),
+            EditAction::make(),
+            DeleteAction::make(),
         ])
         ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make(),
+            DeleteBulkAction::make(),
         ]);
     }
 

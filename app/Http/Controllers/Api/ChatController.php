@@ -149,6 +149,27 @@ class ChatController extends Controller
         ]);
         $fromId = $request->user()->id;
 
+        // Handle attachments if present
+        $attachmentsMeta = null;
+        if ($request->hasFile('attachments')) {
+            $files = $request->file('attachments');
+            $attachmentsMeta = [];
+            foreach ($files as $file) {
+                try {
+                    $path = $file->store('chat_attachments', ['disk' => 'public']);
+                    $attachmentsMeta[] = [
+                        'name' => $file->getClientOriginalName(),
+                        'path' => $path,
+                        'url' => asset('storage/' . $path),
+                        'size' => $file->getSize(),
+                        'mime' => $file->getClientMimeType(),
+                    ];
+                } catch (\Exception $e) {
+                    \Log::warning('Failed to store chat attachment: ' . $e->getMessage());
+                }
+            }
+        }
+
         if ($request->filled('group_id')) {
             // Group message
             $msg = Message::create([
@@ -157,6 +178,7 @@ class ChatController extends Controller
                 'content' => $request->content,
                 'type' => 'group',
                 'is_read' => false,
+                'attachments' => $attachmentsMeta,
             ]);
         } else {
             // Direct message
@@ -166,6 +188,7 @@ class ChatController extends Controller
                 'content' => $request->content,
                 'type' => 'direct',
                 'is_read' => false,
+                'attachments' => $attachmentsMeta,
             ]);
         }
 

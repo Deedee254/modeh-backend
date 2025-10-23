@@ -22,29 +22,31 @@ class TopicResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Forms\Components\Card::make()
+            \Filament\Schemas\Components\Section::make()
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->required()
                         ->maxLength(255),
                         
-                    Forms\Components\Select::make('grade_id')
-                        ->relationship('grade', 'name')
-                        ->required()
+                        Forms\Components\Select::make('grade_filter')
+                            ->label('Grade')
+                            ->options(function () {
+                                return \App\Models\Grade::orderBy('name')->pluck('name', 'id')->toArray();
+                            })
+                        ->reactive()
                         ->searchable()
-                        ->preload()
-                        ->live(),
+                        ->preload(),
                         
                     Forms\Components\Select::make('subject_id')
                         ->relationship('subject', 'name', function (Builder $query, $get) {
-                            $query->when($get('grade_id'), function ($query, $gradeId) {
+                            $query->when($get('grade_filter'), function ($query, $gradeId) {
                                 $query->where('grade_id', $gradeId);
                             });
                         })
                         ->required()
                         ->searchable()
                         ->preload()
-                        ->visible(fn ($get) => filled($get('grade_id'))),
+                        ->visible(fn ($get) => filled($get('grade_filter'))),
 
                     Forms\Components\Toggle::make('is_approved')
                         ->required()
@@ -65,12 +67,12 @@ class TopicResource extends Resource
                 IconColumn::make('is_approved')->boolean()->label('Approved'),
             ])
             ->actions([
-                \Filament\Tables\Actions\ViewAction::make(),
-                \Filament\Tables\Actions\EditAction::make(),
-                \Filament\Tables\Actions\DeleteAction::make(),
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                \Filament\Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
 

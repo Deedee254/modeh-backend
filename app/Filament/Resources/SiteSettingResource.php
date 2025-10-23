@@ -18,7 +18,7 @@ class SiteSettingResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            \Filament\Forms\Components\Card::make()
+            \Filament\Schemas\Components\Section::make()
                 ->schema([
                     \Filament\Forms\Components\Toggle::make('auto_approve_topics')->label('Auto-approve Topics')->default(true),
                     \Filament\Forms\Components\Toggle::make('auto_approve_quizzes')->label('Auto-approve Quizzes')->default(true),
@@ -37,7 +37,7 @@ class SiteSettingResource extends Resource
                 TextColumn::make('auto_approve_questions')->label('Questions')->formatStateUsing(fn($s)=> $s? 'On':'Off'),
             ])
             ->actions([
-                \Filament\Tables\Actions\EditAction::make(),
+                \Filament\Actions\EditAction::make(),
             ]);
     }
 

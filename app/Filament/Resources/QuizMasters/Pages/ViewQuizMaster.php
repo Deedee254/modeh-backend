@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\QuizMasters\Pages;
 
 use App\Filament\Resources\QuizMasters\QuizMasterResource;
-use Filament\Actions\EditAction;
+    use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 
 class ViewQuizMaster extends ViewRecord

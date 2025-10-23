@@ -6,6 +6,8 @@ use App\Filament\Resources\AchievementResource\Pages;
 use App\Filament\Resources\Navigation\NavigationGroup;
 use App\Models\Achievement;
 use Filament\Forms;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Group;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -16,8 +18,8 @@ use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Actions\EditAction;
-use Filament\Tables\Actions\Action;
+use Filament\Actions\EditAction;
+use Filament\Actions\Action;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Illuminate\Database\Eloquent\Builder;
@@ -35,9 +37,9 @@ class AchievementResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Forms\Components\Group::make()
+            Group::make()
                 ->schema([
-                    Forms\Components\Section::make('Basic Information')
+                    Section::make('Basic Information')
                         ->schema([
                             Forms\Components\TextInput::make('name')
                                 ->required()
@@ -55,7 +57,7 @@ class AchievementResource extends Resource
                                 ->helperText('Emoji or icon character (e.g., 🏆, ⭐, 📚)'),
                         ])->columns(2),
                         
-                    Forms\Components\Section::make('Achievement Settings')
+                    Section::make('Achievement Settings')
                         ->schema([
                             Forms\Components\Select::make('category')
                                 ->required()
@@ -105,9 +107,9 @@ class AchievementResource extends Resource
                         ])->columns(2),
                 ]),
                 
-            Forms\Components\Group::make()
+            Group::make()
                 ->schema([
-                    Forms\Components\Section::make('Display Settings')
+                    Section::make('Display Settings')
                         ->schema([
                             Forms\Components\ColorPicker::make('color')
                                 ->default('#4f46e5'),
@@ -211,7 +213,7 @@ class AchievementResource extends Resource
                     ->openUrlInNewTab(),
             ])
             ->bulkActions([
-                Tables\Actions\BulkAction::make('update_points')
+                \Filament\Actions\BulkAction::make('update_points')
                     ->label('Update Points')
                     ->icon('heroicon-o-currency-dollar')
                     ->form([
@@ -238,7 +240,7 @@ class AchievementResource extends Resource
                         }
                     })
                     ->deselectRecordsAfterCompletion(),
-                Tables\Actions\BulkAction::make('toggle_active')
+                \Filament\Actions\BulkAction::make('toggle_active')
                     ->label('Toggle Active Status')
                     ->icon('heroicon-o-power')
                     ->action(function (Collection $records) {
@@ -247,7 +249,7 @@ class AchievementResource extends Resource
                         }
                     })
                     ->deselectRecordsAfterCompletion(),
-                Tables\Actions\DeleteBulkAction::make()
+                \Filament\Actions\DeleteBulkAction::make()
                     ->before(function (Collection $records) {
                         // Check if any achievements have been awarded
                         $hasAwards = $records->contains(function ($record) {

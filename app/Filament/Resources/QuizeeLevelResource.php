@@ -11,7 +11,7 @@ use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Card;
+use Filament\Schemas\Components\Section;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ColorColumn;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,7 +29,7 @@ class QuizeeLevelResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->schema([
-            Card::make()
+            Section::make()
                 ->schema([
                     TextInput::make('name')
                         ->required()
@@ -80,11 +80,11 @@ class QuizeeLevelResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
     

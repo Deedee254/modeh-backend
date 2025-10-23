@@ -10,13 +10,15 @@ class Message extends Model
         'sender_id', 'recipient_id', 'content', // new DM fields
         'is_read',
         'group_id',
-        'type' // message type (direct, support, group)
+        'type', // message type (direct, support, group)
+        'attachments',
     ];
 
     protected $casts = [
         'is_read' => 'boolean',
         'read' => 'boolean',
-        'type' => 'string'
+        'type' => 'string',
+        'attachments' => 'array',
     ];
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Quizees\Schemas;
 
 use Filament\Schemas\Schema;
+use Filament\Schemas\Components\Section;
 
 class QuizeeForm
 {
@@ -10,7 +11,7 @@ class QuizeeForm
     {
         return $schema
             ->components([
-                \Filament\Forms\Components\Section::make('Quizee Information')
+                Section::make('Quizee Information')
                     ->schema([
                         \Filament\Forms\Components\TextInput::make('user.name')
                             ->required()

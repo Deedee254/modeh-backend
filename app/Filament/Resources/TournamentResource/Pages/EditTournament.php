@@ -3,7 +3,8 @@
 namespace App\Filament\Resources\TournamentResource\Pages;
 
 use App\Filament\Resources\TournamentResource;
-use Filament\Pages\Actions;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\EditRecord;
 
 class EditTournament extends EditRecord
@@ -13,14 +14,14 @@ class EditTournament extends EditRecord
     protected function getActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
-            Actions\Action::make('generate_matches')
+            DeleteAction::make(),
+            Action::make('generate_matches')
                 ->action(fn () => $this->record->generateMatches())
                 ->requiresConfirmation()
                 ->visible(fn () => $this->record->status === 'upcoming')
                 ->color('success')
                 ->icon('heroicon-o-play'),
-            Actions\Action::make('view_leaderboard')
+            Action::make('view_leaderboard')
                 ->url(fn () => route('admin.tournaments.leaderboard', $this->record))
                 ->visible(fn () => in_array($this->record->status, ['active', 'completed']))
                 ->color('secondary')

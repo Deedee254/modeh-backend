@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\TournamentBattleResource\Pages;
 
 use App\Filament\Resources\TournamentBattleResource;
-use Filament\Pages\Actions;
+use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListTournamentBattles extends ListRecords
@@ -13,7 +13,7 @@ class ListTournamentBattles extends ListRecords
     protected function getActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            CreateAction::make(),
         ];
     }
 }

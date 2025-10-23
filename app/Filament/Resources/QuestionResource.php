@@ -18,7 +18,7 @@ class QuestionResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Forms\Components\Card::make()
+            \Filament\Schemas\Components\Section::make()
                 ->schema([
                     Forms\Components\Textarea::make('content')->required()->rows(4),
                     Forms\Components\Select::make('difficulty')
@@ -61,9 +61,7 @@ class QuestionResource extends Resource
                 \Filament\Tables\Filters\SelectFilter::make('subject')->relationship('subject','name'),
             ])
             ->actions([
-                \Filament\Tables\Actions\EditAction::make(),
-                \Filament\Tables\Actions\DeleteAction::make(),
-                \Filament\Tables\Actions\Action::make('approve')
+                \Filament\Actions\Action::make('approve')
                     ->label('Approve')
                     ->action(function ($record) {
                         $record->is_approved = true;
@@ -72,7 +70,7 @@ class QuestionResource extends Resource
                     })
                     ->requiresConfirmation()
                     ->visible(fn($record) => !$record->is_approved),
-                \Filament\Tables\Actions\Action::make('toggleApprove')
+                \Filament\Actions\Action::make('toggleApprove')
                     ->label('Toggle Approve')
                     ->action(function ($record) {
                         $record->is_approved = !$record->is_approved;
@@ -81,7 +79,11 @@ class QuestionResource extends Resource
                     ->requiresConfirmation(),
             ])
             ->bulkActions([
-                \Filament\Tables\Actions\DeleteBulkAction::make(),
+                    \Filament\Actions\EditAction::make(),
+                    \Filament\Actions\DeleteAction::make(),
+                ])
+                ->bulkActions([
+                    \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
 

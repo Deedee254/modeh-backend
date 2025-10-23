@@ -14,7 +14,7 @@ class GradeResource extends Resource
 {
     protected static ?string $model = Grade::class;
 
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-academic-cap';
+    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-academic-cap';
     protected static ?int $navigationSort = 1;
 
     public static function getNavigationGroup(): ?string
@@ -26,7 +26,7 @@ class GradeResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Forms\Components\Card::make()
+            \Filament\Schemas\Components\Section::make()
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->required()
@@ -94,9 +94,9 @@ class GradeResource extends Resource
                 Tables\Filters\TernaryFilter::make('is_active'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make()
                     ->before(function (Grade $record) {
                         if ($record->subjects()->count() > 0) {
                             \Filament\Notifications\Notification::make()
@@ -111,7 +111,7 @@ class GradeResource extends Resource
                     }),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
 

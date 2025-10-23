@@ -3,7 +3,8 @@
 namespace App\Filament\Resources\SponsorResource\Pages;
 
 use App\Filament\Resources\SponsorResource;
-use Filament\Pages\Actions;
+use Filament\Actions\DeleteAction;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
 class EditSponsor extends EditRecord
@@ -13,10 +14,10 @@ class EditSponsor extends EditRecord
     protected function getActions(): array
     {
         return [
-            Actions\DeleteAction::make()
+            DeleteAction::make()
                 ->before(function () {
                     if ($this->record->tournaments()->count() > 0) {
-                        Filament\Notifications\Notification::make()
+                        Notification::make()
                             ->warning()
                             ->title('Cannot delete sponsor')
                             ->body('This sponsor has tournaments associated with it.')

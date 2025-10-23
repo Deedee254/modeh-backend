@@ -10,7 +10,7 @@ use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
-use Filament\Tables\Actions;
+// use Filament\Tables\Actions; (not used; action classes come from Filament\Actions)
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\DateTimePicker;
@@ -47,7 +47,7 @@ class BattleResource extends Resource
             TextInput::make('one_off_price')
                 ->numeric()
                 ->label('One-off Price')
-                ->min(0)
+                ->minValue(0)
                 ->step(0.01),
             DateTimePicker::make('completed_at'),
         ]);
@@ -82,12 +82,12 @@ class BattleResource extends Resource
                 TextColumn::make('created_at')->dateTime()->since()->sortable(),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\DeleteBulkAction::make(),
             ])
             ->filters([
                 SelectFilter::make('status')->options([

@@ -19,7 +19,7 @@ class SponsorResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Forms\Components\Card::make()
+            \Filament\Schemas\Components\Section::make()
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->required()
@@ -58,7 +58,7 @@ class SponsorResource extends Resource
                     ->circular(),
 
                 \Filament\Tables\Columns\TextColumn::make('website_url')
-                    ->url()
+                    ->url(fn ($record) => $record->website_url)
                     ->openUrlInNewTab(),
 
                 \Filament\Tables\Columns\IconColumn::make('is_active')
@@ -77,8 +77,8 @@ class SponsorResource extends Resource
                 \Filament\Tables\Filters\TernaryFilter::make('is_active'),
             ])
             ->actions([
-                \Filament\Tables\Actions\EditAction::make(),
-                \Filament\Tables\Actions\DeleteAction::make()
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make()
                     ->before(function (Sponsor $record) {
                         if ($record->tournaments()->count() > 0) {
                             Filament\Notifications\Notification::make()
@@ -93,7 +93,7 @@ class SponsorResource extends Resource
                     }),
             ])
             ->bulkActions([
-                \Filament\Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
 

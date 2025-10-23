@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\QuizMasters\Schemas;
 
 use Filament\Schemas\Schema;
+use Filament\Schemas\Components\Section;
 
 class QuizMasterForm
 {
@@ -10,7 +11,7 @@ class QuizMasterForm
     {
         return $schema
             ->components([
-                \Filament\Forms\Components\Section::make('Quiz Master Information')
+                Section::make('Quiz Master Information')
                     ->schema([
                         \Filament\Forms\Components\TextInput::make('user.name')
                             ->required()
@@ -40,7 +41,7 @@ class QuizMasterForm
                             ->required()
                             ->maxLength(20),
                     ]),
-                \Filament\Forms\Components\Section::make('Authentication')
+                Section::make('Authentication')
                     ->schema([
                         \Filament\Forms\Components\Select::make('user.social_provider')
                             ->label('Login Method')

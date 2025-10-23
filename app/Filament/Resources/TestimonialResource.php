@@ -18,7 +18,7 @@ class TestimonialResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Forms\Components\Card::make()
+            \Filament\Schemas\Components\Section::make()
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->required()
@@ -81,11 +81,11 @@ class TestimonialResource extends Resource
                 \Filament\Tables\Filters\TernaryFilter::make('is_active'),
             ])
             ->actions([
-                \Filament\Tables\Actions\EditAction::make(),
-                \Filament\Tables\Actions\DeleteAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                \Filament\Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
 

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SocialAuthSettings\Schemas;
 
 use Filament\Schemas\Schema;
+use Filament\Schemas\Components\Section;
 
 class SocialAuthSettingForm
 {
@@ -10,7 +11,7 @@ class SocialAuthSettingForm
     {
         return $schema
             ->components([
-                \Filament\Forms\Components\Section::make('Provider Configuration')
+                Section::make('Provider Configuration')
                     ->schema([
                         \Filament\Forms\Components\Select::make('provider')
                             ->label('OAuth Provider')

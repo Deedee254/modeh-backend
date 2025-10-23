@@ -22,4 +22,12 @@ class Sponsor extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    /**
+     * Get tournaments sponsored by this sponsor.
+     */
+    public function tournaments()
+    {
+        return $this->hasMany(Tournament::class, 'sponsor_id');
+    }
 }

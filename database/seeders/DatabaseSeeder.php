@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             GradeSeeder::class,
             LevelsTableSeeder::class,
+            TertiaryAndEYESeeder::class,
             SubjectSeeder::class,
             TopicSeeder::class,
             QuizeeSeeder::class,

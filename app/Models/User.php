@@ -8,8 +8,10 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\QuizMaster;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens;
@@ -67,6 +69,15 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return ($this->role ?? '') === 'admin';
+    }
+
+    /**
+     * Filament contract: determine whether the user can access the given panel.
+     */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        // Only users with role 'admin' may access the Filament admin panel.
+        return $this->isAdmin();
     }
 
     /**

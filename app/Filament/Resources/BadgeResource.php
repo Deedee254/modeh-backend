@@ -11,13 +11,14 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Tables\Columns\TextColumn;
+use BackedEnum;
 
 class BadgeResource extends Resource
 {
     protected static ?string $model = Badge::class;
     protected static ?int $navigationSort = 4;
 
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-trophy';
+    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';
 
     public static function getNavigationGroup(): ?string
     {
@@ -50,14 +51,14 @@ class BadgeResource extends Resource
             TextColumn::make('points_reward'),
             TextColumn::make('created_at')->date(),
         ])
-        ->actions([
-            Tables\Actions\ViewAction::make(),
-            Tables\Actions\EditAction::make(),
-            Tables\Actions\DeleteAction::make(),
-        ])
-        ->bulkActions([
-            Tables\Actions\DeleteBulkAction::make(),
-        ]);
+            ->actions([
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                \Filament\Actions\DeleteBulkAction::make(),
+            ]);
     }
 
     public static function getPages(): array

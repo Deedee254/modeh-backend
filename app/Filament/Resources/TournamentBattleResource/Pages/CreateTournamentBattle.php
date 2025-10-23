@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\TournamentBattleResource\Pages;
 
 use App\Filament\Resources\TournamentBattleResource;
-use Filament\Pages\Actions;
+use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateTournamentBattle extends CreateRecord

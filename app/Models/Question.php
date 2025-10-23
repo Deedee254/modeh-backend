@@ -55,4 +55,30 @@ class Question extends Model
     {
         return $this->belongsTo(Quiz::class);
     }
+
+    /**
+     * Taxonomy relationships
+     */
+    public function grade()
+    {
+        return $this->belongsTo(Grade::class, 'grade_id');
+    }
+
+    public function subject()
+    {
+        return $this->belongsTo(Subject::class, 'subject_id');
+    }
+
+    public function topic()
+    {
+        return $this->belongsTo(Topic::class, 'topic_id');
+    }
+
+    /**
+     * Optional level relationship — some questions are organized by level
+     */
+    public function level()
+    {
+        return $this->belongsTo(Level::class, 'level_id');
+    }
 }

@@ -9,7 +9,7 @@ use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Actions\Action;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
 
@@ -59,12 +59,12 @@ class SubscriptionResource extends Resource
                     $record->ends_at = now()->addDays($days);
                     $record->save();
                 }),
-                \Filament\Tables\Actions\ViewAction::make(),
-                \Filament\Tables\Actions\EditAction::make(),
-                \Filament\Tables\Actions\DeleteAction::make(),
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
         ])
         ->bulkActions([
-            \Filament\Tables\Actions\DeleteBulkAction::make(),
+            \Filament\Actions\DeleteBulkAction::make(),
         ]);
     }
 

@@ -18,7 +18,7 @@ class TournamentBattleResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Forms\Components\Card::make()->schema([
+            \Filament\Schemas\Components\Section::make()->schema([
                 Forms\Components\Select::make('tournament_id')->relationship('tournament', 'name')->required(),
                 Forms\Components\TextInput::make('round')->numeric()->required(),
                 Forms\Components\Select::make('player1_id')->relationship('player1', 'name')->required(),
@@ -60,11 +60,11 @@ class TournamentBattleResource extends Resource
                 ]),
             ])
             ->actions([
-                \Filament\Tables\Actions\EditAction::make(),
-                \Filament\Tables\Actions\DeleteAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                \Filament\Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
 

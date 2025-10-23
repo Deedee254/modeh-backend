@@ -7,7 +7,10 @@ use App\Models\DailyChallenge;
 // avoid importing Filament\Forms\Form to prevent signature mismatches with installed Filament
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
-use Filament\Tables\Actions;
+use Filament\Actions\ViewAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
@@ -64,12 +67,12 @@ class DailyChallengeResource extends Resource
                 BooleanColumn::make('is_active')->label('Active'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\DeleteBulkAction::make(),
             ])
             ->filters([
                 SelectFilter::make('difficulty')

@@ -8,12 +8,13 @@ use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use BackedEnum;
 
 class LevelResource extends Resource
 {
     protected static ?string $model = Level::class;
 
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-collection';
+    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-book-open';
     protected static ?int $navigationSort = 0;
 
     public static function getNavigationGroup(): ?string
@@ -24,7 +25,7 @@ class LevelResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Forms\Components\Card::make()
+            \Filament\Schemas\Components\Section::make()
                 ->schema([
                     Forms\Components\TextInput::make('name')->required()->maxLength(255),
                     Forms\Components\TextInput::make('slug')->maxLength(255),
@@ -44,8 +45,8 @@ class LevelResource extends Resource
                 Tables\Columns\TextColumn::make('order')->sortable(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                \Filament\Actions\EditAction::make(),
+                    \Filament\Actions\DeleteAction::make(),
             ]);
     }
 

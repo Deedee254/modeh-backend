@@ -26,7 +26,7 @@ class QuizMastersTable
                     ->searchable()
                     ->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('subjects')
-                    ->formatStateUsing(fn ($state) => implode(', ', $state ?? []))
+                    ->formatStateUsing(fn ($state) => is_array($state) ? implode(', ', $state) : (is_scalar($state) ? (string) $state : ''))
                     ->searchable()
                     ->wrap(),
                 \Filament\Tables\Columns\TextColumn::make('phone')
