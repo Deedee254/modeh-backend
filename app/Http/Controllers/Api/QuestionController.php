@@ -147,6 +147,16 @@ class QuestionController extends Controller
         ]);
 
         if ($v->fails()) {
+            // Log validation failure for easier debugging in dev/staging
+            try {
+                \Log::error('Question store validation failed', [
+                    'request' => $request->all(),
+                    'errors' => $v->errors()->toArray(),
+                ]);
+            } catch (\Throwable $_) {
+                // ignore logging errors
+            }
+
             return response()->json(['errors' => $v->errors()], 422);
         }
 
@@ -301,9 +311,25 @@ class QuestionController extends Controller
             }
         }
 
-        $payload = $request->validate([
+        // Validate 'questions' without throwing so we can log payload on failure
+        $validator = Validator::make($request->all(), [
             'questions' => 'required|array'
         ]);
+
+        if ($validator->fails()) {
+            try {
+                \Log::error('Bulk questions validation failed', [
+                    'request' => $request->all(),
+                    'errors' => $validator->errors()->toArray(),
+                ]);
+            } catch (\Throwable $_) {
+                // ignore logging errors
+            }
+
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $payload = $request->get('questions');
 
         // collect any uploaded media files keyed under question_media[index] or question_media[uid]
         $mediaFiles = $request->file('question_media', []);
