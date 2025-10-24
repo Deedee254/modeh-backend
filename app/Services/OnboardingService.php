@@ -45,7 +45,21 @@ class OnboardingService
                     break;
                 case 'role_quizee':
                 case 'role_quiz-master':
+                    // Role selection step: update user's role and optional password
                     $onboarding->role_selected = true;
+                    if (!empty($data['role'])) {
+                        $user->role = $data['role'];
+                    } else {
+                        // Fallback based on step name
+                        $user->role = $step === 'role_quiz-master' ? 'quiz-master' : 'quizee';
+                    }
+
+                    // If a password is provided, set it (User model casts 'password' => 'hashed')
+                    if (!empty($data['password'])) {
+                        $user->password = $data['password'];
+                    }
+
+                    $user->save();
                     break;
                 case 'grade':
                     $onboarding->grade_selected = true;
