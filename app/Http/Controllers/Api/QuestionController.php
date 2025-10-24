@@ -68,10 +68,34 @@ class QuestionController extends Controller
         $query = Question::query();
         // The public question bank is independent of any quiz-master-set `for_battle` flag.
         // We intentionally do not filter by `for_battle` here.
-        if ($grade = $request->get('grade_id')) $query->where('grade_id', $grade);
-        if ($subject = $request->get('subject_id')) $query->where('subject_id', $subject);
-        if ($topic = $request->get('topic_id')) $query->where('topic_id', $topic);
-        if ($difficulty = $request->get('difficulty')) $query->where('difficulty', $difficulty);
+        // Accept either explicit *_id keys or shorthand keys used by frontend (grade, subject, topic)
+        $grade = $request->get('grade_id') ?? $request->get('grade');
+        $subject = $request->get('subject_id') ?? $request->get('subject');
+        $topic = $request->get('topic_id') ?? $request->get('topic');
+        $difficulty = $request->get('difficulty');
+        if ($grade) $query->where('grade_id', $grade);
+        if ($subject) $query->where('subject_id', $subject);
+        if ($topic) $query->where('topic_id', $topic);
+        if ($difficulty) $query->where('difficulty', $difficulty);
+
+        // Support filtering by level (frontend may send `level` or `level_id`). If provided,
+        // constrain questions to grades that belong to that level (if grades table has level_id).
+        $level = $request->get('level_id') ?? $request->get('level');
+        if ($level) {
+            try {
+                if (Schema::hasTable('grades') && Schema::hasColumn('grades', 'level_id') && Schema::hasColumn('questions', 'grade_id')) {
+                    $gradeIds = \App\Models\Grade::where('level_id', $level)->pluck('id')->toArray();
+                    if (!empty($gradeIds)) {
+                        $query->whereIn('grade_id', $gradeIds);
+                    } else {
+                        // no grades found for level — ensure no results
+                        $query->whereRaw('0 = 1');
+                    }
+                }
+            } catch (\Throwable $_) {
+                // ignore and continue without level filtering
+            }
+        }
 
         if ($q = $request->get('q')) {
             $query->where(function($qq) use ($q) {
@@ -107,6 +131,7 @@ class QuestionController extends Controller
             'body' => 'required|string',
             'options' => 'nullable|array',
             'answers' => 'nullable|array',
+            'parts' => 'nullable|array',
             'tags' => 'nullable|array',
             'hint' => 'nullable|string',
             'solution_steps' => 'nullable|array',
@@ -202,6 +227,7 @@ class QuestionController extends Controller
             'body' => $request->body,
             'options' => $request->options ?? null,
             'answers' => $answers ?? null,
+            'parts' => $request->get('parts') ?? null,
             'media_path' => $mediaPath,
             'media_type' => $mediaType,
             'youtube_url' => $youtubeUrl,
@@ -292,6 +318,7 @@ class QuestionController extends Controller
                     'body' => $q['text'] ?? ($q['body'] ?? ''),
                     'options' => $q['options'] ?? null,
                     'answers' => $q['answers'] ?? (isset($q['corrects']) ? $q['corrects'] : null),
+                    'parts' => $q['parts'] ?? null,
                     'difficulty' => $q['difficulty'] ?? 3,
                     'tags' => $q['tags'] ?? null,
                     'hint' => $q['hint'] ?? null,
@@ -374,6 +401,7 @@ class QuestionController extends Controller
             'body' => 'nullable|string',
             'options' => 'nullable|array',
             'answers' => 'nullable|array',
+            'parts' => 'nullable|array',
             'correctAnswer' => 'nullable',
             'tags' => 'nullable|array',
             'hint' => 'nullable|string',

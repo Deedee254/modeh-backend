@@ -13,6 +13,7 @@ class Question extends Model
         'quiz_id', 'created_by', 'type', 'body', 'options', 'answers', 
         'media_path', 'media_type', 'youtube_url', 'media_metadata',
         'explanation',
+        'parts',
         'difficulty', 'is_quiz-master_marked', 'is_approved', 'is_banked', 
         'hint',
         // taxonomy references
@@ -22,6 +23,8 @@ class Question extends Model
     protected $casts = [
         'options' => 'array',
         'answers' => 'array',
+        'parts' => 'array',
+        'solution_steps' => 'array',
         'media_metadata' => 'array',
     'explanation' => 'string',
         'is_quiz-master_marked' => 'boolean',
@@ -47,7 +50,9 @@ class Question extends Model
             'fill_blank' => 'Fill in the Blanks',
             'image_mcq' => 'Image Multiple Choice',
             'audio_mcq' => 'Audio Multiple Choice',
-            'video_mcq' => 'Video Multiple Choice'
+            'video_mcq' => 'Video Multiple Choice',
+            'math' => 'Math / Multipart Question',
+            'code' => 'Code Answer Question'
         ];
     }
 
