@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\SocialAuthService;
+use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
 
 class SocialAuthController extends Controller
@@ -33,23 +34,38 @@ class SocialAuthController extends Controller
             $socialUser = Socialite::driver($provider)->user();
             $user = $this->socialAuthService->findOrCreateUser($socialUser, $provider);
 
-            // Create token for API authentication
+            // Log the user into the session so Sanctum/cookie-based endpoints work
+            try { Auth::login($user); } catch (\Throwable $ex) { /* ignore session issues */ }
+
+            // Create token for API authentication (also returned to SPA as a convenience)
             $token = $user->createToken('auth_token')->plainTextToken;
 
             // If profile is not complete, return different response
-            if (!$user->is_profile_completed) {
+            $requiresCompletion = !$user->is_profile_completed;
+            $nextStep = $this->determineNextStep($user);
+
+            // If the request expects JSON (API/client), return JSON as before.
+            if ($request->wantsJson() || $request->ajax() || str_contains($request->header('accept',''), '/json')) {
                 return response()->json([
                     'token' => $token,
                     'user' => $user,
-                    'requires_profile_completion' => true,
-                    'next_step' => $this->determineNextStep($user),
+                    'requires_profile_completion' => $requiresCompletion,
+                    'next_step' => $nextStep,
                 ], 200);
             }
 
-            return response()->json([
+            // Otherwise assume this is a browser OAuth flow - redirect back to frontend
+            // Frontend will handle storing the token and routing the user. Configure FRONTEND_APP_URL in .env
+            $frontend = env('FRONTEND_APP_URL', config('app.url') ?? 'http://localhost:3000');
+
+            // Build redirect URL (we place data in query string). Token is sent in query for simplicity.
+            $query = http_build_query([
                 'token' => $token,
-                'user' => $user,
-            ], 200);
+                'requires_profile_completion' => $requiresCompletion ? '1' : '0',
+                'next_step' => $nextStep,
+            ]);
+
+            return redirect()->to(rtrim($frontend, '/') . '/auth/callback?' . $query);
 
         } catch (\Exception $e) {
             return response()->json([
