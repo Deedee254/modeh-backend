@@ -11,7 +11,11 @@ use App\Observers\UserBadgeObserver;
 use App\Observers\UserDailyChallengeObserver;
 use App\Observers\BattleObserver;
 use App\Observers\QuizObserver;
+use App\Observers\DashboardCacheInvalidationObserver;
 use App\Models\Quiz;
+use App\Models\QuizAttempt;
+use Illuminate\Support\Facades\Cache;
+use App\Models\User;
 use App\Policies\QuizPolicy;
 
 class AppServiceProvider extends ServiceProvider
@@ -53,5 +57,31 @@ class AppServiceProvider extends ServiceProvider
         UserDailyChallenge::observe(UserDailyChallengeObserver::class);
         Battle::observe(BattleObserver::class);
     Quiz::observe(QuizObserver::class);
+
+        // Register lightweight cache invalidation listeners for dashboard widgets
+        $flush = function ($model = null) {
+            try {
+                if (Cache::getStore() instanceof \Illuminate\Cache\TaggableStore) {
+                    Cache::tags(['dashboard_charts'])->flush();
+                } else {
+                    Cache::flush();
+                }
+            } catch (\Throwable $e) {
+                logger()->warning('Failed to flush dashboard cache: ' . $e->getMessage());
+            }
+        };
+
+        // Attach to key models that affect the dashboard charts
+        User::created($flush);
+        User::updated($flush);
+        User::deleted($flush);
+
+        Quiz::created($flush);
+        Quiz::updated($flush);
+        Quiz::deleted($flush);
+
+        QuizAttempt::created($flush);
+        QuizAttempt::updated($flush);
+        QuizAttempt::deleted($flush);
     }
 }

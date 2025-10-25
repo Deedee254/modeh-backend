@@ -12,6 +12,13 @@ class ListTopics extends ListRecords
 {
     protected static string $resource = TopicResource::class;
 
+    protected function getHeaderActions(): array
+    {
+        return [
+            \Filament\Actions\CreateAction::make()->label('Add Topic'),
+        ];
+    }
+
     protected function getTableActions(): array
     {
         return [

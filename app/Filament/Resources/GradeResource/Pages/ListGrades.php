@@ -8,4 +8,11 @@ use Filament\Resources\Pages\ListRecords;
 class ListGrades extends ListRecords
 {
     protected static string $resource = GradeResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            \Filament\Actions\CreateAction::make()->label('Add Grade'),
+        ];
+    }
 }

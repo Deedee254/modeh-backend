@@ -64,24 +64,34 @@ class SocialAuthController extends Controller
      */
     protected function determineNextStep($user)
     {
-        $onboarding = $user->onboarding;
+        $onboarding = $user->onboarding ?? null;
 
-        if (!$onboarding->institution_added) {
+        // If there's no onboarding record yet, treat as not started and ask for institution
+        if (!$onboarding || empty($onboarding)) {
             return 'institution';
         }
 
-        if (!$onboarding->role_selected) {
+        // Null-safe checks for boolean flags
+        if (empty($onboarding->institution_added) || !$onboarding->institution_added) {
+            return 'institution';
+        }
+
+        if (empty($onboarding->role_selected) || !$onboarding->role_selected) {
             return 'role';
         }
 
-        // Based on role, determine next step
+        // Based on role, determine next step. completed_steps may be stored as array or JSON string.
         $completedSteps = $onboarding->completed_steps ?? [];
+        if (is_string($completedSteps)) {
+            $decoded = json_decode($completedSteps, true);
+            $completedSteps = is_array($decoded) ? $decoded : [];
+        }
 
-        if (in_array('role_quizee', $completedSteps) && !$onboarding->grade_selected) {
+        if (in_array('role_quizee', (array)$completedSteps) && empty($onboarding->grade_selected)) {
             return 'grade';
         }
 
-        if (in_array('role_quiz-master', $completedSteps) && !$onboarding->subject_selected) {
+        if (in_array('role_quiz-master', (array)$completedSteps) && empty($onboarding->subject_selected)) {
             return 'subjects';
         }
 

@@ -118,10 +118,20 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/subjects/{subject}/approve', [\App\Http\Controllers\Api\SubjectController::class, 'approve']);
     Route::post('/subjects/{subject}/upload-icon', [\App\Http\Controllers\Api\SubjectController::class, 'uploadIcon']);
 
+    // Grades (create/update/delete)
+    Route::post('/grades', [\App\Http\Controllers\Api\GradeController::class, 'store']);
+    Route::patch('/grades/{grade}', [\App\Http\Controllers\Api\GradeController::class, 'update']);
+    Route::delete('/grades/{grade}', [\App\Http\Controllers\Api\GradeController::class, 'destroy']);
+
     // Topics
     Route::post('/topics', [\App\Http\Controllers\Api\TopicController::class, 'store']);
     Route::post('/topics/{topic}/approve', [\App\Http\Controllers\Api\TopicController::class, 'approve']);
     Route::post('/topics/{topic}/upload-image', [\App\Http\Controllers\Api\TopicController::class, 'uploadImage']);
+
+    // Levels (create/update/delete)
+    Route::post('/levels', [\App\Http\Controllers\Api\LevelController::class, 'store']);
+    Route::patch('/levels/{level}', [\App\Http\Controllers\Api\LevelController::class, 'update']);
+    Route::delete('/levels/{level}', [\App\Http\Controllers\Api\LevelController::class, 'destroy']);
 
     // Question bank
     Route::get('/questions', [\App\Http\Controllers\Api\QuestionController::class, 'index']);

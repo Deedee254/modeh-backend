@@ -12,6 +12,13 @@ class ListSubjects extends ListRecords
 {
     protected static string $resource = SubjectResource::class;
 
+    protected function getHeaderActions(): array
+    {
+        return [
+            \Filament\Actions\CreateAction::make()->label('Add Subject'),
+        ];
+    }
+
     protected function getTableActions(): array
     {
         return [

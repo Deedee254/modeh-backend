@@ -39,10 +39,9 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\EchoMonitoring::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
-            ->widgets([
-                AccountWidget::class,
-                FilamentInfoWidget::class,
-            ])
+            // Disable the default top/header widgets (AccountWidget, FilamentInfoWidget)
+            // so the custom Dashboard page controls which widgets are shown.
+            ->widgets([])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

@@ -28,25 +28,25 @@ class TopicResource extends Resource
                         ->required()
                         ->maxLength(255),
                         
-                        Forms\Components\Select::make('grade_filter')
-                            ->label('Grade')
+                        // Select the subject directly when creating a topic. We present subjects grouped
+                        // by Level -> Grade (or Course) to make it easier for admins to find the right subject.
+                        Forms\Components\Select::make('subject_id')
+                            ->label('Subject')
                             ->options(function () {
-                                return \App\Models\Grade::orderBy('name')->pluck('name', 'id')->toArray();
+                                $subjects = \App\Models\Subject::with(['grade.level'])->get();
+                                $groups = [];
+                                foreach ($subjects as $s) {
+                                    $levelName = $s->grade?->level?->name ?? 'No level';
+                                    $grade = $s->grade;
+                                    $gradeLabel = $grade ? ($grade->type === 'course' ? ($grade->display_name ?? $grade->name) . ' (Course)' : ($grade->name)) : 'No grade';
+                                    $label = "{$gradeLabel} — {$s->name}";
+                                    $groups[$levelName][$s->id] = $label;
+                                }
+                                return $groups;
                             })
-                        ->reactive()
-                        ->searchable()
-                        ->preload(),
-                        
-                    Forms\Components\Select::make('subject_id')
-                        ->relationship('subject', 'name', function (Builder $query, $get) {
-                            $query->when($get('grade_filter'), function ($query, $gradeId) {
-                                $query->where('grade_id', $gradeId);
-                            });
-                        })
-                        ->required()
-                        ->searchable()
-                        ->preload()
-                        ->visible(fn ($get) => filled($get('grade_filter'))),
+                            ->required()
+                            ->searchable()
+                            ->preload(),
 
                     Forms\Components\Toggle::make('is_approved')
                         ->required()
@@ -80,7 +80,8 @@ class TopicResource extends Resource
     {
         return [
             'index' => Pages\ListTopics::route('/'),
-            // create/edit pages are not present in Pages folder; register only existing pages
+            'create' => Pages\CreateTopic::route('/create'),
+            'edit' => Pages\EditTopic::route('/{record}/edit'),
             'view' => Pages\ViewTopic::route('/{record}'),
         ];
     }

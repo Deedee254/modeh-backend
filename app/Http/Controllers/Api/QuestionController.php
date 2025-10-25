@@ -331,11 +331,30 @@ class QuestionController extends Controller
 
         $payload = $request->get('questions');
 
+        // Accept either JSON shape: { questions: [...] } OR directly an array: [ {...}, {...} ]
+        // Earlier we decode JSON string payloads into an array above, but be defensive here.
+        $items = [];
+        if (is_array($payload)) {
+            // numeric-indexed array (client sent [...])
+            if (array_values($payload) === $payload) {
+                $items = $payload;
+            } elseif (isset($payload['questions']) && is_array($payload['questions'])) {
+                // nested shape { questions: [...] }
+                $items = $payload['questions'];
+            }
+        }
+
+        // Fallback: ensure we still handle when request->get returned something unexpected
+        if (empty($items) && $request->has('questions')) {
+            $maybe = $request->get('questions');
+            if (is_array($maybe) && array_values($maybe) === $maybe) $items = $maybe;
+        }
+
         // collect any uploaded media files keyed under question_media[index] or question_media[uid]
         $mediaFiles = $request->file('question_media', []);
 
         $saved = [];
-            foreach ($payload['questions'] as $idx => $q) {
+            foreach ($items as $idx => $q) {
             try {
                 // normalize incoming question shape for Question::create/update
                 $qData = [

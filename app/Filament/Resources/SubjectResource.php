@@ -32,7 +32,11 @@ class SubjectResource extends Resource
                 TextColumn::make('grade.name')->label('Grade'),
                 IconColumn::make('is_approved')->boolean()->label('Approved'),
             ])
-            ->actions([]);
+                ->actions([
+                    \Filament\Actions\ViewAction::make(),
+                    \Filament\Actions\EditAction::make(),
+                    \Filament\Actions\DeleteAction::make(),
+                ]);
     }
 
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema

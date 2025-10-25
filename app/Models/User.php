@@ -98,6 +98,11 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(Quiz::class);
     }
 
+    public function quizAttempts()
+    {
+        return $this->hasMany(\App\Models\QuizAttempt::class);
+    }
+
     public function achievements()
     {
         return $this->belongsToMany(Achievement::class, 'user_achievements')

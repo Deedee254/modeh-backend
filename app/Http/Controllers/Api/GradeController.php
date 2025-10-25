@@ -45,4 +45,49 @@ class GradeController extends Controller
         $grade->quizzes_count = $grade->subjects->sum('quizzes_count');
         return response()->json(['grade' => $grade]);
     }
+
+    // Create a grade (requires authenticated user - routes should protect this)
+    public function store(Request $request)
+    {
+        $v = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'level_id' => 'nullable|exists:levels,id',
+            'description' => 'nullable|string',
+            'type' => 'nullable|string|max:50',
+            'display_name' => 'nullable|string|max:255',
+            'is_active' => 'sometimes|boolean',
+        ]);
+        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+
+        $data = $request->only(['name', 'level_id', 'description', 'type', 'display_name']);
+        if ($request->has('is_active')) $data['is_active'] = (bool)$request->get('is_active');
+
+        $grade = Grade::create($data);
+
+        return response()->json(['grade' => $grade], 201);
+    }
+
+    // Update a grade
+    public function update(Request $request, Grade $grade)
+    {
+        $v = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'name' => 'sometimes|required|string|max:255',
+            'level_id' => 'sometimes|nullable|exists:levels,id',
+            'description' => 'sometimes|nullable|string',
+            'type' => 'sometimes|nullable|string|max:50',
+            'display_name' => 'sometimes|nullable|string|max:255',
+            'is_active' => 'sometimes|boolean',
+        ]);
+        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+
+        $grade->update($request->only(['name', 'level_id', 'description', 'type', 'display_name', 'is_active']));
+        return response()->json(['grade' => $grade]);
+    }
+
+    // Delete a grade
+    public function destroy(Grade $grade)
+    {
+        $grade->delete();
+        return response()->json(['deleted' => true]);
+    }
 }
