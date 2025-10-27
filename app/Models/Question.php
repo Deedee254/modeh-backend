@@ -13,7 +13,9 @@ class Question extends Model
         'quiz_id', 'created_by', 'type', 'body', 'options', 'answers', 
         'media_path', 'media_type', 'youtube_url', 'media_metadata',
         'explanation',
-        'parts',
+        'parts', 'fill_parts',
+        'correct', 'corrects',
+        'marks',
         'difficulty', 'is_quiz-master_marked', 'is_approved', 'is_banked', 
         'hint',
         // taxonomy references
@@ -24,9 +26,12 @@ class Question extends Model
         'options' => 'array',
         'answers' => 'array',
         'parts' => 'array',
+        'fill_parts' => 'array',
+        'corrects' => 'array',
+        'marks' => 'float',
         'solution_steps' => 'array',
         'media_metadata' => 'array',
-    'explanation' => 'string',
+        'explanation' => 'string',
         'is_quiz-master_marked' => 'boolean',
         'is_approved' => 'boolean',
         'is_banked' => 'boolean',
@@ -42,17 +47,15 @@ class Question extends Model
      */
     public static function getAllowedTypes()
     {
+        // Canonical, simplified question types. Media is represented separately via media_type.
         return [
             'mcq' => 'Multiple Choice Question',
             'multi' => 'Multiple Select',
             'short' => 'Short Answer',
             'numeric' => 'Numeric Answer',
             'fill_blank' => 'Fill in the Blanks',
-            'image_mcq' => 'Image Multiple Choice',
-            'audio_mcq' => 'Audio Multiple Choice',
-            'video_mcq' => 'Video Multiple Choice',
             'math' => 'Math / Multipart Question',
-            'code' => 'Code Answer Question'
+            'code' => 'Code Answer Question',
         ];
     }
 

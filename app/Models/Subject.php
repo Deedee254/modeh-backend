@@ -9,7 +9,7 @@ class Subject extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['grade_id', 'created_by', 'name', 'description', 'is_approved', 'auto_approve', 'icon', 'is_active'];
+    protected $fillable = ['grade_id', 'created_by', 'name', 'description', 'is_approved', 'auto_approve', 'approval_requested_at', 'icon', 'is_active'];
 
     protected $casts = [
         'is_approved' => 'boolean',

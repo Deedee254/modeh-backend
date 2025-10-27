@@ -48,9 +48,28 @@ class TopicResource extends Resource
                             ->searchable()
                             ->preload(),
 
+                    Forms\Components\TextInput::make('created_by')
+                        ->label('Created By (user id)')
+                        ->numeric()
+                        ->nullable(),
+
+                    Forms\Components\Textarea::make('description')
+                        ->rows(4)
+                        ->maxLength(65535)
+                        ->nullable(),
+
+                    Forms\Components\FileUpload::make('image')
+                        ->image()
+                        ->directory('topics/images')
+                        ->maxSize(2048),
+
                     Forms\Components\Toggle::make('is_approved')
                         ->required()
                         ->default(false),
+
+                    Forms\Components\DateTimePicker::make('approval_requested_at')
+                        ->label('Approval Requested At')
+                        ->nullable(),
                 ])
                 ->columns(2)
         ]);

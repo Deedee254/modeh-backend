@@ -148,7 +148,8 @@ class QuizController extends Controller
             foreach ($request->questions as $index => $q) {
                 try {
                     $qType = $q['type'] ?? 'mcq';
-                    $body = $q['text'] ?? ($q['body'] ?? '');
+                    // Prefer canonical 'body' field; accept legacy 'text' as fallback
+                    $body = $q['body'] ?? ($q['text'] ?? '');
                     $options = $q['options'] ?? null;
                     $answers = $q['answers'] ?? (isset($q['correct']) ? [$q['correct']] : null);
 
@@ -411,7 +412,8 @@ class QuizController extends Controller
             foreach ($request->questions as $index => $q) {
                 try {
                     $qType = $q['type'] ?? 'mcq';
-                    $body = $q['text'] ?? ($q['body'] ?? '');
+                    // Prefer canonical 'body' field; accept legacy 'text' as fallback
+                    $body = $q['body'] ?? ($q['text'] ?? '');
                     $options = $q['options'] ?? null;
                     $answers = $q['answers'] ?? (isset($q['correct']) ? [$q['correct']] : null);
 

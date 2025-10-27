@@ -9,7 +9,7 @@ class Topic extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['subject_id', 'created_by', 'name', 'description', 'is_approved', 'image'];
+    protected $fillable = ['subject_id', 'created_by', 'name', 'description', 'is_approved', 'approval_requested_at', 'image'];
 
     protected $casts = [
         'is_approved' => 'boolean',
