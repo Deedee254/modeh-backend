@@ -51,7 +51,10 @@ class Kernel extends HttpKernel
      * @var array
      */
     protected $routeMiddleware = [
-        'auth' => \App\Http\Middleware\Authenticate::class,
+    // Use the framework-provided Authenticate middleware. The application previously
+    // referenced App\Http\Middleware\Authenticate which is not present in this
+    // codebase (causes "Unknown route middleware: 'auth'." at runtime).
+    'auth' => \Illuminate\Auth\Middleware\Authenticate::class,
         'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
         'cache.headers' => \Illuminate\Http\Middleware\SetCacheHeaders::class,
         'can' => \Illuminate\Auth\Middleware\Authorize::class,

@@ -33,13 +33,15 @@ class QuizAttemptController extends Controller
                 $isOwner = false;
             }
             if ($isOwner || ($user->is_admin ?? false)) {
-                $quiz->load(['topic.subject', 'subject', 'grade', 'questions']);
+                // Ensure the grade->level relation is loaded so the frontend can
+                // reconstruct level_id/level metadata when pre-filling the create form.
+                $quiz->load(['topic.subject', 'subject', 'grade.level', 'questions']);
                 return response()->json(['quiz' => $quiz]);
             }
         }
 
-        // Public / attempt view: Load questions but strip the correct answers
-        $quiz->load(['topic', 'questions']);
+        // Public / attempt view: Load questions and taxonomy so the frontend can display details
+        $quiz->load(['topic.subject', 'subject', 'grade.level', 'questions']);
         $questions = $quiz->questions->map(function ($q) {
             return [
                 'id' => $q->id,
@@ -50,12 +52,20 @@ class QuizAttemptController extends Controller
             ];
         });
 
+        // expose taxonomy objects in the public payload (level may be nested under grade)
+        $level = $quiz->level ?? ($quiz->grade && $quiz->grade->level ? $quiz->grade->level : null);
+
         return response()->json(['quiz' => [
             'id' => $quiz->id,
             'title' => $quiz->title,
             'description' => $quiz->description,
             'timer_seconds' => $quiz->timer_seconds,
             'questions' => $questions,
+            'topic' => $quiz->topic ?? null,
+            'subject' => $quiz->subject ?? null,
+            'grade' => $quiz->grade ?? null,
+            'level_id' => $quiz->level_id ?? ($level ? ($level->id ?? null) : null),
+            'level' => $level ?? null,
         ]]);
     }
 
