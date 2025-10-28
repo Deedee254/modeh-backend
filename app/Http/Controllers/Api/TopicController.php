@@ -67,6 +67,7 @@ class TopicController extends Controller
             // admins see all topics (no additional where)
         }
 
+        $query->orderBy('created_at', 'desc');
         $perPage = max(1, (int)$request->get('per_page', 10));
         $data = $query->paginate($perPage);
             // Attach an image for each topic if available: topic.image or representative quiz cover

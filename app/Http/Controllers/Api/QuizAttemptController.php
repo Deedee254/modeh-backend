@@ -60,6 +60,9 @@ class QuizAttemptController extends Controller
             'title' => $quiz->title,
             'description' => $quiz->description,
             'timer_seconds' => $quiz->timer_seconds,
+            // Expose multimedia fields publicly as requested
+            'youtube_url' => $quiz->youtube_url ?? null,
+            'cover_image' => $quiz->cover_image ?? null,
             'questions' => $questions,
             'topic' => $quiz->topic ?? null,
             'subject' => $quiz->subject ?? null,

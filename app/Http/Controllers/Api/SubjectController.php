@@ -26,6 +26,7 @@ class SubjectController extends Controller
             $query->where('name', 'like', "%{$q}%");
         }
 
+        $query->orderBy('created_at', 'desc');
         $perPage = max(1, (int)$request->get('per_page', 50)); // More for browsing
         $data = $query->paginate($perPage);
 

@@ -143,6 +143,13 @@ class QuizController extends Controller
 
         // If questions included, reuse existing creation logic to attach them
         if ($request->filled('questions') && is_array($request->questions)) {
+            try {
+                \Log::info('QuizController@update received questions payload', [
+                    'quiz_id' => $quiz->id,
+                    'questions_count' => is_array($request->questions) ? count($request->questions) : null,
+                    'files' => array_keys($request->files->all()),
+                ]);
+            } catch (\Throwable $_) {}
             // Support per-question file uploads: keys may be numeric index or question uid
             $mediaFiles = $request->file('question_media', []);
             foreach ($request->questions as $index => $q) {
@@ -176,7 +183,7 @@ class QuizController extends Controller
                     // If topic/subject information is unavailable, default to site setting
                     $questionIsApproved = $siteAutoQuestions || (($topic && $topic->subject) ? (bool)($topic->subject->auto_approve ?? false) : false);
 
-                    \App\Models\Question::create([
+                    $createdQuestion = \App\Models\Question::create([
                         'quiz_id' => $quiz->id,
                         'created_by' => $user->id,
                         'type' => $qType,
@@ -191,10 +198,25 @@ class QuizController extends Controller
                         'is_quiz-master_marked' => true,
                         'is_approved' => $questionIsApproved,
                         'is_banked' => isset($q['is_banked']) ? (bool)$q['is_banked'] : false,
-                        'hint' => $q['hint'] ?? null,
                     ]);
-                } catch (\Exception $e) {
-                    // ignore per-question failures for now
+                    try {
+                        \Log::info('QuizController@update question created', [
+                            'quiz_id' => $quiz->id,
+                            'question_id' => $createdQuestion->id ?? null,
+                            'index' => $index,
+                            'payload_keys' => is_array($q) ? array_values(array_keys($q)) : null,
+                        ]);
+                    } catch (\Throwable $_) {}
+                } catch (\Throwable $e) {
+                    try {
+                        \Log::error('QuizController@update question failed', [
+                            'quiz_id' => $quiz->id,
+                            'index' => $index,
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                            'payload_preview' => is_array($q) ? array_slice($q,0,10) : $q,
+                        ]);
+                    } catch (\Throwable $_) {}
                 }
             }
             try { $quiz->recalcDifficulty(); } catch (\Exception $e) {}
@@ -264,6 +286,7 @@ class QuizController extends Controller
             $query->where('is_approved', (bool)$request->get('approved'));
         }
 
+        $query->orderBy('created_at', 'desc');
         $perPage = max(1, (int)$request->get('per_page', 10));
         $data = $query->paginate($perPage);
         return response()->json(['quizzes' => $data]);
@@ -438,7 +461,7 @@ class QuizController extends Controller
                     // if quiz_id is null (banked question), we mark is_banked true; here quiz exists so banked only if requested
                     $isBanked = isset($q['is_banked']) ? (bool)$q['is_banked'] : false;
 
-                    \App\Models\Question::create([
+                    $createdQuestion = \App\Models\Question::create([
                         'quiz_id' => $quiz->id,
                         'created_by' => $user->id,
                         'type' => $qType,
@@ -453,10 +476,25 @@ class QuizController extends Controller
                         'is_quiz-master_marked' => true,
                         'is_approved' => false,
                         'is_banked' => $isBanked,
-                        'hint' => $q['hint'] ?? null,
                     ]);
-                } catch (\Exception $e) {
-                    // ignore per-question failures for now
+                    try {
+                        \Log::info('QuizController@store question created', [
+                            'quiz_id' => $quiz->id,
+                            'question_id' => $createdQuestion->id ?? null,
+                            'index' => $index,
+                            'payload_keys' => is_array($q) ? array_values(array_keys($q)) : null,
+                        ]);
+                    } catch (\Throwable $_) {}
+                } catch (\Throwable $e) {
+                    try {
+                        \Log::error('QuizController@store question failed', [
+                            'quiz_id' => $quiz->id,
+                            'index' => $index,
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                            'payload_preview' => is_array($q) ? array_slice($q,0,10) : $q,
+                        ]);
+                    } catch (\Throwable $_) {}
                 }
             }
             // recalc difficulty

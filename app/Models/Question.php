@@ -17,7 +17,6 @@ class Question extends Model
         'correct', 'corrects',
         'marks',
         'difficulty', 'is_quiz-master_marked', 'is_approved', 'is_banked', 
-        'hint',
         // taxonomy references
         'subject_id', 'topic_id', 'grade_id'
     ];

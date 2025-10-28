@@ -137,7 +137,6 @@ class QuestionController extends Controller
             'correct' => 'nullable',
             'corrects' => 'nullable|array',
             'tags' => 'nullable|array',
-            'hint' => 'nullable|string',
             'solution_steps' => 'nullable|array',
             'subject_id' => 'nullable|exists:subjects,id',
             'topic_id' => 'nullable|exists:topics,id',
@@ -187,7 +186,9 @@ class QuestionController extends Controller
                         $mediaMetadata['width'] = $dimensions[0];
                         $mediaMetadata['height'] = $dimensions[1];
                     }
-                } catch (\Exception $e) {}
+                } catch (\Throwable $e) {
+                    try { \Log::error('QuestionController@store image metadata failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
+                }
             } elseif (strpos($mimeType, 'audio/') === 0) {
                 $mediaType = 'audio';
                 // Get audio duration if possible
@@ -197,7 +198,9 @@ class QuestionController extends Controller
                     if (isset($fileInfo['playtime_seconds'])) {
                         $mediaMetadata['duration'] = $fileInfo['playtime_seconds'];
                     }
-                } catch (\Exception $e) {}
+                } catch (\Throwable $e) {
+                    try { \Log::error('QuestionController@store audio metadata failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
+                }
             } elseif (strpos($mimeType, 'video/') === 0) {
                 $mediaType = 'video';
                 // Get video metadata if possible
@@ -209,7 +212,9 @@ class QuestionController extends Controller
                     if ($duration) {
                         $mediaMetadata['duration'] = floatval($duration);
                     }
-                } catch (\Exception $e) {}
+                } catch (\Throwable $e) {
+                    try { \Log::error('QuestionController@store video metadata failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
+                }
             }
         }
 
@@ -345,7 +350,6 @@ class QuestionController extends Controller
             'is_quiz-master_marked' => $request->get('is_quiz-master_marked', false),
             'is_approved' => $siteAutoQuestions,
             'tags' => $request->get('tags'),
-            'hint' => $request->get('hint'),
             'solution_steps' => $request->get('solution_steps'),
             'subject_id' => $request->get('subject_id'),
             'topic_id' => $request->get('topic_id'),
@@ -387,7 +391,25 @@ class QuestionController extends Controller
     {
         // merge quiz id into request then call store logic
         $request->merge(['quiz_id' => $quiz->id]);
-        return $this->store($request);
+        try {
+            \Log::info('QuestionController@storeForQuiz incoming', [
+                'quiz_id' => $quiz->id,
+                'keys' => array_keys($request->all()),
+            ]);
+        } catch (\Throwable $_) {
+            // ignore logging errors
+        }
+
+        // Delegate to the single-question store logic to avoid duplicating
+        // validation and media handling. This returns the same JSON shape
+        // as creating a question normally, but attached to the provided quiz.
+        try {
+            return $this->store($request);
+        } catch (\Throwable $e) {
+            try { \Log::error('QuestionController@storeForQuiz failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
+            return response()->json(['message' => 'Failed to store question for quiz'], 500);
+        }
+
     }
 
     /**
@@ -453,6 +475,13 @@ class QuestionController extends Controller
         $mediaFiles = $request->file('question_media', []);
 
         $saved = [];
+        try {
+            \Log::info('QuestionController@bulkUpdateForQuiz incoming', [
+                'quiz_id' => $quiz->id,
+                'incoming_count' => is_array($items) ? count($items) : null,
+                'media_keys' => is_array($mediaFiles) ? array_keys($mediaFiles) : [],
+            ]);
+        } catch (\Throwable $_) {}
         foreach ($items as $idx => $q) {
             try {
                 // Expect canonical 'type' key (mcq, multi, short, numeric, fill_blank, math, code).
@@ -565,7 +594,6 @@ class QuestionController extends Controller
                     'marks' => $marks,
                     'difficulty' => $q['difficulty'] ?? 3,
                     'tags' => $q['tags'] ?? null,
-                    'hint' => $q['hint'] ?? null,
                     'solution_steps' => $q['solution_steps'] ?? null,
                     'subject_id' => $q['subject_id'] ?? $quiz->subject_id ?? null,
                     'topic_id' => $q['topic_id'] ?? $quiz->topic_id ?? null,
@@ -596,8 +624,8 @@ class QuestionController extends Controller
                                 $qData['media_type'] = $mediaType;
                             }
                         }
-                    } catch (\Exception $e) {
-                        // ignore file storage errors for per-question uploads and continue
+                    } catch (\Throwable $e) {
+                        try { \Log::error('QuestionController@bulkUpdateForQuiz file storage failed', ['quiz_id' => $quiz->id, 'index' => $idx, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
                     }
 
                 // If the question has an id, attempt update
@@ -628,7 +656,7 @@ class QuestionController extends Controller
         }
 
         // recalc quiz difficulty
-        try { $quiz->recalcDifficulty(); } catch (\Exception $e) {}
+    try { $quiz->recalcDifficulty(); } catch (\Throwable $e) { try { \Log::error('QuestionController@bulkUpdateForQuiz recalcDifficulty failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage()]); } catch (\Throwable $_) {} }
 
         return response()->json(['questions' => $saved]);
     }
@@ -651,7 +679,6 @@ class QuestionController extends Controller
             'corrects' => 'nullable|array',
             'marks' => 'nullable|numeric',
             'tags' => 'nullable|array',
-            'hint' => 'nullable|string',
             'solution_steps' => 'nullable|array',
             'subject_id' => 'nullable|exists:subjects,id',
             'topic_id' => 'nullable|exists:topics,id',
@@ -834,7 +861,7 @@ class QuestionController extends Controller
         }
 
         // additional fields
-        foreach (['tags','hint','solution_steps','subject_id','topic_id','grade_id','for_battle','is_quiz-master_marked'] as $f) {
+        foreach (['tags','solution_steps','subject_id','topic_id','grade_id','for_battle','is_quiz-master_marked'] as $f) {
             if ($request->has($f)) $question->{$f} = $request->get($f);
         }
         $question->save();
@@ -881,7 +908,8 @@ class QuestionController extends Controller
         try {
             $question->delete();
             return response()->json(['message' => 'Deleted'], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            try { \Log::error('QuestionController@destroy failed', ['question_id' => $question->id ?? null, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
             return response()->json(['message' => 'Failed to delete'], 500);
         }
     }
