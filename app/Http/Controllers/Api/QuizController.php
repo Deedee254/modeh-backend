@@ -49,6 +49,7 @@ class QuizController extends Controller
 
         $v = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'title' => 'sometimes|required|string|max:255',
+            'topic_id' => 'sometimes|nullable|exists:topics,id',
             'subject_id' => 'sometimes|nullable|exists:subjects,id',
             'grade_id' => 'sometimes|nullable|exists:grades,id',
             'level_id' => 'sometimes|nullable|exists:levels,id',
@@ -91,43 +92,28 @@ class QuizController extends Controller
             $newTopic = \App\Models\Topic::find($request->get('topic_id'));
             if (!$newTopic) return response()->json(['message' => 'Topic not found'], 422);
             $quiz->topic_id = $newTopic->id;
-            // if subject_id supplied, ensure it matches topic; otherwise set subject to topic's subject
-            if ($request->has('subject_id')) {
-                if ((string)$newTopic->subject_id !== (string)$request->get('subject_id')) {
-                    return response()->json(['message' => 'Topic does not belong to the supplied subject'], 422);
-                }
-                $quiz->subject_id = $request->get('subject_id');
-            } else {
-                $quiz->subject_id = $newTopic->subject_id;
+            $quiz->subject_id = $newTopic->subject_id;
+            $quiz->grade_id = $newTopic->subject->grade_id;
+            $quiz->level_id = $newTopic->subject->grade->level_id;
+        } elseif ($request->has('subject_id')) {
+            $newSubject = \App\Models\Subject::find($request->get('subject_id'));
+            if (!$newSubject) return response()->json(['message' => 'Subject not found'], 422);
+            $quiz->subject_id = $newSubject->id;
+            $quiz->grade_id = $newSubject->grade_id;
+            $quiz->level_id = $newSubject->grade->level_id;
+            // If the new subject is different from the old one, nullify the topic
+            if ($quiz->topic && $quiz->topic->subject_id !== $newSubject->id) {
+                $quiz->topic_id = null;
             }
-        } else {
-            if ($request->has('subject_id')) {
-                $quiz->subject_id = $request->get('subject_id');
-            }
-        }
-
-        if ($request->has('subject_id')) {
-            $sub = \App\Models\Subject::find($request->get('subject_id'));
-            if (!$sub) return response()->json(['message' => 'Subject not found'], 422);
-            if ($request->has('grade_id')) {
-                if ((string)$sub->grade_id !== (string)$request->get('grade_id')) {
-                    return response()->json(['message' => 'Subject does not belong to the supplied grade'], 422);
-                }
-                $quiz->grade_id = $request->get('grade_id');
-                // try to set level_id from grade if present
-                try {
-                    $g = \App\Models\Grade::find($request->get('grade_id'));
-                    if ($g && isset($g->level_id)) $quiz->level_id = $g->level_id;
-                } catch (\Throwable $_) {}
-            } else {
-                $quiz->grade_id = $sub->grade_id;
-                try { $quiz->level_id = \App\Models\Grade::find($sub->grade_id)->level_id ?? null; } catch (\Throwable $_) {}
-            }
-        } else {
-            if ($request->has('grade_id')) {
-                // If grade provided without subject, only set it; subject remains unchanged
-                $quiz->grade_id = $request->get('grade_id');
-                try { $quiz->level_id = \App\Models\Grade::find($request->get('grade_id'))->level_id ?? null; } catch (\Throwable $_) {}
+        } elseif ($request->has('grade_id')) {
+            $newGrade = \App\Models\Grade::find($request->get('grade_id'));
+            if (!$newGrade) return response()->json(['message' => 'Grade not found'], 422);
+            $quiz->grade_id = $newGrade->id;
+            $quiz->level_id = $newGrade->level_id;
+            // If the new grade is different, nullify subject and topic
+            if ($quiz->subject && $quiz->subject->grade_id !== $newGrade->id) {
+                $quiz->subject_id = null;
+                $quiz->topic_id = null;
             }
         }
 
@@ -314,7 +300,17 @@ class QuizController extends Controller
 
         // Log incoming payload for debugging (don't include file streams)
         \Log::info('QuizController@store incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
-
+        
+        // Temporary: attempt to dump full request payload for debugging. Wrapped in try/catch
+        // because uploaded file objects may not be serializable in logs.
+        try {
+            \Log::debug('QuizController@store full request dump', [
+                'all' => $request->all(),
+                'files' => array_keys($request->files->all()),
+            ]);
+        } catch (\Throwable $e) {
+            try { \Log::error('QuizController@store dump failed', ['error' => $e->getMessage()]); } catch (\Throwable $_) {}
+        }
         $v = Validator::make($request->all(), [
             'topic_id' => 'required|exists:topics,id',
             'subject_id' => 'required|exists:subjects,id',
