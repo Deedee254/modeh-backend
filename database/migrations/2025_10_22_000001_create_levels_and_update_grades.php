@@ -1,44 +1,19 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 
+// This migration was superseded by an earlier-dated migration (moved to 2025_09_18_000004_...)
+// Keep a no-op migration here so running migrations in environments that already have this file
+// will not attempt to recreate the `levels` table.
 return new class extends Migration
 {
     public function up()
     {
-        Schema::create('levels', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('slug')->unique();
-            $table->integer('order')->default(0);
-            $table->text('description')->nullable();
-            $table->timestamps();
-        });
-
-        Schema::table('grades', function (Blueprint $table) {
-            // add nullable foreign key to levels
-            if (!Schema::hasColumn('grades', 'level_id')) {
-                $table->foreignId('level_id')->nullable()->constrained('levels')->nullOnDelete()->after('id');
-            }
-            if (!Schema::hasColumn('grades', 'type')) {
-                $table->string('type')->default('grade')->after('description');
-            }
-        });
+        // no-op: levels creation moved to an earlier migration file
     }
 
     public function down()
     {
-        Schema::table('grades', function (Blueprint $table) {
-            if (Schema::hasColumn('grades', 'type')) {
-                $table->dropColumn('type');
-            }
-            if (Schema::hasColumn('grades', 'level_id')) {
-                $table->dropConstrainedForeignId('level_id');
-            }
-        });
-
-        Schema::dropIfExists('levels');
+        // no-op
     }
 };
