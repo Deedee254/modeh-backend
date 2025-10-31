@@ -39,14 +39,14 @@ class LeaderboardController extends Controller
         
         if ($hasPointsColumn) {
             try {
-                $query = User::query()->select(['id', 'name', 'email', 'points', 'avatar', 'country', 'created_at']);
+                $query = User::query()->select(['id', 'name', 'email', 'points', 'social_avatar', 'country', 'created_at']);
             } catch (\Exception $e) {
                 \Log::warning('Failed to query with points column: ' . $e->getMessage());
-                $query = User::query()->selectRaw('id, name, email, 0 as points, avatar, country, created_at');
+                $query = User::query()->selectRaw('id, name, email, 0 as points, social_avatar, country, created_at');
             }
         } else {
             // Fallback for older schema without points column
-            $query = User::query()->selectRaw('id, name, email, 0 as points, avatar, country, created_at');
+            $query = User::query()->selectRaw('id, name, email, 0 as points, social_avatar, country, created_at');
             \Log::info('Using fallback query - points column does not exist');
         }
 
