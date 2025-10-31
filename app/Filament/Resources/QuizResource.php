@@ -26,7 +26,7 @@ class QuizResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            \Filament\Schemas\Components\Section::make()
+            \Filament\Schemas\Components\Section::make('Basic Information')
                 ->schema([
                     \Filament\Forms\Components\TextInput::make('title')->label('Title')->required(),
                     \Filament\Forms\Components\TextInput::make('one_off_price')
@@ -37,6 +37,65 @@ class QuizResource extends Resource
                     \Filament\Forms\Components\Toggle::make('is_approved')->label('Approved')->default(false),
                 ])
                 ->columns(1),
+
+            \Filament\Schemas\Components\Section::make('Taxonomy')
+                ->schema([
+                    \Filament\Forms\Components\Select::make('level_id')
+                        ->label('Level')
+                        ->options(function ($get) {
+                            return \App\Models\Level::orderBy('name')->pluck('name', 'id')->toArray();
+                        })
+                        ->reactive()
+                        ->afterStateUpdated(function ($state, $set) {
+                            // Reset dependent selects when level changes
+                            $set('grade_id', null);
+                            $set('subject_id', null);
+                            $set('topic_id', null);
+                        }),
+
+                    \Filament\Forms\Components\Select::make('grade_id')
+                        ->label('Grade')
+                        ->options(function ($get) {
+                            $levelId = $get('level_id');
+
+                            return \App\Models\Grade::when($levelId, function ($q) use ($levelId) {
+                                $q->where('level_id', $levelId);
+                            })->orderBy('name')->pluck('name', 'id')->toArray();
+                        })
+                        ->reactive()
+                        ->afterStateUpdated(function ($state, $set) {
+                            // Reset dependent selects when grade changes
+                            $set('subject_id', null);
+                            $set('topic_id', null);
+                        }),
+
+                    \Filament\Forms\Components\Select::make('subject_id')
+                        ->label('Subject')
+                        ->options(function ($get) {
+                            $gradeId = $get('grade_id');
+
+                            return \App\Models\Subject::when($gradeId, function ($q) use ($gradeId) {
+                                $q->where('grade_id', $gradeId);
+                            })->orderBy('name')->pluck('name', 'id')->toArray();
+                        })
+                        ->reactive()
+                        ->afterStateUpdated(function ($state, $set) {
+                            // Reset dependent select when subject changes
+                            $set('topic_id', null);
+                        }),
+
+                    \Filament\Forms\Components\Select::make('topic_id')
+                        ->label('Topic')
+                        ->options(function ($get) {
+                            $subjectId = $get('subject_id');
+
+                            return \App\Models\Topic::when($subjectId, function ($q) use ($subjectId) {
+                                $q->where('subject_id', $subjectId);
+                            })->orderBy('name')->pluck('name', 'id')->toArray();
+                        })
+                        ->reactive(),
+                ])
+                ->columns(2),
         ]);
     }
 
