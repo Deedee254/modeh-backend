@@ -81,7 +81,7 @@ class TopicResource extends Resource
             ->columns([
                 TextColumn::make('id')->sortable(),
                 TextColumn::make('name')->searchable()->label('Topic'),
-                TextColumn::make('grade.name')->label('Grade')->sortable()->searchable(),
+                TextColumn::make('subject.grade.name')->label('Grade')->sortable()->searchable(),
                 TextColumn::make('subject.name')->label('Subject')->sortable()->searchable(),
                 IconColumn::make('is_approved')->boolean()->label('Approved'),
             ])
