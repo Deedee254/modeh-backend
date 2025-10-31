@@ -9,6 +9,81 @@ class Question extends Model
 {
     use HasFactory;
 
+    /**
+     * Get the text of the correct option(s) for MCQ/multi questions
+     * 
+     * @return string|array The text of the correct option(s)
+     */
+    public function getCorrectOptionText()
+    {
+        if (!$this->options || empty($this->options)) {
+            return null;
+        }
+
+        if ($this->type === 'mcq' && isset($this->correct)) {
+            $index = $this->correct;
+            return isset($this->options[$index]) ? $this->options[$index]['text'] : null;
+        }
+
+        if ($this->type === 'multi' && !empty($this->corrects)) {
+            return collect($this->corrects)
+                ->map(fn($index) => $this->options[$index]['text'] ?? null)
+                ->filter()
+                ->values()
+                ->all();
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the text of a specific option by its index
+     * 
+     * @param int $index The index of the option
+     * @return string|null The text of the option
+     */
+    public function getOptionText($index)
+    {
+        return $this->options[$index]['text'] ?? null;
+    }
+
+    /**
+     * Get all options as an array of text values
+     * 
+     * @return array Array of option texts
+     */
+    public function getAllOptionTexts()
+    {
+        if (!$this->options) {
+            return [];
+        }
+        
+        return collect($this->options)
+            ->pluck('text')
+            ->all();
+    }
+
+    /**
+     * Find the index of an option by its text
+     * 
+     * @param string $text The text to search for
+     * @return int|null The index of the option or null if not found
+     */
+    public function findOptionIndexByText($text)
+    {
+        if (!$this->options) {
+            return null;
+        }
+
+        foreach ($this->options as $index => $option) {
+            if (isset($option['text']) && $option['text'] === $text) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
     protected $fillable = [
         'quiz_id', 'created_by', 'type', 'body', 'options', 'answers', 
         'media_path', 'media_type', 'youtube_url', 'media_metadata',
@@ -18,7 +93,7 @@ class Question extends Model
         'marks',
         'difficulty', 'is_quiz-master_marked', 'is_approved', 'is_banked', 
         // taxonomy references
-        'subject_id', 'topic_id', 'grade_id'
+        'subject_id', 'topic_id', 'grade_id', 'level_id'
     ];
 
     protected $casts = [
@@ -39,6 +114,7 @@ class Question extends Model
         'subject_id' => 'integer',
         'topic_id' => 'integer',
         'grade_id' => 'integer',
+        'level_id' => 'integer',
     ];
     
     /**

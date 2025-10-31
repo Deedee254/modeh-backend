@@ -83,49 +83,49 @@ class AdminTournamentController extends Controller
 
     public function generateMatches(Request $request, Tournament $tournament) 
     {
-        // Only generate if tournament is upcoming
-        if ($tournament->status !== 'upcoming') {
-            return response()->json(['message' => 'Can only generate matches for upcoming tournaments'], 400);
+        // allow admin to pass explicit participant IDs to generate a specific round
+        $participantIds = $request->input('participant_ids');
+        $round = intval($request->input('round', 1));
+        $scheduledAt = $request->input('scheduled_at') ? \Illuminate\Support\Carbon::parse($request->input('scheduled_at')) : $tournament->start_date;
+
+        // If no explicit participant ids provided, use registered participants
+        if (!is_array($participantIds) || empty($participantIds)) {
+            // Only generate if tournament is upcoming
+            if ($tournament->status !== 'upcoming') {
+                return response()->json(['message' => 'Can only generate matches for upcoming tournaments'], 400);
+            }
+
+            $participants = $tournament->participants()->get()->pluck('id')->toArray();
+            $participantIds = $participants;
         }
 
-        // Get participants
-        $participants = $tournament->participants()->get();
-        $count = $participants->count();
-
-        if ($count < 2) {
+        if (count($participantIds) < 2) {
+            // If only one participant remains, finalize
+            if (count($participantIds) === 1) {
+                $tournament->finalizeWithWinner((int) $participantIds[0]);
+                return response()->json(['message' => 'Tournament completed with single participant']);
+            }
             return response()->json(['message' => 'Need at least 2 participants'], 400);
         }
 
-        // Randomize participants
-        $participants = $participants->shuffle();
-
-        // Generate round-robin matches where each player plays against every other player
-        $matches = [];
-        for ($i = 0; $i < $count; $i++) {
-            for ($j = $i + 1; $j < $count; $j++) {
-                $matches[] = [
-                    'tournament_id' => $tournament->id,
-                    'round' => 1,
-                    'player1_id' => $participants[$i]->id,
-                    'player2_id' => $participants[$j]->id,
-                    'status' => 'scheduled',
-                    'scheduled_at' => $tournament->start_date,
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ];
-            }
+        // If this is the first round for an upcoming tournament, randomize entry order
+        if ($round === 1 && $tournament->status === 'upcoming') {
+            shuffle($participantIds);
         }
 
-        // Insert all battles
-        $tournament->battles()->insert($matches);
+        // create battles using the Tournament helper
+        $created = $tournament->createBattlesForRound($participantIds, $round, $scheduledAt);
 
-        // Activate tournament
-        $tournament->status = 'active';
-        $tournament->save();
+        // Activate tournament if this is the first round
+        if ($round === 1 && $tournament->status === 'upcoming') {
+            $tournament->status = 'active';
+            $tournament->save();
+        }
 
         return response()->json([
             'message' => 'Tournament battles generated successfully',
-            'battles' => $tournament->battles()->with(['player1', 'player2'])->get()
+            'created' => count($created),
+            'battles' => $tournament->battles()->where('round', $round)->with(['player1', 'player2'])->get()
         ]);
     }
 

@@ -103,6 +103,15 @@ class ProfileController extends Controller
             'last_name',
         ]));
 
+        // If a grade was provided, also persist the associated level on the profile
+        if ($request->filled('grade_id')) {
+            $grade = \App\Models\Grade::find($request->get('grade_id'));
+            if ($grade && isset($grade->level_id)) {
+                $profile->level_id = $grade->level_id;
+                $profile->save();
+            }
+        }
+
         // Return updated profile with relationships
         $user->load(['quizeeProfile.grade']);
         

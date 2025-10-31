@@ -262,6 +262,9 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // Tournaments
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);
     Route::post('/tournaments/battles/{battle}/submit', [\App\Http\Controllers\Api\TournamentController::class, 'submitBattle']);
+    Route::post('/tournaments/{tournament}/battles/{battle}/mark', [\App\Http\Controllers\Api\TournamentController::class, 'mark']);
+    // Allow a tournament-battle mark call that only provides the battle id (used by some frontends)
+    Route::post('/tournaments/battles/{battle}/mark', [\App\Http\Controllers\Api\TournamentController::class, 'mark']);
     Route::get('/tournaments/{tournament}/battles/{battle}/result', [\App\Http\Controllers\Api\TournamentController::class, 'result']);
     Route::get('/tournaments/{tournament}/leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'leaderboard']);
 

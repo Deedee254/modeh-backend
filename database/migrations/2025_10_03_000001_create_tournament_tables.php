@@ -18,6 +18,7 @@ return new class extends Migration
             $table->integer('max_participants')->nullable();
             $table->decimal('entry_fee', 10, 2)->nullable();
             $table->string('status');
+            $table->foreignId('winner_id')->nullable()->constrained('users')->onDelete('set null');
             $table->json('rules')->nullable();
             $table->foreignId('subject_id')->constrained('subjects')->onDelete('cascade');
             $table->foreignId('topic_id')->nullable()->constrained('topics')->onDelete('set null');
@@ -30,7 +31,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('tournament_id')->constrained()->onDelete('cascade');
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->decimal('score', 10, 2)->nullable();
+            $table->decimal('score', 10, 2)->default(0);
             $table->integer('rank')->nullable();
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();

@@ -10,9 +10,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 
 class QuizController extends Controller
 {
+    protected array $questionColumnCache = [];
+
     public function __construct()
     {
         // Protect most endpoints but allow public listing (index)
@@ -44,6 +47,8 @@ class QuizController extends Controller
             }
         }
 
+        $this->normalizeBooleanInputs($request, ['is_paid', 'use_per_question_timer', 'shuffle_questions', 'shuffle_answers', 'is_draft']);
+
         // Log incoming payload for debugging (don't include file streams)
         \Log::info('QuizController@update incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
 
@@ -70,6 +75,7 @@ class QuizController extends Controller
         ]);
 
         if ($v->fails()) {
+            try { \Log::error('QuizController@update validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]); } catch (\Throwable $_) {}
             return response()->json(['errors' => $v->errors()], 422);
         }
 
@@ -81,7 +87,7 @@ class QuizController extends Controller
         }
 
         // Update known fields if present
-        $fields = ['title','description','youtube_url','is_paid','timer_seconds','per_question_seconds','use_per_question_timer','attempts_allowed','shuffle_questions','shuffle_answers','visibility','scheduled_at','is_draft'];
+        $fields = ['title','description','youtube_url','timer_seconds','per_question_seconds','use_per_question_timer','attempts_allowed','shuffle_questions','shuffle_answers','visibility','scheduled_at','is_draft'];
         foreach ($fields as $f) {
             if ($request->has($f)) {
                 $quiz->{$f} = $request->get($f);
@@ -89,8 +95,17 @@ class QuizController extends Controller
         }
         // allow updating taxonomy links — validate consistency if topic/subject/grade are changed
         if ($request->has('topic_id')) {
+            if ($request->has('access')) {
+                $quiz->is_paid = $request->get('access') === 'paywall';
+            } elseif ($request->has('is_paid')) {
+                $quiz->is_paid = $request->boolean('is_paid');
+            }
             $newTopic = \App\Models\Topic::find($request->get('topic_id'));
             if (!$newTopic) return response()->json(['message' => 'Topic not found'], 422);
+            // If the caller also supplied a subject_id, ensure it matches the topic's subject
+            if ($request->has('subject_id') && (string)$request->get('subject_id') !== (string)$newTopic->subject_id) {
+                return response()->json(['message' => 'Supplied topic does not belong to the supplied subject'], 422);
+            }
             $quiz->topic_id = $newTopic->id;
             $quiz->subject_id = $newTopic->subject_id;
             $quiz->grade_id = $newTopic->subject->grade_id;
@@ -169,11 +184,27 @@ class QuizController extends Controller
                     // If topic/subject information is unavailable, default to site setting
                     $questionIsApproved = $siteAutoQuestions || (($topic && $topic->subject) ? (bool)($topic->subject->auto_approve ?? false) : false);
 
-                    $createdQuestion = \App\Models\Question::create([
+                    // Determine correct/corrects for MCQ/MULTI types when frontend provided them
+                    $qCorrect = null;
+                    $qCorrects = [];
+                    if (isset($q['correct']) && is_numeric($q['correct'])) {
+                        $qCorrect = (int)$q['correct'];
+                    } elseif (is_array($answers) && isset($answers[0]) && is_numeric($answers[0])) {
+                        // fallback: answers[0] may contain the correct index
+                        $qCorrect = (int)$answers[0];
+                    }
+                    if (isset($q['corrects']) && is_array($q['corrects'])) {
+                        $qCorrects = array_values(array_filter(array_map(static function ($c) {
+                            return is_numeric($c) ? (int)$c : null;
+                        }, $q['corrects']), static fn($v) => $v !== null));
+                    }
+
+                    $questionData = [
                         'quiz_id' => $quiz->id,
                         'created_by' => $user->id,
                         'type' => $qType,
                         'body' => $body,
+                        'explanation' => $q['explanation'] ?? null,
                         'youtube_url' => $q['youtube_url'] ?? null,
                         'media_metadata' => $q['media_metadata'] ?? null,
                         'options' => $options,
@@ -181,10 +212,25 @@ class QuizController extends Controller
                         'media_path' => $mediaPath,
                         'media_type' => $mediaType,
                         'difficulty' => $q['difficulty'] ?? 3,
+                        'marks' => isset($q['marks']) ? $q['marks'] : null,
                         'is_quiz-master_marked' => true,
                         'is_approved' => $questionIsApproved,
                         'is_banked' => isset($q['is_banked']) ? (bool)$q['is_banked'] : false,
-                    ]);
+                        'level_id' => $quiz->level_id,
+                        'grade_id' => $quiz->grade_id,
+                        'subject_id' => $quiz->subject_id,
+                        'topic_id' => $quiz->topic_id,
+                    ];
+
+                    if ($this->questionsTableHasColumn('correct')) {
+                        $questionData['correct'] = $qCorrect;
+                    }
+
+                    if ($this->questionsTableHasColumn('corrects')) {
+                        $questionData['corrects'] = $qCorrects;
+                    }
+
+                    $createdQuestion = \App\Models\Question::create($questionData);
                     try {
                         \Log::info('QuizController@update question created', [
                             'quiz_id' => $quiz->id,
@@ -278,6 +324,59 @@ class QuizController extends Controller
         return response()->json(['quizzes' => $data]);
     }
 
+    private function normalizeBooleanInputs(Request $request, array $keys): void
+    {
+        foreach ($keys as $key) {
+            if (!$request->has($key)) {
+                continue;
+            }
+
+            $value = $request->input($key);
+
+            if ($value === '' || $value === null) {
+                $request->merge([$key => null]);
+                continue;
+            }
+
+            if (is_bool($value)) {
+                continue;
+            }
+
+            if (is_numeric($value)) {
+                $request->merge([$key => (bool)(int)$value]);
+                continue;
+            }
+
+            if (is_string($value)) {
+                $normalized = strtolower($value);
+
+                if (in_array($normalized, ['true', '1', 'yes', 'on'], true)) {
+                    $request->merge([$key => true]);
+                    continue;
+                }
+
+                if (in_array($normalized, ['false', '0', 'no', 'off'], true)) {
+                    $request->merge([$key => false]);
+                    continue;
+                }
+
+                if ($normalized === 'null') {
+                    $request->merge([$key => null]);
+                    continue;
+                }
+            }
+        }
+    }
+
+    private function questionsTableHasColumn(string $column): bool
+    {
+        if (!array_key_exists($column, $this->questionColumnCache)) {
+            $this->questionColumnCache[$column] = Schema::hasColumn('questions', $column);
+        }
+
+        return $this->questionColumnCache[$column];
+    }
+
     // quiz-master creates a quiz under a topic (topic must be approved)
     public function store(Request $request)
     {
@@ -297,6 +396,8 @@ class QuizController extends Controller
                 $request->merge(['questions' => $decoded]);
             }
         }
+
+        $this->normalizeBooleanInputs($request, ['is_paid', 'use_per_question_timer', 'shuffle_questions', 'shuffle_answers', 'is_draft']);
 
         // Log incoming payload for debugging (don't include file streams)
         \Log::info('QuizController@store incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
@@ -334,7 +435,8 @@ class QuizController extends Controller
         ]);
 
         if ($v->fails()) {
-            return response()->json(['errors' => $v->errors()], 422);
+              try { \Log::error('QuizController@store validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]); } catch (\Throwable $_) {}
+              return response()->json(['errors' => $v->errors()], 422);
         }
 
         $topic = Topic::find($request->topic_id);
@@ -342,28 +444,29 @@ class QuizController extends Controller
             return response()->json(['message' => 'Topic is not approved or does not exist'], 403);
         }
 
-        // If subject_id not provided, infer from topic; otherwise ensure topic belongs to provided subject
+        // If the frontend provided a subject_id, ensure the selected topic belongs to it.
+        // We do not infer or merge subject/grade/level here — the frontend's payload
+        // (buildQuizPayload) is expected to include canonical IDs.
         $providedSubjectId = $request->get('subject_id');
         if ($providedSubjectId) {
             if ((string)$topic->subject_id !== (string)$providedSubjectId) {
                 return response()->json(['message' => 'Topic does not belong to the supplied subject'], 422);
             }
-        } else {
-            $request->merge(['subject_id' => $topic->subject_id]);
         }
 
-        // If grade_id provided, ensure subject belongs to the grade; otherwise infer from subject
-        $providedGradeId = $request->get('grade_id');
-        $subject = \App\Models\Subject::find($request->get('subject_id'));
-        if (!$subject) {
-            return response()->json(['message' => 'Subject not found'], 422);
-        }
-        if ($providedGradeId) {
-            if ((string)$subject->grade_id !== (string)$providedGradeId) {
-                return response()->json(['message' => 'Subject does not belong to the supplied grade'], 422);
+        // If a subject_id was provided, validate the referenced subject exists and,
+        // if a grade_id was provided, ensure consistency. Do not infer missing ids.
+        $subject = null;
+        if ($request->has('subject_id')) {
+            $subject = \App\Models\Subject::find($request->get('subject_id'));
+            if (!$subject) {
+                return response()->json(['message' => 'Subject not found'], 422);
             }
-        } else {
-            $request->merge(['grade_id' => $subject->grade_id]);
+            if ($request->has('grade_id')) {
+                if ((string)$subject->grade_id !== (string)$request->get('grade_id')) {
+                    return response()->json(['message' => 'Subject does not belong to the supplied grade'], 422);
+                }
+            }
         }
 
         $coverUrl = null;
@@ -373,9 +476,12 @@ class QuizController extends Controller
             $coverUrl = Storage::url($path);
         }
 
+        // Use IDs directly from the frontend payload. The frontend's
+        // buildQuizPayload should supply topic_id, subject_id, grade_id and
+        // level_id; do not second-guess or infer server-side.
         $quiz = Quiz::create([
             'user_id' => $user->id,
-            'topic_id' => $topic->id,
+            'topic_id' => $request->get('topic_id') ?? $topic->id,
             'subject_id' => $request->get('subject_id') ?? null,
             'grade_id' => $request->get('grade_id') ?? null,
             'level_id' => $request->get('level_id') ?? null,
@@ -457,22 +563,53 @@ class QuizController extends Controller
                     // if quiz_id is null (banked question), we mark is_banked true; here quiz exists so banked only if requested
                     $isBanked = isset($q['is_banked']) ? (bool)$q['is_banked'] : false;
 
-                    $createdQuestion = \App\Models\Question::create([
+                    // Determine correct/corrects for MCQ/MULTI types when frontend provided them
+                    $qCorrect = null;
+                    $qCorrects = [];
+                    if (isset($q['correct']) && is_numeric($q['correct'])) {
+                        $qCorrect = (int)$q['correct'];
+                    } elseif (is_array($answers) && isset($answers[0]) && is_numeric($answers[0])) {
+                        // fallback: answers[0] may contain the correct index
+                        $qCorrect = (int)$answers[0];
+                    }
+                    if (isset($q['corrects']) && is_array($q['corrects'])) {
+                        $qCorrects = array_values(array_filter(array_map(static function ($c) {
+                            return is_numeric($c) ? (int)$c : null;
+                        }, $q['corrects']), static fn($v) => $v !== null));
+                    }
+
+                    $questionData = [
                         'quiz_id' => $quiz->id,
                         'created_by' => $user->id,
                         'type' => $qType,
                         'body' => $body,
+                        'explanation' => $q['explanation'] ?? null,
                         'youtube_url' => $q['youtube_url'] ?? null,
                         'media_metadata' => $q['media_metadata'] ?? null,
                         'options' => $options,
                         'answers' => $answers,
                         'media_path' => $mediaPath,
                         'media_type' => $mediaType,
-                        'difficulty' => $q['difficulty'] ?? 3,
+                            'difficulty' => $q['difficulty'] ?? 3,
+                            'marks' => isset($q['marks']) ? $q['marks'] : null,
                         'is_quiz-master_marked' => true,
                         'is_approved' => false,
                         'is_banked' => $isBanked,
-                    ]);
+                        'level_id' => $quiz->level_id,
+                        'grade_id' => $quiz->grade_id,
+                        'subject_id' => $quiz->subject_id,
+                        'topic_id' => $quiz->topic_id,
+                    ];
+
+                    if ($this->questionsTableHasColumn('correct')) {
+                        $questionData['correct'] = $qCorrect;
+                    }
+
+                    if ($this->questionsTableHasColumn('corrects')) {
+                        $questionData['corrects'] = $qCorrects;
+                    }
+
+                    $createdQuestion = \App\Models\Question::create($questionData);
                     try {
                         \Log::info('QuizController@store question created', [
                             'quiz_id' => $quiz->id,

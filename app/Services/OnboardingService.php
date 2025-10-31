@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Models\UserOnboarding;
+use App\Models\Grade;
 use Illuminate\Support\Facades\DB;
 
 class OnboardingService
@@ -56,7 +57,7 @@ class OnboardingService
 
                     // If a password is provided, set it (User model casts 'password' => 'hashed')
                     if (!empty($data['password'])) {
-                        $user->password = $data['password'];
+                        $user->forceFill(['password' => bcrypt($data['password'])])->save();
                     }
 
                     $user->save();
@@ -66,7 +67,13 @@ class OnboardingService
                     if ($user->role === 'quiz-master' && !empty($data['grade_id'])) {
                         $user->quizMasterProfile->update(['grade_id' => $data['grade_id']]);
                     } elseif ($user->role === 'quizee' && !empty($data['grade_id'])) {
-                        $user->quizeeProfile->update(['grade_id' => $data['grade_id']]);
+                        // Update quizee profile grade and also persist the associated level
+                        $grade = Grade::find($data['grade_id']);
+                        $update = ['grade_id' => $data['grade_id']];
+                        if ($grade && isset($grade->level_id)) {
+                            $update['level_id'] = $grade->level_id;
+                        }
+                        $user->quizeeProfile->update($update);
                     }
                     break;
                 case 'subjects':

@@ -46,19 +46,58 @@ class TournamentController extends Controller
 
     public function show(Tournament $tournament)
     {
-        $tournament->load(['subject', 'topic', 'grade', 'participants', 'battles']);
+        // Eager-load winner and include questions on battles so the frontend can
+        // render a current battle inline without an extra request.
+        $tournament->load(['subject', 'topic', 'grade', 'participants', 'battles.questions', 'winner']);
         $user = auth()->user();
 
         // Add participation info for current user
         $isParticipant = $tournament->participants()->where('user_id', $user->id)->exists();
         $tournament->is_participant = $isParticipant;
 
-        return response()->json($tournament);
+        // Return an explicit JSON shape so callers (frontend) can rely on
+        // `tournament` and `winner` keys being present. We include `winner`
+        // explicitly even if null to make response shape stable.
+        return response()->json([
+            'ok' => true,
+            'tournament' => $tournament,
+            'winner' => $tournament->winner ?? null,
+        ]);
     }
 
     public function join(Request $request, Tournament $tournament)
     {
         $user = $request->user();
+
+        // If the tournament has an entry fee, require either an active subscription
+        // or a confirmed one-off purchase for this tournament before allowing join.
+        if ($tournament->entry_fee && floatval($tournament->entry_fee) > 0) {
+            $activeSub = \App\Models\Subscription::where('user_id', $user->id)
+                ->where('status', 'active')
+                ->where(function($q) {
+                    $now = now();
+                    $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
+                })
+                ->orderByDesc('started_at')
+                ->first();
+
+            $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
+                ->where('item_type', 'tournament')
+                ->where('item_id', $tournament->id)
+                ->where('status', 'confirmed')
+                ->exists();
+
+            if (!$activeSub && !$hasOneOff) {
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'payment_required',
+                    'amount' => (float) $tournament->entry_fee,
+                    'item_type' => 'tournament',
+                    'item_id' => $tournament->id,
+                    'message' => 'Tournament entry fee required'
+                ], 402);
+            }
+        }
 
         // Verify tournament is joinable
         if ($tournament->status !== 'upcoming' && $tournament->status !== 'active') {
@@ -131,6 +170,17 @@ class TournamentController extends Controller
                         'score' => $playerScore
                     ]);
                 }
+
+                // Update the main tournament leaderboard scores
+                try {
+                    $tournament = $battle->tournament;
+                    if ($tournament) {
+                        $tournament->participants()->updateExistingPivot($battle->player1_id, ['score' => DB::raw("score + {$battle->player1_score}")]);
+                        $tournament->participants()->updateExistingPivot($battle->player2_id, ['score' => DB::raw("score + {$battle->player2_score}")]);
+                    }
+                } catch (\Exception $e) {
+                    // Log error, but don't fail the request
+                }
             } else {
                 $battle->status = 'in_progress';
             }
@@ -198,5 +248,69 @@ class TournamentController extends Controller
         ];
 
         return response()->json(['ok' => true, 'result' => $result]);
+    }
+
+    /**
+     * Mark a tournament battle (reveal results) for the requesting user.
+     * Requires active subscription or one-off purchase for the tournament (entry fee).
+     */
+    public function mark(Request $request, Tournament $tournament, TournamentBattle $battle)
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+
+        // Check subscription
+        $activeSub = \App\Models\Subscription::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->where(function($q) {
+                $now = now();
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
+            })
+            ->orderByDesc('started_at')
+            ->first();
+
+        // Check one-off purchase for the tournament (pay once for the whole tournament)
+        $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
+            ->where('item_type', 'tournament')
+            ->where('item_id', $tournament->id)
+            ->where('status', 'confirmed')
+            ->exists();
+
+        if (!$activeSub && !$hasOneOff) {
+            return response()->json(['ok' => false, 'message' => 'Subscription or tournament purchase required'], 403);
+        }
+
+        // Enforce package limits similar to battles if package defines limits
+        if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
+            $features = $activeSub->package->features;
+            $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
+            if ($limit !== null) {
+                $today = now()->startOfDay();
+                $used = TournamentBattle::where(function($q) use ($user) {
+                        $q->where('player1_id', $user->id)->orWhere('player2_id', $user->id);
+                    })->whereNotNull('completed_at')
+                    ->where('completed_at', '>=', $today)
+                    ->count();
+                if ($used >= intval($limit)) {
+                    return response()->json([
+                        'ok' => false,
+                        'code' => 'limit_reached',
+                        'limit' => [
+                            'type' => 'battle_results',
+                            'value' => intval($limit)
+                        ],
+                        'message' => 'Daily result reveal limit reached for your plan'
+                    ], 403);
+                }
+            }
+        }
+
+        // Only allow participants
+        if (!in_array($user->id, [$battle->player1_id, $battle->player2_id])) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // Delegate to existing result() which builds the response shape for a tournament battle
+        return $this->result($request, $tournament, $battle);
     }
 }

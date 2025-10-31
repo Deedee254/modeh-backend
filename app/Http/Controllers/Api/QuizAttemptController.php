@@ -10,6 +10,7 @@ use App\Models\QuizAttempt;
 use App\Services\AchievementService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class QuizAttemptController extends Controller
 {
@@ -18,6 +19,139 @@ class QuizAttemptController extends Controller
     public function __construct(AchievementService $achievementService) 
     {
         $this->achievementService = $achievementService;
+    }
+    
+    /**
+     * Build a map of option id/index => display text for a question's options
+     *
+     * @param  mixed $q Question model or object with options
+     * @return array
+     */
+    private function buildOptionMap($q)
+    {
+        $optionMap = [];
+        if (is_array($q->options)) {
+            foreach ($q->options as $idx => $opt) {
+                if (is_array($opt)) {
+                    if (isset($opt['id'])) {
+                        $optionMap[(string)$opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
+                    }
+                    if (isset($opt['text']) || isset($opt['body'])) {
+                        $optionMap[(string)$idx] = $opt['text'] ?? $opt['body'] ?? null;
+                    }
+                }
+            }
+        }
+        return $optionMap;
+    }
+
+    /**
+     * Resolve a value (option id/index, object or text) to a human-readable text
+     */
+    private function toText($val, array $optionMap = [])
+    {
+        if (is_array($val) && (isset($val['body']) || isset($val['text']))) {
+            return $val['text'] ?? $val['body'] ?? '';
+        }
+        if (!is_array($val)) {
+            $key = (string)$val;
+            if ($key !== '' && isset($optionMap[$key])) {
+                return $optionMap[$key];
+            }
+        }
+        return (string)$val;
+    }
+
+    /**
+     * Normalize a single value for comparison (lowercase, trimmed)
+     */
+    private function normalizeForCompare($val, array $optionMap = [])
+    {
+        $text = $this->toText($val, $optionMap);
+        return strtolower(trim((string)$text));
+    }
+
+    /**
+     * Normalize an array of values for comparison: map -> trim/lower -> filter -> sort
+     */
+    private function normalizeArrayForCompare($arr, array $optionMap = [])
+    {
+        $normalized = array_map(function ($v) use ($optionMap) {
+            return $this->normalizeForCompare($v, $optionMap);
+        }, $arr ?: []);
+        $normalized = array_filter($normalized, function ($v) { return $v !== null && $v !== ''; });
+        sort($normalized);
+        return array_values($normalized);
+    }
+
+    /**
+     * Calculate score and correctness for a given set of answers against a quiz's questions.
+     *
+     * @param array $answers The user's submitted answers.
+     * @param \Illuminate\Database\Eloquent\Collection $questions The collection of question models for the quiz.
+     * @return array An array containing ['results' => array, 'correct_count' => int, 'score' => float]
+     */
+    private function calculateScore(array $answers, $questions): array
+    {
+        $results = [];
+        $correctCount = 0;
+        $questionMap = $questions->keyBy('id');
+
+        foreach ($answers as $a) {
+            $qid = intval($a['question_id'] ?? 0);
+            $selected = $a['selected'] ?? null;
+            $q = $questionMap->get($qid);
+            if (!$q) continue;
+
+            $isCorrect = false;
+            $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+
+            $optionMap = $this->buildOptionMap($q);
+
+            if (is_array($selected)) {
+                $submittedAnswers = $this->normalizeArrayForCompare($selected, $optionMap);
+                $correctAnswersNormalized = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
+                $isCorrect = $submittedAnswers == $correctAnswersNormalized;
+            } else {
+                $submittedAnswer = $this->normalizeForCompare($selected, $optionMap);
+                $correctAnswersNormalized = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
+                $isCorrect = in_array($submittedAnswer, $correctAnswersNormalized);
+            }
+
+            if ($isCorrect) $correctCount++;
+            $results[] = ['question_id' => $qid, 'correct' => $isCorrect];
+        }
+
+        $attempted = max(0, count($answers));
+        $score = $attempted > 0 ? round($correctCount / $attempted * 100, 1) : 0;
+
+        return ['results' => $results, 'correct_count' => $correctCount, 'score' => $score];
+    }
+
+    /**
+     * Build the payload for the AchievementService.
+     *
+     * @param \App\Models\QuizAttempt $attempt
+     * @param \App\Models\Quiz $quiz
+     * @param float $score
+     * @param \Illuminate\Http\Request $request
+     * @return array
+     */
+    private function buildAchievementPayload(QuizAttempt $attempt, Quiz $quiz, float $score, Request $request): array
+    {
+        $previousAttempt = QuizAttempt::where('user_id', $attempt->user_id)
+            ->where('quiz_id', $quiz->id)
+            ->where('id', '!=', $attempt->id)
+            ->orderByDesc('created_at')
+            ->first();
+
+        return [
+            'type' => 'quiz', 'score' => $score, 'time' => $attempt->total_time_seconds,
+            'question_count' => $quiz->questions()->count(), 'attempt_id' => $attempt->id,
+            'quiz_id' => $quiz->id, 'subject_id' => $quiz->subject_id ?? null,
+            'streak' => $request->input('streak', 0), 'previous_score' => $previousAttempt ? $previousAttempt->score : null,
+            'total' => 100 * (count($attempt->answers ?? []) / max(1, $quiz->questions()->count()))
+        ];
     }
     public function show(Request $request, Quiz $quiz)
     {
@@ -93,57 +227,12 @@ class QuizAttemptController extends Controller
     $totalTimeSeconds = isset($payload['total_time_seconds']) ? (int)$payload['total_time_seconds'] : null;
     $attemptId = $payload['attempt_id'] ?? null;
 
-    $results = [];
-    $correct = 0;
-        foreach ($answers as $a) {
-            $qid = intval($a['question_id'] ?? 0);
-            $selected = $a['selected'] ?? null;
-            $q = Question::find($qid);
-            if (!$q) continue;
-
-            $isCorrect = false;
-            // normalize both stored correct answers and submitted answers
-            $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
-            
-            // handle objects or ids by extracting body text
-            $normalizeValue = function($val) use ($q) {
-                if (is_array($val) && isset($val['body'])) return $val['body'];
-                if (is_array($val) && isset($val['text'])) return $val['text'];
-                return (string)$val;
-            };
-            
-            // normalize array of values
-            $normalizeArray = function($arr) use ($normalizeValue) {
-                $normalized = array_map($normalizeValue, $arr);
-                $normalized = array_map('trim', $normalized);
-                $normalized = array_map('strtolower', $normalized);
-                sort($normalized);
-                return $normalized;
-            };
-            
-            if (is_array($selected)) {
-                // normalize and sort both arrays for order-insensitive comparison
-                $submittedAnswers = $normalizeArray($selected);
-                $correctAnswers = $normalizeArray($correctAnswers);
-                $isCorrect = $submittedAnswers == $correctAnswers;
-            } else {
-                // normalize single answer
-                $submittedAnswer = strtolower(trim($normalizeValue($selected)));
-                $correctAnswers = $normalizeArray($correctAnswers);
-                $isCorrect = in_array($submittedAnswer, $correctAnswers);
-            }
-
-            if ($isCorrect) $correct++;
-            $results[] = ['question_id' => $qid, 'correct' => $isCorrect];
-        }
-
-        // Compute score relative to attempted questions (so skipped questions are ignored in scoring)
-        $attempted = max(0, count($answers));
-        if ($attempted > 0) {
-            $score = round($correct / $attempted * 100, 1);
-        } else {
-            $score = 0;
-        }
+        // Eager load all questions for the quiz to avoid N+1 queries
+        $quizQuestions = $quiz->questions()->get();
+        $scoringResult = $this->calculateScore($answers, $quizQuestions);
+        $results = $scoringResult['results'];
+        $score = $scoringResult['score'];
+        $attempted = count($answers);
 
         // Allow submit to only persist answers and defer marking (score calculation, points, achievements)
         $defer = $request->boolean('defer_marking', false);
@@ -217,28 +306,15 @@ class QuizAttemptController extends Controller
             $attempt = null;
         }
 
+        // Invalidate user stats cache on successful attempt submission
+        if ($attempt) {
+            Cache::forget('user-stats:' . $user->id);
+        }
+
             // Check achievements only when marking occurred (not deferred)
         $awarded = [];
         if ($attempt && !$defer) {
-            // Get previous attempt score for improvement check
-            $previousAttempt = QuizAttempt::where('user_id', $user->id)
-                ->where('quiz_id', $quiz->id)
-                ->where('id', '!=', $attempt->id)
-                ->orderByDesc('created_at')
-                ->first();
-            
-            $achievementPayload = [
-                'type' => 'quiz',
-                'score' => $score,
-                'time' => $totalTimeSeconds,
-                'question_count' => $quiz->questions()->count(),
-                'attempt_id' => $attempt->id,
-                'quiz_id' => $quiz->id,
-                'subject_id' => $quiz->subject_id ?? null,
-                'streak' => $request->input('streak', 0),
-                'previous_score' => $previousAttempt ? $previousAttempt->score : null,
-                'total' => 100 * (count($answers) / $quiz->questions()->count())
-            ];
+            $achievementPayload = $this->buildAchievementPayload($attempt, $quiz, $score, $request);
 
             try {
                 $achievements = $this->achievementService->checkAchievements($user, $achievementPayload);
@@ -354,62 +430,9 @@ class QuizAttemptController extends Controller
         // Recompute score from stored answers
         $answers = $attempt->answers ?? [];
         $quiz = $attempt->quiz()->with('questions')->first();
-        $correct = 0;
-        $results = [];
-        foreach ($answers as $a) {
-            $qid = intval($a['question_id'] ?? 0);
-            $selected = $a['selected'] ?? null;
-            $q = $quiz->questions->firstWhere('id', $qid);
-            if (!$q) continue;
-
-            $isCorrect = false;
-            $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
-
-            // Build option id -> body map to resolve numeric/ID answers to readable text
-            $optionMap = [];
-            if (is_array($q->options)) {
-                foreach ($q->options as $opt) {
-                    if (is_array($opt) && isset($opt['id'])) {
-                        $optionMap[(string)$opt['id']] = $opt['body'] ?? $opt['text'] ?? null;
-                    }
-                }
-            }
-
-            // normalize values: extract body/text from objects, resolve option ids to bodies when possible
-            $normalizeValue = function($val) use ($optionMap) {
-                if (is_array($val) && isset($val['body'])) return $val['body'];
-                if (is_array($val) && isset($val['text'])) return $val['text'];
-                if (!is_array($val)) {
-                    $key = (string)$val;
-                    if ($key !== '' && isset($optionMap[$key]) && $optionMap[$key] !== null) return $optionMap[$key];
-                }
-                return (string)$val;
-            };
-
-            $normalizeArray = function($arr) use ($normalizeValue) {
-                $normalized = array_map($normalizeValue, $arr ?: []);
-                $normalized = array_map('trim', $normalized);
-                $normalized = array_map('strtolower', $normalized);
-                sort($normalized);
-                return $normalized;
-            };
-
-            if (is_array($selected)) {
-                $submittedAnswers = $normalizeArray($selected);
-                $correctNormalized = $normalizeArray($correctAnswers);
-                $isCorrect = $submittedAnswers == $correctNormalized;
-            } else {
-                $submittedAnswer = strtolower(trim($normalizeValue($selected)));
-                $correctNormalized = $normalizeArray($correctAnswers);
-                $isCorrect = in_array($submittedAnswer, $correctNormalized);
-            }
-
-            if ($isCorrect) $correct++;
-            $results[] = ['question_id' => $qid, 'correct' => $isCorrect];
-        }
-
+        $scoringResult = $this->calculateScore($answers, $quiz->questions);
+        $score = $scoringResult['score'];
         $attempted = max(0, count($answers));
-        $score = $attempted > 0 ? round($correct / $attempted * 100, 1) : 0;
         $pointsEarned = round(($score / 100) * ($attempted * 10), 2);
 
         try {
@@ -430,25 +453,7 @@ class QuizAttemptController extends Controller
 
             // achievements
             $awarded = [];
-            $previousAttempt = QuizAttempt::where('user_id', $user->id)
-                ->where('quiz_id', $quiz->id)
-                ->where('id', '!=', $attempt->id)
-                ->orderByDesc('created_at')
-                ->first();
-
-            $achievementPayload = [
-                'type' => 'quiz',
-                'score' => $score,
-                'time' => $attempt->total_time_seconds,
-                'question_count' => $quiz->questions()->count(),
-                'attempt_id' => $attempt->id,
-                'quiz_id' => $quiz->id,
-                'subject_id' => $quiz->subject_id ?? null,
-                'streak' => $request->input('streak', 0),
-                'previous_score' => $previousAttempt ? $previousAttempt->score : null,
-                'total' => 100 * (count($answers) / $quiz->questions()->count())
-            ];
-
+            $achievementPayload = $this->buildAchievementPayload($attempt, $quiz, $score, $request);
             try {
                 $achievements = $this->achievementService->checkAchievements($user, $achievementPayload);
                 if (is_array($achievements) && count($achievements)) {
@@ -531,42 +536,31 @@ class QuizAttemptController extends Controller
 
             $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
 
-            // Build a simple option id -> body map to resolve numeric/ID answers to readable text
-            $optionMap = [];
-            if (is_array($q->options)) {
-                foreach ($q->options as $opt) {
-                    if (is_array($opt) && isset($opt['id'])) {
-                        $optionMap[(string)$opt['id']] = $opt['body'] ?? $opt['text'] ?? null;
-                    }
-                }
-            }
+            // Build option map and compute readable/provided values
+            $optionMap = $this->buildOptionMap($q);
 
-            // normalize to readable text with option-id resolution when possible
-            $normalizeToText = function($val) use ($optionMap) {
-                if (is_array($val) && isset($val['body'])) return $val['body'];
-                if (is_array($val) && isset($val['text'])) return $val['text'];
-                // if scalar and matches an option id, return the option body
-                if (!is_array($val)) {
-                    $key = (string)$val;
-                    if ($key !== '' && isset($optionMap[$key]) && $optionMap[$key] !== null) return $optionMap[$key];
-                }
-                return (string)$val;
-            };
+            $providedDisplay = is_array($provided)
+                ? array_map(function ($v) use ($optionMap) { return $this->toText($v, $optionMap); }, $provided)
+                : $this->toText($provided, $optionMap);
 
-            $isCorrect = false;
+            // compute correctness using normalized comparisons
             if (is_array($provided)) {
-                $isCorrect = array_values($provided) == array_values($correctAnswers);
+                $submitted = $this->normalizeArrayForCompare($provided, $optionMap);
+                $correctNormalized = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
+                $isCorrect = $submitted == $correctNormalized;
             } else {
-                $isCorrect = in_array($provided, $correctAnswers);
+                $submitted = $this->normalizeForCompare($provided, $optionMap);
+                $correctNormalized = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
+                $isCorrect = in_array($submitted, $correctNormalized);
             }
 
             $details[] = [
                 'question_id' => $q->id,
                 'body' => $q->body,
                 'options' => $q->options,
-                'provided' => is_array($provided) ? array_map($normalizeToText, $provided) : $normalizeToText($provided),
+                'provided' => $providedDisplay,
                 'correct' => $isCorrect,
-                'correct_answers' => array_map($normalizeToText, $correctAnswers),
+                'correct_answers' => array_map(function ($v) use ($optionMap) { return $this->toText($v, $optionMap); }, $correctAnswers),
                 'explanation' => $q->explanation ?? null,
             ];
         }
@@ -674,46 +668,49 @@ class QuizAttemptController extends Controller
     {
         $user = $request->user();
         if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        
+        $cacheKey = 'user-stats:' . $user->id;
+        $cacheDuration = now()->addMinutes(5); // Cache for 5 minutes
 
-        $attempts = QuizAttempt::where('user_id', $user->id)->whereNotNull('score')->get();
+        $stats = Cache::remember($cacheKey, $cacheDuration, function () use ($user) {
+            $attempts = QuizAttempt::where('user_id', $user->id)->whereNotNull('score')->get();
 
-        $totalAttempts = $attempts->count();
-        $averageScore = $totalAttempts ? round($attempts->avg('score'), 1) : 0;
-        $totalTime = $attempts->sum('total_time_seconds') ?? 0;
-        $avgQuizTime = $totalAttempts ? round($attempts->avg('total_time_seconds'), 2) : 0;
-        $fastestQuizTime = $attempts->min('total_time_seconds') ?? 0;
+            $totalAttempts = $attempts->count();
+            $averageScore = $totalAttempts ? round($attempts->avg('score'), 1) : 0;
+            $totalTime = $attempts->sum('total_time_seconds') ?? 0;
+            $avgQuizTime = $totalAttempts ? round($attempts->avg('total_time_seconds'), 2) : 0;
+            $fastestQuizTime = $attempts->min('total_time_seconds') ?? 0;
 
-        // average question time: compute per attempt if per_question_time exists
-        $questionTimes = [];
-        foreach ($attempts as $a) {
-            $pqt = $a->per_question_time ?? null;
-            if (is_array($pqt)) {
-                $questionTimes = array_merge($questionTimes, $pqt);
-            } elseif (is_string($pqt)) {
-                // try decode
-                $decoded = json_decode($pqt, true);
-                if (is_array($decoded)) $questionTimes = array_merge($questionTimes, $decoded);
-            }
-        }
-        $avgQuestionTime = count($questionTimes) ? round(array_sum($questionTimes) / count($questionTimes), 2) : 0;
+            // average question time: compute per attempt if per_question_time exists
+            $allQuestionTimes = $attempts->pluck('per_question_time')->filter()->flatMap(function ($pqt) {
+                if (is_string($pqt)) {
+                    $decoded = json_decode($pqt, true);
+                    return is_array($decoded) ? $decoded : [];
+                }
+                return is_array($pqt) ? $pqt : [];
+            })->filter(fn($time) => is_numeric($time));
 
-        // points today
-        $today = now()->startOfDay();
-        $pointsToday = QuizAttempt::where('user_id', $user->id)
-            ->where('created_at', '>=', $today)
-            ->sum('points_earned');
+            $avgQuestionTime = $allQuestionTimes->isNotEmpty() ? round($allQuestionTimes->avg(), 2) : 0;
 
-        return response()->json([
-            'ok' => true,
-            'total_attempts' => $totalAttempts,
-            'average_score' => $averageScore,
-            'total_time_seconds' => $totalTime,
-            'avg_quiz_time' => $avgQuizTime,
-            'fastest_quiz_time' => $fastestQuizTime,
-            'avg_question_time' => $avgQuestionTime,
-            'points_today' => $pointsToday,
-            'current_streak' => $user->current_streak ?? 0,
-            'total_points' => $user->points ?? 0,
-        ]);
+            // points today
+            $today = now()->startOfDay();
+            $pointsToday = QuizAttempt::where('user_id', $user->id)
+                ->where('created_at', '>=', $today)
+                ->sum('points_earned');
+
+            return [
+                'total_attempts' => $totalAttempts,
+                'average_score' => $averageScore,
+                'total_time_seconds' => $totalTime,
+                'avg_quiz_time' => $avgQuizTime,
+                'fastest_quiz_time' => $fastestQuizTime,
+                'avg_question_time' => $avgQuestionTime,
+                'points_today' => $pointsToday,
+                'current_streak' => $user->current_streak ?? 0,
+                'total_points' => $user->points ?? 0,
+            ];
+        });
+
+        return response()->json(array_merge(['ok' => true], $stats));
     }
 }

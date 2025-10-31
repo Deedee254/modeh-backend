@@ -29,9 +29,9 @@ class BattleController extends Controller
 
         $data = $request->only(['name']);
         $data['initiator_id'] = $user->id;
-    // Ensure opponent_id is set to something if DB requires it (tests use sqlite schema)
+// Ensure opponent_id is set to something if DB requires it (tests use sqlite schema)
     $data['opponent_id'] = $request->input('opponent_id', $user->id);
-        $data['status'] = 'pending';
+        $data['status'] = 'waiting';
         if ($request->has('settings')) {
             // persist settings as provided (will be cast to array by model)
             $data['settings'] = $request->input('settings');
@@ -68,11 +68,11 @@ class BattleController extends Controller
 
     public function index(Request $request)
     {
-        // Only show pending battles that are open for joining
+        // Only show waiting battles that are open for joining
         // select explicit existing columns from quizees to avoid SQL errors (use first_name)
         // NOTE: there is no `players` relationship on Battle; eager-load initiator/opponent
         $battles = Battle::with('initiator:id,first_name,profile', 'opponent:id,first_name,profile')
-            ->where('status', 'pending')
+            ->where('status', 'waiting')
             ->where(function ($query) {
                 // A battle is joinable if opponent_id is null, or if it's the same as initiator_id (placeholder)
                 $query->whereNull('opponent_id')
@@ -107,7 +107,10 @@ class BattleController extends Controller
 
     public function show(Request $request, Battle $battle)
     {
-        $battle->load('questions');
+        // Conditionally load questions. Default to true, but allow disabling.
+        if ($request->boolean('with_questions', true)) {
+            $battle->load('questions');
+        }
         // expose time_per_question at top-level for frontend convenience
         $settings = is_array($battle->settings) ? $battle->settings : (array) ($battle->settings ?? []);
         if (isset($settings['time_per_question'])) {
@@ -130,13 +133,13 @@ class BattleController extends Controller
             return response()->json(['ok' => true, 'battle' => $battle]);
         }
 
-        // Only allow joining if battle is pending or has no opponent
+        // Only allow joining if battle is waiting or has no opponent
         if ($battle->opponent_id && $battle->opponent_id !== $battle->initiator_id) {
             return response()->json(['message' => 'Battle already has an opponent'], 400);
         }
 
         $battle->opponent_id = $user->id;
-        $battle->status = 'pending';
+        $battle->status = 'waiting';
         $battle->save();
 
         // broadcast participant joined event
@@ -570,9 +573,9 @@ class BattleController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // Only allowed if opponent is null or equal to initiator (no-one joined)
-        if ($battle->opponent_id && $battle->opponent_id !== $battle->initiator_id) {
-            return response()->json(['message' => 'Battle already has an opponent'], 400);
+        // Only allowed if opponent is null or equal to initiator (no-one joined) and battle is waiting
+        if (($battle->opponent_id && $battle->opponent_id !== $battle->initiator_id) || $battle->status !== 'waiting') {
+            return response()->json(['message' => 'Battle already has an opponent or is not in waiting state'], 400);
         }
 
         $payload = $request->validate(['answers' => 'required|array']);

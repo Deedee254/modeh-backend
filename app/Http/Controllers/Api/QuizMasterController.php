@@ -63,7 +63,7 @@ class QuizMasterController extends Controller
     /**
      * Display a single public quiz master profile.
      */
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         // Find the user and eager-load all necessary relationships.
         $user = User::with(['quizMasterProfile', 'quizzes.topic'])->findOrFail($id);
@@ -81,7 +81,7 @@ class QuizMasterController extends Controller
             ];
         });
 
-        return response()->json(['data' => [
+        $data = [
             'id' => $user->id,
             'name' => $user->name,
             'avatar' => $user->social_avatar,
@@ -100,6 +100,16 @@ class QuizMasterController extends Controller
                     'topic_name' => $quiz->topic->name ?? null,
                 ];
             }),
-        ]]);
+        ];
+
+        // Add is_following for authenticated users
+        if ($request->user()) {
+            $data['is_following'] = \DB::table('quiz_master_follows')
+                ->where('quiz_master_id', $user->id)
+                ->where('user_id', $request->user()->id)
+                ->exists();
+        }
+
+        return response()->json(['data' => $data]);
     }
 }

@@ -26,6 +26,8 @@ return new class extends Migration
             // additional metadata added here so base migration is complete
 
             $table->unsignedBigInteger('subject_id')->nullable();
+            // Optional explicit level on question (keeps question level in sync with quiz when attached)
+            $table->unsignedBigInteger('level_id')->nullable();
             $table->unsignedBigInteger('topic_id')->nullable();
             $table->unsignedBigInteger('grade_id')->nullable();
             $table->string('youtube_url')->nullable();
@@ -35,9 +37,11 @@ return new class extends Migration
 
             // indexes & foreign keys
             $table->index(['subject_id','topic_id','grade_id']);
+            $table->index(['level_id']);
             $table->foreign('subject_id')->references('id')->on('subjects')->onDelete('set null');
             $table->foreign('topic_id')->references('id')->on('topics')->onDelete('set null');
             $table->foreign('grade_id')->references('id')->on('grades')->onDelete('set null');
+            $table->foreign('level_id')->references('id')->on('levels')->onDelete('set null');
 
             $table->timestamps();
         });

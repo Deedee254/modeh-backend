@@ -68,18 +68,40 @@ class QuizAnalyticsController extends Controller
                 if (!$qModel) continue;
                 $correctAnswers = is_array($qModel->answers) ? $qModel->answers : json_decode($qModel->answers, true) ?? [];
 
-                // Normalization helpers (same logic used in submit/mark)
-                $normalizeValue = function($val) {
-                    if (is_array($val) && isset($val['body'])) return $val['body'];
-                    if (is_array($val) && isset($val['text'])) return $val['text'];
-                    return (string)$val;
+                // Build option map (id/index -> text) to resolve numeric references and normalize for comparison
+                $optionMap = [];
+                if (is_array($qModel->options)) {
+                    foreach ($qModel->options as $idx => $opt) {
+                        if (is_array($opt)) {
+                            if (isset($opt['id'])) {
+                                $optionMap[(string)$opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
+                            }
+                            if (isset($opt['text']) || isset($opt['body'])) {
+                                $optionMap[(string)$idx] = $opt['text'] ?? $opt['body'] ?? null;
+                            }
+                        }
+                    }
+                }
+
+                $normalizeForCompare = function($val) use ($optionMap) {
+                    if (is_array($val) && (isset($val['body']) || isset($val['text']))) {
+                        $text = $val['text'] ?? $val['body'] ?? '';
+                    } else {
+                        $key = (string)$val;
+                        if ($key !== '' && isset($optionMap[$key])) {
+                            $text = $optionMap[$key];
+                        } else {
+                            $text = (string)$val;
+                        }
+                    }
+                    return strtolower(trim((string)$text));
                 };
-                $normalizeArray = function($arr) use ($normalizeValue) {
-                    $normalized = array_map($normalizeValue, $arr);
-                    $normalized = array_map('trim', $normalized);
-                    $normalized = array_map('strtolower', $normalized);
+
+                $normalizeArray = function($arr) use ($normalizeForCompare) {
+                    $normalized = array_map($normalizeForCompare, $arr ?: []);
+                    $normalized = array_filter($normalized, function ($v) { return $v !== null && $v !== ''; });
                     sort($normalized);
-                    return $normalized;
+                    return array_values($normalized);
                 };
 
                 $isCorrect = false;
@@ -88,7 +110,7 @@ class QuizAnalyticsController extends Controller
                     $correct = $normalizeArray(is_array($correctAnswers) ? $correctAnswers : []);
                     $isCorrect = ($submitted == $correct);
                 } else {
-                    $submitted = strtolower(trim($normalizeValue($selected)));
+                    $submitted = $normalizeForCompare($selected);
                     $correct = $normalizeArray(is_array($correctAnswers) ? $correctAnswers : []);
                     $isCorrect = in_array($submitted, $correct);
                 }
@@ -175,16 +197,51 @@ class QuizAnalyticsController extends Controller
                     $attemptCount++;
                     $selected = $ans['selected'] ?? null;
                     $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
-                    // normalize simple correctness similar to show()
+                    // Build option map for this question
+                    $optionMap = [];
+                    if (is_array($q->options)) {
+                        foreach ($q->options as $idx => $opt) {
+                            if (is_array($opt)) {
+                                if (isset($opt['id'])) {
+                                    $optionMap[(string)$opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
+                                }
+                                if (isset($opt['text']) || isset($opt['body'])) {
+                                    $optionMap[(string)$idx] = $opt['text'] ?? $opt['body'] ?? null;
+                                }
+                            }
+                        }
+                    }
+
+                    $normalizeForCompare = function($val) use ($optionMap) {
+                        if (is_array($val) && (isset($val['body']) || isset($val['text']))) {
+                            $text = $val['text'] ?? $val['body'] ?? '';
+                        } else {
+                            $key = (string)$val;
+                            if ($key !== '' && isset($optionMap[$key])) {
+                                $text = $optionMap[$key];
+                            } else {
+                                $text = (string)$val;
+                            }
+                        }
+                        return strtolower(trim((string)$text));
+                    };
+
+                    $normalizeArray = function($arr) use ($normalizeForCompare) {
+                        $normalized = array_map($normalizeForCompare, $arr ?: []);
+                        $normalized = array_filter($normalized, function ($v) { return $v !== null && $v !== ''; });
+                        sort($normalized);
+                        return array_values($normalized);
+                    };
+
                     $isCorrect = false;
                     if (is_array($selected)) {
-                        $normSubmitted = array_map('strtolower', array_map('trim', array_map(function($v){ return is_array($v)&&isset($v['body'])?$v['body']:(is_array($v)&&isset($v['text'])?$v['text']:(string)$v); }, $selected)));
-                        $normCorrect = array_map('strtolower', array_map('trim', $correctAnswers));
-                        sort($normSubmitted); sort($normCorrect);
+                        $normSubmitted = $normalizeArray($selected);
+                        $normCorrect = $normalizeArray($correctAnswers);
                         $isCorrect = $normSubmitted == $normCorrect;
                     } else {
-                        $sv = is_array($selected) ? json_encode($selected) : (string)$selected;
-                        $isCorrect = in_array(strtolower(trim($sv)), array_map('strtolower', $correctAnswers));
+                        $submitted = $normalizeForCompare($selected);
+                        $normCorrect = $normalizeArray($correctAnswers);
+                        $isCorrect = in_array($submitted, $normCorrect);
                     }
                     if ($isCorrect) $correctCount++;
                 }

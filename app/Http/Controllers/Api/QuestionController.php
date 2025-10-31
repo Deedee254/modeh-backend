@@ -26,7 +26,7 @@ class QuestionController extends Controller
         // the created_by restriction so non-admin quizees can fetch the
         // public question bank.
         $user = $request->user();
-        $query = Question::query();
+    $query = Question::query()->with(['grade.level', 'subject', 'topic', 'quiz']);
 
     $isBankQuery = $request->boolean('random') || $request->boolean('banked');
         if (!$isBankQuery) {
@@ -53,10 +53,17 @@ class QuestionController extends Controller
             $query->orderByDesc('id');
         }
 
-    // Allow callers to request a specific number of questions using
-    // either `question_count` (used by some clients) or `per_page`.
-    $perPage = max(1, (int)($request->get('question_count') ?? $request->get('per_page', 20)));
-    return response()->json(['questions' => $query->paginate($perPage)]);
+    // Optional server-side limit to avoid accidental huge payloads. Frontend will paginate client-side.
+    $limit = (int) ($request->get('limit') ?? 0);
+    if ($limit > 0) {
+        // enforce a reasonable cap
+        $limit = min($limit, 1000);
+        $query->limit($limit);
+    }
+
+    // Return all matching questions (frontend will handle pagination)
+    $results = $query->get();
+    return response()->json(['questions' => $results]);
     }
 
     /**
@@ -65,18 +72,20 @@ class QuestionController extends Controller
      */
     public function bank(Request $request)
     {
-        $query = Question::query();
+        // Build a base query with filters applied so we can both count and
+        // fetch a paginated subset when the frontend requests pages.
+        $baseQuery = Question::query();
         // The public question bank is independent of any quiz-master-set `for_battle` flag.
         // We intentionally do not filter by `for_battle` here.
         // Accept either explicit *_id keys or shorthand keys used by frontend (grade, subject, topic)
-        $grade = $request->get('grade_id') ?? $request->get('grade');
-        $subject = $request->get('subject_id') ?? $request->get('subject');
-        $topic = $request->get('topic_id') ?? $request->get('topic');
-        $difficulty = $request->get('difficulty');
-        if ($grade) $query->where('grade_id', $grade);
-        if ($subject) $query->where('subject_id', $subject);
-        if ($topic) $query->where('topic_id', $topic);
-        if ($difficulty) $query->where('difficulty', $difficulty);
+    $grade = $request->get('grade_id') ?? $request->get('grade');
+    $subject = $request->get('subject_id') ?? $request->get('subject');
+    $topic = $request->get('topic_id') ?? $request->get('topic');
+    $difficulty = $request->get('difficulty');
+    if ($grade) $baseQuery->where('grade_id', $grade);
+    if ($subject) $baseQuery->where('subject_id', $subject);
+    if ($topic) $baseQuery->where('topic_id', $topic);
+    if ($difficulty) $baseQuery->where('difficulty', $difficulty);
 
         // Support filtering by level (frontend may send `level` or `level_id`). If provided,
         // constrain questions to grades that belong to that level (if grades table has level_id).
@@ -86,10 +95,10 @@ class QuestionController extends Controller
                 if (Schema::hasTable('grades') && Schema::hasColumn('grades', 'level_id') && Schema::hasColumn('questions', 'grade_id')) {
                     $gradeIds = \App\Models\Grade::where('level_id', $level)->pluck('id')->toArray();
                     if (!empty($gradeIds)) {
-                        $query->whereIn('grade_id', $gradeIds);
+                        $baseQuery->whereIn('grade_id', $gradeIds);
                     } else {
                         // no grades found for level — ensure no results
-                        $query->whereRaw('0 = 1');
+                        $baseQuery->whereRaw('0 = 1');
                     }
                 }
             } catch (\Throwable $_) {
@@ -98,7 +107,7 @@ class QuestionController extends Controller
         }
 
         if ($q = $request->get('q')) {
-            $query->where(function($qq) use ($q) {
+            $baseQuery->where(function($qq) use ($q) {
                 $qq->where('body', 'like', "%{$q}%")
                    ->orWhere('type', 'like', "%{$q}%");
             });
@@ -110,17 +119,54 @@ class QuestionController extends Controller
         // public listing.
         $user = $request->user();
         if ($user) {
-            $query->where('created_by', '!=', $user->id);
+            $baseQuery->where('created_by', '!=', $user->id);
         }
 
+        // Support optional paging parameters for the public bank UI. If the
+        // frontend asks for page/per_page we'll return a paginator-like
+        // envelope; otherwise we still support a simple `limit` param.
+        $page = max(1, (int) $request->get('page', 1));
+        $perPage = (int) $request->get('per_page', 0);
+        $limit = (int) ($request->get('limit') ?? 0);
+        if ($perPage <= 0) {
+            if ($limit > 0) {
+                $perPage = min($limit, 1000);
+            } else {
+                $perPage = 10;
+            }
+        } else {
+            $perPage = min($perPage, 1000);
+        }
+
+        // Count total matching before applying page/limit
+        try {
+            $total = (clone $baseQuery)->count();
+        } catch (\Throwable $_) {
+            $total = 0;
+        }
+
+        // Build final query for fetching results (with relations)
+        $query = (clone $baseQuery)->with(['grade.level', 'subject', 'topic', 'quiz']);
         if ($request->boolean('random')) {
             $query->inRandomOrder();
         } else {
             $query->orderByDesc('id');
         }
 
-        $perPage = max(1, (int)$request->get('per_page', 20));
-        return response()->json(['questions' => $query->paginate($perPage)]);
+        // Apply paging/offset
+        $query->skip(($page - 1) * $perPage)->take($perPage);
+
+        $results = $query->get();
+
+        $lastPage = (int) max(1, ceil($total / max(1, $perPage)));
+
+        return response()->json(['questions' => [
+            'data' => $results,
+            'total' => $total,
+            'per_page' => $perPage,
+            'current_page' => $page,
+            'last_page' => $lastPage,
+        ]]);
     }
 
     public function store(Request $request)
@@ -129,6 +175,7 @@ class QuestionController extends Controller
             'quiz_id' => 'nullable|exists:quizzes,id',
             'type' => 'required|string|in:' . implode(',', array_keys(Question::getAllowedTypes())),
             'body' => 'required|string',
+            'explanation' => 'nullable|string',
             'options' => 'nullable|array',
             'answers' => 'nullable|array',
             'parts' => 'nullable|array',
@@ -229,12 +276,10 @@ class QuestionController extends Controller
         }
 
         $payloadType = $request->get('type');
-
         $answers = $request->get('answers');
-        $correct = $request->get('correct');
-        $corrects = $request->get('corrects');
         $fillParts = $request->get('fill_parts');
 
+        // Normalize answers based on question type
         if ($payloadType === 'fill_blank') {
             if (!is_array($answers)) {
                 $answers = $answers ? [$answers] : [];
@@ -248,30 +293,14 @@ class QuestionController extends Controller
             $answers = array_values(array_map(static function ($ans) {
                 return is_null($ans) ? '' : (string) $ans;
             }, $answers));
-        }
-
-        if ($payloadType === 'multi') {
-            if (!is_array($corrects)) {
-                $corrects = [];
-            }
-            $corrects = array_values(array_unique(array_map(static function ($idx) {
-                return is_numeric($idx) ? (int) $idx : null;
-            }, $corrects)));
-            $corrects = array_values(array_filter($corrects, static fn($v) => $v !== null));
-            $correct = null;
-        } elseif (in_array($payloadType, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq'], true)) {
-            $corrects = [];
-            $correct = is_numeric($correct) ? (int) $correct : (is_numeric($request->input('answers.0')) ? (int) $request->input('answers.0') : null);
         } else {
-            $correct = null;
-            $corrects = [];
-        }
-
-        if ($payloadType !== 'fill_blank') {
+            // For all other types, ensure answers is an array of the correct values
             if (is_array($answers)) {
                 $answers = array_values(array_map(static fn($ans) => is_null($ans) ? null : (string) $ans, $answers));
             } elseif (!is_null($answers)) {
                 $answers = [(string) $answers];
+            } else {
+                $answers = [];
             }
         }
 
@@ -298,24 +327,24 @@ class QuestionController extends Controller
 
         $options = $request->get('options');
         if (is_array($options)) {
-            $options = array_values(array_map(function ($opt, $idx) use ($payloadType, $correct, $corrects) {
+            $options = array_values(array_map(function ($opt, $idx) use ($answers, $payloadType) {
                 if (is_array($opt)) {
                     $text = isset($opt['text']) ? (string) $opt['text'] : (isset($opt['value']) ? (string) $opt['value'] : '');
-                    $isCorrect = isset($opt['is_correct']) ? (bool) $opt['is_correct'] : false;
                 } else {
                     $text = is_string($opt) ? $opt : '';
-                    $isCorrect = false;
                 }
-                if (in_array($payloadType, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq'], true)) {
-                    $isCorrect = ($correct === $idx);
-                } elseif ($payloadType === 'multi') {
-                    $isCorrect = in_array($idx, $corrects, true) || (!empty($corrects) && in_array((string) $idx, array_map('strval', $corrects), true));
+
+                // Set is_correct based on answers array for option-based question types
+                $isCorrect = false;
+                if (in_array($payloadType, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq', 'multi'], true) && is_array($answers)) {
+                    $isCorrect = in_array((string)$idx, $answers, true);
                 }
+
                 return [
                     'text' => $text,
                     'is_correct' => $isCorrect,
                 ];
-            }, $options));
+            }, $options, array_keys($options)));
         } else {
             $options = null;
         }
@@ -329,18 +358,22 @@ class QuestionController extends Controller
 
         $siteSettings = \App\Models\SiteSetting::current();
         $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
+        // If a quiz id is provided, try to infer missing taxonomy values from the quiz
+        $quizObj = null;
+        if ($request->quiz_id) {
+            try { $quizObj = Quiz::find($request->quiz_id); } catch (\Throwable $_) { $quizObj = null; }
+        }
 
         $question = Question::create([
             'quiz_id' => $request->quiz_id,
             'created_by' => $user->id,
             'type' => $request->type,
             'body' => $request->body,
+            'explanation' => $request->get('explanation'),
             'options' => $options,
-            'answers' => $answers ?? null,
+            'answers' => $answers,
             'parts' => $payloadType === 'fill_blank' ? $fillParts : $parts,
             'fill_parts' => $payloadType === 'fill_blank' ? $fillParts : null,
-            'correct' => $correct,
-            'corrects' => $corrects,
             'marks' => $marks,
             'media_path' => $mediaPath,
             'media_type' => $mediaType,
@@ -351,9 +384,10 @@ class QuestionController extends Controller
             'is_approved' => $siteAutoQuestions,
             'tags' => $request->get('tags'),
             'solution_steps' => $request->get('solution_steps'),
-            'subject_id' => $request->get('subject_id'),
-            'topic_id' => $request->get('topic_id'),
-            'grade_id' => $request->get('grade_id'),
+            'subject_id' => $request->get('subject_id') ?? ($quizObj->subject_id ?? null),
+            'topic_id' => $request->get('topic_id') ?? ($quizObj->topic_id ?? null),
+            'grade_id' => $request->get('grade_id') ?? ($quizObj->grade_id ?? null),
+            'level_id' => $request->get('level_id') ?? ($quizObj->level_id ?? null),
             'for_battle' => $request->get('for_battle', true),
         ]);
 
@@ -366,6 +400,9 @@ class QuestionController extends Controller
                 // ignore
             }
         }
+
+        // Load nested relations for client convenience
+        try { $question->load(['grade.level', 'subject', 'topic', 'quiz']); } catch (\Throwable $_) {}
 
         return response()->json(['question' => $question], 201);
     }
@@ -381,6 +418,8 @@ class QuestionController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        // Ensure nested relations are available to the client
+        try { $question->load(['grade.level', 'subject', 'topic', 'quiz']); } catch (\Throwable $_) {}
         return response()->json(['question' => $question]);
     }
 
@@ -475,6 +514,7 @@ class QuestionController extends Controller
         $mediaFiles = $request->file('question_media', []);
 
         $saved = [];
+        $incomingIds = [];
         try {
             \Log::info('QuestionController@bulkUpdateForQuiz incoming', [
                 'quiz_id' => $quiz->id,
@@ -533,42 +573,25 @@ class QuestionController extends Controller
                     }
                 }
 
-                if (in_array($type, ['multi'], true)) {
-                    if (!is_array($rawCorrects)) {
-                        $rawCorrects = [];
-                    }
-                    $rawCorrects = array_values(array_unique(array_map(static function ($idx) {
-                        return is_numeric($idx) ? (int) $idx : null;
-                    }, $rawCorrects)));
-                    $rawCorrects = array_values(array_filter($rawCorrects, static fn($v) => $v !== null));
-                    $rawCorrect = null;
-                } elseif (in_array($type, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq'], true)) {
-                    $rawCorrects = [];
-                    $rawCorrect = is_numeric($rawCorrect) ? (int) $rawCorrect : (is_numeric($rawAnswers[0] ?? null) ? (int) $rawAnswers[0] : null);
-                } else {
-                    $rawCorrect = null;
-                    $rawCorrects = [];
-                }
-
                 if (is_array($rawOptions)) {
-                    $rawOptions = array_values(array_map(function ($opt, $idx) use ($type, $rawCorrect, $rawCorrects) {
+                    $rawOptions = array_values(array_map(function ($opt, $idx) use ($rawAnswers, $type) {
                         if (is_array($opt)) {
                             $text = isset($opt['text']) ? (string) $opt['text'] : (isset($opt['value']) ? (string) $opt['value'] : '');
-                            $isCorrect = isset($opt['is_correct']) ? (bool) $opt['is_correct'] : false;
                         } else {
                             $text = is_string($opt) ? $opt : '';
-                            $isCorrect = false;
                         }
-                        if (in_array($type, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq'], true)) {
-                            $isCorrect = ($rawCorrect === $idx);
-                        } elseif ($type === 'multi') {
-                            $isCorrect = in_array($idx, $rawCorrects, true) || (!empty($rawCorrects) && in_array((string) $idx, array_map('strval', $rawCorrects), true));
+
+                        // Set is_correct based on answers array for option-based question types
+                        $isCorrect = false;
+                        if (in_array($type, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq', 'multi'], true) && is_array($rawAnswers)) {
+                            $isCorrect = in_array((string)$idx, $rawAnswers, true);
                         }
+
                         return [
                             'text' => $text,
                             'is_correct' => $isCorrect,
                         ];
-                    }, $rawOptions));
+                    }, $rawOptions, array_keys($rawOptions)));
                 } else {
                     $rawOptions = null;
                 }
@@ -585,12 +608,11 @@ class QuestionController extends Controller
                     'quiz_id' => $quiz->id,
                     'type' => $type,
                     'body' => $q['text'] ?? ($q['body'] ?? ''),
+                    'explanation' => $q['explanation'] ?? null,
                     'options' => $rawOptions,
                     'answers' => $type === 'fill_blank' ? $rawAnswers : (is_array($rawAnswers) ? array_values(array_map(static fn($ans) => is_null($ans) ? null : (string) $ans, $rawAnswers)) : (!is_null($rawAnswers) ? [(string) $rawAnswers] : [])),
                     'parts' => $type === 'fill_blank' ? $rawFillParts : $rawParts,
                     'fill_parts' => $type === 'fill_blank' ? $rawFillParts : null,
-                    'correct' => $rawCorrect,
-                    'corrects' => $rawCorrects,
                     'marks' => $marks,
                     'difficulty' => $q['difficulty'] ?? 3,
                     'tags' => $q['tags'] ?? null,
@@ -598,6 +620,7 @@ class QuestionController extends Controller
                     'subject_id' => $q['subject_id'] ?? $quiz->subject_id ?? null,
                     'topic_id' => $q['topic_id'] ?? $quiz->topic_id ?? null,
                     'grade_id' => $q['grade_id'] ?? $quiz->grade_id ?? null,
+                    'level_id' => $q['level_id'] ?? $quiz->level_id ?? null,
                 ];
                     // If there's an uploaded file for this question, store it and attach metadata
                     try {
@@ -633,7 +656,7 @@ class QuestionController extends Controller
                     $existing = Question::where('id', $q['id'])->where('quiz_id', $quiz->id)->first();
                     if ($existing) {
                         $existing->fill($qData);
-                        if (isset($qData['answers'])) $existing->answers = $qData['answers'];
+                        $incomingIds[] = $existing->id;
                             // If we stored media above, ensure existing question gets the path
                             if (isset($qData['media_path'])) $existing->media_path = $qData['media_path'];
                             if (isset($qData['media_type'])) $existing->media_type = $qData['media_type'];
@@ -649,10 +672,27 @@ class QuestionController extends Controller
                     $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
                     $qData['is_approved'] = $siteAutoQuestions;
                     $created = Question::create($qData);
+                $incomingIds[] = $created->id;
                 $saved[] = $created;
             } catch (\Throwable $e) {
                 // ignore per-question failures but continue
             }
+        }
+
+        // Ensure returned saved questions include nested relations for client
+        try {
+            foreach ($saved as $s) {
+                if ($s && method_exists($s, 'load')) {
+                    $s->load(['grade.level', 'subject', 'topic', 'quiz']);
+                }
+            }
+        } catch (\Throwable $_) {}
+
+        // Delete questions that were part of the quiz but not in the incoming payload
+        $existingIds = $quiz->questions()->pluck('id')->all();
+        $toDeleteIds = array_diff($existingIds, $incomingIds);
+        if (!empty($toDeleteIds)) {
+            Question::whereIn('id', $toDeleteIds)->where('quiz_id', $quiz->id)->delete();
         }
 
         // recalc quiz difficulty
@@ -700,7 +740,6 @@ class QuestionController extends Controller
 
         // Expect canonical 'answers' array from frontend
         $payloadType = $request->input('type', $question->type);
-        $singleChoiceTypes = ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq'];
 
         $answersInput = $request->has('answers') ? $request->input('answers') : $question->answers;
         if ($payloadType === 'fill_blank') {
@@ -767,54 +806,27 @@ class QuestionController extends Controller
             }, $partsInput));
         }
 
-        $correctInput = $request->has('correct') ? $request->input('correct') : $question->correct;
-        $correctsInput = $request->has('corrects') ? $request->input('corrects') : $question->corrects;
-        if ($payloadType === 'multi') {
-            $correctsInput = is_array($correctsInput) ? $correctsInput : [];
-            $correctsNormalized = array_values(array_filter(array_map(static function ($idx) {
-                return is_numeric($idx) ? (int) $idx : null;
-            }, $correctsInput), static fn($v) => $v !== null));
-            $correctNormalized = null;
-        } elseif (in_array($payloadType, $singleChoiceTypes, true)) {
-            if (is_numeric($correctInput)) {
-                $correctNormalized = (int) $correctInput;
-            } elseif (isset($answersNormalized[0]) && is_numeric($answersNormalized[0])) {
-                $correctNormalized = (int) $answersNormalized[0];
-            } elseif (is_numeric($question->correct)) {
-                $correctNormalized = (int) $question->correct;
-            } else {
-                $correctNormalized = null;
-            }
-            $correctsNormalized = [];
-        } else {
-            $correctNormalized = null;
-            $correctsNormalized = [];
-        }
-
         $optionsInput = $request->has('options') ? $request->input('options') : $question->options;
         $optionsNormalized = $question->options;
         if (is_array($optionsInput)) {
-            $optionsNormalized = [];
-            $idx = 0;
-            foreach ($optionsInput as $opt) {
+            $optionsNormalized = array_values(array_map(function ($opt, $idx) use ($answersNormalized, $payloadType) {
                 if (is_array($opt)) {
                     $text = isset($opt['text']) ? (string) $opt['text'] : (isset($opt['value']) ? (string) $opt['value'] : '');
-                    $isCorrect = isset($opt['is_correct']) ? (bool) $opt['is_correct'] : false;
                 } else {
                     $text = is_string($opt) ? $opt : '';
-                    $isCorrect = false;
                 }
-                if (in_array($payloadType, $singleChoiceTypes, true)) {
-                    $isCorrect = ($correctNormalized === $idx);
-                } elseif ($payloadType === 'multi') {
-                    $isCorrect = in_array($idx, $correctsNormalized, true);
+
+                // Set is_correct based on answers array for option-based question types
+                $isCorrect = false;
+                if (in_array($payloadType, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq', 'multi'], true) && is_array($answersNormalized)) {
+                    $isCorrect = in_array((string)$idx, $answersNormalized, true);
                 }
-                $optionsNormalized[] = [
+
+                return [
                     'text' => $text,
                     'is_correct' => $isCorrect,
                 ];
-                $idx++;
-            }
+            }, $optionsInput, array_keys($optionsInput)));
         }
 
         $marksNormalized = $question->marks;
@@ -834,24 +846,10 @@ class QuestionController extends Controller
             $question->answers = $answersNormalized;
             $question->parts = $fillPartsNormalized ?? [];
             $question->fill_parts = $fillPartsNormalized ?? [];
-            $question->correct = null;
-            $question->corrects = [];
         } else {
-            if ($request->has('answers')) {
-                $question->answers = $answersNormalized;
-            }
+            $question->answers = $answersNormalized;
             $question->parts = $partsNormalized;
             $question->fill_parts = null;
-            if ($payloadType === 'multi') {
-                $question->correct = null;
-                $question->corrects = $correctsNormalized;
-            } elseif (in_array($payloadType, $singleChoiceTypes, true)) {
-                $question->correct = $correctNormalized;
-                $question->corrects = [];
-            } else {
-                $question->correct = null;
-                $question->corrects = [];
-            }
         }
         if ($request->has('marks')) {
             $question->marks = $marksNormalized;
@@ -860,8 +858,8 @@ class QuestionController extends Controller
             $question->difficulty = (int) $request->get('difficulty');
         }
 
-        // additional fields
-        foreach (['tags','solution_steps','subject_id','topic_id','grade_id','for_battle','is_quiz-master_marked'] as $f) {
+        // additional fields (including level_id)
+        foreach (['tags','solution_steps','subject_id','topic_id','grade_id','level_id','for_battle','is_quiz-master_marked','explanation'] as $f) {
             if ($request->has($f)) $question->{$f} = $request->get($f);
         }
         $question->save();
@@ -870,6 +868,8 @@ class QuestionController extends Controller
             try { $question->quiz->recalcDifficulty(); } catch (\Exception $e) {}
         }
 
+        // Return with relations loaded
+        try { $question->load(['grade.level', 'subject', 'topic', 'quiz']); } catch (\Throwable $_) {}
         return response()->json(['question' => $question]);
     }
 
