@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\QuizMaster;
+use App\Models\Affiliate;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 
@@ -64,6 +65,16 @@ class User extends Authenticatable implements FilamentUser
     ];
 
     /**
+     * Attributes to append to the serialized model.
+     * We expose affiliate_code for convenience on the frontend.
+     *
+     * @var array<int,string>
+     */
+    protected $appends = [
+        'affiliate_code',
+    ];
+
+    /**
      * Helper to check admin role (used throughout the codebase).
      */
     public function isAdmin(): bool
@@ -91,6 +102,22 @@ class User extends Authenticatable implements FilamentUser
     public function quizMasterProfile()
     {
         return $this->hasOne(QuizMaster::class);
+    }
+
+    /**
+     * Relation to the Affiliate record (if any) for this user.
+     */
+    public function affiliate()
+    {
+        return $this->hasOne(Affiliate::class);
+    }
+
+    /**
+     * Convenience accessor: $user->affiliate_code
+     */
+    public function getAffiliateCodeAttribute()
+    {
+        return $this->affiliate ? $this->affiliate->referral_code : null;
     }
 
     public function quizzes()

@@ -50,6 +50,17 @@ class AuthController extends Controller
             'subjects' => $request->subjects ?? [],
         ]);
 
+        // Assign default package subscription
+        $defaultPackage = \App\Models\Package::where('is_default', true)->first();
+        if ($defaultPackage) {
+            \App\Models\Subscription::create([
+                'user_id' => $user->id,
+                'package_id' => $defaultPackage->id,
+                'status' => 'active',
+                'started_at' => now(),
+                'ends_at' => now()->addDays($defaultPackage->duration_days ?? 30),
+            ]);
+        }
         return response()->json(['user' => $user, 'quizee' => $quizee], 201);
     }
 
@@ -108,13 +119,15 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-        // Obtain the authenticated user
-        $user = Auth::user();
+    // Obtain the authenticated user and ensure affiliate relation is loaded
+    $user = Auth::user();
+    // Load affiliate relation so frontend receives affiliate data without a second request
+    $user->loadMissing('affiliate');
 
-        // Regenerate session id for security (uses the configured single session cookie)
-        $request->session()->regenerate();
+    // Regenerate session id for security (uses the configured single session cookie)
+    $request->session()->regenerate();
 
-        return response()->json(['role' => $user->role, 'user' => $user]);
+    return response()->json(['role' => $user->role, 'user' => $user]);
     }
 
     public function logout(Request $request)

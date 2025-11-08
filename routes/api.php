@@ -68,7 +68,21 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::get('/me', function (Request $request) {
-        return $request->user();
+        // Ensure the affiliate relation is loaded so the frontend can access
+        // the user's referral code without an additional request.
+        return $request->user()->loadMissing('affiliate');
+    });
+
+    // Return only the authenticated user's affiliate record (smaller payload)
+    Route::get('/affiliates/me', function (Request $request) {
+        $user = $request->user();
+        if (!$user) return response()->json(null, 401);
+        // load relation if not loaded
+        $affiliate = $user->affiliate()->first();
+        // Return a consistent shape when no affiliate exists so frontends don't get `null`.
+        // Frontend expects at least the referral_code attribute; return it as null if absent.
+        if (!$affiliate) return response()->json(['referral_code' => null], 200);
+        return response()->json($affiliate);
     });
 
     // Profile updates

@@ -39,9 +39,13 @@ class OnboardingService
                 case 'institution':
                     $onboarding->institution_added = true;
                     if ($user->role === 'quiz-master' && !empty($data['institution'])) {
-                        $user->quizMasterProfile->update(['institution' => $data['institution']]);
+                        // Create or update quiz master profile
+                        $profile = $user->quizMasterProfile ?? $user->quizMasterProfile()->create([]);
+                        $profile->update(['institution' => $data['institution']]);
                     } elseif ($user->role === 'quizee' && !empty($data['institution'])) {
-                        $user->quizeeProfile->update(['institution' => $data['institution']]);
+                        // Create or update quizee profile
+                        $profile = $user->quizeeProfile ?? $user->quizeeProfile()->create([]);
+                        $profile->update(['institution' => $data['institution']]);
                     }
                     break;
                 case 'role_quizee':
@@ -94,9 +98,10 @@ class OnboardingService
             $onboarding->save();
 
             // Determine if profile is complete based on flags or explicit step
-            $isComplete = $onboarding->profile_completed
-                || ($onboarding->institution_added && $onboarding->role_selected
-                    && ($onboarding->grade_selected || $onboarding->subject_selected || true));
+            // Consider profile complete if institution and role are set
+            // Grade and subjects are optional and can be completed later via complete-profile
+            $isComplete = $step === 'profile_complete' || 
+                         ($onboarding->institution_added && $onboarding->role_selected);
 
             if ($onboarding->profile_completed) {
                 $isComplete = true;
