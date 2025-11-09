@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('tournaments', function (Blueprint $table) {
             if (! Schema::hasColumn('tournaments', 'requires_approval')) {
-                $table->boolean('requires_approval')->default(false)->after('requires_premium');
+                $table->boolean('requires_approval')->default(false)->after('status');
             }
         });
     }
