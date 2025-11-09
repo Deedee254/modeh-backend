@@ -14,28 +14,99 @@ class Tournament extends Model
         'description',
         'start_date',
         'end_date',
+        'status',
+        'entry_fee',
         'prize_pool',
         'max_participants',
-        'entry_fee',
-        'status', // 'upcoming', 'active', 'completed'
+        'registration_end_date',
+        'min_participants',
+        'format',
         'rules',
-        'subject_id',
-        'topic_id',
-        'grade_id',
-        'created_by',
-        'sponsor_id',
-        'sponsor_banner_url',
-        'status', // 'upcoming', 'active', 'completed'
-        'winner_id',
+        'requires_premium',
+        'requires_approval',
+        'is_featured',
+        'banner_url',
+        'auto_start',
+        'auto_complete'
     ];
 
     protected $casts = [
         'start_date' => 'datetime',
         'end_date' => 'datetime',
-        'rules' => 'array',
-
+        'registration_end_date' => 'datetime',
         'entry_fee' => 'decimal:2',
+        'prize_pool' => 'decimal:2',
+        'rules' => 'array',
+        'requires_premium' => 'boolean',
+        'requires_approval' => 'boolean',
+        'is_featured' => 'boolean',
+        'auto_start' => 'boolean',
+        'auto_complete' => 'boolean'
     ];
+
+    protected $appends = [
+        'current_round',
+        'total_rounds',
+        'registration_open',
+        'can_start'
+    ];
+
+    public function getCurrentRoundAttribute()
+    {
+        return $this->battles()->max('round') ?? 0;
+    }
+
+    public function getTotalRoundsAttribute()
+    {
+        $participantCount = $this->participants()->count();
+        return $participantCount > 0 ? ceil(log($participantCount, 2)) : 0;
+    }
+
+    public function getRegistrationOpenAttribute()
+    {
+        if ($this->status !== 'upcoming') {
+            return false;
+        }
+
+        $now = now();
+        return $now->between(
+            $this->registration_end_date ? $now : $this->start_date,
+            $this->registration_end_date ?? $this->start_date
+        );
+    }
+
+    public function getCanStartAttribute()
+    {
+        if ($this->status !== 'upcoming') {
+            return false;
+        }
+
+        $participantCount = $this->participants()->count();
+        return $participantCount >= ($this->min_participants ?? 2) &&
+               $participantCount % 2 === 0 &&
+               now()->gte($this->start_date);
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active');
+    }
+
+    public function scopeUpcoming($query)
+    {
+        return $query->where('status', 'upcoming')
+                    ->where('start_date', '>', now());
+    }
+
+    public function scopeCompleted($query)
+    {
+        return $query->where('status', 'completed');
+    }
+
+    public function scopeFeatured($query)
+    {
+        return $query->where('is_featured', true);
+    }
 
     public function winner()
     {
@@ -60,7 +131,7 @@ class Tournament extends Model
     public function participants()
     {
         return $this->belongsToMany(User::class, 'tournament_participants')
-            ->withPivot(['score', 'rank', 'completed_at'])
+            ->withPivot(['score', 'rank', 'completed_at', 'status', 'requested_at', 'approved_at', 'approved_by'])
             ->withTimestamps();
     }
 

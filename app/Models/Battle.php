@@ -6,6 +6,25 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Question;
 
+/**
+ * @property int $id
+ * @property string $uuid
+ * @property int $initiator_id
+ * @property int $opponent_id
+ * @property string $status
+ * @property int|null $winner_id
+ * @property int|null $initiator_points
+ * @property int|null $opponent_points
+ * @property int|null $rounds_completed
+ * @property array|null $settings
+ * @property \Carbon\Carbon|null $completed_at
+ * @property \Carbon\Carbon $created_at
+ * @property \Carbon\Carbon $updated_at
+ * @property-read \App\Models\User $initiator
+ * @property-read \App\Models\User $opponent
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\Question[] $questions
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\BattleSubmission[] $submissions
+ */
 class Battle extends Model
 {
     use HasFactory;

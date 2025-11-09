@@ -198,7 +198,9 @@ class TournamentResource extends Resource
 
     public static function getRelations(): array
     {
-        return [];
+        return [
+            \App\Filament\Resources\TournamentResource\RelationManagers\ParticipantsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

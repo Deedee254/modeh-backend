@@ -12,6 +12,29 @@ use App\Models\Affiliate;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 
+/**
+ * @property int $id
+ * @property string $name
+ * @property string $email
+ * @property string $password
+ * @property string $role User's role (quizee, quiz-master, etc.)
+ * @property string|null $social_id
+ * @property string|null $social_provider
+ * @property string|null $social_avatar
+ * @property string|null $social_token
+ * @property string|null $social_refresh_token
+ * @property-read \App\Models\QuizMaster|null $quizMasterProfile
+ * @property-read \App\Models\Quizee|null $quizeeProfile
+ * @property string|null $social_expires_at
+ * @property bool|null $is_profile_completed
+ * @property \Carbon\Carbon|null $email_verified_at
+ * @property string|null $remember_token
+ * @property \Carbon\Carbon $created_at
+ * @property \Carbon\Carbon $updated_at
+ * @property-read \App\Models\QuizMaster|null $quizMaster
+ * @property-read \App\Models\Quizee|null $quizee
+ * @property-read \App\Models\Affiliate|null $affiliate
+ */
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
@@ -26,6 +49,7 @@ class User extends Authenticatable implements FilamentUser
         'name',
         'email',
         'password',
+        'role',
         'social_id',
         'social_provider',
         'social_avatar',
@@ -33,8 +57,6 @@ class User extends Authenticatable implements FilamentUser
         'social_refresh_token',
         'social_expires_at',
         'is_profile_completed',
-        // Allow role to be mass assigned when creating/updating users
-        'role',
     ];
 
     /**

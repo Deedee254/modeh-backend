@@ -5,6 +5,19 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property int $user_id
+ * @property string $referral_code
+ * @property float $commission_rate
+ * @property float $total_earnings
+ * @property string $status
+ * @property \Carbon\Carbon $created_at
+ * @property \Carbon\Carbon $updated_at
+ * @property-read \App\Models\User $user
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\AffiliatePayout[] $payouts
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\AffiliateLinkClick[] $linkClicks
+ */
 class Affiliate extends Model
 {
     use HasFactory;

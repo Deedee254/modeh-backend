@@ -3,6 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Events\Tournament\BattleStarted;
+use App\Events\Tournament\BattleCompleted;
+use App\Events\Tournament\BattleForfeited;
+use App\Events\Tournament\BattleCancelled;
 
 class TournamentBattle extends Model
 {
@@ -16,12 +20,44 @@ class TournamentBattle extends Model
         'player2_score',
         'scheduled_at',
         'completed_at',
-        'status' // 'scheduled', 'in_progress', 'completed'
+        'started_at',
+        'status',
+        'forfeit_reason',
+        'is_draw',
+        'timeout_at',
+        'battle_duration'
     ];
 
     protected $casts = [
         'scheduled_at' => 'datetime',
-        'completed_at' => 'datetime'
+        'completed_at' => 'datetime',
+        'started_at' => 'datetime',
+        'timeout_at' => 'datetime',
+        'player1_score' => 'float',
+        'player2_score' => 'float',
+        'is_draw' => 'boolean',
+        'battle_duration' => 'integer'
+    ];
+
+    protected $appends = [
+        'is_active',
+        'can_start',
+        'time_remaining',
+        'has_timed_out'
+    ];
+
+    const STATUS_SCHEDULED = 'scheduled';
+    const STATUS_IN_PROGRESS = 'in_progress';
+    const STATUS_COMPLETED = 'completed';
+    const STATUS_FORFEITED = 'forfeited';
+    const STATUS_CANCELLED = 'cancelled';
+
+    const VALID_STATUSES = [
+        self::STATUS_SCHEDULED,
+        self::STATUS_IN_PROGRESS,
+        self::STATUS_COMPLETED,
+        self::STATUS_FORFEITED,
+        self::STATUS_CANCELLED
     ];
 
     public function tournament()
@@ -44,10 +80,96 @@ class TournamentBattle extends Model
         return $this->belongsTo(User::class, 'winner_id');
     }
 
+    public function getIsActiveAttribute()
+    {
+        return $this->status === self::STATUS_IN_PROGRESS;
+    }
+
+    public function getCanStartAttribute()
+    {
+        if ($this->status !== self::STATUS_SCHEDULED) {
+            return false;
+        }
+
+        return now()->gte($this->scheduled_at);
+    }
+
+    public function getTimeRemainingAttribute()
+    {
+        if (!$this->is_active || !$this->timeout_at) {
+            return null;
+        }
+
+        $remaining = $this->timeout_at->diffInSeconds(now(), false);
+        return $remaining > 0 ? $remaining : 0;
+    }
+
+    public function getHasTimedOutAttribute()
+    {
+        return $this->is_active && 
+               $this->timeout_at && 
+               now()->gte($this->timeout_at);
+    }
+
+    public function start()
+    {
+        if (!$this->can_start) {
+            throw new \Exception('Battle cannot be started');
+        }
+
+        $this->status = self::STATUS_IN_PROGRESS;
+        $this->started_at = now();
+        $this->timeout_at = now()->addMinutes(30); // Configure timeout duration
+        $this->save();
+
+        event(new BattleStarted($this));
+    }
+
+    public function complete($winnerId = null, $isDraw = false)
+    {
+        $this->status = self::STATUS_COMPLETED;
+        $this->completed_at = now();
+        $this->is_draw = $isDraw;
+        $this->winner_id = $winnerId;
+        $this->battle_duration = $this->started_at->diffInSeconds($this->completed_at);
+        $this->save();
+
+        event(new BattleCompleted($this));
+    }
+
+    public function forfeit($playerId, $reason = null)
+    {
+        $this->status = self::STATUS_FORFEITED;
+        $this->completed_at = now();
+        $this->forfeit_reason = $reason;
+        $this->winner_id = $this->player1_id === $playerId ? $this->player2_id : $this->player1_id;
+        $this->battle_duration = $this->started_at->diffInSeconds($this->completed_at);
+        $this->save();
+
+        event(new BattleForfeited($this));
+    }
+
+    public function cancel()
+    {
+        $this->status = self::STATUS_CANCELLED;
+        $this->completed_at = now();
+        $this->save();
+
+        event(new BattleCancelled($this));
+    }
+
     public function questions()
     {
         return $this->belongsToMany(Question::class, 'tournament_battle_questions')
             ->withPivot(['position'])
             ->orderBy('position');
+    }
+
+    /**
+     * Per-question attempts for this battle (saved per player)
+     */
+    public function attempts()
+    {
+        return $this->hasMany(TournamentBattleAttempt::class, 'battle_id');
     }
 }

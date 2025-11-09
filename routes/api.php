@@ -57,6 +57,7 @@ Route::get('/recommendations/quizzes', [\App\Http\Controllers\Api\Recommendation
 // Public tournament routes for listing and viewing
 Route::get('/tournaments', [\App\Http\Controllers\Api\TournamentController::class, 'index']);
 Route::get('/tournaments/{tournament}', [\App\Http\Controllers\Api\TournamentController::class, 'show']);
+Route::get('/tournaments/{tournament}/tree', [\App\Http\Controllers\Api\TournamentController::class, 'tree']);
 // Global public leaderboard (supports pagination, sorting and search)
 Route::get('/leaderboard', [\App\Http\Controllers\Api\LeaderboardController::class, 'index']);
 // Public badges endpoint
@@ -83,6 +84,13 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
         // Frontend expects at least the referral_code attribute; return it as null if absent.
         if (!$affiliate) return response()->json(['referral_code' => null], 200);
         return response()->json($affiliate);
+    });
+    
+    // Affiliate routes
+    Route::prefix('affiliates')->group(function () {
+        Route::get('/stats', [\App\Http\Controllers\Api\AffiliateController::class, 'stats']);
+        Route::get('/referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'referrals']);
+        Route::post('/generate-code', [\App\Http\Controllers\Api\AffiliateController::class, 'generateCode']);
     });
 
     // Profile updates
@@ -275,7 +283,9 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
 
     // Tournaments
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);
+    Route::get('/tournaments/{tournament}/registration-status', [\App\Http\Controllers\Api\TournamentController::class, 'registrationStatus']);
     Route::post('/tournaments/battles/{battle}/submit', [\App\Http\Controllers\Api\TournamentController::class, 'submitBattle']);
+    Route::post('/tournaments/battles/{battle}/forfeit', [\App\Http\Controllers\Api\TournamentController::class, 'forfeitBattle']);
     Route::post('/tournaments/{tournament}/battles/{battle}/mark', [\App\Http\Controllers\Api\TournamentController::class, 'mark']);
     // Allow a tournament-battle mark call that only provides the battle id (used by some frontends)
     Route::post('/tournaments/battles/{battle}/mark', [\App\Http\Controllers\Api\TournamentController::class, 'mark']);
@@ -287,14 +297,24 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
         Route::post('/admin/tournaments', [\App\Http\Controllers\Api\AdminTournamentController::class, 'store']);
         Route::put('/admin/tournaments/{tournament}', [\App\Http\Controllers\Api\AdminTournamentController::class, 'update']);
         Route::post('/admin/tournaments/{tournament}/questions', [\App\Http\Controllers\Api\AdminTournamentController::class, 'attachQuestions']);
+    Route::post('/admin/tournaments/{tournament}/battles/{battle}/attach-questions', [\App\Http\Controllers\Api\AdminTournamentController::class, 'attachQuestionsToBattle']);
         Route::post('/admin/tournaments/{tournament}/generate-matches', [\App\Http\Controllers\Api\AdminTournamentController::class, 'generateMatches']);
         Route::delete('/admin/tournaments/{tournament}', [\App\Http\Controllers\Api\AdminTournamentController::class, 'destroy']);
+        // Admin approve/reject tournament registrations
+        Route::post('/admin/tournaments/{tournament}/registrations/{user}/approve', [\App\Http\Controllers\Api\TournamentController::class, 'approveRegistration']);
+        Route::post('/admin/tournaments/{tournament}/registrations/{user}/reject', [\App\Http\Controllers\Api\TournamentController::class, 'rejectRegistration']);
     });
     Route::post('/battles/{battle}/submit', [\App\Http\Controllers\Api\BattleController::class, 'submit']);
     Route::post('/battles/{battle}/mark', [\App\Http\Controllers\Api\BattleController::class, 'mark']);
     Route::get('/battles/{battle}/result', [\App\Http\Controllers\Api\BattleController::class, 'result']);
     Route::post('/battles/{battle}/attach-questions', [\App\Http\Controllers\Api\BattleController::class, 'attachQuestions']);
     Route::post('/battles/{battle}/solo-complete', [\App\Http\Controllers\Api\BattleController::class, 'soloComplete']);
+
+    // Quiz Master Analytics
+    Route::get('/quiz-master/analytics', [\App\Http\Controllers\Api\DashboardAnalyticsController::class, 'index']);
+    Route::get('/quiz-master/analytics/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'show']);
+    Route::get('/quiz-master/analytics/quizzes/{quiz}/export/csv', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportCsv']);
+    Route::get('/quiz-master/analytics/quizzes/{quiz}/export/pdf', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportPdf']);
 });
 
 // Public webhook for mpesa callbacks

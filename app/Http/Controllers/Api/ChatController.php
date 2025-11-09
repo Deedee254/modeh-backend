@@ -55,9 +55,10 @@ class ChatController extends Controller
         // add unread_count and last_message for groups
         foreach ($groups as $g) {
             $last = Message::where('group_id', $g->id)->orderBy('created_at', 'desc')->first();
-            $g->last_message = $last?->content ?? null;
-            $g->last_at = $last?->created_at ?? null;
-            $g->unread_count = Message::where('group_id', $g->id)->where('sender_id', '!=', $user->id)->where('is_read', false)->count();
+            // Use setAttribute to avoid static-analysis warnings about dynamic/protected properties
+            $g->setAttribute('last_message', $last?->content ?? null);
+            $g->setAttribute('last_at', $last?->created_at ?? null);
+            $g->setAttribute('unread_count', Message::where('group_id', $g->id)->where('sender_id', '!=', $user->id)->where('is_read', false)->count());
         }
 
         return response()->json(['conversations' => $conversations, 'groups' => $groups]);
@@ -174,8 +175,8 @@ class ChatController extends Controller
             // Group message
             $msg = Message::create([
                 'sender_id' => $fromId,
-                'group_id' => $request->group_id,
-                'content' => $request->content,
+                'group_id' => $request->input('group_id'),
+                'content' => $request->input('content'),
                 'type' => 'group',
                 'is_read' => false,
                 'attachments' => $attachmentsMeta,
@@ -184,8 +185,8 @@ class ChatController extends Controller
             // Direct message
             $msg = Message::create([
                 'sender_id' => $fromId,
-                'recipient_id' => $request->recipient_id,
-                'content' => $request->content,
+                'recipient_id' => $request->input('recipient_id'),
+                'content' => $request->input('content'),
                 'type' => 'direct',
                 'is_read' => false,
                 'attachments' => $attachmentsMeta,
@@ -292,7 +293,15 @@ class ChatController extends Controller
             \Broadcast::channel('App.Models.User.' . $threadId, function () use ($user, $threadId) {
                 return true;
             });
-            \Broadcast::socket($request->header('X-Socket-Id'))->whisper('typing', ['thread_id' => $threadId, 'user_id' => $user->id]);
+            try {
+                // Use facade root and guard against unexpected types so static analysis is happier
+                $b = \Broadcast::getFacadeRoot();
+                if (is_object($b) && method_exists($b, 'socket')) {
+                    $b->socket($request)->whisper('typing', ['thread_id' => $threadId, 'user_id' => $user->id]);
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Broadcast whisper failed: ' . $e->getMessage());
+            }
         }
         return response()->json(['ok' => true]);
     }
@@ -306,7 +315,14 @@ class ChatController extends Controller
             \Broadcast::channel('App.Models.User.' . $threadId, function () use ($user, $threadId) {
                 return true;
             });
-            \Broadcast::socket($request->header('X-Socket-Id'))->whisper('typing-stopped', ['thread_id' => $threadId, 'user_id' => $user->id]);
+            try {
+                $b = \Broadcast::getFacadeRoot();
+                if (is_object($b) && method_exists($b, 'socket')) {
+                    $b->socket($request)->whisper('typing-stopped', ['thread_id' => $threadId, 'user_id' => $user->id]);
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Broadcast whisper failed: ' . $e->getMessage());
+            }
         }
         return response()->json(['ok' => true]);
     }

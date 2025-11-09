@@ -104,9 +104,9 @@ class MessageController extends Controller
         
         $message = Message::create([
             'sender_id' => $user->id,
-            'recipient_id' => $request->recipient_id,
-            'content' => $request->content,
-                'type' => $request->type,
+            'recipient_id' => $request->input('recipient_id'),
+            'content' => $request->input('content'),
+                'type' => $request->input('type'),
             'is_read' => false,
         ]);
         

@@ -1,0 +1,117 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Affiliate;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+
+class AffiliateController extends Controller
+{
+    public function stats(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $affiliate = $user->affiliate()->first();
+        if (!$affiliate) {
+            return response()->json([
+                'totalEarned' => 0,
+                'pendingPayouts' => 0,
+                'activeReferrals' => 0,
+                'conversionRate' => 0
+            ]);
+        }
+
+        // Get affiliate stats
+        $totalEarned = $affiliate->total_earnings ?? 0;
+        $pendingPayouts = $affiliate->pending_payouts ?? 0;
+        $activeReferrals = $affiliate->referrals()->where('status', 'active')->count();
+        $totalReferrals = $affiliate->referrals()->count();
+        $conversionRate = $totalReferrals > 0 ? ($activeReferrals / $totalReferrals) * 100 : 0;
+
+        return response()->json([
+            'totalEarned' => $totalEarned,
+            'pendingPayouts' => $pendingPayouts,
+            'activeReferrals' => $activeReferrals,
+            'conversionRate' => round($conversionRate, 2)
+        ]);
+    }
+
+    public function referrals(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $affiliate = $user->affiliate()->first();
+        if (!$affiliate) {
+            return response()->json([]);
+        }
+
+        $referrals = $affiliate->referrals()
+            ->with('user:id,name')
+            ->latest()
+            ->get()
+            ->map(function ($referral) {
+                return [
+                    'id' => $referral->id,
+                    'user_name' => $referral->user->name,
+                    'type' => $referral->type ?? 'signup',
+                    'earnings' => $referral->earnings ?? 0,
+                    'status' => $referral->status,
+                    'created_at' => $referral->created_at
+                ];
+            });
+
+        return response()->json($referrals);
+    }
+
+    public function generateCode(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        // Check if user already has an affiliate record
+        $affiliate = $user->affiliate()->first();
+        if ($affiliate && $affiliate->referral_code) {
+            return response()->json([
+                'message' => 'Affiliate code already exists',
+                'referral_code' => $affiliate->referral_code
+            ]);
+        }
+
+        // Generate a unique code
+        $code = strtoupper(Str::random(8));
+        while (Affiliate::where('referral_code', $code)->exists()) {
+            $code = strtoupper(Str::random(8));
+        }
+
+        // Create or update affiliate record
+        if (!$affiliate) {
+            $affiliate = new Affiliate();
+            $affiliate->fill([
+                'referral_code' => $code,
+                'commission_rate' => 10.00, // Default 10% commission
+                'status' => 'active'
+            ]);
+            $user->affiliate()->save($affiliate);
+        } else {
+            $affiliate->update([
+                'referral_code' => $code,
+                'status' => 'active'
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Affiliate code generated successfully',
+            'referral_code' => $code
+        ]);
+    }
+}

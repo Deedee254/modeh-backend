@@ -2,9 +2,23 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property string $status
+ * @property \DateTimeInterface|null $started_at
+ * @property \DateTimeInterface|null $ends_at
+ * @property int|null $package_id
+ * @property int $user_id
+ * @property \DateTimeInterface $created_at
+ * @property \DateTimeInterface $updated_at
+ * @property-read \App\Models\User $user
+ * @property-read \App\Models\Package|null $package
+ */
 class Subscription extends Model
 {
     use HasFactory;
@@ -26,15 +40,17 @@ class Subscription extends Model
     {
         return $this->belongsTo(User::class);
     }
-
+    
     public function activate(
-        \DateTimeInterface $startsAt = null,
-        \DateTimeInterface $endsAt = null
-    ) {
+        ?DateTimeInterface $startsAt = null,
+        ?DateTimeInterface $endsAt = null
+    ): self
+    {
         $this->status = 'active';
         $this->started_at = $startsAt ?? now();
-        $this->ends_at = $endsAt ?? ($this->started_at ? $this->started_at->addDays(optional($this->package)->duration_days ?? 30) : now()->addDays(optional($this->package)->duration_days ?? 30));
+        $this->ends_at = $endsAt ?? now()->addDays(optional($this->package)->duration_days ?? 30);
         $this->save();
+
         return $this;
     }
 }

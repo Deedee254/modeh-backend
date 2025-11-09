@@ -127,7 +127,7 @@ class AuthController extends Controller
     // Regenerate session id for security (uses the configured single session cookie)
     $request->session()->regenerate();
 
-    return response()->json(['role' => $user->role, 'user' => $user]);
+    return response()->json(['role' => $user->getAttribute('role'), 'user' => $user]);
     }
 
     public function logout(Request $request)

@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Models\BattleSubmission;
 use App\Models\Transaction;
 use App\Models\Wallet;
@@ -285,6 +286,24 @@ class BattleController extends Controller
     }
 
     /**
+     * Normalize question answers into an array safely.
+     * Accepts arrays, JSON strings, objects with toArray, or other scalars.
+     */
+    private function normalizeAnswers($answers): array
+    {
+        if (is_array($answers)) return $answers;
+        if (is_object($answers) && method_exists($answers, 'toArray')) {
+            try { return $answers->toArray(); } catch (\Throwable $_) { /* fall through */ }
+        }
+        if (is_string($answers)) {
+            $decoded = json_decode($answers, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+        // Fallback safely to array cast
+        return is_array($answers) ? $answers : (array) $answers;
+    }
+
+    /**
      * Accept a player's answers for a battle, score them and mark the battle completed.
      * Expected payload: { answers: [{ question_id, selected, time_taken }], meta: { score? } }
      */
@@ -321,20 +340,23 @@ class BattleController extends Controller
                 $qid = intval($a['question_id'] ?? 0);
                 $selected = $a['selected'] ?? null;
                 $timeTaken = $a['time_taken'] ?? null;
-                $q = $questionMap->get($qid) ?? \App\Models\Question::find($qid);
-                if (!$q) continue;
+                $q = $questionMap->get($qid) ?? Question::find($qid);
+                if (!$q) return;
 
                 $isCorrect = false;
-                $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+                // Normalize correct answers to an array regardless of how they are stored
+                $correctAnswers = $this->normalizeAnswers($q->answers);
                 if (is_array($selected)) {
+                    // Compare arrays by values (order-insensitive if both are simple indexed arrays)
                     $isCorrect = array_values($selected) == array_values($correctAnswers);
                 } else {
-                    $isCorrect = in_array($selected, $correctAnswers);
+                    // Ensure $correctAnswers is an array and use strict in_array to avoid type coercion
+                    $isCorrect = is_array($correctAnswers) ? in_array($selected, $correctAnswers, true) : false;
                 }
 
                 // Persist or update the per-question submission
                 BattleSubmission::updateOrCreate([
-                    'battle_id' => $battle->id,
+                    'battle_id' => $battle->getKey(),
                     'user_id' => $user->id,
                     'question_id' => $qid,
                 ], [
@@ -432,7 +454,7 @@ class BattleController extends Controller
 
         $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'battle')
-            ->where('item_id', $battle->id)
+            ->where('item_id', $battle->getKey())
             ->where('status', 'confirmed')
             ->exists();
 
@@ -472,21 +494,23 @@ class BattleController extends Controller
 
         // Recompute correct_flag for any submissions with null correct_flag
         $questionMap = $battle->questions()->get()->keyBy('id');
+        $submissions = $battle->submissions()->whereNull('correct_flag')->get();
         $totalMarked = 0;
 
-        DB::transaction(function () use ($battle, $questionMap, &$totalMarked) {
-            $subs = $battle->submissions()->whereNull('correct_flag')->get();
-            foreach ($subs as $s) {
-                $q = $questionMap->get($s->question_id) ?? \App\Models\Question::find($s->question_id);
+        DB::transaction(function () use ($submissions, $battle, $questionMap, &$totalMarked) {
+            foreach ($submissions as $s) {
+                $q = $questionMap->get($s->question_id) ?? Question::find($s->question_id);
                 if (!$q) continue;
-                $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+
+                $correctAnswers = $this->normalizeAnswers($q->answers);
+
                 $selected = $s->selected;
-                $isCorrect = false;
                 if (is_array($selected)) {
                     $isCorrect = array_values($selected) == array_values($correctAnswers);
                 } else {
                     $isCorrect = in_array($selected, $correctAnswers);
                 }
+
                 $s->correct_flag = $isCorrect;
                 $s->save();
                 $totalMarked++;
@@ -499,7 +523,7 @@ class BattleController extends Controller
             $battle->initiator_points = $initiatorCorrect;
             $battle->opponent_points = $opponentCorrect;
 
-            if (!is_null($battle->initiator_points) && !is_null($battle->opponent_points)) {
+            if ($battle->initiator_points !== null && $battle->opponent_points !== null) {
                 if ($battle->initiator_points > $battle->opponent_points) $battle->winner_id = $battle->initiator_id;
                 elseif ($battle->opponent_points > $battle->initiator_points) $battle->winner_id = $battle->opponent_id;
                 else $battle->winner_id = null; // tie
@@ -592,11 +616,11 @@ class BattleController extends Controller
                 $qid = intval($a['question_id'] ?? 0);
                 $selected = $a['selected'] ?? null;
                 $timeTaken = $a['time_taken'] ?? null;
-                $q = $questionMap->get($qid) ?? \App\Models\Question::find($qid);
+                $q = $questionMap->get($qid) ?? Question::find($qid);
                 if (!$q) continue;
 
                 $isCorrect = false;
-                $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+                $correctAnswers = $this->normalizeAnswers($q->answers);
                 if (is_array($selected)) {
                     $isCorrect = array_values($selected) == array_values($correctAnswers);
                 } else {
@@ -604,7 +628,7 @@ class BattleController extends Controller
                 }
 
                 BattleSubmission::updateOrCreate([
-                    'battle_id' => $battle->id,
+                    'battle_id' => $battle->getKey(),
                     'user_id' => $user->id,
                     'question_id' => $qid,
                 ], [
@@ -702,24 +726,25 @@ class BattleController extends Controller
         }
 
         $battle->load('questions');
+
+        // Build submissions lookup: [question_id][user_id] => submission
+        $submissionsByQuestion = [];
+        $subs = $battle->submissions()->get();
+        foreach ($subs as $s) {
+            $submissionsByQuestion[$s->question_id][$s->user_id] = $s;
+        }
+
         // If battle not completed yet, still return present points if any
         $initiatorPoints = $battle->initiator_points ?? 0;
         $opponentPoints = $battle->opponent_points ?? 0;
 
-        // Load persisted submissions if table exists
         $questions = [];
-        $submissionsByQuestion = [];
-        if (Schema::hasTable('battle_submissions')) {
-            $subs = $battle->submissions()->get()->groupBy('question_id');
-            foreach ($subs as $qid => $group) {
-                $submissionsByQuestion[$qid] = $group->keyBy('user_id');
-            }
-        }
-
         foreach ($battle->questions as $q) {
             $qid = $q->id;
             $initiatorSub = $submissionsByQuestion[$qid][$battle->initiator_id] ?? null;
             $opponentSub = $submissionsByQuestion[$qid][$battle->opponent_id] ?? null;
+
+            $correctAnswers = $this->normalizeAnswers($q->answers);
 
             $questions[] = [
                 'question_id' => $qid,
@@ -734,7 +759,7 @@ class BattleController extends Controller
                     'time_taken' => $opponentSub->time_taken,
                     'correct_flag' => (bool) $opponentSub->correct_flag,
                 ] : null,
-                'correct' => is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [],
+                'correct' => $correctAnswers,
             ];
         }
 

@@ -5,6 +5,26 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property string $body Question text/content
+ * @property string $type Question type (mcq, multi, etc.)
+ * @property array $options Available options/choices
+ * @property mixed $answers Correct answer(s)
+ * @property int|null $grade_id
+ * @property int|null $subject_id
+ * @property int|null $topic_id
+ * @property string|null $difficulty
+ * @property array|null $metadata Additional metadata
+ * @property bool $is_public Whether the question is publicly available
+ * @property \Carbon\Carbon $created_at
+ * @property \Carbon\Carbon $updated_at
+ * @property-read \App\Models\Grade|null $grade
+ * @property-read \App\Models\Subject|null $subject
+ * @property-read \App\Models\Topic|null $topic
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\Quiz[] $quizzes
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\Battle[] $battles
+ */
 class Question extends Model
 {
     use HasFactory;

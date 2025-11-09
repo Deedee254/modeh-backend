@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Tournament;
 use App\Models\TournamentMatch;
 use App\Models\TournamentBattle;
+use App\Models\TournamentBattleAttempt;
 use App\Services\AchievementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,7 @@ class TournamentController extends Controller
     {
         $this->achievementService = $achievementService;
         $this->middleware('auth:sanctum')->except(['index', 'show']);
+        $this->middleware('throttle:60,1')->only(['join', 'submitBattle']);
     }
 
     public function index(Request $request)
@@ -104,8 +106,12 @@ class TournamentController extends Controller
             return response()->json(['message' => 'Tournament is not open for registration'], 400);
         }
 
-        // Check if max participants reached
-        if ($tournament->max_participants && $tournament->participants()->count() >= $tournament->max_participants) {
+        // Check if max participants reached (count only approved participants)
+        $approvedCount = DB::table('tournament_participants')
+            ->where('tournament_id', $tournament->id)
+            ->where('status', 'approved')
+            ->count();
+        if ($tournament->max_participants && $approvedCount >= $tournament->max_participants) {
             return response()->json(['message' => 'Tournament is full'], 400);
         }
 
@@ -114,16 +120,92 @@ class TournamentController extends Controller
             return response()->json(['message' => 'Already registered for this tournament'], 400);
         }
 
-        // Add participant
-        $tournament->participants()->attach($user->id);
+        // Add participant. If tournament requires approval, add as pending.
+        if ($tournament->requires_approval) {
+            $tournament->participants()->attach($user->id, [
+                'status' => 'pending',
+                'requested_at' => now()
+            ]);
+            $this->achievementService->checkAchievements($user->id, [
+                'type' => 'tournament_joined',
+                'tournament_id' => $tournament->id
+            ]);
 
-        // Check achievements
-        $this->achievementService->checkAchievements($user->id, [
-            'type' => 'tournament_joined',
-            'tournament_id' => $tournament->id
-        ]);
+            return response()->json(['message' => 'Registration pending approval', 'status' => 'pending']);
+        }
+
+        // Default: immediately approved
+        $tournament->participants()->attach($user->id, ['status' => 'approved', 'requested_at' => now(), 'approved_at' => now()]);
 
         return response()->json(['message' => 'Successfully joined tournament']);
+    }
+
+    /**
+     * Approve a pending registration (admin only)
+     */
+    public function approveRegistration(Request $request, Tournament $tournament, $userId)
+    {
+        $admin = $request->user();
+        if (!isset($admin->is_admin) || !$admin->is_admin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // Ensure participant exists
+        if (! $tournament->participants()->where('user_id', $userId)->exists()) {
+            return response()->json(['message' => 'Registration not found'], 404);
+        }
+
+        // Approve: update pivot
+        try {
+            $tournament->participants()->updateExistingPivot($userId, [
+                'status' => 'approved',
+                'approved_at' => now(),
+                'approved_by' => $admin->id
+            ]);
+
+            // Notify user
+            $user = \App\Models\User::find($userId);
+            if ($user) {
+                $user->notify(new \App\Notifications\TournamentRegistrationStatusChanged($tournament, 'approved'));
+            }
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to approve registration'], 500);
+        }
+
+        return response()->json(['message' => 'Registration approved']);
+    }
+
+    /**
+     * Reject a pending registration (admin only)
+     */
+    public function rejectRegistration(Request $request, Tournament $tournament, $userId)
+    {
+        $admin = $request->user();
+        if (!isset($admin->is_admin) || !$admin->is_admin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        if (! $tournament->participants()->where('user_id', $userId)->exists()) {
+            return response()->json(['message' => 'Registration not found'], 404);
+        }
+
+        try {
+            $tournament->participants()->updateExistingPivot($userId, [
+                'status' => 'rejected',
+                'approved_at' => now(),
+                'approved_by' => $admin->id
+            ]);
+
+            // Notify user
+            $user = \App\Models\User::find($userId);
+            if ($user) {
+                $user->notify(new \App\Notifications\TournamentRegistrationStatusChanged($tournament, 'rejected'));
+            }
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to reject registration'], 500);
+        }
+
+        return response()->json(['message' => 'Registration rejected']);
     }
 
     public function submitBattle(Request $request, TournamentBattle $battle)
@@ -135,17 +217,102 @@ class TournamentController extends Controller
             return response()->json(['message' => 'Not authorized'], 403);
         }
 
+        // Validate battle state
+        if ($battle->status !== TournamentBattle::STATUS_IN_PROGRESS) {
+            return response()->json(['message' => 'Battle is not in progress'], 400);
+        }
+
+        if ($battle->has_timed_out) {
+            $battle->forfeit($user->id, 'Battle timed out');
+            return response()->json(['message' => 'Battle has timed out'], 400);
+        }
+
+        // Validate incoming answers array. We compute score server-side to be authoritative.
         $data = $request->validate([
             'answers' => 'required|array',
-            'score' => 'required|numeric|min:0'
+            'answers.*.question_id' => 'required|integer',
+            'answers.*.answer' => 'nullable'
         ]);
 
-        DB::transaction(function() use ($battle, $user, $data) {
-            // Update player score
-            if ($battle->player1_id === $user->id) {
-                $battle->player1_score = $data['score'];
+        // Load the battle questions so we can grade answers
+        $questions = $battle->questions()->get()->keyBy('id');
+
+        // First, build attempts and compute score so we can persist in a single transaction
+        $computedScore = 0.0;
+        $attempts = [];
+
+        foreach ($data['answers'] as $ans) {
+            $qId = (int) ($ans['question_id'] ?? 0);
+            $given = $ans['answer'] ?? null;
+            if (! $questions->has($qId)) continue;
+
+            $q = $questions->get($qId);
+            $marks = $q->marks ?? 1;
+
+            $points = 0;
+            if ($q->type === 'mcq') {
+                if (! is_null($q->correct) && (string) $q->correct === (string) $given) {
+                    $points = $marks;
+                } elseif (is_string($given)) {
+                    $idx = $q->findOptionIndexByText($given);
+                    if (! is_null($idx) && (string) $idx === (string) ($q->correct ?? '')) {
+                        $points = $marks;
+                    }
+                }
+            } elseif ($q->type === 'multi') {
+                $givenArr = is_array($given) ? $given : (is_string($given) ? json_decode($given, true) : null);
+                if (is_array($givenArr) && is_array($q->corrects)) {
+                    $corrects = array_map('strval', $q->corrects);
+                    $givenStr = array_map('strval', $givenArr);
+                    sort($corrects); sort($givenStr);
+                    if ($corrects === $givenStr) {
+                        $points = $marks;
+                    }
+                }
             } else {
-                $battle->player2_score = $data['score'];
+                if (! empty($q->answers)) {
+                    $expected = $q->answers;
+                    if (is_string($given) && in_array($given, (array) $expected, true)) {
+                        $points = $marks;
+                    }
+                }
+            }
+
+            $answerToStore = is_array($given) ? json_encode($given) : (string) ($given ?? '');
+            $pointsValue = round((float) $points, 2);
+
+            $attempts[] = [
+                'battle_id' => $battle->id,
+                'player_id' => $user->id,
+                'question_id' => $qId,
+                'answer' => $answerToStore,
+                'points' => $pointsValue,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+
+            $computedScore += $pointsValue;
+        }
+
+        DB::transaction(function() use ($battle, $user, $attempts, $computedScore) {
+            // upsert attempts (updateOrCreate per-row to keep logic simple)
+            foreach ($attempts as $a) {
+                TournamentBattleAttempt::updateOrCreate([
+                    'battle_id' => $a['battle_id'],
+                    'player_id' => $a['player_id'],
+                    'question_id' => $a['question_id']
+                ], [
+                    'answer' => $a['answer'],
+                    'points' => $a['points']
+                ]);
+            }
+
+            // Update player total score
+            $scoreValue = round($computedScore, 2);
+            if ($battle->player1_id === $user->id) {
+                $battle->player1_score = $scoreValue;
+            } else {
+                $battle->player2_score = $scoreValue;
             }
 
             // If both players submitted, determine winner
@@ -155,7 +322,7 @@ class TournamentController extends Controller
                 } elseif ($battle->player2_score > $battle->player1_score) {
                     $battle->winner_id = $battle->player2_id;
                 }
-                $battle->status = 'completed';
+                $battle->status = TournamentBattle::STATUS_COMPLETED;
                 $battle->completed_at = now();
 
                 // Check achievements for both players
@@ -182,7 +349,7 @@ class TournamentController extends Controller
                     // Log error, but don't fail the request
                 }
             } else {
-                $battle->status = 'in_progress';
+                $battle->status = TournamentBattle::STATUS_IN_PROGRESS;
             }
 
             $battle->save();
@@ -190,7 +357,8 @@ class TournamentController extends Controller
 
         return response()->json([
             'battle' => $battle->fresh(['player1', 'player2', 'winner']),
-            'message' => 'Battle submission successful'
+            'message' => 'Battle submission successful',
+            'computed_score' => $computedScore
         ]);
     }
 
@@ -222,18 +390,34 @@ class TournamentController extends Controller
      */
     public function result(Request $request, Tournament $tournament, TournamentBattle $battle)
     {
-        $battle->load('questions');
+        // Load questions and attempts so we can include per-player responses
+        $battle->load(['questions', 'attempts']);
 
         $initiatorPoints = $battle->player1_score ?? 0;
         $opponentPoints = $battle->player2_score ?? 0;
 
+        // Group attempts by question_id for quick lookup
+        $attemptsByQuestion = $battle->attempts->groupBy('question_id');
+
         $questions = [];
         foreach ($battle->questions as $q) {
+            $initiator = null;
+            $opponent = null;
+
+            $group = $attemptsByQuestion->get($q->id) ?? collect();
+            foreach ($group as $att) {
+                if ($att->player_id === $battle->player1_id) {
+                    $initiator = $att->answer;
+                } elseif ($att->player_id === $battle->player2_id) {
+                    $opponent = $att->answer;
+                }
+            }
+
             $questions[] = [
                 'question_id' => $q->id,
                 'body' => $q->body,
-                'initiator' => null,
-                'opponent' => null,
+                'initiator' => $initiator,
+                'opponent' => $opponent,
                 'correct' => is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [],
             ];
         }
@@ -254,6 +438,41 @@ class TournamentController extends Controller
      * Mark a tournament battle (reveal results) for the requesting user.
      * Requires active subscription or one-off purchase for the tournament (entry fee).
      */
+    public function forfeitBattle(Request $request, TournamentBattle $battle)
+    {
+        $user = $request->user();
+        
+        // Validate user is participant
+        if ($battle->player1_id !== $user->id && $battle->player2_id !== $user->id) {
+            return response()->json(['message' => 'Not authorized'], 403);
+        }
+
+        // Validate battle can be forfeited
+        if ($battle->status !== TournamentBattle::STATUS_IN_PROGRESS) {
+            return response()->json(['message' => 'Battle cannot be forfeited'], 400);
+        }
+
+        // Execute forfeit
+        try {
+            DB::beginTransaction();
+            
+            $battle->forfeit(
+                $user->id, 
+                $request->input('reason', 'Player forfeited the battle')
+            );
+            
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Battle forfeited successfully',
+                'battle' => $battle->fresh(['player1', 'player2', 'winner'])
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['message' => 'Failed to forfeit battle'], 500);
+        }
+    }
+
     public function mark(Request $request, Tournament $tournament, TournamentBattle $battle)
     {
         $user = $request->user();
@@ -312,5 +531,26 @@ class TournamentController extends Controller
 
         // Delegate to existing result() which builds the response shape for a tournament battle
         return $this->result($request, $tournament, $battle);
+    }
+
+    /**
+     * Return the current user's registration status for a tournament
+     */
+    public function registrationStatus(Request $request, Tournament $tournament)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['isRegistered' => false]);
+        }
+
+        $participant = $tournament->participants()->where('user_id', $user->id)->first();
+        if (! $participant) {
+            return response()->json(['isRegistered' => false]);
+        }
+
+        return response()->json([
+            'isRegistered' => true,
+            'status' => $participant->pivot->status ?? 'approved'
+        ]);
     }
 }
