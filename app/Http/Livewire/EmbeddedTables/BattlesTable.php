@@ -6,6 +6,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Support\Contracts\TranslatableContentDriver;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Component;
 use App\Models\Tournament;
@@ -38,6 +39,11 @@ class BattlesTable extends Component implements HasTable
             TextColumn::make('status')->badge()->sortable(),
             TextColumn::make('scheduled_at')->dateTime()->sortable(),
         ];
+    }
+
+    public function makeFilamentTranslatableContentDriver(): ?TranslatableContentDriver
+    {
+        return null;
     }
 
     public function render()

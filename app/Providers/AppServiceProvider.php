@@ -19,6 +19,7 @@ use App\Models\TournamentBattle;
 use Illuminate\Support\Facades\Cache;
 use App\Models\User;
 use App\Policies\QuizPolicy;
+use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -82,6 +83,14 @@ class AppServiceProvider extends ServiceProvider
         Quiz::created($flush);
         Quiz::updated($flush);
         Quiz::deleted($flush);
+
+        // Explicitly register Livewire admin components aliases (fix component-not-found errors)
+        try {
+            Livewire::component('admin.bank-questions-table', \App\Http\Livewire\Admin\BankQuestionsTable::class);
+        } catch (\Throwable $e) {
+            // Don't block boot if Livewire not available in some contexts
+            logger()->debug('Livewire component registration skipped: ' . $e->getMessage());
+        }
 
         QuizAttempt::created($flush);
         QuizAttempt::updated($flush);

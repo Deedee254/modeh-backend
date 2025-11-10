@@ -10,8 +10,8 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\DB;
 use App\Models\Tournament;
+use App\Models\TournamentParticipant;
 
 class PendingRegistrations extends Page implements Tables\Contracts\HasTable
 {
@@ -30,7 +30,7 @@ class PendingRegistrations extends Page implements Tables\Contracts\HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn () => DB::table('tournament_participants')
+            ->query(fn () => TournamentParticipant::query()
                 ->where('tournament_participants.status', 'pending')
                 ->join('users', 'users.id', '=', 'tournament_participants.user_id')
                 ->join('tournaments', 'tournaments.id', '=', 'tournament_participants.tournament_id')
@@ -86,7 +86,7 @@ class PendingRegistrations extends Page implements Tables\Contracts\HasTable
                             try {
                                 app()->call([\App\Http\Controllers\Api\TournamentController::class, 'approveRegistration'], [
                                     'request' => request(),
-                                    'tournament' => \App\Models\Tournament::find($r['tournament_id']),
+                                    'tournament' => Tournament::find($r['tournament_id']),
                                     'userId' => $r['user_id'],
                                 ]);
                             } catch (\Exception $e) {
@@ -102,7 +102,7 @@ class PendingRegistrations extends Page implements Tables\Contracts\HasTable
                             try {
                                 app()->call([\App\Http\Controllers\Api\TournamentController::class, 'rejectRegistration'], [
                                     'request' => request(),
-                                    'tournament' => \App\Models\Tournament::find($r['tournament_id']),
+                                    'tournament' => Tournament::find($r['tournament_id']),
                                     'userId' => $r['user_id'],
                                 ]);
                             } catch (\Exception $e) {

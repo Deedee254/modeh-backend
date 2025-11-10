@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Level;
 
 class Tournament extends Model
 {
@@ -22,6 +23,7 @@ class Tournament extends Model
         'min_participants',
         'format',
         'rules',
+    'level_id',
         'requires_premium',
         'requires_approval',
         'is_featured',
@@ -116,6 +118,11 @@ class Tournament extends Model
     public function subject()
     {
         return $this->belongsTo(Subject::class);
+    }
+
+    public function level()
+    {
+        return $this->belongsTo(Level::class, 'level_id');
     }
 
     public function topic()

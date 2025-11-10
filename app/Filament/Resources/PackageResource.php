@@ -39,7 +39,7 @@ class PackageResource extends Resource
     {
         return $table->columns([
             TextColumn::make('title'),
-            TextColumn::make('price')->money('currency'),
+            TextColumn::make('price')->money(fn ($record) => $record?->currency ?? 'KES'),
             TextColumn::make('duration_days')->label('Days'),
             TextColumn::make('created_at')->date(),
         ])

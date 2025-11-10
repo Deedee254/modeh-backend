@@ -159,7 +159,7 @@ class AdminTournamentController extends Controller
         // Normalize payload whether $request is Request or array
         $payload = [];
         $uploadedFile = null;
-        if ($request instanceof \Illuminate\Http\Request) {
+        if ($request instanceof Request) {
             $payload = $request->all();
             $uploadedFile = $request->file('csv') ?? $request->file('file') ?? null;
         } elseif (is_array($request)) {

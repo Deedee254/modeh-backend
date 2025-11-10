@@ -104,11 +104,23 @@ class TournamentBattleResource extends Resource
                                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xlsx'
                             ])
                             ->maxSize(10240)
-                            ->help('Upload a CSV (or .xlsx) containing either an `id`/`question_id` column to attach existing questions, or a full set of question columns (prompt/type/options/etc.) to create & attach.'),
+                            ->helperText('Upload a CSV (or .xlsx) containing either an `id`/`question_id` column to attach existing questions, or a full set of question columns (prompt/type/options/etc.) to create & attach.'),
                         Forms\Components\TextInput::make('question_count')->numeric()->default(10),
-                        Forms\Components\Select::make('grade_id')->relationship('tournament.grade', 'id')->nullable(),
-                        Forms\Components\Select::make('subject_id')->relationship('tournament.subject', 'id')->nullable(),
-                        Forms\Components\Select::make('topic_id')->relationship('tournament.topic', 'id')->nullable(),
+                        Forms\Components\Select::make('grade_id')
+                            ->label('Grade')
+                            ->options(fn () => \App\Models\Grade::query()->pluck('name', 'id')->toArray())
+                            ->searchable()
+                            ->nullable(),
+                        Forms\Components\Select::make('subject_id')
+                            ->label('Subject')
+                            ->options(fn () => \App\Models\Subject::query()->pluck('name', 'id')->toArray())
+                            ->searchable()
+                            ->nullable(),
+                        Forms\Components\Select::make('topic_id')
+                            ->label('Topic')
+                            ->options(fn () => \App\Models\Topic::query()->pluck('name', 'id')->toArray())
+                            ->searchable()
+                            ->nullable(),
                         Forms\Components\Select::make('difficulty')->options([
                             'easy' => 'Easy',
                             'medium' => 'Medium',

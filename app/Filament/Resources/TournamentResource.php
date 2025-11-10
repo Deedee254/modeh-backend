@@ -4,15 +4,20 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TournamentResource\Pages;
 use App\Models\Tournament;
+use App\Models\Question;
 use Filament\Forms;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
+use Filament\Actions\Action;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\HtmlString;
 
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use Illuminate\Support\Facades\Log;
 class TournamentResource extends Resource
 {
     protected static ?string $model = Tournament::class;
@@ -31,7 +36,9 @@ class TournamentResource extends Resource
 
                     Forms\Components\RichEditor::make('description')
                         ->required()
-                        ->maxLength(65535),
+                        ->maxLength(65535)
+                        ->columnSpan('full')
+                        ->extraAttributes(['style' => 'min-height: 18rem;']),
 
                     Forms\Components\Select::make('sponsor_id')
                         ->relationship('sponsor', 'name')
@@ -75,40 +82,270 @@ class TournamentResource extends Resource
 
             Section::make()
                 ->schema([
-                    Forms\Components\Select::make('grade_id')
-                        ->relationship('grade', 'name')
-                        ->required()
-                        ->searchable()
-                        ->preload(),
-
-                    Forms\Components\Select::make('subject_id')
-                        ->relationship('subject', 'name')
+                    Forms\Components\Select::make('level_id')
+                        ->relationship('level', 'name', fn (Builder $query) => $query->orderBy('order'))
                         ->required()
                         ->searchable()
                         ->preload()
-                        ->live(),
+                        ->live()
+                        ->afterStateUpdated(function (Set $set) {
+                            $set('grade_id', null);
+                            $set('subject_id', null);
+                            $set('topic_id', null);
+                            $set('questions', []);
+                        }),
+
+                    Forms\Components\Select::make('grade_id')
+                        ->relationship('grade', 'display_name', function (Builder $query, Get $get) {
+                            $levelId = $get('level_id');
+                            if ($levelId) {
+                                $query->where('level_id', $levelId);
+                            }
+                        })
+                        ->required()
+                        ->searchable()
+                        ->preload()
+                        ->live()
+                        ->afterStateUpdated(function (Set $set) {
+                            $set('subject_id', null);
+                            $set('topic_id', null);
+                            $set('questions', []);
+                        }),
+
+                    Forms\Components\Select::make('subject_id')
+                        ->relationship('subject', 'name', function (Builder $query, Get $get) {
+                            $gradeId = $get('grade_id');
+                            if ($gradeId) {
+                                $query->where('grade_id', $gradeId);
+                            }
+                        })
+                        ->required()
+                        ->searchable()
+                        ->preload()
+                        ->live()
+                        ->afterStateUpdated(function (Set $set) {
+                            $set('topic_id', null);
+                            $set('questions', []);
+                        }),
 
                     Forms\Components\Select::make('topic_id')
-                        ->relationship('topic', 'name', function (Builder $query, Get $get): void {
-                            $query->where('subject_id', $get('subject_id'));
+                        ->relationship('topic', 'name', function (Builder $query, Get $get) {
+                            $subjectId = $get('subject_id');
+                            if ($subjectId) {
+                                $query->where('subject_id', $subjectId);
+                            }
                         })
                         ->searchable()
                         ->preload()
-                        ->visible(fn (Get $get): bool => filled($get('subject_id'))),
+                        ->live()
+                        ->afterStateUpdated(fn (Set $set) => $set('questions', [])),
 
                     Forms\Components\Select::make('questions')
                         ->multiple()
-                        ->relationship('questions', 'content', function (Builder $query, Get $get): void {
-                            $query
-                                ->when($get('grade_id'), fn (Builder $innerQuery) => $innerQuery->where('grade_id', $get('grade_id')))
-                                ->when($get('subject_id'), fn (Builder $innerQuery) => $innerQuery->where('subject_id', $get('subject_id')))
-                                ->when($get('topic_id'), fn (Builder $innerQuery) => $innerQuery->where('topic_id', $get('topic_id')));
+                        ->relationship('questions', 'body', function (Builder $query, Get $get) {
+                            if ($get('grade_id')) $query->where('grade_id', $get('grade_id'));
+                            if ($get('subject_id')) $query->where('subject_id', $get('subject_id'));
+                            if ($get('topic_id')) $query->where('topic_id', $get('topic_id'));
+                            if ($get('level_id')) $query->where('level_id', $get('level_id'));
                         })
                         ->searchable()
                         ->preload()
                         ->required()
-                        ->visible(fn (Get $get): bool => filled($get('subject_id')))
                         ->live(),
+
+                    Grid::make(2)->schema([
+                        Action::make('browseBank')
+                            ->label('Browse Bank')
+                            ->icon('heroicon-o-circle-stack')
+                            ->modalHeading('Browse Question Bank')
+                            ->modalWidth('7xl')
+                            ->modalContent(function (Get $get) {
+                                $filters = [
+                                    'level_id' => $get('level_id'),
+                                    'grade_id' => $get('grade_id'),
+                                    'subject_id' => $get('subject_id'),
+                                    'topic_id' => $get('topic_id'),
+                                ];
+                                return view('filament.modals.bank-questions-table', ['filters' => $filters]);
+                            })
+                            ->modalSubmitAction(false) // We handle selection via JS events
+                            ->modalCancelAction(false)
+                            ->color('secondary'),
+
+                        Action::make('uploadFile')
+                            ->label('Upload from File')
+                            ->icon('heroicon-o-arrow-up-tray')
+                            ->color('secondary')
+                            ->form([
+                                Forms\Components\FileUpload::make('file')
+                                    ->label('CSV File')
+                                    ->required()
+                                    ->acceptedFileTypes(['text/csv'])
+                                    ->helperText('Upload a CSV file with columns: type,text,option1,option2,option3,option4,answers,marks,difficulty,explanation,youtube_url,media'),
+                            ])
+                            ->action(function (array $data, Set $set, Get $get) {
+                                $uploaded = $data['file'] ?? null;
+                                // Filament/Livewire may provide either a temporary uploaded file object or a path string.
+                                if (is_string($uploaded) && file_exists($uploaded)) {
+                                    $path = $uploaded;
+                                } elseif (is_object($uploaded) && method_exists($uploaded, 'getRealPath')) {
+                                    $path = $uploaded->getRealPath();
+                                } else {
+                                    // Could not resolve uploaded file, abort gracefully
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('Upload Failed')
+                                        ->body('Unable to read uploaded file.')
+                                        ->danger()
+                                        ->send();
+                                    return;
+                                }
+
+                                $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                                try {
+                                    if (in_array($ext, ['csv', 'txt'])) {
+                                        // Quick CSV sanity check before trying PhpSpreadsheet
+                                        $fh = @fopen($path, 'r');
+                                        if (! $fh) {
+                                            Log::error('upload_file: unable to open CSV for reading', ['path' => $path, 'ext' => $ext]);
+                                            \Filament\Notifications\Notification::make()
+                                                ->title('Upload Failed')
+                                                ->body('Unable to open the uploaded CSV file.')
+                                                ->danger()
+                                                ->send();
+                                            return;
+                                        }
+                                        $first = @fgetcsv($fh);
+                                        if ($first === false) {
+                                            $sample = @file_get_contents($path, false, null, 0, 2048);
+                                            Log::error('upload_file: CSV appears empty or malformed', ['path' => $path, 'sample' => substr($sample, 0, 2048)]);
+                                            fclose($fh);
+                                            \Filament\Notifications\Notification::make()
+                                                ->title('Upload Failed')
+                                                ->body('The uploaded CSV appears empty or malformed.')
+                                                ->danger()
+                                                ->send();
+                                            return;
+                                        }
+                                        // rewind and let PhpSpreadsheet parse it for consistency
+                                        rewind($fh);
+                                        fclose($fh);
+                                    }
+
+                                    $spreadsheet = IOFactory::load($path);
+                                    $sheet = $spreadsheet->getActiveSheet();
+                                    $rows = $sheet->toArray(null, true, true, true);
+                                } catch (\Throwable $e) {
+                                    $sample = @file_exists($path) ? @file_get_contents($path, false, null, 0, 4096) : null;
+                                    Log::error('upload_file: failed to parse uploaded file', [
+                                        'path' => $path,
+                                        'ext' => $ext,
+                                        'size' => @filesize($path),
+                                        'error' => $e->getMessage(),
+                                        'trace' => $e->getTraceAsString(),
+                                        'sample' => $sample ? substr($sample, 0, 2048) : null,
+                                    ]);
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('Upload Failed')
+                                        ->body('Unable to parse the uploaded file. Check server logs for details.')
+                                        ->danger()
+                                        ->send();
+                                    return;
+                                }
+
+                                if (empty($rows)) {
+                                    return;
+                                }
+
+                                $levelId = $get('level_id');
+                                $gradeId = $get('grade_id');
+                                $subjectId = $get('subject_id');
+                                $topicId = $get('topic_id');
+
+                                if (!$levelId || !$gradeId || !$subjectId) {
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('Upload Failed')
+                                        ->body('Please select Level, Grade, and Subject before uploading questions.')
+                                        ->danger()
+                                        ->send();
+                                    return;
+                                }
+
+                                $header = array_map('strtolower', array_values(array_shift($rows)));
+                                $expectedHeaders = ['type', 'text', 'option1', 'option2', 'option3', 'option4', 'answers', 'marks', 'difficulty', 'explanation', 'youtube_url', 'media'];
+                                $missingHeaders = array_diff($expectedHeaders, $header);
+                                if (!empty($missingHeaders)) {
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('Upload Failed')
+                                        ->body('CSV must contain all required columns: ' . implode(', ', $expectedHeaders))
+                                        ->danger()
+                                        ->send();
+                                    return;
+                                }
+
+                                $createdQuestions = [];
+                                foreach ($rows as $row) {
+                                    $row = array_combine($header, array_values($row));
+                                    $type = $row['type'];
+                                    $body = $row['text'];
+
+                                    $options = [];
+                                    if (in_array($type, ['mcq', 'multi'])) {
+                                        $optionTexts = array_filter([$row['option1'], $row['option2'], $row['option3'], $row['option4']]);
+                                        $options = array_map(fn($text) => ['text' => $text], $optionTexts);
+                                    }
+
+                                    $answers = array_map('trim', explode(',', $row['answers']));
+                                    $correct = null;
+                                    $corrects = [];
+                                    $answersArray = [];
+
+                                    if ($type === 'mcq') {
+                                        $correctText = $answers[0] ?? '';
+                                        $correct = array_search($correctText, array_column($options, 'text'));
+                                        if ($correct === false) $correct = null;
+                                    } elseif ($type === 'multi') {
+                                        $corrects = [];
+                                        foreach ($answers as $ans) {
+                                            $idx = array_search($ans, array_column($options, 'text'));
+                                            if ($idx !== false) $corrects[] = $idx;
+                                        }
+                                    } else {
+                                        $answersArray = $answers;
+                                    }
+
+                                    $question = Question::create([
+                                        'type' => $type,
+                                        'body' => $body,
+                                        'options' => $options,
+                                        'answers' => $answersArray,
+                                        'correct' => $correct,
+                                        'corrects' => $corrects,
+                                        'marks' => (float)$row['marks'],
+                                        'difficulty' => $row['difficulty'],
+                                        'explanation' => $row['explanation'],
+                                        'youtube_url' => $row['youtube_url'],
+                                        'media_path' => $row['media'],
+                                        'level_id' => $levelId,
+                                        'grade_id' => $gradeId,
+                                        'subject_id' => $subjectId,
+                                        'topic_id' => $topicId,
+                                        'is_banked' => true,
+                                        'created_by' => auth()->id(),
+                                    ]);
+
+                                    $createdQuestions[] = $question->id;
+                                }
+
+                                $currentIds = $get('questions') ?? [];
+                                $set('questions', array_unique(array_merge($currentIds, $createdQuestions)));
+
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Upload Successful')
+                                    ->body('Created ' . count($createdQuestions) . ' questions.')
+                                    ->success()
+                                    ->send();
+                            }),
+                    ]),
 
                     Forms\Components\Placeholder::make('total_questions')
                         ->label('Selected Questions')
@@ -200,6 +437,7 @@ class TournamentResource extends Resource
     {
         return [
             \App\Filament\Resources\TournamentResource\RelationManagers\ParticipantsRelationManager::class,
+            \App\Filament\Resources\TournamentResource\RelationManagers\QuestionsRelationManager::class,
         ];
     }
 
@@ -216,5 +454,10 @@ class TournamentResource extends Resource
     public static function getNavigationBadge(): ?string
     {
         return static::getModel()::where('status', 'active')->count();
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->withCount('participants');
     }
 }

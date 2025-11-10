@@ -9,6 +9,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\QuizMaster;
 use App\Models\Affiliate;
+use App\Models\Quizee;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 
@@ -124,6 +125,11 @@ class User extends Authenticatable implements FilamentUser
     public function quizMasterProfile()
     {
         return $this->hasOne(QuizMaster::class);
+    }
+
+    public function quizeeProfile()
+    {
+        return $this->hasOne(Quizee::class);
     }
 
     /**
