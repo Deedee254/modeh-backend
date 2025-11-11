@@ -24,6 +24,8 @@ use Filament\Panel;
  * @property string|null $social_avatar
  * @property string|null $social_token
  * @property string|null $social_refresh_token
+ * @property string|null $avatar_url
+ * @property string|null $bio
  * @property-read \App\Models\QuizMaster|null $quizMasterProfile
  * @property-read \App\Models\Quizee|null $quizeeProfile
  * @property string|null $social_expires_at
@@ -58,6 +60,8 @@ class User extends Authenticatable implements FilamentUser
         'social_refresh_token',
         'social_expires_at',
         'is_profile_completed',
+        'avatar_url',
+        'bio',
     ];
 
     /**

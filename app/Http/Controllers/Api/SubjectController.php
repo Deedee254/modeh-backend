@@ -26,6 +26,11 @@ class SubjectController extends Controller
             $query->where('name', 'like', "%{$q}%");
         }
 
+        // Filter by grade_id if provided
+        if ($gradeId = $request->get('grade_id')) {
+            $query->where('grade_id', $gradeId);
+        }
+
         $query->orderBy('created_at', 'desc');
         $perPage = max(1, (int)$request->get('per_page', 50)); // More for browsing
         $data = $query->paginate($perPage);

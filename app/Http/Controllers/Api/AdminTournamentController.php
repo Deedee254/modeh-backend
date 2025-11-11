@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class AdminTournamentController extends Controller
@@ -151,6 +152,16 @@ class AdminTournamentController extends Controller
      */
     public function attachQuestionsToBattle($request, Tournament $tournament, TournamentBattle $battle)
     {
+        // Log entry for diagnostics
+        try {
+            $who = $request instanceof \Illuminate\Http\Request && $request->user() ? $request->user()->id : null;
+            Log::info('AdminTournamentController::attachQuestionsToBattle called', [
+                'tournament_id' => $tournament->id ?? null,
+                'battle_id' => $battle->id ?? null,
+                'caller_user_id' => $who,
+                'request_type' => is_object($request) ? get_class($request) : gettype($request),
+            ]);
+        } catch (\Throwable $_) {}
         // Ensure the battle belongs to the tournament
         if ($battle->tournament_id !== $tournament->id) {
             return response()->json(['message' => 'Battle does not belong to tournament'], 400);
@@ -159,7 +170,7 @@ class AdminTournamentController extends Controller
         // Normalize payload whether $request is Request or array
         $payload = [];
         $uploadedFile = null;
-        if ($request instanceof Request) {
+        if ($request instanceof \Illuminate\Http\Request) {
             $payload = $request->all();
             $uploadedFile = $request->file('csv') ?? $request->file('file') ?? null;
         } elseif (is_array($request)) {
@@ -176,10 +187,12 @@ class AdminTournamentController extends Controller
                 } elseif (method_exists($uploadedFile, 'getRealPath')) {
                     $path = $uploadedFile->getRealPath();
                 } else {
+                    Log::warning('attachQuestionsToBattle: invalid uploadedFile type', ['uploadedFile' => is_object($uploadedFile) ? get_class($uploadedFile) : gettype($uploadedFile)]);
                     return response()->json(['message' => 'Invalid uploaded file'], 422);
                 }
 
                 $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                try { Log::info('attachQuestionsToBattle: parsing uploaded file', ['path' => $path, 'ext' => $ext, 'tournament_id' => $tournament->id, 'battle_id' => $battle->id]); } catch (\Throwable $_) {}
 
                 // helper to normalize tabular file into headers + rows (rows as plain arrays)
                 $parseTabular = function (string $path, string $ext) {
@@ -213,7 +226,9 @@ class AdminTournamentController extends Controller
                 };
 
                 [$headers, $rows] = $parseTabular($path, $ext);
+                try { Log::info('attachQuestionsToBattle: parsed tabular file', ['headers_count' => count($headers), 'rows_count' => count($rows), 'headers' => $headers]); } catch (\Throwable $_) {}
                 if (empty($headers)) {
+                    try { Log::warning('attachQuestionsToBattle: parsed file had no headers', ['path' => $path, 'ext' => $ext, 'tournament_id' => $tournament->id]); } catch (\Throwable $_) {}
                     return response()->json(['message' => 'Empty or unreadable file'], 422);
                 }
 
@@ -237,13 +252,20 @@ class AdminTournamentController extends Controller
                         if (is_numeric($val)) $ids[] = intval($val);
                     }
                     if (empty($ids)) {
+                        try { Log::warning('attachQuestionsToBattle: id-column present but no ids parsed', ['path' => $path, 'tournament_id' => $tournament->id]); } catch (\Throwable $_) {}
                         DB::rollBack();
                         return response()->json(['message' => 'No question ids found in file'], 422);
                     }
                     $questions = Question::whereIn('id', $ids)->get()->keyBy('id');
+                    $missing = [];
                     foreach ($ids as $i => $qid) {
-                        if ($questions->has($qid)) $attachData[$qid] = ['position' => $i];
+                        if ($questions->has($qid)) {
+                            $attachData[$qid] = ['position' => $i];
+                        } else {
+                            $missing[] = $qid;
+                        }
                     }
+                    try { Log::info('attachQuestionsToBattle: attaching existing questions by id', ['requested' => count($ids), 'found' => $questions->count(), 'missing_ids' => $missing]); } catch (\Throwable $_) {}
                     if (!empty($attachData)) {
                         $battle->questions()->detach();
                         $battle->questions()->attach($attachData);
@@ -259,6 +281,7 @@ class AdminTournamentController extends Controller
                 $created = [];
                 $userId = null;
                 if ($request instanceof Request && $request->user()) $userId = $request->user()->id;
+                try { Log::info('attachQuestionsToBattle: creating questions from rows', ['rows' => count($rows), 'tournament_id' => $tournament->id]); } catch (\Throwable $_) {}
                 foreach ($rows as $rIdx => $row) {
                     $rowData = [];
                     foreach ($canonical as $i => $key) {
@@ -352,11 +375,11 @@ class AdminTournamentController extends Controller
                     $question = Question::create($createData);
                     $created[] = $question;
                 }
-
                 // attach created questions preserving order
                 foreach ($created as $i => $q) {
                     $attachData[$q->id] = ['position' => $i];
                 }
+                try { Log::info('attachQuestionsToBattle: created questions', ['created_count' => count($created), 'attached_count' => count($attachData)]); } catch (\Throwable $_) {}
                 if (!empty($attachData)) {
                     $battle->questions()->detach();
                     $battle->questions()->attach($attachData);
@@ -366,6 +389,19 @@ class AdminTournamentController extends Controller
                 return response()->json(['created' => count($created), 'attached' => count($attachData), 'questions' => $battle->questions()->get()]);
             } catch (\Throwable $e) {
                 DB::rollBack();
+                try {
+                    $sample = null;
+                    if (isset($path) && @file_exists($path)) {
+                        $sample = @file_get_contents($path, false, null, 0, 4096);
+                    }
+                    Log::error('attachQuestionsToBattle: exception processing uploaded file', [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                        'tournament_id' => $tournament->id ?? null,
+                        'battle_id' => $battle->id ?? null,
+                        'sample' => $sample ? substr($sample, 0, 2048) : null,
+                    ]);
+                } catch (\Throwable $_) {}
                 return response()->json(['message' => 'Failed to process file: ' . $e->getMessage()], 500);
             }
         }

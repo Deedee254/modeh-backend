@@ -14,7 +14,9 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Toggle;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\IconColumn;
 use UnitEnum;
 
 class PackageResource extends Resource
@@ -30,6 +32,9 @@ class PackageResource extends Resource
             TextInput::make('price')->numeric()->required(),
             TextInput::make('currency')->default('KES'),
             TextInput::make('duration_days')->numeric()->default(30),
+            Toggle::make('is_default')
+                ->label('Set as Default Package')
+                ->helperText('This package will be the default option for new users'),
             FileUpload::make('cover_image')->image()->directory('packages')->preserveFilenames(),
             Repeater::make('features')->schema([TextInput::make('feature')])->columnSpan('full'),
         ]);
@@ -41,6 +46,9 @@ class PackageResource extends Resource
             TextColumn::make('title'),
             TextColumn::make('price')->money(fn ($record) => $record?->currency ?? 'KES'),
             TextColumn::make('duration_days')->label('Days'),
+            IconColumn::make('is_default')
+                ->label('Default')
+                ->boolean(),
             TextColumn::make('created_at')->date(),
         ])
         ->actions([

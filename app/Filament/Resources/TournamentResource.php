@@ -150,7 +150,6 @@ class TournamentResource extends Resource
                         })
                         ->searchable()
                         ->preload()
-                        ->required()
                         ->live(),
 
                     Grid::make(2)->schema([
@@ -180,18 +179,30 @@ class TournamentResource extends Resource
                                 Forms\Components\FileUpload::make('file')
                                     ->label('CSV File')
                                     ->required()
-                                    ->acceptedFileTypes(['text/csv'])
+                                    ->acceptedFileTypes(['text/csv', 'application/vnd.ms-excel'])
+                                    ->disk('local')
+                                    ->directory('temp')
+                                    ->visibility('private')
                                     ->helperText('Upload a CSV file with columns: type,text,option1,option2,option3,option4,answers,marks,difficulty,explanation,youtube_url,media'),
                             ])
                             ->action(function (array $data, Set $set, Get $get) {
-                                $uploaded = $data['file'] ?? null;
-                                // Filament/Livewire may provide either a temporary uploaded file object or a path string.
-                                if (is_string($uploaded) && file_exists($uploaded)) {
-                                    $path = $uploaded;
-                                } elseif (is_object($uploaded) && method_exists($uploaded, 'getRealPath')) {
-                                    $path = $uploaded->getRealPath();
-                                } else {
-                                    // Could not resolve uploaded file, abort gracefully
+                                $uploadedFileName = $data['file'] ?? null;
+                                
+                                if (!$uploadedFileName) {
+                                    \Filament\Notifications\Notification::make()
+                                        ->title('Upload Failed')
+                                        ->body('No file provided.')
+                                        ->danger()
+                                        ->send();
+                                    return;
+                                }
+                                
+                                // File is stored in storage/app/private/temp/ by FileUpload component with visibility('private')
+                                // The uploadedFileName comes as 'temp/filename.csv' so we need to prepend 'private/'
+                                $path = storage_path('app/private') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $uploadedFileName);
+                                
+                                if (!file_exists($path)) {
+                                    Log::error('upload_file: file not found at expected path', ['path' => $path, 'uploaded' => $uploadedFileName]);
                                     \Filament\Notifications\Notification::make()
                                         ->title('Upload Failed')
                                         ->body('Unable to read uploaded file.')
@@ -295,21 +306,19 @@ class TournamentResource extends Resource
                                     }
 
                                     $answers = array_map('trim', explode(',', $row['answers']));
-                                    $correct = null;
-                                    $corrects = [];
                                     $answersArray = [];
 
                                     if ($type === 'mcq') {
+                                        // For MCQ, store the correct answer text in answers array
                                         $correctText = $answers[0] ?? '';
-                                        $correct = array_search($correctText, array_column($options, 'text'));
-                                        if ($correct === false) $correct = null;
-                                    } elseif ($type === 'multi') {
-                                        $corrects = [];
-                                        foreach ($answers as $ans) {
-                                            $idx = array_search($ans, array_column($options, 'text'));
-                                            if ($idx !== false) $corrects[] = $idx;
+                                        if ($correctText) {
+                                            $answersArray = [$correctText];
                                         }
+                                    } elseif ($type === 'multi') {
+                                        // For multi-select, store all correct answer texts
+                                        $answersArray = $answers;
                                     } else {
+                                        // For other types (short, numeric, etc.), store as-is
                                         $answersArray = $answers;
                                     }
 
@@ -318,10 +327,8 @@ class TournamentResource extends Resource
                                         'body' => $body,
                                         'options' => $options,
                                         'answers' => $answersArray,
-                                        'correct' => $correct,
-                                        'corrects' => $corrects,
                                         'marks' => (float)$row['marks'],
-                                        'difficulty' => $row['difficulty'],
+                                        'difficulty' => (int)$row['difficulty'],
                                         'explanation' => $row['explanation'],
                                         'youtube_url' => $row['youtube_url'],
                                         'media_path' => $row['media'],
@@ -338,6 +345,15 @@ class TournamentResource extends Resource
 
                                 $currentIds = $get('questions') ?? [];
                                 $set('questions', array_unique(array_merge($currentIds, $createdQuestions)));
+
+                                // Clean up the temporary file
+                                try {
+                                    if (file_exists($path)) {
+                                        unlink($path);
+                                    }
+                                } catch (\Throwable $e) {
+                                    Log::warning('upload_file: failed to delete temp file', ['path' => $path, 'error' => $e->getMessage()]);
+                                }
 
                                 \Filament\Notifications\Notification::make()
                                     ->title('Upload Successful')

@@ -40,25 +40,25 @@ class SocialAuthController extends Controller
             $socialUser = Socialite::driver($provider)->user();
             $user = $this->socialAuthService->findOrCreateUser($socialUser, $provider);
 
-            // Log the user into the session so Sanctum/cookie-based endpoints work
-            try {
-                Auth::login($user);
+            // Log the user into the session. Keep the session active during onboarding
+            // so that password and role can be set. The session cookie will persist
+            // across onboarding requests, and after profile completion the user remains authenticated.
+            Auth::login($user);
 
-                // If the user has no password, they are a new socialite user.
-                // We log them in to start a session, but then immediately log them out of the session guard
-                // to prevent a session being stored with an empty password hash.
-                // The frontend will use the returned API token for subsequent onboarding requests.
-                if (empty($user->password)) { Auth::logout(); }
-            } catch (\Throwable $ex) { /* ignore session issues */ }
+            // Revoke old tokens before issuing a new one. This ensures only the latest
+            // token is valid, preventing token accumulation and unauthorized reuse.
+            $this->socialAuthService->revokeAllTokens($user);
 
-            // Create token for API authentication (also returned to SPA as a convenience)
-            $token = $user->createToken('auth_token')->plainTextToken;
+            // Create a token with expiry for API-based authentication (JSON responses).
+            // Token expires in 30 days by default (configurable).
+            $tokenExpiresIn = config('sanctum.expiration', 30) * 24 * 60; // in minutes
+            $token = $user->createToken('auth_token', ['*'], now()->addMinutes($tokenExpiresIn))->plainTextToken;
 
             // If profile is not complete, return different response
             $requiresCompletion = !$user->is_profile_completed;
             $nextStep = $this->determineNextStep($user);
 
-            // If the request expects JSON (API/client), return JSON as before.
+            // If the request expects JSON (API/client), return JSON with token.
             if ($request->wantsJson() || $request->ajax() || str_contains($request->header('accept',''), '/json')) {
                 return response()->json([
                     'token' => $token,
@@ -68,12 +68,10 @@ class SocialAuthController extends Controller
                 ], 200);
             }
 
-            // Otherwise assume this is a browser OAuth flow - redirect back to frontend
-            // Frontend will handle storing the token and routing the user. Configure FRONTEND_APP_URL in .env
+            // Browser OAuth flow: redirect back to frontend.
+            // Session cookie is automatically included by browser (Sanctum handles this).
+            // Additionally, set a secure HttpOnly cookie with the token for fallback API auth.
             $frontend = env('FRONTEND_APP_URL', config('app.url') ?? 'http://localhost:3000');
-
-            // Retrieve the intended destination from the session, or default to a safe path.
-            // Pull it from the session so it's only available once.
             $nextUrl = session()->pull('auth_redirect_url', '/auth/callback');
 
             // Ensure the path starts with a slash to prevent open redirect vulnerabilities.
@@ -81,13 +79,29 @@ class SocialAuthController extends Controller
                 $nextUrl = '/auth/callback';
             }
 
-            // Build redirect URL (we place data in query string). Token is sent in query for simplicity.
+            // Build redirect URL with only safe metadata (no token in URL).
+            // The session cookie and secure token cookie will authenticate subsequent requests.
             $query = http_build_query([
-                'token' => $token,
                 'requires_profile_completion' => $requiresCompletion ? '1' : '0',
                 'next_step' => $nextStep,
             ]);
-            return redirect()->to(rtrim($frontend, '/') . $nextUrl . '?' . $query);
+
+            // Set secure HttpOnly token cookie (if frontend and backend on same top-level domain or cookies configured).
+            // Expires in same duration as token. SameSite=Lax for cross-site request tolerance (OAuth redirect).
+            $redirectUrl = rtrim($frontend, '/') . $nextUrl . '?' . $query;
+            $cookie = \Illuminate\Support\Facades\Cookie::make(
+                'auth_token',
+                $token,
+                $tokenExpiresIn,
+                '/',
+                config('session.domain'), // e.g., '.example.com' for cross-subdomain
+                config('session.secure', true), // HTTPS only
+                true, // HttpOnly
+                false, // raw
+                config('session.same_site', 'Lax') // SameSite attribute
+            );
+
+            return redirect()->to($redirectUrl)->withCookie($cookie);
 
         } catch (\Exception $e) {
             return response()->json([

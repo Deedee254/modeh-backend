@@ -20,22 +20,53 @@ class QuestionResource extends Resource
         return $schema->schema([
             \Filament\Schemas\Components\Section::make()
                 ->schema([
-                    Forms\Components\Textarea::make('content')->required()->rows(4),
-                    Forms\Components\Select::make('difficulty')
-                        ->options(['easy' => 'Easy', 'medium' => 'Medium', 'hard' => 'Hard'])
+                    Forms\Components\Textarea::make('body')->label('Question')->required()->rows(4),
+                    Forms\Components\Select::make('type')
+                        ->options(['mcq' => 'Multiple Choice', 'multi' => 'Multiple Answer', 'short' => 'Short Answer', 'numeric' => 'Numeric', 'fill_blank' => 'Fill in Blanks', 'math' => 'Math', 'code' => 'Code', 'essay' => 'Essay'])
                         ->required(),
-                    Forms\Components\TextInput::make('points')->numeric()->default(1),
-                    Forms\Components\Select::make('grade_id')->relationship('grade', 'name')->required(),
-                    Forms\Components\Select::make('subject_id')->relationship('subject', 'name')->required(),
-                    Forms\Components\Select::make('topic_id')->relationship('topic', 'name')->visible(fn($get) => filled($get('subject_id'))),
+                    Forms\Components\Select::make('difficulty')
+                        ->options([1 => 'Very Easy', 2 => 'Easy', 3 => 'Medium', 4 => 'Hard', 5 => 'Very Hard'])
+                        ->required()
+                        ->native(false),
+                    Forms\Components\TextInput::make('marks')
+                        ->numeric()
+                        ->default(1)
+                        ->required(),
+                    Forms\Components\Select::make('grade_id')
+                        ->relationship('grade', 'name')
+                        ->required()
+                        ->native(false),
+                    Forms\Components\Select::make('subject_id')
+                        ->relationship('subject', 'name')
+                        ->required()
+                        ->native(false),
+                    Forms\Components\Select::make('topic_id')
+                        ->relationship('topic', 'name')
+                        ->native(false),
+                    Forms\Components\Select::make('level_id')
+                        ->relationship('level', 'name')
+                        ->native(false),
                     Forms\Components\Repeater::make('options')
                         ->schema([
-                            Forms\Components\TextInput::make('content')->required(),
-                            Forms\Components\Toggle::make('is_correct')->label('Correct?')
+                            Forms\Components\TextInput::make('text')->label('Option Text')->required(),
+                            Forms\Components\Hidden::make('label'),
                         ])
                         ->createItemButtonLabel('Add option')
                         ->minItems(2)
-                        ->maxItems(6),
+                        ->maxItems(6)
+                        ->visible(fn($get) => in_array($get('type'), ['mcq', 'multi'])),
+                    Forms\Components\Textarea::make('answers')
+                        ->label('Correct Answers (JSON array)')
+                        ->rows(3)
+                        ->helperText('e.g., ["Option A", "Option B"] or [0, 2] for indices')
+                        ->json(),
+                    Forms\Components\Textarea::make('explanation')
+                        ->label('Explanation')
+                        ->rows(3),
+                    Forms\Components\Toggle::make('is_approved')
+                        ->label('Approved'),
+                    Forms\Components\Toggle::make('is_banked')
+                        ->label('Banked Question'),
                 ])
         ]);
     }
@@ -45,18 +76,37 @@ class QuestionResource extends Resource
         return $table
             ->columns([
                 \Filament\Tables\Columns\TextColumn::make('id')->sortable(),
-                \Filament\Tables\Columns\TextColumn::make('content')->limit(80)->wrap()->searchable(),
-                \Filament\Tables\Columns\TextColumn::make('difficulty')->sortable()->badge(),
-                \Filament\Tables\Columns\TextColumn::make('points')->sortable(),
+                \Filament\Tables\Columns\TextColumn::make('body')->label('Question')->limit(80)->wrap()->searchable(),
+                \Filament\Tables\Columns\TextColumn::make('type')->sortable()->badge(),
+                \Filament\Tables\Columns\TextColumn::make('difficulty')
+                    ->sortable()
+                    ->badge()
+                    ->formatStateUsing(fn($state) => match((int)$state) {
+                        1 => 'Very Easy',
+                        2 => 'Easy',
+                        3 => 'Medium',
+                        4 => 'Hard',
+                        5 => 'Very Hard',
+                        default => $state
+                    })
+                    ->color(fn($state) => match((int)$state) {
+                        1 => 'success',
+                        2 => 'info',
+                        3 => 'warning',
+                        4 => 'danger',
+                        5 => 'error',
+                        default => 'gray'
+                    }),
+                \Filament\Tables\Columns\TextColumn::make('marks')->label('Points')->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('grade.name')->label('Grade')->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('subject.name')->label('Subject')->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('topic.name')->label('Topic')->sortable(),
                 \Filament\Tables\Columns\IconColumn::make('is_approved')->boolean()->label('Approved'),
-                \Filament\Tables\Columns\TextColumn::make('user.name')->label('Author')->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('created_at')->dateTime(),
             ])
             ->filters([
-                \Filament\Tables\Filters\SelectFilter::make('difficulty')->options(['easy'=>'Easy','medium'=>'Medium','hard'=>'Hard']),
+                \Filament\Tables\Filters\SelectFilter::make('difficulty')
+                    ->options([1 => 'Very Easy', 2 => 'Easy', 3 => 'Medium', 4 => 'Hard', 5 => 'Very Hard']),
                 \Filament\Tables\Filters\SelectFilter::make('grade')->relationship('grade','name'),
                 \Filament\Tables\Filters\SelectFilter::make('subject')->relationship('subject','name'),
             ])

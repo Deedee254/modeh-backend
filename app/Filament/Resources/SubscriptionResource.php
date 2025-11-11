@@ -9,9 +9,8 @@ use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\IconColumn;
-use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\DateTimePicker;
+use Filament\Actions\Action;
 
 class SubscriptionResource extends Resource
 {
@@ -21,15 +20,19 @@ class SubscriptionResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            Select::make('user_id')->relationship('user', 'name')->required(),
+            Select::make('user_id')
+                ->relationship(
+                    'user',
+                    'name',
+                    fn ($query) => $query->where('role', 'quizee')
+                )
+                ->required(),
             Select::make('package_id')->relationship('package', 'title')->required(),
             Select::make('status')->options([
                 'pending' => 'Pending',
                 'active' => 'Active',
                 'cancelled' => 'Cancelled',
             ])->required(),
-            DateTimePicker::make('started_at'),
-            DateTimePicker::make('ends_at'),
         ]);
     }
 
@@ -59,9 +62,9 @@ class SubscriptionResource extends Resource
                     $record->ends_at = now()->addDays($days);
                     $record->save();
                 }),
-                \Filament\Actions\ViewAction::make(),
-                \Filament\Actions\EditAction::make(),
-                \Filament\Actions\DeleteAction::make(),
+            \Filament\Actions\ViewAction::make(),
+            \Filament\Actions\EditAction::make(),
+            \Filament\Actions\DeleteAction::make(),
         ])
         ->bulkActions([
             \Filament\Actions\DeleteBulkAction::make(),
@@ -72,7 +75,7 @@ class SubscriptionResource extends Resource
     {
         return [
             'index' => Pages\ListSubscriptions::route('/'),
-            // 'create' page not present in Pages; omit to avoid autoload errors
+            'create' => Pages\CreateSubscription::route('/create'),
             'edit' => Pages\EditSubscription::route('/{record}/edit'),
             'view' => Pages\ViewSubscription::route('/{record}'),
         ];

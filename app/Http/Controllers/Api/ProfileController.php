@@ -48,25 +48,7 @@ class ProfileController extends Controller
         
         return response()->json([
             'message' => 'Profile updated successfully',
-            'profile' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'avatar' => $user->social_avatar,
-                'headline' => $profile->headline ?? 'Experienced quiz master',
-                'bio' => $profile->bio,
-                'institution' => $profile->institution,
-                'grade' => $profile->grade ? [
-                    'id' => $profile->grade->id,
-                    'name' => $profile->grade->name,
-                ] : null,
-                'subjects' => Subject::whereIn('id', $profile->subjects ?? [])->get()
-                    ->map(function ($subject) {
-                        return [
-                            'id' => $subject->id,
-                            'name' => $subject->name,
-                        ];
-                    }),
-            ]
+            'profile' => $user->quizMasterProfile->load('grade')->append('subjectModels')->toArray(),
         ]);
     }
 
@@ -117,25 +99,7 @@ class ProfileController extends Controller
         
         return response()->json([
             'message' => 'Profile updated successfully',
-            'profile' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'avatar' => $user->social_avatar,
-                'first_name' => $profile->first_name,
-                'last_name' => $profile->last_name,
-                'institution' => $profile->institution,
-                'grade' => $profile->grade ? [
-                    'id' => $profile->grade->id,
-                    'name' => $profile->grade->name,
-                ] : null,
-                'subjects' => Subject::whereIn('id', $profile->subjects ?? [])->get()
-                    ->map(function ($subject) {
-                        return [
-                            'id' => $subject->id,
-                            'name' => $subject->name,
-                        ];
-                    }),
-            ]
+            'profile' => $user->quizeeProfile->load('grade')->toArray(),
         ]);
     }
 }

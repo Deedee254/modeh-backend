@@ -69,9 +69,18 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::get('/me', function (Request $request) {
-        // Ensure the affiliate relation is loaded so the frontend can access
-        // the user's referral code without an additional request.
-        return $request->user()->loadMissing('affiliate');
+        $user = $request->user();
+        
+        // Load profile relationship based on role
+        if ($user->role === 'quiz-master') {
+            $user->loadMissing(['quizMasterProfile.grade', 'affiliate']);
+        } elseif ($user->role === 'quizee') {
+            $user->loadMissing(['quizeeProfile.grade', 'affiliate']);
+        } else {
+            $user->loadMissing('affiliate');
+        }
+        
+        return $user;
     });
 
     // Return only the authenticated user's affiliate record (smaller payload)
@@ -229,6 +238,8 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
         Route::get('/admin/echo/stats', [\App\Http\Controllers\Api\EchoMonitoringController::class, 'stats']);
         Route::get('/admin/echo/settings', [\App\Http\Controllers\Api\EchoAdminController::class, 'settings']);
         Route::post('/admin/echo/prune', [\App\Http\Controllers\Api\EchoAdminController::class, 'prune']);
+        // Admin: assign or upgrade a user's subscription to a chosen package (idempotent)
+        Route::post('/admin/subscriptions/assign/{user}', [\App\Http\Controllers\Api\AdminSubscriptionController::class, 'assign']);
     });
     
     // Wallet (quiz-master)
@@ -280,6 +291,7 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/battles', [\App\Http\Controllers\Api\BattleController::class, 'store']);
     Route::get('/battles/{battle}', [\App\Http\Controllers\Api\BattleController::class, 'show']);
     Route::post('/battles/{battle}/join', [\App\Http\Controllers\Api\BattleController::class, 'join']);
+    Route::post('/battles/{battle}/start-solo', [\App\Http\Controllers\Api\BattleController::class, 'startSolo']);
 
     // Tournaments
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);

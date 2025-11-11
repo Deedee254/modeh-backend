@@ -29,6 +29,11 @@ class GradeController extends Controller
             $query->where('name', 'like', "%{$q}%");
         }
 
+        // Filter by level_id if provided (for cascading filters)
+        if ($levelId = $request->get('level_id')) {
+            $query->where('level_id', $levelId);
+        }
+
         $grades = $query->orderBy('id')->get();
         // Add total quizzes per grade
         $grades->each(function($grade) {

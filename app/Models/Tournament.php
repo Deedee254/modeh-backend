@@ -23,13 +23,18 @@ class Tournament extends Model
         'min_participants',
         'format',
         'rules',
-    'level_id',
-        'requires_premium',
+        'timeline',
+        'level_id',
+        'grade_id',
+        'subject_id',
+        'topic_id',
+        'created_by',
+        'winner_id',
+        'sponsor_id',
+        'sponsor_banner',
+        'sponsor_details',
         'requires_approval',
         'is_featured',
-        'banner_url',
-        'auto_start',
-        'auto_complete'
     ];
 
     protected $casts = [

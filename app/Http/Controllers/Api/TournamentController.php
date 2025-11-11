@@ -48,9 +48,9 @@ class TournamentController extends Controller
 
     public function show(Tournament $tournament)
     {
-        // Eager-load winner and include questions on battles so the frontend can
+        // Eager-load winner, sponsor, and include questions on battles so the frontend can
         // render a current battle inline without an extra request.
-        $tournament->load(['subject', 'topic', 'grade', 'participants', 'battles.questions', 'winner']);
+        $tournament->load(['subject', 'topic', 'grade', 'level', 'participants', 'battles.questions', 'winner', 'sponsor']);
         $user = auth()->user();
 
         // Add participation info for current user

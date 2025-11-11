@@ -108,8 +108,8 @@ class BattleController extends Controller
 
     public function show(Request $request, Battle $battle)
     {
-        // Conditionally load questions. Default to true, but allow disabling.
-        if ($request->boolean('with_questions', true)) {
+        // Conditionally load questions. Default to false for waiting room, allow enabling.
+        if ($request->boolean('with_questions', false)) {
             $battle->load('questions');
         }
         // expose time_per_question at top-level for frontend convenience
@@ -151,6 +151,36 @@ class BattleController extends Controller
         }
 
         return response()->json(['ok' => true, 'battle' => $battle]);
+    }
+
+    public function startSolo(Request $request, Battle $battle)
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+
+        // Only a participant can start solo mode (initiator or opponent who joined)
+        if (!in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
+            return response()->json(['message' => 'Only battle participants can start solo mode'], 403);
+        }
+
+        // Only allowed if battle is still waiting
+        if ($battle->status !== 'waiting') {
+            return response()->json(['message' => 'Battle is not in waiting state'], 400);
+        }
+
+        // Transition to in-progress
+        $battle->status = 'in-progress';
+        $battle->started_at = now();
+        $battle->save();
+
+        // Broadcast status update event
+        try {
+            event(new \App\Events\BattleStatusUpdated($battle));
+        } catch (\Exception $e) {
+            // ignore broadcast errors
+        }
+
+        return response()->json(['ok' => true, 'message' => 'Solo battle started', 'battle' => $battle]);
     }
 
     public function attachQuestions(Request $request, Battle $battle)
