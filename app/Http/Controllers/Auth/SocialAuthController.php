@@ -96,7 +96,7 @@ class SocialAuthController extends Controller
                 $tokenExpiresIn,
                 '/',
                 config('session.domain'), // e.g., '.example.com' for cross-subdomain
-                config('session.secure', true), // HTTPS only
+                config('session.secure'), // Use environment config - false for local dev, true for production
                 false, // NOT HttpOnly - allows JavaScript to read it
                 false, // raw
                 config('session.same_site', 'Lax') // SameSite attribute
