@@ -12,9 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Add CookieToBearer middleware to the API group so auth_token cookies
-        // are converted to Authorization headers before Sanctum authenticates.
-        $middleware->api([\App\Http\Middleware\CookieToBearer::class]);
+        //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
