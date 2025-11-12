@@ -15,6 +15,25 @@ class Grade extends Model
         'is_active' => 'boolean',
     ];
 
+    public function getDisplayNameAttribute($value)
+    {
+        if (filled($value)) {
+            return $value;
+        }
+
+        if (filled($this->attributes['name'] ?? null)) {
+            return $this->attributes['name'];
+        }
+
+        $id = $this->attributes['id'] ?? null;
+
+        if ($id !== null) {
+            return 'Grade ' . $id;
+        }
+
+        return '';
+    }
+
     public function subjects()
     {
         return $this->hasMany(Subject::class);
