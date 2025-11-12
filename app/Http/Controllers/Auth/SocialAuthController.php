@@ -86,7 +86,8 @@ class SocialAuthController extends Controller
                 'next_step' => $nextStep,
             ]);
 
-            // Set secure HttpOnly token cookie (if frontend and backend on same top-level domain or cookies configured).
+            // Set secure token cookie (NOT HttpOnly so JavaScript can read it for Authorization header).
+            // Frontend JavaScript will read this cookie and include it as a Bearer token.
             // Expires in same duration as token. SameSite=Lax for cross-site request tolerance (OAuth redirect).
             $redirectUrl = rtrim($frontend, '/') . $nextUrl . '?' . $query;
             $cookie = \Illuminate\Support\Facades\Cookie::make(
@@ -96,7 +97,7 @@ class SocialAuthController extends Controller
                 '/',
                 config('session.domain'), // e.g., '.example.com' for cross-subdomain
                 config('session.secure', true), // HTTPS only
-                true, // HttpOnly
+                false, // NOT HttpOnly - allows JavaScript to read it
                 false, // raw
                 config('session.same_site', 'Lax') // SameSite attribute
             );
