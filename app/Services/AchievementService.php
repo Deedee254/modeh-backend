@@ -99,6 +99,7 @@ class AchievementService
      */
     protected function awardAchievement(User $user, Achievement $achievement, ?int $attemptId = null): Achievement
     {
+
         $payload = [
             'completed_at' => now(),
             'progress' => $achievement->criteria_value,
@@ -107,11 +108,16 @@ class AchievementService
             $payload['attempt_id'] = $attemptId;
         }
 
-        $user->achievements()->attach($achievement->id, $payload);
+    $user->achievements()->attach($achievement->id, $payload);
 
-        // Add points from achievement (defensive: wrap in try/catch to avoid failing when points column missing)
+        // Add points from achievement only for quizee users. Quiz-masters use wallet earnings
+        // and shouldn't have their leaderboard points changed here.
         try {
-            $user->increment('points', $achievement->points);
+            if (isset($user->role) && $user->role === 'quizee') {
+                $user->increment('points', $achievement->points);
+            } else {
+                try { \Log::info("Achievement awarded to non-quizee (no points increment): user={$user->id}, role={$user->role}, achievement={$achievement->id}"); } catch (\Throwable $_) {}
+            }
         } catch (\Throwable $e) {
             // Log and continue; we don't want achievements to fail due to points column issues
             try { \Log::warning('Could not increment user points for achievement: '.$e->getMessage()); } catch (\Throwable $_) {}

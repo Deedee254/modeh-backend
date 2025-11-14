@@ -1,8 +1,8 @@
 <template>
   <div class="flex min-h-[calc(100vh-6rem)] md:min-h-[calc(100vh-8rem)] bg-[#f0f2f5] px-4 py-6 md:px-6">
     <div class="hidden md:flex w-96 flex-shrink-0">
-      <div class="flex h-full w-full flex-col rounded-3xl border border-border/50 bg-white text-foreground shadow-xl backdrop-blur">
-        <div class="p-4 border-b border-border bg-white text-foreground rounded-t-3xl sticky top-0 z-30">
+  <div class="flex h-full w-full flex-col rounded-3xl border border-border/50 bg-white text-foreground shadow-xl">
+  <div class="p-4 border-b border-border bg-white text-foreground rounded-t-3xl sticky top-0 z-60">
           <div class="flex items-center justify-between mb-4">
             <h1 class="text-xl font-semibold">Threads</h1>
           </div>
@@ -19,7 +19,7 @@
             >
           </div>
         </div>
-        <div class="px-4 py-3 border-b border-border bg-transparent sticky top-[128px] z-20">
+  <div class="px-4 py-3 border-b border-border bg-transparent sticky top-[128px] z-50">
           <div dir="ltr" data-orientation="horizontal">
             <div role="tablist" aria-orientation="horizontal" class="h-10 items-center justify-center rounded-md p-1 text-muted-foreground grid w-full grid-cols-3 bg-muted/50">
               <button

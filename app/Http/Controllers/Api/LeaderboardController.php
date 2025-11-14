@@ -39,14 +39,16 @@ class LeaderboardController extends Controller
         
         if ($hasPointsColumn) {
             try {
-                $query = User::query()->select(['id', 'name', 'email', 'points', 'social_avatar', 'country', 'created_at']);
+                // Avoid selecting optional columns such as `country` which may not exist
+                // across all environments. Select a minimal safe set and normalize later.
+                $query = User::query()->select(['id', 'name', 'email', 'points', 'social_avatar', 'created_at']);
             } catch (\Exception $e) {
                 \Log::warning('Failed to query with points column: ' . $e->getMessage());
-                $query = User::query()->selectRaw('id, name, email, 0 as points, social_avatar, country, created_at');
+                $query = User::query()->selectRaw('id, name, email, 0 as points, social_avatar, created_at');
             }
         } else {
             // Fallback for older schema without points column
-            $query = User::query()->selectRaw('id, name, email, 0 as points, social_avatar, country, created_at');
+            $query = User::query()->selectRaw('id, name, email, 0 as points, social_avatar, created_at');
             \Log::info('Using fallback query - points column does not exist');
         }
 
@@ -56,6 +58,9 @@ class LeaderboardController extends Controller
                     ->orWhere('email', 'like', "%{$q}%");
             });
         }
+
+        // Only include quizee users on the public leaderboard
+        $query->where('role', 'quizee');
 
         // Validate sort_by allowed values
         $allowedSort = ['points', 'name', 'created_at'];
@@ -73,14 +78,17 @@ class LeaderboardController extends Controller
         }
 
         try {
-            $paginated = $query->paginate($perPage, ['id', 'name', 'email', 'points', 'avatar', 'country', 'created_at'], 'page', $page);
+            // Use the query's selected columns (avoid overriding with a columns list that
+            // may not exist across different schema versions). This is more resilient
+            // and avoids errors when migrations differ between environments.
+            $paginated = $query->paginate($perPage, ['*'], 'page', $page);
 
             // Normalize collection items to a stable shape expected by frontend
             $paginated->getCollection()->transform(function ($u) {
                 return [
                     'id' => $u->id,
                     'name' => $u->name ?? ($u->email ?? 'Unknown'),
-                    'avatar' => $u->avatar ?? $u->social_avatar ?? null,
+                    'avatar' => property_exists($u, 'avatar') && $u->avatar ? $u->avatar : ($u->social_avatar ?? null),
                     'points' => (int)($u->points ?? 0), // Force integer
                     'country' => $u->country ?? null,
                 ];
@@ -88,9 +96,12 @@ class LeaderboardController extends Controller
 
             return response()->json($paginated);
         } catch (\Exception $e) {
-            \Log::error('Leaderboard query failed: ' . $e->getMessage());
-            
-            // Return empty result set rather than 500
+            // Log full exception with stack so debugging is easier
+            \Log::error('Leaderboard query failed: ' . $e->getMessage(), ['exception' => $e]);
+
+            // Return empty result set rather than 500 to avoid breaking public pages,
+            // but include a helpful message in logs. Frontend will show the empty
+            // pagination shape and our UI now renders table headers while loading.
             return response()->json([
                 'data' => [],
                 'total' => 0,

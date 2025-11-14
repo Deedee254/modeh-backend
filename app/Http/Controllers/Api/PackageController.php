@@ -54,32 +54,83 @@ class PackageController extends Controller
             } catch (\Throwable $_) {}
         }
 
-        // Create pending subscription (new)
-        $sub = Subscription::create([
-            'user_id' => $user->id,
-            'package_id' => $package->id,
-            'status' => 'pending',
-            'gateway' => $request->gateway ?? 'mpesa',
-            'gateway_meta' => ['phone' => $request->phone ?? $user->phone ?? null],
-        ]);
+        $pkgPrice = $package->price ?? 0;
+        $gw = $request->gateway ?? 'mpesa';
 
-        // If gateway is mpesa, attempt to initiate STK Push
-        if (($request->gateway ?? 'mpesa') === 'mpesa') {
+        // If package is free or gateway explicitly set to 'free', create and activate immediately
+        if ((float)$pkgPrice === 0.0 || $gw === 'free') {
+            $sub = Subscription::create([
+                'user_id' => $user->id,
+                'package_id' => $package->id,
+                'status' => 'active',
+                'gateway' => 'free',
+                'gateway_meta' => ['phone' => $request->phone ?? $user->phone ?? null],
+                'started_at' => now(),
+                'ends_at' => !empty($package->duration_days) ? now()->addDays($package->duration_days) : null,
+            ]);
+            return response()->json(['ok' => true, 'subscription' => $sub, 'previous_subscription' => $previous ?? null, 'package' => [
+                'id' => $package->id,
+                'title' => $package->title,
+                'features' => $package->features ?? [],
+            ]]);
+        }
+
+        // Handle mpesa gateway: validate phone/config, initiate STK push, then create subscription only on success
+        if ($gw === 'mpesa') {
+            $phone = $request->phone ?? ($user->phone ?? null);
+            if (!$phone || !is_string($phone) || trim($phone) === '') {
+                return response()->json([
+                    'ok' => false,
+                    'require_phone' => true,
+                    'message' => 'Phone number required for mpesa payments',
+                    'package' => [
+                        'id' => $package->id,
+                        'title' => $package->title,
+                        'price' => $package->price,
+                    ],
+                ], 422);
+            }
+
             try {
                 $setting = PaymentSetting::where('gateway', 'mpesa')->first();
                 $config = $setting ? ($setting->config ?? []) : [];
+                $requiredKeys = ['consumer_key', 'consumer_secret', 'shortcode', 'passkey'];
+                $missing = [];
+                foreach ($requiredKeys as $k) {
+                    if (empty($config[$k])) $missing[] = $k;
+                }
+                if (!empty($missing)) {
+                    try { Log::error('MpesaService: missing config keys: '.implode(',', $missing)); } catch (\Throwable $_) {}
+                    return response()->json([
+                        'ok' => false,
+                        'code' => 'gateway_not_configured',
+                        'message' => 'Payment gateway not configured',
+                        'missing' => $missing,
+                        'package' => [
+                            'id' => $package->id,
+                            'title' => $package->title,
+                            'price' => $package->price,
+                        ],
+                    ], 500);
+                }
+
                 $service = new MpesaService($config);
                 $amount = $package->price ?? 0;
-                $phone = $request->phone ?? ($sub->gateway_meta['phone'] ?? null) ?? ($user->phone ?? null);
-                $res = $service->initiateStkPush($phone, $amount, 'Subscription-'.$sub->id);
+                $res = $service->initiateStkPush($phone, $amount, 'Subscription-temp');
                 if ($res['ok']) {
-                    $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], ['tx' => $res['tx'], 'initiated_at' => now()]);
-                    $sub->save();
+                    // Create subscription now that initiation succeeded
+                    $sub = Subscription::create([
+                        'user_id' => $user->id,
+                        'package_id' => $package->id,
+                        'status' => 'pending',
+                        'gateway' => 'mpesa',
+                        'gateway_meta' => ['phone' => $phone, 'tx' => $res['tx'], 'initiated_at' => now()],
+                    ]);
                     return response()->json([
                         'ok' => true,
                         'subscription' => $sub,
                         'tx' => $res['tx'],
-                        'message' => $res['message'],
+                        'message' => $res['message'] ?? null,
                         'previous_subscription' => $previous ?? null,
                         'package' => [
                             'id' => $package->id,
@@ -88,12 +139,10 @@ class PackageController extends Controller
                         ]
                     ]);
                 }
-                // initiation failed — return subscription but indicate failure
+
                 return response()->json([
                     'ok' => false,
-                    'subscription' => $sub,
                     'message' => 'failed to initiate mpesa',
-                    'previous_subscription' => $previous ?? null,
                     'package' => [
                         'id' => $package->id,
                         'title' => $package->title,
@@ -104,9 +153,7 @@ class PackageController extends Controller
                 try { Log::error('Mpesa initiate error: '.$e->getMessage()); } catch (\Throwable $_) {}
                 return response()->json([
                     'ok' => false,
-                    'subscription' => $sub,
                     'message' => 'mpesa initiation error',
-                    'previous_subscription' => $previous ?? null,
                     'package' => [
                         'id' => $package->id,
                         'title' => $package->title,
@@ -116,7 +163,14 @@ class PackageController extends Controller
             }
         }
 
-        // For non-mpesa gateways just return subscription; include previous subscription info and package features
+        // For other gateways, create pending subscription (gateway may handle initiation separately)
+        $sub = Subscription::create([
+            'user_id' => $user->id,
+            'package_id' => $package->id,
+            'status' => 'pending',
+            'gateway' => $gw,
+            'gateway_meta' => ['phone' => $request->phone ?? $user->phone ?? null],
+        ]);
         $resp = ['ok' => true, 'subscription' => $sub, 'previous_subscription' => $previous ?? null, 'package' => [
             'id' => $package->id,
             'title' => $package->title,

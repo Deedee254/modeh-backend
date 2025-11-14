@@ -53,8 +53,12 @@ class TournamentController extends Controller
         $tournament->load(['subject', 'topic', 'grade', 'level', 'participants', 'battles.questions', 'winner', 'sponsor']);
         $user = auth()->user();
 
-        // Add participation info for current user
-        $isParticipant = $tournament->participants()->where('user_id', $user->id)->exists();
+        // Add participation info for current user (guard when no authenticated user)
+        if ($user) {
+            $isParticipant = $tournament->participants()->where('user_id', $user->id)->exists();
+        } else {
+            $isParticipant = false;
+        }
         $tournament->is_participant = $isParticipant;
 
         // Return an explicit JSON shape so callers (frontend) can rely on
@@ -364,8 +368,11 @@ class TournamentController extends Controller
 
     public function leaderboard(Tournament $tournament)
     {
-        // Load participants and map pivot values to keys the frontend expects
-        $participants = $tournament->participants()->withPivot('score', 'rank', 'completed_at')->get();
+        // Load participants (only quizee users) and map pivot values to keys the frontend expects
+        $participants = $tournament->participants()
+            ->where('role', 'quizee')
+            ->withPivot('score', 'rank', 'completed_at')
+            ->get();
 
         $leaderboard = $participants->map(function ($p) {
             return [

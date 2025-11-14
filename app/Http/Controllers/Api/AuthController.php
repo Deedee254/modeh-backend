@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
@@ -167,7 +168,24 @@ class AuthController extends Controller
         }
 
         // Attempt to authenticate using session (cookie-based) auth
-        if (! Auth::attempt($request->only('email', 'password'))) {
+        // Support "remember me" so clients can request a persistent login.
+        $remember = $request->boolean('remember', false);
+        // Log the login attempt for debugging (temporary)
+        Log::info('Login attempt', ['email' => $request->input('email')]);
+        // Additional debug: check whether a user exists and whether the password matches
+        try {
+            $dbgUser = User::where('email', $request->input('email'))->first();
+            if ($dbgUser) {
+                $pwMatch = \Illuminate\Support\Facades\Hash::check($request->input('password'), $dbgUser->password);
+                Log::info('Login debug user found', ['email' => $dbgUser->email, 'pw_match' => $pwMatch]);
+            } else {
+                Log::info('Login debug user not found', ['email' => $request->input('email')]);
+            }
+        } catch (\Exception $ex) {
+            Log::error('Login debug error', ['err' => $ex->getMessage()]);
+        }
+        if (! Auth::attempt($request->only('email', 'password'), $remember)) {
+            Log::warning('Login failed', ['email' => $request->input('email')]);
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
