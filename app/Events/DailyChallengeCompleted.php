@@ -15,6 +15,8 @@ class DailyChallengeCompleted implements ShouldBroadcastContract
 
     public $userId;
     public $challenge;
+        // Ensure broadcasting happens after DB transaction commit
+        public $afterCommit = true;
 
     public function __construct(int $userId, array $challenge)
     {

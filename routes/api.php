@@ -65,8 +65,20 @@ Route::get('/badges', [\App\Http\Controllers\Api\BadgeController::class, 'index'
 // Public daily challenge leaderboard
 Route::get('/daily-challenges/leaderboard', [\App\Http\Controllers\Api\DailyChallengeController::class, 'leaderboard']);
 
+// Public institutions endpoints
+Route::get('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'index'] ?? function () { return response()->json([], 200); });
+Route::get('/institutions/{institution}', [\App\Http\Controllers\Api\InstitutionController::class, 'show']);
+
 Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Institution creation (authenticated users become institution-manager)
+    Route::post('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'store']);
+    // Institution member management (institution manager only)
+    Route::get('/institutions/{institution}/members', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'index']);
+    Route::get('/institutions/{institution}/requests', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'requests']);
+    Route::post('/institutions/{institution}/members/accept', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'accept']);
+    Route::delete('/institutions/{institution}/members/{user}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'remove']);
 
     Route::get('/me', function (Request $request) {
         $user = $request->user();

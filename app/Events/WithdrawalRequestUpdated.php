@@ -14,6 +14,8 @@ class WithdrawalRequestUpdated implements ShouldBroadcast
 
     public $withdrawal;
     public $userId;
+       // Ensure broadcasting happens after DB transaction commit
+       public $afterCommit = true;
 
     public function __construct($userId, $withdrawal)
     {

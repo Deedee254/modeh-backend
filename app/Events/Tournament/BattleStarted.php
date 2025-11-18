@@ -14,6 +14,9 @@ class BattleStarted implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
+
     public $battle;
 
     public function __construct(TournamentBattle $battle)

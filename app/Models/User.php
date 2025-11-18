@@ -10,6 +10,7 @@ use Laravel\Sanctum\HasApiTokens;
 use App\Models\QuizMaster;
 use App\Models\Affiliate;
 use App\Models\Quizee;
+use App\Models\Institution;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 
@@ -155,6 +156,16 @@ class User extends Authenticatable implements FilamentUser
     public function quizzes()
     {
         return $this->hasMany(Quiz::class);
+    }
+
+    /**
+     * Institutions this user belongs to (membership/pivot stores role like institution-manager)
+     */
+    public function institutions()
+    {
+        return $this->belongsToMany(Institution::class, 'institution_user')
+            ->withPivot('role', 'status', 'invited_by')
+            ->withTimestamps();
     }
 
     public function quizAttempts()

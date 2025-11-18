@@ -11,6 +11,9 @@ class GroupMembershipChanged implements ShouldBroadcast
 {
     use InteractsWithSockets, SerializesModels;
 
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
+
     public $groupId;
     public $action; // 'created', 'member_added', 'member_removed'
     public $members; // array of member ids/emails

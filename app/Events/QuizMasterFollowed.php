@@ -13,6 +13,9 @@ class QuizMasterFollowed implements ShouldBroadcast
 {
     use InteractsWithSockets, SerializesModels;
 
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
+
     public $quizMaster;
     public $user;
 

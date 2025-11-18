@@ -30,6 +30,7 @@ class DatabaseSeeder extends Seeder
             // QuizQuestionSeeder::class,
             PaymentSettingsSeeder::class,
             PackageSeeder::class,
+            InstitutionManagerSeeder::class,
             AssignSubscriptionsSeeder::class,
             // Sponsors and Testimonials
             SponsorSeeder::class,

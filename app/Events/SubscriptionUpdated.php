@@ -6,12 +6,16 @@ use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class SubscriptionUpdated implements ShouldBroadcastNow
+class SubscriptionUpdated implements ShouldBroadcast, ShouldQueue
 {
-    use InteractsWithSockets, SerializesModels;
+    use Dispatchable, InteractsWithSockets, SerializesModels;
+
+    // Ensure broadcasting happens after DB transaction commit and is queued
+    public $afterCommit = true;
 
     public $userId;
     public $subscription;

@@ -7,8 +7,6 @@ use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\ShouldBroadcast;
-use Illuminate\Broadcasting\ShouldBroadcastNow;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast as ShouldBroadcastContract;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -17,6 +15,8 @@ class BattleStatusUpdated implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $battle;
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
 
     public function __construct($battle)
     {

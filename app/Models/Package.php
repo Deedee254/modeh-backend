@@ -9,13 +9,14 @@ use Illuminate\Database\Eloquent\Model;
 class Package extends Model
 {
     use HasFactory;
-    protected $fillable = ['title','description','short_description','slug','price','currency','features','is_active','duration_days','cover_image','is_default'];
+    protected $fillable = ['title','description','short_description','slug','price','currency','features','is_active','duration_days','seats','cover_image','is_default'];
 
     protected $casts = [
         'features' => 'array',
         'price' => 'decimal:2',
         'is_active' => 'boolean',
         'duration_days' => 'integer',
+        'seats' => 'integer',
         'is_default' => 'boolean',
     ];
 

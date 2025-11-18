@@ -15,6 +15,9 @@ class AchievementUnlocked implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
+
     public $user;
     public $achievement;
 

@@ -14,6 +14,9 @@ class BadgeAwarded implements ShouldBroadcastContract
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
+
     public $userId;
     public $badge;
 

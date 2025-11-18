@@ -41,8 +41,31 @@ class PackageController extends Controller
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
 
-        // If user has an active subscription, mark it as cancelled/ended so this acts as a switch
-        $previous = Subscription::where('user_id', $user->id)
+        // Determine owner (defaults to the authenticated user)
+        $ownerType = 'App\\Models\\User';
+        $ownerId = $user->id;
+        if ($request->owner_type === 'institution' || ($request->owner_type && str_contains($request->owner_type, 'Institution'))) {
+            // institution subscription requested
+            $institutionId = $request->owner_id;
+            if (!$institutionId) {
+                return response()->json(['ok' => false, 'message' => 'owner_id (institution id) required for institution subscription'], 422);
+            }
+            $inst = \App\Models\Institution::find($institutionId);
+            if (!$inst) return response()->json(['ok' => false, 'message' => 'Institution not found'], 404);
+
+            // Ensure the current user is an institution-manager for this institution
+            $isManager = $inst->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+            if (!$isManager) {
+                return response()->json(['ok' => false, 'message' => 'Forbidden: must be an institution-manager to subscribe on behalf of institution'], 403);
+            }
+
+            $ownerType = \App\Models\Institution::class;
+            $ownerId = $inst->id;
+        }
+
+        // If owner has an active subscription, mark it as cancelled/ended so this acts as a switch
+        $previous = Subscription::where('owner_type', $ownerType)
+            ->where('owner_id', $ownerId)
             ->where('status', 'active')
             ->orderByDesc('started_at')
             ->first();
@@ -61,6 +84,8 @@ class PackageController extends Controller
         if ((float)$pkgPrice === 0.0 || $gw === 'free') {
             $sub = Subscription::create([
                 'user_id' => $user->id,
+                'owner_type' => $ownerType,
+                'owner_id' => $ownerId,
                 'package_id' => $package->id,
                 'status' => 'active',
                 'gateway' => 'free',
@@ -121,6 +146,8 @@ class PackageController extends Controller
                     // Create subscription now that initiation succeeded
                     $sub = Subscription::create([
                         'user_id' => $user->id,
+                        'owner_type' => $ownerType,
+                        'owner_id' => $ownerId,
                         'package_id' => $package->id,
                         'status' => 'pending',
                         'gateway' => 'mpesa',
@@ -166,6 +193,8 @@ class PackageController extends Controller
         // For other gateways, create pending subscription (gateway may handle initiation separately)
         $sub = Subscription::create([
             'user_id' => $user->id,
+            'owner_type' => $ownerType,
+            'owner_id' => $ownerId,
             'package_id' => $package->id,
             'status' => 'pending',
             'gateway' => $gw,

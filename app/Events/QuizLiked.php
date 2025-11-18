@@ -13,6 +13,9 @@ class QuizLiked implements ShouldBroadcast
 {
     use InteractsWithSockets, SerializesModels;
 
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
+
     public $quiz;
     public $user;
 

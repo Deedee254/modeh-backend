@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Institution;
 
 class QuizMaster extends Model
 {
@@ -28,6 +29,11 @@ class QuizMaster extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function institution()
+    {
+        return $this->belongsTo(Institution::class, 'institution_id');
     }
 
     public function quizzes()

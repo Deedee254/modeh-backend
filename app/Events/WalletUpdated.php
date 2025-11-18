@@ -12,6 +12,9 @@ class WalletUpdated implements ShouldBroadcast
 {
     use InteractsWithSockets, SerializesModels;
 
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
+
     public $wallet;
     public $userId;
 

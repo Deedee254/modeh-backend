@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Quiz;
 use App\Models\QuizMaster;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use App\Events\QuizLiked;
@@ -18,7 +19,8 @@ class InteractionController extends Controller
     {
         $user = $request->user();
 
-        DB::transaction(function () use ($quiz, $user) {
+        // Perform DB work inside a transaction and return whether we should broadcast
+        $shouldBroadcastLike = DB::transaction(function () use ($quiz, $user) {
             $exists = DB::table('quiz_likes')->where(['quiz_id' => $quiz->id, 'user_id' => $user->id])->exists();
             if (! $exists) {
                 DB::table('quiz_likes')->insert([
@@ -31,10 +33,24 @@ class InteractionController extends Controller
                 // Atomically increment cached counter on quizzes table
                 DB::table('quizzes')->where('id', $quiz->id)->increment('likes_count', 1);
 
-                // Broadcast event for listeners
-                Event::dispatch(new QuizLiked($quiz, $user));
+                // indicate that we should broadcast
+                return true;
             }
+
+            return false;
         });
+
+        if ($shouldBroadcastLike) {
+            try {
+                Event::dispatch(new QuizLiked($quiz, $user));
+            } catch (\Throwable $e) {
+                \Log::error('Failed to broadcast QuizLiked event', [
+                    'quiz_id' => $quiz->id,
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return response()->json(['liked' => true]);
     }
@@ -57,7 +73,10 @@ class InteractionController extends Controller
     {
         $user = $request->user();
 
-        DB::transaction(function () use ($quizMaster, $user) {
+        // Use a flag to indicate whether we should broadcast after the DB commit.
+        $shouldBroadcast = false;
+
+        DB::transaction(function () use ($quizMaster, $user, &$shouldBroadcast) {
             $exists = DB::table('quiz_master_follows')->where(['quiz_master_id' => $quizMaster->id, 'user_id' => $user->id])->exists();
             if (! $exists) {
                 DB::table('quiz_master_follows')->insert([
@@ -69,9 +88,27 @@ class InteractionController extends Controller
 
                 DB::table('quiz_masters')->where('id', $quizMaster->id)->increment('followers_count', 1);
 
-                Event::dispatch(new QuizMasterFollowed($quizMaster, $user));
+                // Mark that we should broadcast after the transaction commits.
+                $shouldBroadcast = true;
             }
         });
+
+        // Dispatch broadcast after the transaction has committed. If broadcasting
+        // fails (e.g. Echo/Push service unavailable) we log the error but do not
+        // roll back the DB changes.
+        if ($shouldBroadcast) {
+            try {
+                Event::dispatch(new QuizMasterFollowed($quizMaster, $user));
+            } catch (\Throwable $e) {
+                // Don't let broadcast failures break the follow operation.
+                // Log for later inspection.
+                \Log::error('Failed to broadcast QuizMasterFollowed event', [
+                    'quiz_master_id' => $quizMaster->id,
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return response()->json(['following' => true]);
     }
