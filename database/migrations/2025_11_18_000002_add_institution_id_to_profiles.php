@@ -13,14 +13,27 @@ return new class extends Migration
     {
         Schema::table('quiz_masters', function (Blueprint $table) {
             if (!Schema::hasColumn('quiz_masters', 'institution_id')) {
-                $table->unsignedBigInteger('institution_id')->nullable()->after('level_id');
+                // Only use the AFTER modifier when the referenced column exists.
+                if (Schema::hasColumn('quiz_masters', 'level_id')) {
+                    $table->unsignedBigInteger('institution_id')->nullable()->after('level_id');
+                } else {
+                    // Add without positional modifier to avoid SQL errors when level_id is missing.
+                    $table->unsignedBigInteger('institution_id')->nullable();
+                }
+
+                // Add foreign key constraint if possible.
                 $table->foreign('institution_id')->references('id')->on('institutions')->onDelete('set null');
             }
         });
 
         Schema::table('quizees', function (Blueprint $table) {
             if (!Schema::hasColumn('quizees', 'institution_id')) {
-                $table->unsignedBigInteger('institution_id')->nullable()->after('level_id');
+                if (Schema::hasColumn('quizees', 'level_id')) {
+                    $table->unsignedBigInteger('institution_id')->nullable()->after('level_id');
+                } else {
+                    $table->unsignedBigInteger('institution_id')->nullable();
+                }
+
                 $table->foreign('institution_id')->references('id')->on('institutions')->onDelete('set null');
             }
         });
