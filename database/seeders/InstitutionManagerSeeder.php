@@ -73,6 +73,8 @@ class InstitutionManagerSeeder extends Seeder
         $values = [
             'owner_type' => Institution::class,
             'owner_id' => $institution->id,
+            // keep user_id populated because subscriptions.user_id column is non-nullable in the schema
+            'user_id' => $user->id,
             'package_id' => $basic->id,
             'status' => 'active',
             'gateway' => 'seed',
