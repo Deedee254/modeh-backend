@@ -217,7 +217,7 @@ class QuizController extends Controller
                         'is_approved' => $questionIsApproved,
                         'is_banked' => isset($q['is_banked']) ? (bool)$q['is_banked'] : false,
                         'level_id' => $quiz->level_id,
-                        'grade_id' => $quiz->grade_id,
+                        'grade_id' => $quiz->grade_id, // Always use quiz's grade to ensure consistency
                         'subject_id' => $quiz->subject_id,
                         'topic_id' => $quiz->topic_id,
                     ];
@@ -235,6 +235,8 @@ class QuizController extends Controller
                         \Log::info('QuizController@update question created', [
                             'quiz_id' => $quiz->id,
                             'question_id' => $createdQuestion->id ?? null,
+                            'created_grade_id' => $createdQuestion->grade_id,
+                            'expected_grade_id' => $quiz->grade_id,
                             'index' => $index,
                             'payload_keys' => is_array($q) ? array_values(array_keys($q)) : null,
                         ]);
@@ -590,13 +592,13 @@ class QuizController extends Controller
                         'answers' => $answers,
                         'media_path' => $mediaPath,
                         'media_type' => $mediaType,
-                            'difficulty' => $q['difficulty'] ?? 3,
-                            'marks' => isset($q['marks']) ? $q['marks'] : null,
+                        'difficulty' => $q['difficulty'] ?? 3,
+                        'marks' => isset($q['marks']) ? $q['marks'] : null,
                         'is_quiz-master_marked' => true,
                         'is_approved' => false,
                         'is_banked' => $isBanked,
                         'level_id' => $quiz->level_id,
-                        'grade_id' => $quiz->grade_id,
+                        'grade_id' => $quiz->grade_id, // Always use quiz's grade to ensure consistency
                         'subject_id' => $quiz->subject_id,
                         'topic_id' => $quiz->topic_id,
                     ];
@@ -614,6 +616,8 @@ class QuizController extends Controller
                         \Log::info('QuizController@store question created', [
                             'quiz_id' => $quiz->id,
                             'question_id' => $createdQuestion->id ?? null,
+                            'created_grade_id' => $createdQuestion->grade_id,
+                            'expected_grade_id' => $quiz->grade_id,
                             'index' => $index,
                             'payload_keys' => is_array($q) ? array_values(array_keys($q)) : null,
                         ]);

@@ -189,10 +189,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-    // Obtain the authenticated user and ensure affiliate relation is loaded
+    // Obtain the authenticated user and ensure affiliate and institutions relations are loaded
     $user = Auth::user();
-    // Load affiliate relation so frontend receives affiliate data without a second request
-    $user->loadMissing('affiliate');
+    // Load affiliate relation and institutions so frontend receives institution data without a second request
+    $user->loadMissing(['affiliate', 'institutions']);
 
     // Regenerate session id for security (uses the configured single session cookie)
     $request->session()->regenerate();

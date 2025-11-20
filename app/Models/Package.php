@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 class Package extends Model
 {
     use HasFactory;
-    protected $fillable = ['title','description','short_description','slug','price','currency','features','is_active','duration_days','seats','cover_image','is_default'];
+    protected $fillable = ['title','description','short_description','slug','price','currency','features','is_active','duration_days','seats','cover_image','is_default','audience'];
 
     protected $casts = [
         'features' => 'array',
@@ -19,6 +19,28 @@ class Package extends Model
         'seats' => 'integer',
         'is_default' => 'boolean',
     ];
+
+    protected $attributes = [
+        'audience' => 'quizee',
+    ];
+
+    /**
+     * Scope packages for a specific audience (quizee | institution)
+     */
+    public function scopeForAudience($query, $audience = 'quizee')
+    {
+        return $query->where('audience', $audience);
+    }
+
+    public function scopeForQuizee($query)
+    {
+        return $query->where('audience', 'quizee');
+    }
+
+    public function scopeForInstitution($query)
+    {
+        return $query->where('audience', 'institution');
+    }
 
     protected $appends = ['name', 'price_display', 'more_link'];
 

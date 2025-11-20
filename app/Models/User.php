@@ -179,4 +179,12 @@ class User extends Authenticatable implements FilamentUser
             ->withTimestamps()
             ->withPivot('progress', 'completed_at', 'attempt_id');
     }
+
+    /**
+     * Assignments from subscriptions granted to this user.
+     */
+    public function subscriptionAssignments()
+    {
+        return $this->hasMany(\App\Models\SubscriptionAssignment::class);
+    }
 }

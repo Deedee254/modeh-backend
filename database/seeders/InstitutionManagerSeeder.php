@@ -18,7 +18,10 @@ class InstitutionManagerSeeder extends Seeder
             [
                 'name' => 'Institution Manager',
                 'password' => bcrypt('password'),
-                'role' => 'quiz-master',
+                // this user acts as an institution manager in the seeded data
+                'role' => 'institution-manager',
+                // mark profile complete so the UI doesn't force complete-profile on login
+                'is_profile_completed' => true,
             ]
         );
 
@@ -55,6 +58,7 @@ class InstitutionManagerSeeder extends Seeder
             'is_active' => true,
             'duration_days' => 30,
             'seats' => 10,
+            'audience' => 'institution',
         ]);
 
         $plus = Package::updateOrCreate(['slug' => 'institution-plus'], [
@@ -67,6 +71,7 @@ class InstitutionManagerSeeder extends Seeder
             'is_active' => true,
             'duration_days' => 30,
             'seats' => 100,
+            'audience' => 'institution',
         ]);
 
         // Activate the basic package for this institution (seeded subscription)

@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Institution;
 use App\Models\User;
 use App\Models\Subscription;
+use App\Models\SubscriptionAssignment;
 
 class InstitutionMemberController extends Controller
 {
@@ -160,13 +161,9 @@ class InstitutionMemberController extends Controller
             ->first();
 
         if ($activeSub && $activeSub->package) {
-            $seats = $activeSub->package->seats ?? null;
-            if (!is_null($seats)) {
-                // count existing accepted members (status = active)
-                $count = \DB::table('institution_user')->where('institution_id', $institution->id)->where('status', 'active')->count();
-                if ($count >= (int)$seats) {
-                    return response()->json(['ok' => false, 'message' => 'Seat limit reached for this institution package'], 422);
-                }
+            $available = $activeSub->availableSeats();
+            if (!is_null($available) && $available <= 0) {
+                return response()->json(['ok' => false, 'message' => 'Seat limit reached for this institution package'], 422);
             }
         }
 
@@ -186,6 +183,23 @@ class InstitutionMemberController extends Controller
             ]);
         }
 
+        // If institution has an active subscription, attempt to assign a seat to this user
+        if ($activeSub && $activeSub->package) {
+            try {
+                $assignment = $activeSub->assignUser($u->id, $user->id);
+                if (!$assignment) {
+                    // rollback pivot change
+                    // mark the pivot back to pending or delete (we'll mark pending)
+                    \DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->update(['status' => 'pending', 'updated_at' => now()]);
+                    return response()->json(['ok' => false, 'message' => 'Failed to assign subscription seat: limit reached'], 422);
+                }
+            } catch (\Throwable $e) {
+                // best-effort: revert pivot and surface error
+                \DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->update(['status' => 'pending', 'updated_at' => now()]);
+                return response()->json(['ok' => false, 'message' => 'Failed to assign subscription seat'], 500);
+            }
+        }
+
         return response()->json(['ok' => true, 'message' => 'User accepted into institution']);
     }
 
@@ -197,5 +211,84 @@ class InstitutionMemberController extends Controller
 
         \DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $userId)->delete();
         return response()->json(['ok' => true, 'message' => 'User removed from institution']);
+    }
+
+    /**
+     * Return the active subscription for the institution (if any), available seats and current assignments
+     */
+    public function subscription(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+
+        $activeSub = Subscription::where('owner_type', \App\Models\Institution::class)
+            ->where('owner_id', $institution->id)
+            ->where('status', 'active')
+            ->orderByDesc('started_at')
+            ->first();
+
+        if (!$activeSub) {
+            return response()->json(['ok' => true, 'subscription' => null, 'available_seats' => null, 'assignments' => []]);
+        }
+
+        $assignments = $activeSub->assignments()->whereNull('revoked_at')->with(['user', 'assignedBy'])->get()->map(function ($a) {
+            return [
+                'id' => $a->id,
+                'user_id' => $a->user_id,
+                'user_name' => $a->user ? $a->user->name : null,
+                'user_email' => $a->user ? $a->user->email : null,
+                'assigned_by' => $a->assignedBy ? $a->assignedBy->name : null,
+                'assigned_at' => $a->assigned_at ? $a->assigned_at->toDateTimeString() : null,
+            ];
+        })->values();
+
+        return response()->json([
+            'ok' => true,
+            'subscription' => $activeSub,
+            'available_seats' => $activeSub->availableSeats(),
+            'assignments' => $assignments,
+        ]);
+    }
+
+    /**
+     * Revoke an assignment (free up a seat) for a user on the institution's active subscription.
+     */
+    public function revokeAssignment(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+
+        $data = $request->validate([
+            'user_id' => 'required|integer',
+        ]);
+
+        $activeSub = Subscription::where('owner_type', \App\Models\Institution::class)
+            ->where('owner_id', $institution->id)
+            ->where('status', 'active')
+            ->orderByDesc('started_at')
+            ->first();
+
+        if (!$activeSub) return response()->json(['ok' => false, 'message' => 'No active subscription found'], 404);
+
+        $assignment = SubscriptionAssignment::where('subscription_id', $activeSub->id)
+            ->where('user_id', $data['user_id'])
+            ->whereNull('revoked_at')
+            ->first();
+
+        if (!$assignment) {
+            return response()->json(['ok' => false, 'message' => 'Assignment not found'], 404);
+        }
+
+        $assignment->revoked_at = now();
+        $assignment->save();
+
+        // Optionally mark the pivot as removed so the member no longer counts as active
+        try {
+            \DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $data['user_id'])->update(['status' => 'removed', 'updated_at' => now()]);
+        } catch (\Throwable $_) {}
+
+        return response()->json(['ok' => true, 'message' => 'Assignment revoked']);
     }
 }

@@ -12,6 +12,7 @@ class Institution extends Model
     protected $fillable = [
         'name',
         'slug',
+        'parent_id',
         'email',
         'phone',
         'logo_url',
@@ -107,5 +108,23 @@ class Institution extends Model
     public function subscriptions()
     {
         return $this->morphMany(Subscription::class, 'owner');
+    }
+
+    public function parent()
+    {
+        return $this->belongsTo(Institution::class, 'parent_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(Institution::class, 'parent_id');
+    }
+
+    /**
+     * Use slug for route-model binding so controllers can accept institution slugs in URLs.
+     */
+    public function getRouteKeyName()
+    {
+        return 'slug';
     }
 }

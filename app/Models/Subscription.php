@@ -63,4 +63,58 @@ class Subscription extends Model
 
         return $this;
     }
+
+    /**
+     * Assignment relations: which users (quizees) have been assigned seats from this subscription
+     */
+    public function assignments()
+    {
+        return $this->hasMany(\App\Models\SubscriptionAssignment::class);
+    }
+
+    /**
+     * Return number of seats available (seats - active assignments)
+     */
+    public function availableSeats()
+    {
+        $seats = optional($this->package)->seats;
+        if (is_null($seats)) return null; // unlimited
+        $assigned = $this->assignments()->whereNull('revoked_at')->count();
+        return max(0, (int)$seats - (int)$assigned);
+    }
+
+    /**
+     * Assign a seat to a user. Returns the SubscriptionAssignment on success or null on failure.
+     */
+    public function assignUser(int $userId, ?int $assignedBy = null)
+    {
+        // If package has no seat limit, allow assignment
+        $seats = optional($this->package)->seats;
+        if (!is_null($seats)) {
+            $available = $this->availableSeats();
+            if ($available <= 0) {
+                return null; // no seats
+            }
+        }
+
+        // create or update a unique assignment
+        $assignment = \App\Models\SubscriptionAssignment::firstOrCreate([
+            'subscription_id' => $this->id,
+            'user_id' => $userId,
+        ], [
+            'assigned_by' => $assignedBy,
+            'assigned_at' => now(),
+            'revoked_at' => null,
+        ]);
+
+        // If it existed but was revoked, revive it
+        if ($assignment->revoked_at) {
+            $assignment->revoked_at = null;
+            $assignment->assigned_by = $assignedBy;
+            $assignment->assigned_at = now();
+            $assignment->save();
+        }
+
+        return $assignment;
+    }
 }

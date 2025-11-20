@@ -15,11 +15,25 @@ class InstitutionController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'slug' => 'nullable|string|max:255',
+            'parent' => 'nullable|string', // slug or id of parent institution (branch creation)
             'email' => 'nullable|email',
             'phone' => 'nullable|string|max:50',
         ]);
 
-        $institution = Institution::create(array_merge($data, ['created_by' => $user->id]));
+        // Resolve parent if provided (accept id or slug)
+        $parentId = null;
+        if (!empty($data['parent'])) {
+            $p = $data['parent'];
+            $q = Institution::query();
+            if (ctype_digit(strval($p))) {
+                $q->orWhere('id', (int)$p);
+            }
+            $q->orWhere('slug', $p);
+            $parent = $q->first();
+            if ($parent) $parentId = $parent->id;
+        }
+
+        $institution = Institution::create(array_merge($data, ['created_by' => $user->id, 'parent_id' => $parentId]));
 
         // Attach the creator as institution-manager
         $institution->users()->attach($user->id, [
@@ -31,9 +45,9 @@ class InstitutionController extends Controller
         return response()->json($institution, 201);
     }
 
-    public function show($id)
+    public function show(Institution $institution)
     {
-        $institution = Institution::with('users')->findOrFail($id);
+        $institution->load('users', 'children');
         return response()->json($institution);
     }
 }

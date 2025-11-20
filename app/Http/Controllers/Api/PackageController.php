@@ -15,7 +15,12 @@ class PackageController extends Controller
 {
     public function index()
     {
-        $packages = Package::where('is_active', true)->orderBy('price')->get()->map(function ($p) {
+        $audience = request()->input('audience', null);
+        $q = Package::where('is_active', true)->orderBy('price');
+        if ($audience) {
+            $q = $q->where('audience', $audience);
+        }
+        $packages = $q->get()->map(function ($p) {
             return [
                 'id' => $p->id,
                 'title' => $p->title,
@@ -31,6 +36,7 @@ class PackageController extends Controller
                 'more_link' => $p->more_link,
                 'is_active' => (bool) $p->is_active,
                 'slug' => $p->slug,
+                'audience' => $p->audience ?? 'quizee',
             ];
         });
         return response()->json(['packages' => $packages]);
@@ -50,7 +56,13 @@ class PackageController extends Controller
             if (!$institutionId) {
                 return response()->json(['ok' => false, 'message' => 'owner_id (institution id) required for institution subscription'], 422);
             }
-            $inst = \App\Models\Institution::find($institutionId);
+            // owner_id may be numeric id or slug; try to resolve either way
+            $instQuery = \App\Models\Institution::query();
+            if (ctype_digit(strval($institutionId))) {
+                $instQuery->orWhere('id', (int)$institutionId);
+            }
+            $instQuery->orWhere('slug', $institutionId);
+            $inst = $instQuery->first();
             if (!$inst) return response()->json(['ok' => false, 'message' => 'Institution not found'], 404);
 
             // Ensure the current user is an institution-manager for this institution
@@ -81,6 +93,14 @@ class PackageController extends Controller
         $gw = $request->gateway ?? 'mpesa';
 
         // If package is free or gateway explicitly set to 'free', create and activate immediately
+        // Enforce package audience matches owner type
+        if ($ownerType === \App\Models\Institution::class && ($package->audience ?? 'quizee') !== 'institution') {
+            return response()->json(['ok' => false, 'message' => 'Package is not available for institutions'], 422);
+        }
+        if ($ownerType === \App\Models\User::class && ($package->audience ?? 'quizee') !== 'quizee') {
+            return response()->json(['ok' => false, 'message' => 'Package is not available for users'], 422);
+        }
+
         if ((float)$pkgPrice === 0.0 || $gw === 'free') {
             $sub = Subscription::create([
                 'user_id' => $user->id,
