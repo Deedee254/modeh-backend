@@ -15,11 +15,13 @@ class TertiaryAndEYESeeder extends Seeder
         // Ensure we have a tertiary level available (lookup by name since slug column was removed)
         $tertiary = Level::where('name', 'Tertiary / Higher Education')->first();
         if (! $tertiary) {
-            $tertiary = Level::create([
-                'name' => 'Tertiary / Higher Education',
-                'order' => 6,
-                'description' => 'Tertiary and higher education',
-            ]);
+            $tertiary = Level::updateOrCreate(
+                ['name' => 'Tertiary / Higher Education'],
+                [
+                    'order' => 6,
+                    'description' => 'Tertiary and higher education',
+                ]
+            );
         }
 
         // Map Pre-Primary grades (EYE)

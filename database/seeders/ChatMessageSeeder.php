@@ -71,14 +71,18 @@ class ChatMessageSeeder extends Seeder
     private function createConversation(array $messages): void
     {
         foreach ($messages as $msg) {
-            Message::create([
-                'sender_id' => $msg['from'],
-                'recipient_id' => $msg['to'],
-                'content' => $msg['message'],
-                'type' => 'direct',
-                'created_at' => Carbon::now()->subMinutes($msg['minutes_ago']),
-                'updated_at' => Carbon::now()->subMinutes($msg['minutes_ago']),
-            ]);
+            Message::updateOrInsert(
+                [
+                    'sender_id' => $msg['from'],
+                    'recipient_id' => $msg['to'],
+                    'content' => $msg['message'],
+                ],
+                [
+                    'type' => 'direct',
+                    'created_at' => Carbon::now()->subMinutes($msg['minutes_ago']),
+                    'updated_at' => Carbon::now()->subMinutes($msg['minutes_ago']),
+                ]
+            );
         }
     }
 }

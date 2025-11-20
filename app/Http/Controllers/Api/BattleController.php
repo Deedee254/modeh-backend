@@ -28,43 +28,46 @@ class BattleController extends Controller
     {
         $user = $request->user();
 
-        $data = $request->only(['name']);
-        $data['initiator_id'] = $user->id;
-// Ensure opponent_id is set to something if DB requires it (tests use sqlite schema)
-    $data['opponent_id'] = $request->input('opponent_id', $user->id);
-        $data['status'] = 'waiting';
-        if ($request->has('settings')) {
-            // persist settings as provided (will be cast to array by model)
-            $data['settings'] = $request->input('settings');
-        }
+        $battle = DB::transaction(function () use ($request, $user) {
+            $data = $request->only(['name']);
+            $data['initiator_id'] = $user->id;
+            $data['opponent_id'] = $request->input('opponent_id', $user->id);
+            $data['status'] = 'waiting';
+            if ($request->has('settings')) {
+                $data['settings'] = $request->input('settings');
+            }
 
-        $battle = Battle::create($data);
+            $battle = Battle::create($data);
 
-        // If frontend requested atomic attach, perform selection now
-        if ($request->boolean('attach_questions')) {
-            // Validate required filters before selection
-            $this->validateAttachPayload($request);
+            // If frontend requested atomic attach, perform selection now
+            if ($request->boolean('attach_questions')) {
+                $this->validateAttachPayload($request);
+                $this->selectAndAttachQuestions($battle, $request->all());
+                $battle->load('questions');
+            }
 
-            $this->selectAndAttachQuestions($battle, $request->all());
-            $battle->load('questions');
-        }
+            // Calculate timing once based on actual attached questions or provided count
+            $settings = is_array($battle->settings) ? $battle->settings : [];
+            $totalTime = $request->input('settings.time_total_seconds') 
+                ?? $request->input('settings.total_time_seconds') 
+                ?? $request->input('time_total_seconds') 
+                ?? null;
+            
+            $questionCount = $battle->questions()->count();
+            if ($totalTime && $questionCount > 0) {
+                $per = (int) floor(intval($totalTime) / $questionCount);
+                $settings['time_per_question'] = $per;
+                $settings['time_total_seconds'] = intval($totalTime);
+                $battle->settings = $settings;
+            }
 
-        // If frontend provided a total time in settings, compute and persist time_per_question so
-        // the battle payload immediately contains timing for frontends to enforce.
-        $settings = is_array($battle->settings) ? $battle->settings : (array) ($battle->settings ?? []);
-        $totalTime = $request->input('settings.time_total_seconds') ?? $request->input('settings.total_time_seconds') ?? $request->input('time_total_seconds') ?? $request->input('total_time_seconds') ?? null;
-        if ($totalTime && isset($settings['question_count']) && intval($settings['question_count']) > 0) {
-            $count = intval($settings['question_count']);
-            $per = (int) floor(intval($totalTime) / $count);
-            $settings['time_per_question'] = $per;
-            $settings['time_total_seconds'] = intval($totalTime);
-            $battle->settings = $settings;
             $battle->save();
             $battle->load('questions');
-        }
 
-    // return created battle including uuid for sharing
-    return response()->json($battle);
+            return $battle;
+        });
+
+        return response()->json($battle);
     }
 
     public function index(Request $request)
@@ -185,17 +188,28 @@ class BattleController extends Controller
 
     public function attachQuestions(Request $request, Battle $battle)
     {
-        // Only allow the initiator to attach questions for now
+        // Only allow the initiator to attach questions
         $user = $request->user();
         if ($battle->initiator_id !== $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
-        // Validate payload when attaching questions
-        $this->validateAttachPayload($request);
 
+        // Prevent re-attachment (once questions are set, they stay)
+        if ($battle->questions()->exists()) {
+            return response()->json([
+                'message' => 'Questions are already attached to this battle',
+                'attached_count' => $battle->questions()->count()
+            ], 409);
+        }
+
+        $this->validateAttachPayload($request);
         $questions = $this->selectAndAttachQuestions($battle, $request->all());
 
-        return response()->json(['attached' => count($questions), 'questions' => $questions]);
+        return response()->json([
+            'ok' => true,
+            'attached' => count($questions),
+            'questions' => $questions
+        ]);
     }
 
     /**
@@ -264,19 +278,54 @@ class BattleController extends Controller
             $questions = $q->limit($perPage)->get();
         }
 
-        // If no questions matched the filters, fall back to random questions from the full bank
+        // Fail fast if filters don't match any questions
         if ($questions->isEmpty()) {
-            $questions = Question::inRandomOrder()->limit($perPage)->get();
+            Log::warning('No questions found for battle attachment', [
+                'initiator_id' => auth()->id() ?? 'unknown',
+                'filters' => compact('grade', 'subject', 'topic', 'difficulty', 'level'),
+                'perPage' => $perPage,
+            ]);
+            
+            abort(response()->json([
+                'ok' => false,
+                'message' => 'No questions found matching your filters. Please adjust them and try again.',
+                'applied_filters' => array_filter([
+                    'grade_id' => $grade,
+                    'subject_id' => $subject,
+                    'topic_id' => $topic,
+                    'difficulty' => $difficulty,
+                    'level_id' => $level,
+                ]),
+            ], 422));
         }
 
-        // attach with position (replace any existing attachments)
+        // attach with position (deduplicate by question_id)
         $battle->questions()->detach();
         $attachData = [];
+        $seenIds = [];
+        
         foreach ($questions as $i => $question) {
-            $attachData[$question->id] = ['position' => $i];
+            if (!in_array($question->id, $seenIds)) {
+                $attachData[$question->id] = ['position' => count($seenIds)];
+                $seenIds[] = $question->id;
+            }
         }
+
         if (!empty($attachData)) {
             $battle->questions()->attach($attachData);
+            
+            // Log the action
+            Log::info('Battle questions attached', [
+                'battle_id' => $battle->id,
+                'initiator_id' => $battle->initiator_id,
+                'question_count' => count($attachData),
+                'filters_applied' => array_filter([
+                    'grade_id' => $grade,
+                    'subject_id' => $subject,
+                    'topic_id' => $topic,
+                    'difficulty' => $difficulty,
+                ]),
+            ]);
         }
 
         return $questions;

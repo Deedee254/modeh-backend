@@ -229,8 +229,9 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     
     // Daily Challenge endpoints
     Route::get('/daily-challenges/today', [\App\Http\Controllers\Api\DailyChallengeController::class, 'today']);
-    Route::get('/user/daily-challenges', [\App\Http\Controllers\Api\DailyChallengeController::class, 'history']);
-    Route::post('/daily-challenges/{challenge}/submit', [\App\Http\Controllers\Api\DailyChallengeController::class, 'submit']);
+    Route::get('/user/daily-challenges', [\App\Http\Controllers\Api\DailyChallengeController::class, 'userHistory']);
+    Route::get('/daily-challenge-submissions/{submission}', [\App\Http\Controllers\Api\DailyChallengeController::class, 'getSubmissionDetails']);
+    Route::post('/daily-challenges/submit', [\App\Http\Controllers\Api\DailyChallengeController::class, 'submit']);
 
     // Subjects
     Route::post('/subjects', [\App\Http\Controllers\Api\SubjectController::class, 'store']);
