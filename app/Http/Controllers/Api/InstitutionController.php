@@ -9,6 +9,20 @@ use Illuminate\Support\Facades\Auth;
 
 class InstitutionController extends Controller
 {
+    public function index(Request $request)
+    {
+        $perPage = (int) $request->query('per_page', 15);
+
+        $query = Institution::query();
+        if ($request->filled('name')) {
+            $query->where('name', 'like', '%' . $request->query('name') . '%');
+        }
+
+        $institutions = $query->with('children', 'users')->paginate($perPage);
+
+        return response()->json($institutions);
+    }
+
     public function store(Request $request)
     {
         $user = $request->user();

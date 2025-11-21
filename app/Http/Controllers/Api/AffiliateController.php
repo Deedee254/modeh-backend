@@ -168,4 +168,49 @@ class AffiliateController extends Controller
             ]
         ]);
     }
+
+    /**
+     * Send an affiliate invitation email to a given address.
+     * The authenticated user must have an affiliate code (generate if missing).
+     */
+    public function sendInvite(Request $request)
+    {
+        $user = $request->user();
+        if (! $user) return response()->json(['error' => 'Unauthorized'], 401);
+
+        $data = $request->validate([
+            'email' => 'required|email'
+        ]);
+
+        // Ensure affiliate code exists (reuse generateCode logic)
+        $affiliate = $user->affiliate()->first();
+        if (! $affiliate || ! $affiliate->referral_code) {
+            // generate a code
+            $code = strtoupper(Str::random(8));
+            while (\App\Models\Affiliate::where('referral_code', $code)->exists()) {
+                $code = strtoupper(Str::random(8));
+            }
+            if (! $affiliate) {
+                $affiliate = new \App\Models\Affiliate();
+                $affiliate->fill([
+                    'referral_code' => $code,
+                    'commission_rate' => 10.00,
+                    'status' => 'active'
+                ]);
+                $user->affiliate()->save($affiliate);
+            } else {
+                $affiliate->update(['referral_code' => $code, 'status' => 'active']);
+            }
+        }
+
+        // Send email
+        try {
+            \Mail::to($data['email'])->send(new \App\Mail\AffiliateInvitationEmail($user, $data['email'], $affiliate->referral_code));
+        } catch (\Throwable $e) {
+            \Log::error('Failed to send affiliate invitation', ['to' => $data['email'], 'error' => $e->getMessage()]);
+            return response()->json(['ok' => false, 'message' => 'Failed to send email'], 500);
+        }
+
+        return response()->json(['ok' => true, 'message' => 'Affiliate invite sent', 'referral_code' => $affiliate->referral_code]);
+    }
 }

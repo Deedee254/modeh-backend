@@ -11,6 +11,7 @@ use App\Models\SubscriptionAssignment;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class InstitutionMemberController extends Controller
 {
@@ -384,15 +385,25 @@ class InstitutionMemberController extends Controller
             ]);
         }
 
-        // Send invitation email
+        // Generate a short-lived frontend token (ftoken) so recipients that get
+        // the backend-sent email land on the frontend verification flow and can
+        // do one-click verify+accept. Cache mapping like generateInviteToken().
         try {
+            $frontend = env('FRONTEND_URL', config('app.url'));
+            $ftoken = \Illuminate\Support\Str::random(48);
+            $cacheKey = 'invite_frontend_token:' . $ftoken;
+            $ttlMinutes = max(60, (int) round($expiresAt->diffInMinutes(now())));
+            Cache::put($cacheKey, ['invitation_token' => $token, 'institution_id' => $institution->id], now()->addMinutes($ttlMinutes));
+
+            // Send invitation email (passes ftoken so email contains frontend link)
             \Mail::to($data['email'])->send(
                 new \App\Mail\InstitutionInvitationEmail(
                     $institution,
                     $data['email'],
                     $token,
                     $expiresAt,
-                    $user
+                    $user,
+                    $ftoken
                 )
             );
         } catch (\Throwable $e) {
@@ -409,6 +420,95 @@ class InstitutionMemberController extends Controller
             'message' => 'Invitation sent to ' . $data['email'],
             'invitation_token' => $token,
             'expires_at' => $expiresAt
+        ], 201);
+    }
+
+    /**
+     * Generate an invitation token without sending an email. Frontend may use this
+     * to compose and send the invite via its preferred channel. Returns token and
+     * a frontend URL that the inviter can include in emails.
+     */
+    public function generateInviteToken(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        $data = $request->validate([
+            'email' => 'required|email',
+            'role' => 'nullable|in:quizee,quiz-master',
+            'expires_in_days' => 'nullable|integer|min:1|max:30'
+        ]);
+
+        $existingUser = User::where('email', $data['email'])->first();
+
+        $existingInvite = DB::table('institution_user')
+            ->where('institution_id', $institution->id)
+            ->where('invited_email', $data['email'])
+            ->where('invitation_status', 'invited')
+            ->where('invitation_expires_at', '>', now())
+            ->first();
+
+        if ($existingInvite) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'User already invited'
+            ], 422);
+        }
+
+        $token = Str::random(32);
+        $expiresAt = now()->addDays($data['expires_in_days'] ?? 14);
+        $role = $data['role'] ?? 'member';
+
+        if ($existingUser) {
+            DB::table('institution_user')->insert([
+                'institution_id' => $institution->id,
+                'user_id' => $existingUser->id,
+                'role' => $role,
+                'invitation_token' => $token,
+                'invitation_expires_at' => $expiresAt,
+                'invitation_status' => 'invited',
+                'invited_email' => $data['email'],
+                'invited_by' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        } else {
+            DB::table('institution_user')->insert([
+                'institution_id' => $institution->id,
+                'user_id' => null,
+                'role' => $role,
+                'invitation_token' => $token,
+                'invitation_expires_at' => $expiresAt,
+                'invitation_status' => 'invited',
+                'invited_email' => $data['email'],
+                'invited_by' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
+
+    $frontend = env('FRONTEND_URL', config('app.url'));
+    // Generate a short-lived frontend token (ftoken) so a single frontend URL
+    // can carry a one-time token that maps back to this invitation. Store in cache
+    // for the same duration as the invitation expiry.
+    $ftoken = \Illuminate\Support\Str::random(48);
+    $cacheKey = 'invite_frontend_token:' . $ftoken;
+    $ttlMinutes = max(60, (int) round($expiresAt->diffInMinutes(now())));
+    \Illuminate\Support\Facades\Cache::put($cacheKey, ['invitation_token' => $token, 'institution_id' => $institution->id], now()->addMinutes($ttlMinutes));
+
+    // Use the email-verified flow on the frontend so recipients land on the verification page
+    $inviteUrl = $frontend . '/email-verified?invite=' . $token . '&ftoken=' . $ftoken . '&email=' . urlencode($data['email']);
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Invitation token generated',
+            'invitation_token' => $token,
+            'expires_at' => $expiresAt,
+            'invite_url' => $inviteUrl,
         ], 201);
     }
 
@@ -489,10 +589,133 @@ class InstitutionMemberController extends Controller
             }
         }
 
+        // Log acceptance
+        \Log::info('Invitation accepted', ['institution_id' => $institution->id, 'user_id' => $user->id, 'invited_email' => $invitation->invited_email]);
+
+        // Notify institution managers that a new user joined via invitation
+        try {
+            $managers = $institution->users()->wherePivot('role', 'institution-manager')->get();
+            foreach ($managers as $m) {
+                try {
+                    $m->notify(new \App\Notifications\InvitationAccepted($institution, $user));
+                } catch (\Throwable $_) {
+                    // continue even if notification fails for one manager
+                }
+            }
+        } catch (\Throwable $_) {
+            // ignore notification failures
+        }
+
         return response()->json([
             'ok' => true,
             'message' => 'Successfully joined ' . $institution->name
         ]);
+    }
+
+    /**
+     * List pending invitations for this institution (manager only)
+     */
+    public function listInvites(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+
+        // Join with users table to include inviter name when available
+        $invites = DB::table('institution_user as iu')
+            ->leftJoin('users as u', 'iu.invited_by', '=', 'u.id')
+            ->where('iu.institution_id', $institution->id)
+            ->where('iu.invitation_status', 'invited')
+            ->where('iu.invitation_expires_at', '>', now())
+            ->orderByDesc('iu.created_at')
+            ->select(['iu.id', 'iu.invited_email', 'iu.role', 'iu.invitation_token', 'iu.invitation_expires_at', 'iu.invited_by', 'iu.created_at', 'u.name as invited_by_name'])
+            ->get()
+            ->map(function ($i) {
+                return [
+                    'id' => $i->id,
+                    'email' => $i->invited_email,
+                    'role' => $i->role,
+                    'invitation_token' => $i->invitation_token,
+                    'expires_at' => $i->invitation_expires_at,
+                    'invited_by' => $i->invited_by,
+                    'invited_by_name' => $i->invited_by_name ?? null,
+                    'created_at' => $i->created_at,
+                ];
+            });
+
+        return response()->json(['ok' => true, 'invites' => $invites]);
+    }
+
+    /**
+     * Audit: list accepted invitations history for this institution (manager only)
+     */
+    public function listAcceptedInvites(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+
+        // Find pivot rows that were created as invites and later accepted (user_id set and invitation_status active)
+        $rows = DB::table('institution_user as iu')
+            ->leftJoin('users as inviter', 'iu.invited_by', '=', 'inviter.id')
+            ->leftJoin('users as accepted', 'iu.user_id', '=', 'accepted.id')
+            ->where('iu.institution_id', $institution->id)
+            ->where('iu.invitation_status', 'active')
+            ->whereNotNull('iu.invited_email')
+            ->orderByDesc('iu.updated_at')
+            ->select([
+                'iu.id', 'iu.invited_email', 'iu.role', 'iu.invited_by', 'inviter.name as invited_by_name',
+                'iu.user_id as accepted_user_id', 'accepted.name as accepted_user_name',
+                'iu.created_at as invited_at', 'iu.updated_at as accepted_at'
+            ])
+            ->get();
+
+        $result = $rows->map(function ($r) {
+            return [
+                'id' => $r->id,
+                'invited_email' => $r->invited_email,
+                'role' => $r->role,
+                'invited_by' => $r->invited_by,
+                'invited_by_name' => $r->invited_by_name ?? null,
+                'accepted_user_id' => $r->accepted_user_id,
+                'accepted_user_name' => $r->accepted_user_name ?? null,
+                'invited_at' => $r->invited_at,
+                'accepted_at' => $r->accepted_at,
+            ];
+        });
+
+        return response()->json(['ok' => true, 'accepted' => $result]);
+    }
+
+    /**
+     * Revoke a pending invitation by token (manager only)
+     */
+    public function revokeInvite(Request $request, Institution $institution, $token)
+    {
+        $user = $request->user();
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+
+        $inv = DB::table('institution_user')
+            ->where('institution_id', $institution->id)
+            ->where('invitation_token', $token)
+            ->where('invitation_status', 'invited')
+            ->first();
+
+        if (!$inv) {
+            return response()->json(['ok' => false, 'message' => 'Invitation not found or already handled'], 404);
+        }
+
+        DB::table('institution_user')->where('id', $inv->id)->update([
+            'invitation_status' => 'revoked',
+            'invitation_token' => null,
+            'invitation_expires_at' => null,
+            'updated_at' => now(),
+        ]);
+
+        \Log::info('Invitation revoked', ['institution_id' => $institution->id, 'invited_email' => $inv->invited_email, 'revoked_by' => $user->id]);
+
+        return response()->json(['ok' => true, 'message' => 'Invitation revoked']);
     }
 
     /**

@@ -204,6 +204,25 @@ class AuthController extends Controller
             }
         }
 
+        // Handle affiliate referral attribution for institution manager signup as well
+        $referralCode = $request->input('ref') ?? $request->query('ref');
+        if (!empty($referralCode)) {
+            try {
+                $affiliate = Affiliate::where('referral_code', $referralCode)->first();
+                if ($affiliate) {
+                    \App\Models\AffiliateReferral::create([
+                        'affiliate_id' => $affiliate->id,
+                        'user_id' => $user->id,
+                        'type' => 'signup',
+                        'earnings' => 0,
+                        'status' => 'active',
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to create affiliate referral', ['error' => $e->getMessage()]);
+            }
+        }
+
         return response()->json([
             'user' => $user,
             'message' => 'Institution Manager registration successful. Complete your profile to continue.'
@@ -270,5 +289,113 @@ class AuthController extends Controller
         }
 
         return $response;
+    }
+
+    /**
+     * Public endpoint: check whether an email address has been verified.
+     * GET /api/auth/verify-status?email=...
+     */
+    public function verifyStatus(Request $request)
+    {
+        $email = $request->query('email');
+        if (! $email || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['error' => 'invalid_email'], 400);
+        }
+
+        $user = User::where('email', $email)->first();
+        if (! $user) {
+            return response()->json(['exists' => false, 'verified' => false], 200);
+        }
+
+        return response()->json([
+            'exists' => true,
+            'verified' => (bool) $user->hasVerifiedEmail(),
+            'email' => $user->email,
+        ], 200);
+    }
+
+    /**
+     * Consume a frontend-submitted token and mark the user's email as verified.
+     * POST /api/auth/verify-email { token }
+     */
+    public function verifyEmail(Request $request)
+    {
+        $token = $request->input('token');
+        $ftoken = $request->input('ftoken');
+        if (! $token || ! is_string($token)) {
+            return response()->json(['error' => 'invalid_token'], 400);
+        }
+
+        $cacheKey = 'email_verification_token:' . $token;
+        $payload = \Illuminate\Support\Facades\Cache::pull($cacheKey);
+        if (! $payload || ! is_array($payload) || empty($payload['id']) || empty($payload['hash'])) {
+            return response()->json(['error' => 'token_not_found_or_expired'], 410);
+        }
+
+        $user = User::find($payload['id']);
+        if (! $user) return response()->json(['error' => 'user_not_found'], 404);
+
+        // validate the hash matches expected sha1 of email
+        if (! hash_equals((string) $payload['hash'], sha1($user->getEmailForVerification()))) {
+            return response()->json(['error' => 'invalid_hash'], 400);
+        }
+
+        if (! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+            event(new \Illuminate\Auth\Events\Verified($user));
+        }
+
+        // If a frontend invite token was provided, attempt to resolve the invitation mapping
+        // and either accept it now (if the request is authenticated) or return the invite token
+        // so the frontend can save it for post-login processing.
+        if ($ftoken && is_string($ftoken)) {
+            $cacheKey2 = 'invite_frontend_token:' . $ftoken;
+            $map = \Illuminate\Support\Facades\Cache::pull($cacheKey2);
+            if ($map && is_array($map) && !empty($map['invitation_token'])) {
+                $inviteToken = $map['invitation_token'];
+                $institutionId = $map['institution_id'] ?? null;
+                // If user is authenticated, accept the invite immediately
+                $authUser = $request->user();
+                if ($authUser) {
+                    try {
+                        $invitation = \Illuminate\Support\Facades\DB::table('institution_user')
+                            ->where('invitation_token', $inviteToken)
+                            ->where('institution_id', $institutionId)
+                            ->first();
+                        if ($invitation) {
+                            \Illuminate\Support\Facades\DB::table('institution_user')
+                                ->where('id', $invitation->id)
+                                ->update([
+                                    'user_id' => $authUser->id,
+                                    'invitation_status' => 'active',
+                                    'status' => 'active',
+                                    'invitation_token' => null,
+                                    'invitation_expires_at' => null,
+                                    'updated_at' => now()
+                                ]);
+                            // Attempt to assign subscription seat if applicable
+                            try {
+                                $institution = \App\Models\Institution::find($institutionId);
+                                if ($institution) {
+                                    $activeSub = $institution->activeSubscription();
+                                    if ($activeSub && $activeSub->package) {
+                                        $activeSub->assignUser($authUser->id, $authUser->id);
+                                    }
+                                }
+                            } catch (\Throwable $_) { /* ignore */ }
+
+                            return response()->json(['verified' => true, 'email' => $user->email, 'invite_accepted' => true]);
+                        }
+                    } catch (\Throwable $_) {
+                        // ignore and fall through to returning invite token
+                    }
+                }
+
+                // Not authenticated or acceptance failed: return invite token so frontend can save intent
+                return response()->json(['verified' => true, 'email' => $user->email, 'invite_token' => $inviteToken]);
+            }
+        }
+
+        return response()->json(['verified' => true, 'email' => $user->email]);
     }
 }

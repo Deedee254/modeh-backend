@@ -21,7 +21,8 @@ class InstitutionInvitationEmail extends Mailable implements ShouldQueue
         public $email,
         public $token,
         public $expiresAt,
-        public $invitedBy
+        public $invitedBy,
+        public $ftoken = null
     ) {}
 
     /**
@@ -39,7 +40,11 @@ class InstitutionInvitationEmail extends Mailable implements ShouldQueue
      */
     public function content(): Content
     {
-        $inviteUrl = url('/join-institution/' . $this->token);
+        $frontend = env('FRONTEND_URL', config('app.url'));
+        $inviteUrl = $frontend . '/email-verified?invite=' . $this->token;
+        if ($this->ftoken) {
+            $inviteUrl .= '&ftoken=' . $this->ftoken;
+        }
         
         return new Content(
             markdown: 'emails.institution-invite',

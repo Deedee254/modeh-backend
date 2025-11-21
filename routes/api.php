@@ -9,6 +9,11 @@ Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->midd
 Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster'])->middleware('throttle:5,1');
 Route::post('/register/institution-manager', [AuthController::class, 'registerInstitutionManager'])->middleware('throttle:5,1');
 
+// Public helper for frontend to confirm verification status of an email address
+Route::get('/auth/verify-status', [AuthController::class, 'verifyStatus']);
+// Endpoint used by the frontend to trigger verification after landing from email link
+Route::post('/auth/verify-email', [AuthController::class, 'verifyEmail']);
+
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.
 Route::post('/login', [AuthController::class, 'login'])->middleware('web');
@@ -80,6 +85,7 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // Institution member management (institution manager only)
     Route::get('/institutions/{institution}/members', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'index']);
     Route::get('/institutions/{institution}/requests', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'requests']);
+    Route::get('/institutions/{institution}/members/invites', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'listInvites']);
     Route::post('/institutions/{institution}/members/accept', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'accept']);
     Route::delete('/institutions/{institution}/members/{user}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'remove']);
     
@@ -93,7 +99,11 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/institutions/{institution}/assignment/revoke', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'revokeAssignment']);
     // Direct invitations
     Route::post('/institutions/{institution}/members/invite', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'invite']);
+    // Generate an invite token (no email sent) so frontend can compose and send the invite link
+    Route::post('/institutions/{institution}/members/generate-token', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'generateInviteToken']);
     Route::post('/institutions/{institution}/members/accept-invitation/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'acceptInvitation']);
+    Route::delete('/institutions/{institution}/members/invites/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'revokeInvite']);
+    Route::get('/institutions/{institution}/members/invites/accepted', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'listAcceptedInvites']);
     // Analytics endpoints
     Route::get('/institutions/{institution}/analytics/overview', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsOverview']);
     Route::get('/institutions/{institution}/analytics/activity', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsActivity']);
@@ -207,6 +217,7 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
         Route::get('/stats', [\App\Http\Controllers\Api\AffiliateController::class, 'stats']);
         Route::get('/referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'referrals']);
         Route::post('/generate-code', [\App\Http\Controllers\Api\AffiliateController::class, 'generateCode']);
+        Route::post('/send-invite', [\App\Http\Controllers\Api\AffiliateController::class, 'sendInvite']);
         Route::post('/payout-request', [\App\Http\Controllers\Api\AffiliateController::class, 'payoutRequest']);
     });
 
