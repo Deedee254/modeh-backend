@@ -5,8 +5,9 @@ use App\Http\Controllers\Auth\SocialAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/register/quizee', [AuthController::class, 'registerquizee']);
-Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster']);
+Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->middleware('throttle:5,1');
+Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster'])->middleware('throttle:5,1');
+Route::post('/register/institution-manager', [AuthController::class, 'registerInstitutionManager'])->middleware('throttle:5,1');
 
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.
@@ -68,6 +69,8 @@ Route::get('/daily-challenges/leaderboard', [\App\Http\Controllers\Api\DailyChal
 // Public institutions endpoints
 Route::get('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'index'] ?? function () { return response()->json([], 200); });
 Route::get('/institutions/{institution}', [\App\Http\Controllers\Api\InstitutionController::class, 'show']);
+// Public invitation endpoint - allows unauthenticated users to view invitation details
+Route::get('/institutions/invitation/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'getInvitationDetails']);
 
 Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -79,18 +82,34 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::get('/institutions/{institution}/requests', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'requests']);
     Route::post('/institutions/{institution}/members/accept', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'accept']);
     Route::delete('/institutions/{institution}/members/{user}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'remove']);
+    
+    // Institution approval workflows (institution manager only)
+    Route::get('/institutions/{institution}/approvals/pending', [\App\Http\Controllers\Api\InstitutionApprovalController::class, 'pending']);
+    Route::post('/institution-approvals/{approvalRequest}/approve', [\App\Http\Controllers\Api\InstitutionApprovalController::class, 'approve']);
+    Route::post('/institution-approvals/{approvalRequest}/reject', [\App\Http\Controllers\Api\InstitutionApprovalController::class, 'reject']);
+    
     // Subscription & assignment endpoints for institutions
     Route::get('/institutions/{institution}/subscription', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'subscription']);
     Route::post('/institutions/{institution}/assignment/revoke', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'revokeAssignment']);
+    // Direct invitations
+    Route::post('/institutions/{institution}/members/invite', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'invite']);
+    Route::post('/institutions/{institution}/members/accept-invitation/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'acceptInvitation']);
+    // Analytics endpoints
+    Route::get('/institutions/{institution}/analytics/overview', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsOverview']);
+    Route::get('/institutions/{institution}/analytics/activity', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsActivity']);
+    Route::get('/institutions/{institution}/analytics/performance', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsPerformance']);
+    Route::get('/institutions/{institution}/analytics/member/{user}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsMember']);
 
     Route::get('/me', function (Request $request) {
         $user = $request->user();
         // Load common relations and profile relationship based on role
         $relations = ['affiliate', 'institutions'];
         if ($user->role === 'quiz-master') {
-            $relations[] = 'quizMasterProfile';
+            $relations[] = 'quizMasterProfile.grade';
+            $relations[] = 'quizMasterProfile.level';
         } elseif ($user->role === 'quizee') {
-            $relations[] = 'quizeeProfile';
+            $relations[] = 'quizeeProfile.grade';
+            $relations[] = 'quizeeProfile.level';
         }
 
         $user->loadMissing($relations);
@@ -188,6 +207,7 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
         Route::get('/stats', [\App\Http\Controllers\Api\AffiliateController::class, 'stats']);
         Route::get('/referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'referrals']);
         Route::post('/generate-code', [\App\Http\Controllers\Api\AffiliateController::class, 'generateCode']);
+        Route::post('/payout-request', [\App\Http\Controllers\Api\AffiliateController::class, 'payoutRequest']);
     });
 
     // Profile updates
@@ -387,9 +407,9 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::get('/tournaments/{tournament}/registration-status', [\App\Http\Controllers\Api\TournamentController::class, 'registrationStatus']);
     Route::post('/tournaments/battles/{battle}/submit', [\App\Http\Controllers\Api\TournamentController::class, 'submitBattle']);
     Route::post('/tournaments/battles/{battle}/forfeit', [\App\Http\Controllers\Api\TournamentController::class, 'forfeitBattle']);
+    Route::post('/tournaments/battles/{battle}/draft', [\App\Http\Controllers\Api\TournamentController::class, 'saveDraft']);
+    Route::get('/tournaments/battles/{battle}/draft', [\App\Http\Controllers\Api\TournamentController::class, 'loadDraft']);
     Route::post('/tournaments/{tournament}/battles/{battle}/mark', [\App\Http\Controllers\Api\TournamentController::class, 'mark']);
-    // Allow a tournament-battle mark call that only provides the battle id (used by some frontends)
-    Route::post('/tournaments/battles/{battle}/mark', [\App\Http\Controllers\Api\TournamentController::class, 'mark']);
     Route::get('/tournaments/{tournament}/battles/{battle}/result', [\App\Http\Controllers\Api\TournamentController::class, 'result']);
     Route::get('/tournaments/{tournament}/leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'leaderboard']);
 

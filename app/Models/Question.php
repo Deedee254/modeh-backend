@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * @property int $id
+ * @property int|null $created_by User ID who created the question
+ * @property int|null $quiz_id Quiz ID this question belongs to
  * @property string $body Question text/content
  * @property string $type Question type (mcq, multi, etc.)
  * @property array $options Available options/choices
@@ -14,14 +16,30 @@ use Illuminate\Database\Eloquent\Model;
  * @property int|null $grade_id
  * @property int|null $subject_id
  * @property int|null $topic_id
+ * @property int|null $level_id
  * @property string|null $difficulty
  * @property array|null $metadata Additional metadata
  * @property bool $is_public Whether the question is publicly available
+ * @property bool $is_approved Whether the question is approved
+ * @property bool $is_banked Whether the question is in the question bank
+ * @property bool $is_quiz_master_marked Whether marked by quiz master
+ * @property string|null $media_path Path to media file
+ * @property string|null $media_type Type of media (image, audio, video, youtube)
+ * @property string|null $youtube_url YouTube URL if applicable
+ * @property array|null $media_metadata Media metadata (dimensions, duration, etc.)
+ * @property array|null $parts Question parts (for math questions)
+ * @property array|null $fill_parts Fill in the blank parts
+ * @property float|null $marks Number of marks for this question
+ * @property array|null $solution_steps Solution steps for the question
+ * @property string|null $explanation Question explanation
+ * @property array|null $tags Question tags
+ * @property \Carbon\Carbon|null $approval_requested_at When approval was requested
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
  * @property-read \App\Models\Grade|null $grade
  * @property-read \App\Models\Subject|null $subject
  * @property-read \App\Models\Topic|null $topic
+ * @property-read \App\Models\Level|null $level
  * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\Quiz[] $quizzes
  * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\Battle[] $battles
  */

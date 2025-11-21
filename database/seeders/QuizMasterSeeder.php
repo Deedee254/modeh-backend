@@ -52,13 +52,17 @@ class QuizMasterSeeder extends Seeder
             'role' => 'quiz-master',
         ]);
 
+        $gradeId = $faker->randomElement($gradeIds);
+        $grade = \App\Models\Grade::find($gradeId);
+        
         QuizMaster::updateOrCreate([
             'user_id' => $user->id,
         ],[
             'headline' => 'Your friendly neighborhood quiz-master.',
             'bio' => 'I am a passionate educator with over 10 years of experience in helping quizees achieve their academic goals. My focus is on creating a supportive and engaging learning environment.',
             'subjects' => $faker->randomElements($subjectIds, rand(2, 3)),
-            'grade_id' => $faker->randomElement($gradeIds),
+            'grade_id' => $gradeId,
+            'level_id' => $grade->level_id ?? null,
             'institution' => $faker->randomElement($institutions),
         ]);
 
@@ -76,13 +80,17 @@ class QuizMasterSeeder extends Seeder
                 'role' => 'quiz-master',
             ]);
 
+            $gradeId = $faker->randomElement($gradeIds);
+            $grade = \App\Models\Grade::find($gradeId);
+
             QuizMaster::updateOrCreate([
                 'user_id' => $user->id,
             ],[
                 'headline' => $faker->sentence(6),
                 'bio' => $faker->paragraphs(3, true),
                 'subjects' => $faker->randomElements($subjectIds, rand(2, 4)),
-                'grade_id' => $faker->randomElement($gradeIds),
+                'grade_id' => $gradeId,
+                'level_id' => $grade->level_id ?? null,
                 'institution' => $faker->randomElement($institutions),
             ]);
         }

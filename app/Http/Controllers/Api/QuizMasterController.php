@@ -32,8 +32,11 @@ class QuizMasterController extends Controller
 
         $quizMasters = $query->with(['quizMasterProfile.grade'])->paginate(12);
 
+        // Get current user for following checks
+        $currentUserId = $request->user()?->id;
+
         // Transform the collection for the frontend.
-        $quizMasters->getCollection()->transform(function ($user) {
+        $quizMasters->getCollection()->transform(function ($user) use ($currentUserId) {
             $profile = $user->quizMasterProfile;
             $subjects = Subject::whereIn('id', $profile->subjects ?? [])->get()
                 ->map(function ($subject) {
@@ -43,7 +46,7 @@ class QuizMasterController extends Controller
                     ];
                 });
 
-            return [
+            $data = [
                 'id' => $user->id,
                 'name' => $user->name,
                 'avatar' => $user->social_avatar,
@@ -55,6 +58,16 @@ class QuizMasterController extends Controller
                 ] : null,
                 'subjects' => $subjects,
             ];
+
+            // Add is_following for authenticated users
+            if ($currentUserId) {
+                $data['is_following'] = \DB::table('quiz_master_follows')
+                    ->where('quiz_master_id', $user->id)
+                    ->where('user_id', $currentUserId)
+                    ->exists();
+            }
+
+            return $data;
         });
 
         return response()->json($quizMasters);

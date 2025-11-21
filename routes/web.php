@@ -10,6 +10,7 @@ Route::middleware('web')->group(function () {
     Route::get('/login', [AuthWebController::class, 'showLogin']);
     Route::post('/login', [AuthWebController::class, 'login']);
     Route::post('/logout', [AuthWebController::class, 'logout']);
+    Route::get('/invitation/{token}', [App\Http\Controllers\InvitationController::class, 'show'])->name('invitation.show');
 });
 
 Route::get('/dashboard', [AuthWebController::class, 'dashboard'])->middleware('auth');

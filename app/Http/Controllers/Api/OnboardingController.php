@@ -47,6 +47,15 @@ class OnboardingController extends Controller
     public function finalize(Request $request)
     {
         $user = $request->user();
+
+        // Check if email is verified before completing profile
+        if (!$user->hasVerifiedEmail()) {
+            return response()->json([
+                'error' => 'Email not verified',
+                'message' => 'Please verify your email before completing profile'
+            ], 403);
+        }
+
         $onboarding = $this->service->completeStep($user, 'profile_complete');
         return response()->json(['onboarding' => $onboarding, 'user' => $user->fresh()]);
     }

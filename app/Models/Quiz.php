@@ -5,6 +5,42 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property int|null $created_by User ID who created the quiz
+ * @property int|null $user_id User ID who owns the quiz
+ * @property int|null $topic_id Topic ID for this quiz
+ * @property int|null $subject_id Subject ID for this quiz
+ * @property int|null $grade_id Grade ID for this quiz
+ * @property int|null $level_id Level ID for this quiz
+ * @property string|null $title Quiz title
+ * @property string|null $description Quiz description
+ * @property string|null $youtube_url YouTube URL for quiz
+ * @property string|null $cover_image Cover image path for quiz
+ * @property bool $is_paid Whether this quiz is paid
+ * @property string|null $one_off_price One-time purchase price
+ * @property int|null $timer_seconds Total timer in seconds
+ * @property int|null $per_question_seconds Time per question in seconds
+ * @property bool $use_per_question_timer Whether to use per-question timer
+ * @property int|null $attempts_allowed Number of attempts allowed
+ * @property bool $shuffle_questions Whether to shuffle questions
+ * @property bool $shuffle_answers Whether to shuffle answers
+ * @property string|null $visibility Quiz visibility (public, private, etc.)
+ * @property \Carbon\Carbon|null $scheduled_at When this quiz is scheduled
+ * @property float|null $difficulty Average difficulty of questions
+ * @property bool $is_approved Whether quiz is approved
+ * @property bool $is_draft Whether quiz is a draft
+ * @property \Carbon\Carbon|null $approval_requested_at When approval was requested
+ * @property \Carbon\Carbon $created_at
+ * @property \Carbon\Carbon $updated_at
+ * @property-read \App\Models\Topic|null $topic
+ * @property-read \App\Models\Level|null $level
+ * @property-read \App\Models\Subject|null $subject
+ * @property-read \App\Models\Grade|null $grade
+ * @property-read \App\Models\User|null $author
+ * @property-read \App\Models\QuizMaster|null $quizMaster
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\Question[] $questions
+ */
 class Quiz extends Model
 {
     use HasFactory;

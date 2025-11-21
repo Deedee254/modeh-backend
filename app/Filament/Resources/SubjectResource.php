@@ -7,6 +7,7 @@ use App\Models\Subject;
 use Filament\Schemas\Schema;
 use Filament\Forms;
 use Filament\Tables\Table;
+use Filament\Actions;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\FileUpload;
@@ -33,13 +34,13 @@ class SubjectResource extends Resource
                 IconColumn::make('is_approved')->boolean()->label('Approved'),
             ])
                 ->actions([
-                    \Filament\Actions\ViewAction::make(),
-                    \Filament\Actions\EditAction::make(),
-                    \Filament\Actions\DeleteAction::make(),
+                        Actions\ViewAction::make(),
+                        Actions\EditAction::make(),
+                        Actions\DeleteAction::make(),
                 ]);
     }
 
-    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
+    public static function form(Schema $schema): Schema
     {
         return $schema->schema([
             Forms\Components\TextInput::make('name')

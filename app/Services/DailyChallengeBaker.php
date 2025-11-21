@@ -13,7 +13,7 @@ class DailyChallengeBaker
     /**
      * Get today's cache for a level/grade combination, or create new one if it doesn't exist
      */
-    public function getOrBakeForGrade(Grade $grade, Level $level = null, ?string $date = null): DailyChallengeCache
+    public function getOrBakeForGrade(Grade $grade, ?Level $level = null, ?string $date = null): DailyChallengeCache
     {
         $date ??= now()->toDateString();
         $level ??= $grade->level;
@@ -24,7 +24,7 @@ class DailyChallengeBaker
 
         $cache = DailyChallengeCache::where('level_id', $level->id)
             ->where('grade_id', $grade->id)
-            ->whereDate('date', $date)
+            ->where('date', $date)
             ->first();
 
         if ($cache) {

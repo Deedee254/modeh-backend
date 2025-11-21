@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Question;
 use App\Models\Quiz;
+use App\Services\MediaMetadataService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
@@ -226,42 +227,13 @@ class QuestionController extends Controller
             $mimeType = $mediaFile->getMimeType();
             if (strpos($mimeType, 'image/') === 0) {
                 $mediaType = 'image';
-                // Get image dimensions
-                try {
-                    $dimensions = getimagesize($mediaFile->getPathname());
-                    if ($dimensions) {
-                        $mediaMetadata['width'] = $dimensions[0];
-                        $mediaMetadata['height'] = $dimensions[1];
-                    }
-                } catch (\Throwable $e) {
-                    try { \Log::error('QuestionController@store image metadata failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
-                }
+                $mediaMetadata = MediaMetadataService::extractImageMetadata($mediaFile);
             } elseif (strpos($mimeType, 'audio/') === 0) {
                 $mediaType = 'audio';
-                // Get audio duration if possible
-                try {
-                    $getID3 = new \getID3;
-                    $fileInfo = $getID3->analyze($mediaFile->getPathname());
-                    if (isset($fileInfo['playtime_seconds'])) {
-                        $mediaMetadata['duration'] = $fileInfo['playtime_seconds'];
-                    }
-                } catch (\Throwable $e) {
-                    try { \Log::error('QuestionController@store audio metadata failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
-                }
+                $mediaMetadata = MediaMetadataService::extractAudioMetadata($mediaFile);
             } elseif (strpos($mimeType, 'video/') === 0) {
                 $mediaType = 'video';
-                // Get video metadata if possible
-                try {
-                    $ffprobe = \FFMpeg\FFProbe::create();
-                    $duration = $ffprobe
-                        ->format($mediaFile->getPathname())
-                        ->get('duration');
-                    if ($duration) {
-                        $mediaMetadata['duration'] = floatval($duration);
-                    }
-                } catch (\Throwable $e) {
-                    try { \Log::error('QuestionController@store video metadata failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
-                }
+                $mediaMetadata = MediaMetadataService::extractVideoMetadata($mediaFile);
             }
         }
 
@@ -452,17 +424,20 @@ class QuestionController extends Controller
     }
 
     /**
-     * Bulk update/replace questions for a quiz. Expects { questions: [...] }
-     * Frontend uses this to save all questions in one call.
+     * Check if user can bulk update questions for a quiz
      */
-    public function bulkUpdateForQuiz(Request $request, Quiz $quiz)
+    private function canBulkUpdateQuiz(Request $request, Quiz $quiz)
     {
         $user = $request->user();
         // minimal auth: only quiz owner or admin may bulk update
-        if ($quiz->created_by && $quiz->created_by !== $user->id && !($user->is_admin ?? false)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        return !($quiz->created_by && $quiz->created_by !== $user->id && !($user->is_admin ?? false));
+    }
 
+    /**
+     * Validate and extract questions array from request
+     */
+    private function validateAndExtractQuestions(Request $request)
+    {
         // Support multipart/form-data where 'questions' may be a JSON string
         if ($request->has('questions') && is_string($request->get('questions'))) {
             $decoded = json_decode($request->get('questions'), true);
@@ -510,9 +485,14 @@ class QuestionController extends Controller
             if (is_array($maybe) && array_values($maybe) === $maybe) $items = $maybe;
         }
 
-        // collect any uploaded media files keyed under question_media[index] or question_media[uid]
-        $mediaFiles = $request->file('question_media', []);
+        return $items;
+    }
 
+    /**
+     * Process and save questions for bulk update
+     */
+    private function processBulkQuestions(array $items, array $mediaFiles, Quiz $quiz, $user)
+    {
         $saved = [];
         $incomingIds = [];
         try {
@@ -679,6 +659,14 @@ class QuestionController extends Controller
             }
         }
 
+        return ['saved' => $saved, 'incomingIds' => $incomingIds];
+    }
+
+    /**
+     * Clean up after bulk update: load relations, delete old questions, recalc difficulty
+     */
+    private function cleanupAfterBulkUpdate(array &$saved, array $incomingIds, Quiz $quiz)
+    {
         // Ensure returned saved questions include nested relations for client
         try {
             foreach ($saved as $s) {
@@ -697,6 +685,32 @@ class QuestionController extends Controller
 
         // recalc quiz difficulty
     try { $quiz->recalcDifficulty(); } catch (\Throwable $e) { try { \Log::error('QuestionController@bulkUpdateForQuiz recalcDifficulty failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage()]); } catch (\Throwable $_) {} }
+    }
+
+    /**
+     * Bulk update/replace questions for a quiz. Expects { questions: [...] }
+     * Frontend uses this to save all questions in one call.
+     */
+    public function bulkUpdateForQuiz(Request $request, Quiz $quiz)
+    {
+        if (!$this->canBulkUpdateQuiz($request, $quiz)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $items = $this->validateAndExtractQuestions($request);
+        if ($items instanceof \Illuminate\Http\JsonResponse) {
+            return $items; // validation failed, return error response
+        }
+
+        // collect any uploaded media files keyed under question_media[index] or question_media[uid]
+        $mediaFiles = $request->file('question_media', []);
+        $user = $request->user();
+
+        $result = $this->processBulkQuestions($items, $mediaFiles, $quiz, $user);
+        $saved = $result['saved'];
+        $incomingIds = $result['incomingIds'];
+
+        $this->cleanupAfterBulkUpdate($saved, $incomingIds, $quiz);
 
         return response()->json(['questions' => $saved]);
     }

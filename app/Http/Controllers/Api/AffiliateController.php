@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Affiliate;
+use App\Models\AffiliatePayout;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -112,6 +113,59 @@ class AffiliateController extends Controller
         return response()->json([
             'message' => 'Affiliate code generated successfully',
             'referral_code' => $code
+        ]);
+    }
+
+    public function payoutRequest(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $affiliate = $user->affiliate()->first();
+        if (!$affiliate) {
+            return response()->json(['error' => 'User has no affiliate account'], 404);
+        }
+
+        // Validate minimum payout threshold (1000 KES)
+        $totalEarned = $affiliate->total_earnings ?? 0;
+        if ($totalEarned < 1000) {
+            return response()->json([
+                'error' => 'Minimum payout threshold is 1000 KES',
+                'current_earnings' => $totalEarned,
+                'required' => 1000
+            ], 422);
+        }
+
+        // Check if there's already a pending payout request
+        $existingPending = AffiliatePayout::where('affiliate_id', $affiliate->id)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($existingPending) {
+            return response()->json([
+                'error' => 'You have a pending payout request already',
+                'payout_id' => $existingPending->id
+            ], 422);
+        }
+
+        // Create new payout request
+        $payout = AffiliatePayout::create([
+            'affiliate_id' => $affiliate->id,
+            'amount' => $totalEarned,
+            'status' => 'pending',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payout request submitted successfully',
+            'payout' => [
+                'id' => $payout->id,
+                'amount' => $payout->amount,
+                'status' => $payout->status,
+                'created_at' => $payout->created_at
+            ]
         ]);
     }
 }

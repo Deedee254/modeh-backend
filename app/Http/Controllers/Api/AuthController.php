@@ -7,6 +7,9 @@ use App\Models\Admin;
 use App\Models\Quizee;
 use App\Models\QuizMaster;
 use App\Models\User;
+use App\Models\Institution;
+use App\Models\Affiliate;
+use App\Models\AffiliateReferral;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -18,58 +21,35 @@ class AuthController extends Controller
     public function registerquizee(Request $request)
     {
         $v = Validator::make($request->all(), [
-            'name' => 'nullable|string',
+            'name' => 'required|string',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:6',
-            'first_name' => 'nullable|string',
-            'last_name' => 'nullable|string',
             'institution' => 'nullable|string',
-            'grade_id' => 'nullable|exists:grades,id',
-            'level_id' => 'nullable|exists:levels,id',
-            'subjects' => 'nullable|array',
+            'level_id' => 'required|exists:levels,id',
+            'grade_id' => 'required|exists:grades,id',
+            'subjects' => 'required|array|min:1',
             'subjects.*' => 'exists:subjects,id',
-            'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/']
+            'parentEmail' => ['nullable', 'email']
         ]);
 
         if ($v->fails()) {
             return response()->json(['errors' => $v->errors()], 422);
         }
 
-        // Prefer explicit name if provided, else combine first/last, else fallback to email
-        $name = null;
-        if ($request->filled('name')) {
-            $name = $request->name;
-        } else {
-            $name = trim(($request->first_name ?? '') . ' ' . ($request->last_name ?? '')) ?: $request->email;
-        }
+        // Create user with provided name
         $user = User::create([
-            'name' => $name,
+            'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'quizee',
         ]);
 
-        // Persist phone on user record if provided (user table may hold phone number used elsewhere)
-        if ($request->filled('phone')) {
-            try { $user->phone = $request->phone; $user->save(); } catch (\Exception $e) { /* ignore save errors */ }
-        }
-
-        // Derive first/last name for profile if not explicitly provided
-        $qFirst = $request->first_name;
-        $qLast = $request->last_name;
-        if (empty($qFirst) && empty($qLast) && $request->filled('name')) {
-            $parts = preg_split('/\s+/', trim($request->name));
-            $qFirst = $parts[0] ?? null;
-            $qLast = count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : null;
-        }
-
+        // Create quizee profile with institution and required taxonomy
         $quizee = Quizee::create([
             'user_id' => $user->id,
-            'first_name' => $qFirst,
-            'last_name' => $qLast,
             'institution' => $request->institution,
+            'level_id' => $request->level_id,
             'grade_id' => $request->grade_id,
-            'level_id' => $request->level_id ?? null,
             'subjects' => $request->subjects ?? [],
         ]);
 
@@ -92,21 +72,45 @@ class AuthController extends Controller
                 $sub->activate();
             }
         }
-        return response()->json(['user' => $user, 'quizee' => $quizee], 201);
+
+        // Handle affiliate referral attribution
+        // Check for ?ref=CODE query parameter or ref in request body
+        $referralCode = $request->input('ref') ?? $request->query('ref');
+        if (!empty($referralCode)) {
+            try {
+                $affiliate = Affiliate::where('referral_code', $referralCode)->first();
+                if ($affiliate) {
+                    // Create referral record linking this new user to the affiliate
+                    AffiliateReferral::create([
+                        'affiliate_id' => $affiliate->id,
+                        'user_id' => $user->id,
+                        'type' => 'signup',
+                        'earnings' => 0, // Earnings will be calculated after purchases
+                        'status' => 'active',
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to create affiliate referral', ['error' => $e->getMessage()]);
+                // Continue signup even if referral tracking fails
+            }
+        }
+
+        // Send email verification notification
+        $user->sendEmailVerificationNotification();
+
+        return response()->json(['user' => $user, 'quizee' => $quizee, 'message' => 'Registration successful. Please verify your email.'], 201);
     }
 
     public function registerQuizMaster(Request $request)
     {
         $v = Validator::make($request->all(), [
-            'name' => 'nullable|string',
+            'name' => 'required|string',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:6',
-            'first_name' => 'nullable|string',
-            'last_name' => 'nullable|string',
             'institution' => 'nullable|string',
+            'level_id' => 'required|exists:levels,id',
             'grade_id' => 'nullable|exists:grades,id',
-            'level_id' => 'nullable|exists:levels,id',
-            'subjects' => 'nullable|array',
+            'subjects' => 'required|array|min:1',
             'subjects.*' => 'exists:subjects,id',
             'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/']
         ]);
@@ -115,15 +119,9 @@ class AuthController extends Controller
             return response()->json(['errors' => $v->errors()], 422);
         }
 
-        // Prefer explicit name if provided, else combine first/last, else fallback to email
-        $name = null;
-        if ($request->filled('name')) {
-            $name = $request->name;
-        } else {
-            $name = trim(($request->first_name ?? '') . ' ' . ($request->last_name ?? '')) ?: $request->email;
-        }
+        // Create user with provided name
         $user = User::create([
-            'name' => $name,
+            'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'quiz-master',
@@ -134,26 +132,82 @@ class AuthController extends Controller
             try { $user->phone = $request->phone; $user->save(); } catch (\Exception $e) { /* ignore save errors */ }
         }
 
-        // Derive first/last name for profile if not explicitly provided
-        $mFirst = $request->first_name;
-        $mLast = $request->last_name;
-        if (empty($mFirst) && empty($mLast) && $request->filled('name')) {
-            $parts = preg_split('/\s+/', trim($request->name));
-            $mFirst = $parts[0] ?? null;
-            $mLast = count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : null;
-        }
-
+        // Create quiz master profile with institution and required taxonomy
         $quizMaster = QuizMaster::create([
             'user_id' => $user->id,
-            'first_name' => $mFirst,
-            'last_name' => $mLast,
             'institution' => $request->institution,
+            'level_id' => $request->level_id,
             'grade_id' => $request->grade_id,
-            'level_id' => $request->level_id ?? null,
             'subjects' => $request->subjects ?? [],
         ]);
 
-        return response()->json(['user' => $user, 'quizMaster' => $quizMaster], 201);
+        // Handle affiliate referral attribution
+        // Check for ?ref=CODE query parameter or ref in request body
+        $referralCode = $request->input('ref') ?? $request->query('ref');
+        if (!empty($referralCode)) {
+            try {
+                $affiliate = Affiliate::where('referral_code', $referralCode)->first();
+                if ($affiliate) {
+                    // Create referral record linking this new user to the affiliate
+                    AffiliateReferral::create([
+                        'affiliate_id' => $affiliate->id,
+                        'user_id' => $user->id,
+                        'type' => 'signup',
+                        'earnings' => 0, // Earnings will be calculated after purchases
+                        'status' => 'active',
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to create affiliate referral', ['error' => $e->getMessage()]);
+                // Continue signup even if referral tracking fails
+            }
+        }
+
+        // Send email verification notification
+        $user->sendEmailVerificationNotification();
+
+        return response()->json(['user' => $user, 'quizMaster' => $quizMaster, 'message' => 'Registration successful. Please verify your email.'], 201);
+    }
+
+    public function registerInstitutionManager(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|min:6',
+            'institution_id' => 'nullable|exists:institutions,id',
+            'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/']
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'role' => 'institution-manager',
+            'phone' => $request->phone,
+        ]);
+
+        // If institution_id provided, attach user to institution with manager role
+        // Otherwise user can create/join institutions later in onboarding
+        if ($request->filled('institution_id')) {
+            $institution = Institution::find($request->institution_id);
+            if ($institution) {
+                $institution->users()->attach($user->id, [
+                    'role' => 'institution-manager',
+                    'status' => 'active',
+                    'invited_by' => null,
+                ]);
+            }
+        }
+
+        return response()->json([
+            'user' => $user,
+            'message' => 'Institution Manager registration successful. Complete your profile to continue.'
+        ], 201);
     }
 
     public function login(Request $request)

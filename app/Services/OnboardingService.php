@@ -5,7 +5,10 @@ namespace App\Services;
 use App\Models\User;
 use App\Models\UserOnboarding;
 use App\Models\Grade;
+use App\Models\Institution;
+use App\Models\InstitutionApprovalRequest;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class OnboardingService
 {
@@ -41,15 +44,7 @@ class OnboardingService
                 case 'institution':
                     if (! $skipped) {
                         $onboarding->institution_added = true;
-                        if ($user->role === 'quiz-master' && !empty($data['institution'])) {
-                            // Create or update quiz master profile
-                            $profile = $user->quizMasterProfile ?? $user->quizMasterProfile()->create([]);
-                            $profile->update(['institution' => $data['institution']]);
-                        } elseif ($user->role === 'quizee' && !empty($data['institution'])) {
-                            // Create or update quizee profile
-                            $profile = $user->quizeeProfile ?? $user->quizeeProfile()->create([]);
-                            $profile->update(['institution' => $data['institution']]);
-                        }
+                        $this->handleInstitutionStep($user, $data);
                     }
                     break;
                 case 'role_quizee':
@@ -107,14 +102,26 @@ class OnboardingService
             $onboarding->last_step_completed_at = now();
             $onboarding->save();
 
-            // Determine if profile is complete based on flags or explicit step
-            // Consider profile complete if institution and role are set
-            // Grade and subjects are optional and can be completed later via complete-profile
-            $isComplete = $step === 'profile_complete' || 
-                         ($onboarding->institution_added && $onboarding->role_selected);
+            // Determine if profile is complete based on role-specific requirements
+            $isComplete = false;
 
-            if ($onboarding->profile_completed) {
+            if ($step === 'profile_complete') {
+                // Explicit completion request
                 $isComplete = true;
+            } elseif ($user->role === 'quizee') {
+                // Quizees must have: institution, role, and grade
+                $isComplete = $onboarding->institution_added &&
+                              $onboarding->role_selected &&
+                              $onboarding->grade_selected;
+            } elseif ($user->role === 'quiz-master') {
+                // Quiz Masters must have: institution, role, and subjects
+                $isComplete = $onboarding->institution_added &&
+                              $onboarding->role_selected &&
+                              $onboarding->subject_selected;
+            } else {
+                // Default: institution + role
+                $isComplete = $onboarding->institution_added &&
+                              $onboarding->role_selected;
             }
 
             // If complete, set user flag as well
@@ -125,5 +132,68 @@ class OnboardingService
 
             return $onboarding->fresh();
         });
+    }
+
+    /**
+     * Create institution approval request if institution doesn't already exist
+     */
+    private function createApprovalRequestIfNeeded(User $user, $profile, string $profileType, string $institutionText)
+    {
+        // Check if institution already exists by name or slug
+        $existingInstitution = Institution::where('name', $institutionText)
+            ->orWhere('slug', \Str::slug($institutionText))
+            ->first();
+
+        if ($existingInstitution) {
+            // Institution exists - automatically link it
+            $profile->update(['institution_id' => $existingInstitution->id]);
+            return;
+        }
+
+        // Check if approval request already pending for this user and institution
+        $existingRequest = InstitutionApprovalRequest::where('user_id', $user->id)
+            ->where('institution_name', $institutionText)
+            ->where('profile_type', $profileType)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($existingRequest) {
+            return;  // Already submitted
+        }
+
+        // Create new approval request
+        InstitutionApprovalRequest::create([
+            'institution_name' => $institutionText,
+            'user_id' => $user->id,
+            'profile_type' => $profileType,
+            'profile_id' => $profile->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    /**
+     * Handle institution step for onboarding - works for both quizee and quiz-master
+     */
+    private function handleInstitutionStep(User $user, array $data)
+    {
+        $institutionId = $data['institution_id'] ?? null;
+        $institutionText = $data['institution'] ?? null;
+
+        // Get or create profile based on role
+        if ($user->role === 'quizee') {
+            $profile = $user->quizeeProfile ?? $user->quizeeProfile()->create([]);
+            $profileType = 'quizee';
+        } else {
+            $profile = $user->quizMasterProfile ?? $user->quizMasterProfile()->create([]);
+            $profileType = 'quiz-master';
+        }
+
+        // Link to existing institution or store as text
+        if ($institutionId) {
+            $profile->update(['institution_id' => $institutionId]);
+        } elseif ($institutionText) {
+            $profile->update(['institution' => $institutionText]);
+            $this->createApprovalRequestIfNeeded($user, $profile, $profileType, $institutionText);
+        }
     }
 }

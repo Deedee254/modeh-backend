@@ -24,6 +24,7 @@ class ProfileController extends Controller
         $validator = Validator::make($request->all(), [
             'institution' => 'nullable|string',
             'grade_id' => 'nullable|exists:grades,id',
+            'level_id' => 'nullable|exists:levels,id',
             'subjects' => 'nullable|array',
             'subjects.*' => 'exists:subjects,id',
             'headline' => 'nullable|string',
@@ -38,17 +39,27 @@ class ProfileController extends Controller
         $profile->update($request->only([
             'institution',
             'grade_id',
+            'level_id',
             'subjects',
             'headline',
             'bio',
         ]));
 
+        // If a grade was provided, also persist the associated level on the profile
+        if ($request->filled('grade_id')) {
+            $grade = \App\Models\Grade::find($request->get('grade_id'));
+            if ($grade && isset($grade->level_id)) {
+                $profile->level_id = $grade->level_id;
+                $profile->save();
+            }
+        }
+
         // Return updated profile with relationships
-        $user->load(['quizMasterProfile.grade']);
+        $user->load(['quizMasterProfile.grade', 'quizMasterProfile.level']);
         
         return response()->json([
             'message' => 'Profile updated successfully',
-            'profile' => $user->quizMasterProfile->load('grade')->append('subjectModels')->toArray(),
+            'profile' => $user->quizMasterProfile->load('grade', 'level')->append('subjectModels')->toArray(),
         ]);
     }
 
@@ -66,10 +77,12 @@ class ProfileController extends Controller
         $validator = Validator::make($request->all(), [
             'institution' => 'nullable|string',
             'grade_id' => 'nullable|exists:grades,id',
+            'level_id' => 'nullable|exists:levels,id',
             'subjects' => 'nullable|array',
             'subjects.*' => 'exists:subjects,id',
             'first_name' => 'nullable|string',
             'last_name' => 'nullable|string',
+            'bio' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -77,13 +90,22 @@ class ProfileController extends Controller
         }
 
         $profile = $user->quizeeProfile;
-        $profile->update($request->only([
+        
+        // Map bio to profile field if provided
+        $updateData = $request->only([
             'institution',
             'grade_id',
+            'level_id',
             'subjects',
             'first_name',
             'last_name',
-        ]));
+        ]);
+        
+        if ($request->filled('bio')) {
+            $updateData['profile'] = $request->get('bio');
+        }
+        
+        $profile->update($updateData);
 
         // If a grade was provided, also persist the associated level on the profile
         if ($request->filled('grade_id')) {
@@ -95,11 +117,11 @@ class ProfileController extends Controller
         }
 
         // Return updated profile with relationships
-        $user->load(['quizeeProfile.grade']);
+        $user->load(['quizeeProfile.grade', 'quizeeProfile.level']);
         
         return response()->json([
             'message' => 'Profile updated successfully',
-            'profile' => $user->quizeeProfile->load('grade')->toArray(),
+            'profile' => $user->quizeeProfile->load('grade', 'level')->toArray(),
         ]);
     }
 }

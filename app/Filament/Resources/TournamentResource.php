@@ -437,7 +437,7 @@ class TournamentResource extends Resource
             ])
             ->actions([
                 \Filament\Actions\EditAction::make(),
-                \Filament\Actions\Action::make('generate_matches')
+                Action::make('generate_matches')
                     ->action(fn (Tournament $record) => $record->generateMatches())
                     ->requiresConfirmation()
                     ->visible(fn (Tournament $record): bool => $record->status === 'upcoming')

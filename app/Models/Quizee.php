@@ -15,14 +15,15 @@ class Quizee extends Model
         'first_name',
         'last_name',
         'dob',
-        'profile',
+        'profile', // also referred to as 'bio' in some APIs
         'grade_id',
         'level_id',
+        'institution_id',  // NEW: Foreign key to institutions table
         'points',
         'current_streak',
         'longest_streak',
         'subject_progress',
-        'institution',
+        'institution',  // KEEP: Text field for user input or legacy data
         'subjects',
     ];
 
@@ -44,6 +45,27 @@ class Quizee extends Model
     public function grade()
     {
         return $this->belongsTo(Grade::class);
+    }
+
+    public function level()
+    {
+        return $this->belongsTo(Level::class);
+    }
+
+    /**
+     * Get the full Subject models for the subject IDs stored in the 'subjects' JSON array.
+     * Note: subjects are stored as JSON array of IDs, not as a traditional pivot table.
+     */
+    public function getSubjectsAttribute($value)
+    {
+        $ids = is_array($value) ? $value : [];
+        if (empty($ids)) return [];
+        
+        // Query the subjects in the order they appear in the array
+        $subjects = Subject::whereIn('id', $ids)->get();
+        
+        // Return as array of models (or keyed by id for easier lookup)
+        return $subjects->toArray();
     }
 
     /**

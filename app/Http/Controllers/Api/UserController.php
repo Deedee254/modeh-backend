@@ -68,6 +68,7 @@ class UserController extends Controller
         $rules = [
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|max:255',
+            'phone' => 'sometimes|nullable|string|max:20',
             'bio' => 'sometimes|nullable|string|max:1000',
         ];
 
@@ -84,6 +85,7 @@ class UserController extends Controller
 
         if (isset($data['name'])) $user->name = $data['name'];
         if (isset($data['email'])) $user->email = $data['email'];
+        if (isset($data['phone'])) $user->phone = $data['phone'];
         if (isset($data['bio'])) $user->bio = $data['bio'];
 
         $user->save();

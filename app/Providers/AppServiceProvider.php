@@ -18,8 +18,8 @@ use App\Models\QuizAttempt;
 use App\Models\TournamentBattle;
 use Illuminate\Support\Facades\Cache;
 use App\Models\User;
-use App\Policies\QuizPolicy;
-use Livewire\Livewire;
+use App\Policies\TournamentPolicy;
+use App\Models\Tournament;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -38,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // Register model policies
         Gate::policy(Quiz::class, QuizPolicy::class);
+        Gate::policy(Tournament::class, TournamentPolicy::class);
         Gate::define('viewFilament', function ($user = null) {
             // Allow unauthenticated users to reach the Filament login page.
             // Filament may evaluate the gate while serving the panel route, so

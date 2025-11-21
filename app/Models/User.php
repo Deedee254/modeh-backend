@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -19,7 +19,7 @@ use Filament\Panel;
  * @property string $name
  * @property string $email
  * @property string $password
- * @property string $role User's role (quizee, quiz-master, etc.)
+ * @property string $role User's role (quizee, quiz-master, institution-manager, admin)
  * @property string|null $social_id
  * @property string|null $social_provider
  * @property string|null $social_avatar
@@ -39,7 +39,7 @@ use Filament\Panel;
  * @property-read \App\Models\Quizee|null $quizee
  * @property-read \App\Models\Affiliate|null $affiliate
  */
-class User extends Authenticatable implements FilamentUser
+class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens;
@@ -54,6 +54,7 @@ class User extends Authenticatable implements FilamentUser
         'email',
         'password',
         'role',
+        'phone',
         'social_id',
         'social_provider',
         'social_avatar',

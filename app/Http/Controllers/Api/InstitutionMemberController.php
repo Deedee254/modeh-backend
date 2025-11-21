@@ -8,6 +8,9 @@ use App\Models\Institution;
 use App\Models\User;
 use App\Models\Subscription;
 use App\Models\SubscriptionAssignment;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\DB;
 
 class InstitutionMemberController extends Controller
 {
@@ -26,7 +29,7 @@ class InstitutionMemberController extends Controller
         $gradeId = $request->input('grade_id', null);
 
         // Build a query on users that belong to this institution and optionally filter by pivot role
-        $query = \App\Models\User::whereHas('institutions', function ($q) use ($institution, $role) {
+        $query = User::whereHas('institutions', function ($q) use ($institution, $role) {
             $q->where('institutions.id', $institution->id);
             if ($role) {
                 $q->where('institution_user.role', $role);
@@ -115,7 +118,7 @@ class InstitutionMemberController extends Controller
         $existing = \DB::table('institution_user')->where('institution_id', $institution->id)->whereIn('user_id', $userIds)->pluck('user_id')->toArray();
         $pendingIds = array_values(array_diff($userIds, $existing));
 
-        $query = \App\Models\User::whereIn('id', $pendingIds);
+        $query = User::whereIn('id', $pendingIds);
         $paginator = $query->paginate($perPage, ['*'], 'page', $page);
 
         $pending = collect($paginator->items())->map(function ($u) {
@@ -154,7 +157,7 @@ class InstitutionMemberController extends Controller
         if ($u->role === 'quiz-master') $pivotRole = 'quiz-master';
 
         // Seat enforcement: check active institution subscription for seat limit
-        $activeSub = Subscription::where('owner_type', \App\Models\Institution::class)
+        $activeSub = Subscription::where('owner_type', Institution::class)
             ->where('owner_id', $institution->id)
             ->where('status', 'active')
             ->orderByDesc('started_at')
@@ -222,7 +225,7 @@ class InstitutionMemberController extends Controller
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
 
-        $activeSub = Subscription::where('owner_type', \App\Models\Institution::class)
+        $activeSub = Subscription::where('owner_type', Institution::class)
             ->where('owner_id', $institution->id)
             ->where('status', 'active')
             ->orderByDesc('started_at')
@@ -264,7 +267,7 @@ class InstitutionMemberController extends Controller
             'user_id' => 'required|integer',
         ]);
 
-        $activeSub = Subscription::where('owner_type', \App\Models\Institution::class)
+        $activeSub = Subscription::where('owner_type', Institution::class)
             ->where('owner_id', $institution->id)
             ->where('status', 'active')
             ->orderByDesc('started_at')
@@ -290,5 +293,435 @@ class InstitutionMemberController extends Controller
         } catch (\Throwable $_) {}
 
         return response()->json(['ok' => true, 'message' => 'Assignment revoked']);
+    }
+
+    /**
+     * Send a direct invite to a user via email
+     */
+    public function invite(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        $data = $request->validate([
+            'email' => 'required|email',
+            'role' => 'nullable|in:quizee,quiz-master',
+            'expires_in_days' => 'nullable|integer|min:1|max:30'
+        ]);
+
+        $existingUser = User::where('email', $data['email'])->first();
+
+        $existingInvite = DB::table('institution_user')
+            ->where('institution_id', $institution->id)
+            ->where('invited_email', $data['email'])
+            ->where('invitation_status', 'invited')
+            ->where('invitation_expires_at', '>', now())
+            ->first();
+
+        if ($existingInvite) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'User already invited'
+            ], 422);
+        }
+
+        $activeSub = $institution->activeSubscription();
+        if ($activeSub && $activeSub->package) {
+            $available = $activeSub->availableSeats();
+            if (!is_null($available) && $available <= 0) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'No available seats'
+                ], 422);
+            }
+        }
+
+        $token = Str::random(32);
+        $expiresAt = now()->addDays($data['expires_in_days'] ?? 14);
+        $role = $data['role'] ?? 'member';
+
+        if ($existingUser) {
+            $existing = DB::table('institution_user')
+                ->where('institution_id', $institution->id)
+                ->where('user_id', $existingUser->id)
+                ->first();
+
+            if ($existing) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'User is already a member'
+                ], 422);
+            }
+
+            DB::table('institution_user')->insert([
+                'institution_id' => $institution->id,
+                'user_id' => $existingUser->id,
+                'role' => $role,
+                'invitation_token' => $token,
+                'invitation_expires_at' => $expiresAt,
+                'invitation_status' => 'invited',
+                'invited_email' => $data['email'],
+                'invited_by' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        } else {
+            DB::table('institution_user')->insert([
+                'institution_id' => $institution->id,
+                'user_id' => null,
+                'role' => $role,
+                'invitation_token' => $token,
+                'invitation_expires_at' => $expiresAt,
+                'invitation_status' => 'invited',
+                'invited_email' => $data['email'],
+                'invited_by' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
+
+        // Send invitation email
+        try {
+            \Mail::to($data['email'])->send(
+                new \App\Mail\InstitutionInvitationEmail(
+                    $institution,
+                    $data['email'],
+                    $token,
+                    $expiresAt,
+                    $user
+                )
+            );
+        } catch (\Throwable $e) {
+            \Log::error('Failed to send institution invitation email', [
+                'email' => $data['email'],
+                'institution_id' => $institution->id,
+                'error' => $e->getMessage()
+            ]);
+            // Don't fail the invitation creation if email fails
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Invitation sent to ' . $data['email'],
+            'invitation_token' => $token,
+            'expires_at' => $expiresAt
+        ], 201);
+    }
+
+    /**
+     * Get invitation details by token
+     */
+    public function getInvitationDetails($token)
+    {
+        $invitation = DB::table('institution_user')
+            ->where('invitation_token', $token)
+            ->where('invitation_expires_at', '>', now())
+            ->first();
+
+        if (!$invitation) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Invalid or expired invitation'
+            ], 404);
+        }
+
+        $institution = Institution::find($invitation->institution_id);
+
+        return response()->json([
+            'ok' => true,
+            'invitation' => [
+                'institution_id' => $institution->id,
+                'institution_name' => $institution->name,
+                'institution_slug' => $institution->slug,
+                'role' => $invitation->role,
+                'expires_at' => $invitation->invitation_expires_at
+            ]
+        ]);
+    }
+
+    /**
+     * Accept a direct invitation
+     */
+    public function acceptInvitation(Request $request, Institution $institution, $token)
+    {
+        $user = $request->user();
+
+        $invitation = DB::table('institution_user')
+            ->where('institution_id', $institution->id)
+            ->where('invitation_token', $token)
+            ->first();
+
+        if (!$invitation) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Invalid invitation'
+            ], 404);
+        }
+
+        if ($invitation->invitation_expires_at && now()->isAfter($invitation->invitation_expires_at)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Invitation expired'
+            ], 422);
+        }
+
+        DB::table('institution_user')
+            ->where('id', $invitation->id)
+            ->update([
+                'user_id' => $user->id,
+                'invitation_status' => 'active',
+                'status' => 'active',
+                'invitation_token' => null,
+                'invitation_expires_at' => null,
+                'updated_at' => now()
+            ]);
+
+        $activeSub = $institution->activeSubscription();
+        if ($activeSub && $activeSub->package) {
+            try {
+                $activeSub->assignUser($user->id, $user->id);
+            } catch (\Throwable $e) {
+                \Log::error('Failed to assign seat', ['error' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Successfully joined ' . $institution->name
+        ]);
+    }
+
+    /**
+     * Get analytics overview
+     */
+    public function analyticsOverview(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        $now = now();
+        $weekAgo = now()->subDays(7);
+
+        $totalMembers = $institution->users()->count();
+        $quizees = $institution->users()->wherePivot('role', 'quizee')->count();
+        $quizMasters = $institution->users()->wherePivot('role', 'quiz-master')->count();
+
+        $memberIds = $institution->users()->pluck('users.id')->toArray();
+
+        $activeToday = 0;
+        $activeThisWeek = 0;
+        if (!empty($memberIds)) {
+            $activeToday = DB::table('quiz_attempts')
+                ->whereIn('user_id', $memberIds)
+                ->whereDate('created_at', $now)
+                ->count();
+
+            $activeThisWeek = DB::table('quiz_attempts')
+                ->whereIn('user_id', $memberIds)
+                ->whereBetween('created_at', [$weekAgo, $now])
+                ->count() > 0 ? DB::table('users')
+                ->whereIn('id', $memberIds)
+                ->whereHas('quizAttempts', function ($q) use ($weekAgo, $now) {
+                    $q->whereBetween('created_at', [$weekAgo, $now]);
+                })->count() : 0;
+        }
+
+        $totalAttempts = 0;
+        $avgScore = 0;
+        if (!empty($memberIds)) {
+            $attempts = DB::table('quiz_attempts')->whereIn('user_id', $memberIds)->get();
+            $totalAttempts = $attempts->count();
+            if ($totalAttempts > 0) {
+                $avgScore = round($attempts->avg('score'), 2);
+            }
+        }
+
+        $activeSub = $institution->activeSubscription();
+        $seatsTotal = $activeSub && $activeSub->package ? $activeSub->package->seats : 0;
+        $seatsAssigned = $activeSub ? $activeSub->assignments()->whereNull('revoked_at')->count() : 0;
+        $seatsAvailable = $seatsTotal > 0 ? $seatsTotal - $seatsAssigned : 0;
+        $utilizationRate = $seatsTotal > 0 ? round(($seatsAssigned / $seatsTotal) * 100, 2) : 0;
+
+        return response()->json([
+            'ok' => true,
+            'analytics' => [
+                'members' => [
+                    'total' => $totalMembers,
+                    'quizees' => $quizees,
+                    'quiz_masters' => $quizMasters,
+                    'active_today' => $activeToday,
+                    'active_this_week' => $activeThisWeek
+                ],
+                'quizzes' => [
+                    'total_attempts' => $totalAttempts,
+                    'avg_score' => $avgScore
+                ],
+                'subscription' => [
+                    'seats_total' => $seatsTotal,
+                    'seats_assigned' => $seatsAssigned,
+                    'seats_available' => $seatsAvailable,
+                    'utilization_rate' => $utilizationRate
+                ]
+            ]
+        ]);
+    }
+
+    /**
+     * Get activity trends
+     */
+    public function analyticsActivity(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        $days = (int) $request->input('days', 30);
+        $startDate = now()->subDays($days);
+
+        $memberIds = $institution->users()->pluck('users.id')->toArray();
+
+        $activity = DB::table('quiz_attempts')
+            ->whereIn('user_id', $memberIds)
+            ->where('created_at', '>=', $startDate)
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as attempts, AVG(score) as avg_score')
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get();
+
+        return response()->json([
+            'ok' => true,
+            'analytics' => [
+                'period_days' => $days,
+                'activity_by_date' => $activity
+            ]
+        ]);
+    }
+
+    /**
+     * Get performance distribution
+     */
+    public function analyticsPerformance(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        $memberIds = $institution->users()->pluck('users.id')->toArray();
+
+        $ranges = [
+            ['min' => 0, 'max' => 20, 'label' => '0-20%'],
+            ['min' => 20, 'max' => 40, 'label' => '20-40%'],
+            ['min' => 40, 'max' => 60, 'label' => '40-60%'],
+            ['min' => 60, 'max' => 80, 'label' => '60-80%'],
+            ['min' => 80, 'max' => 100, 'label' => '80-100%'],
+        ];
+
+        $distribution = [];
+        foreach ($ranges as $range) {
+            $count = DB::table('quiz_attempts')
+                ->whereIn('user_id', $memberIds)
+                ->whereBetween('score', [$range['min'], $range['max']])
+                ->count();
+            $distribution[] = [
+                'range' => $range['label'],
+                'count' => $count
+            ];
+        }
+
+        $topPerformers = DB::table('quiz_attempts')
+            ->whereIn('user_id', $memberIds)
+            ->selectRaw('user_id, AVG(score) as avg_score, COUNT(*) as attempts')
+            ->groupBy('user_id')
+            ->orderByDesc('avg_score')
+            ->limit(10)
+            ->with('user')
+            ->get();
+
+        $topPerformersFormatted = DB::table('quiz_attempts')
+            ->whereIn('user_id', $memberIds)
+            ->selectRaw('user_id, AVG(score) as avg_score, COUNT(*) as attempts')
+            ->groupBy('user_id')
+            ->orderByDesc('avg_score')
+            ->limit(10)
+            ->get()
+            ->map(function ($item) {
+                $u = User::find($item->user_id);
+                return [
+                    'user_id' => $item->user_id,
+                    'name' => $u ? $u->name : 'Unknown',
+                    'avg_score' => round($item->avg_score, 2),
+                    'attempts' => $item->attempts
+                ];
+            });
+
+        return response()->json([
+            'ok' => true,
+            'analytics' => [
+                'score_distribution' => $distribution,
+                'top_performers' => $topPerformersFormatted
+            ]
+        ]);
+    }
+
+    /**
+     * Get member engagement details
+     */
+    public function analyticsMember(Request $request, Institution $institution, $userId)
+    {
+        $user = $request->user();
+
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        $member = $institution->users()->where('users.id', $userId)->first();
+        if (!$member) {
+            return response()->json(['ok' => false, 'message' => 'Member not found'], 404);
+        }
+
+        $pivot = $member->pivot;
+        $attempts = DB::table('quiz_attempts')->where('user_id', $userId)->get();
+        $totalAttempts = $attempts->count();
+        $avgScore = $totalAttempts > 0 ? round($attempts->avg('score'), 2) : 0;
+        $lastActivity = DB::table('quiz_attempts')
+            ->where('user_id', $userId)
+            ->orderByDesc('created_at')
+            ->first();
+
+        $memberSince = $pivot->created_at ? \Carbon\Carbon::parse($pivot->created_at) : null;
+        $daysSince = $memberSince ? $memberSince->diffInDays(now()) : 0;
+
+        return response()->json([
+            'ok' => true,
+            'member' => [
+                'id' => $member->id,
+                'name' => $member->name,
+                'email' => $member->email,
+                'role' => $pivot->role,
+                'status' => $pivot->status,
+                'member_since' => $memberSince ? $memberSince->toDateString() : null,
+                'days_as_member' => $daysSince,
+                'activity' => [
+                    'total_attempts' => $totalAttempts,
+                    'avg_score' => $avgScore,
+                    'last_activity' => $lastActivity ? $lastActivity->created_at : null
+                ]
+            ]
+        ]);
     }
 }

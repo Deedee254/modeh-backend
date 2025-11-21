@@ -31,7 +31,7 @@ class Institution extends Model
     public function users()
     {
         return $this->belongsToMany(User::class, 'institution_user')
-            ->withPivot('role', 'status', 'invited_by')
+            ->withPivot('role', 'status', 'invited_by', 'invitation_token', 'invitation_expires_at', 'invitation_status', 'invited_email', 'last_activity_at')
             ->withTimestamps();
     }
 
@@ -126,5 +126,33 @@ class Institution extends Model
     public function getRouteKeyName()
     {
         return 'slug';
+    }
+
+    /**
+     * Get the active subscription for this institution.
+     */
+    public function activeSubscription()
+    {
+        return Subscription::where('owner_type', self::class)
+            ->where('owner_id', $this->id)
+            ->where('status', 'active')
+            ->orderByDesc('started_at')
+            ->first();
+    }
+
+    /**
+     * Get all quiz attempts from institution members.
+     */
+    public function quizAttempts()
+    {
+        return QuizAttempt::whereIn('user_id', $this->users()->pluck('users.id'));
+    }
+
+    /**
+     * Approval requests for this institution
+     */
+    public function approvalRequests()
+    {
+        return $this->hasMany(\App\Models\InstitutionApprovalRequest::class, 'institution_name', 'name');
     }
 }

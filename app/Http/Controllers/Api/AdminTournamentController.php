@@ -10,14 +10,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use PhpOffice\PhpSpreadsheet\IOFactory;
+use App\Services\TournamentQuestionService;
+use Illuminate\Http\UploadedFile;
 
 class AdminTournamentController extends Controller
 {
-    public function __construct()
+    protected $tournamentQuestionService;
+
+    public function __construct(TournamentQuestionService $tournamentQuestionService)
     {
         $this->middleware(['auth:sanctum', 'can:viewFilament']);
+        $this->tournamentQuestionService = $tournamentQuestionService;
     }
 
     public function store(Request $request)
@@ -141,272 +144,27 @@ class AdminTournamentController extends Controller
     }
 
     /**
-     * Attach questions to a specific TournamentBattle using filters.
-     * Mirrors the BattleController select/attach behavior but for TournamentBattle.
-     * Admin-only (route is protected by can:viewFilament middleware).
-     */
-    /**
      * Attach questions to a specific TournamentBattle using filters or CSV upload.
-     * Accepts either a Request (from HTTP route) or an array (when called from Filament action).
-     * CSV must include a header with `id` or `question_id` column to attach existing bank questions.
      */
-    public function attachQuestionsToBattle($request, Tournament $tournament, TournamentBattle $battle)
+    public function attachQuestionsToBattle(Request $request, Tournament $tournament, TournamentBattle $battle)
     {
-        // Log entry for diagnostics
-        try {
-            $who = $request instanceof \Illuminate\Http\Request && $request->user() ? $request->user()->id : null;
-            Log::info('AdminTournamentController::attachQuestionsToBattle called', [
-                'tournament_id' => $tournament->id ?? null,
-                'battle_id' => $battle->id ?? null,
-                'caller_user_id' => $who,
-                'request_type' => is_object($request) ? get_class($request) : gettype($request),
-            ]);
-        } catch (\Throwable $_) {}
-        // Ensure the battle belongs to the tournament
         if ($battle->tournament_id !== $tournament->id) {
             return response()->json(['message' => 'Battle does not belong to tournament'], 400);
         }
 
-        // Normalize payload whether $request is Request or array
-        $payload = [];
-        $uploadedFile = null;
-        if ($request instanceof \Illuminate\Http\Request) {
-            $payload = $request->all();
-            $uploadedFile = $request->file('csv') ?? $request->file('file') ?? null;
-        } elseif (is_array($request)) {
-            $payload = $request;
-            // Filament action may provide the uploaded file object in the payload
-            $uploadedFile = $payload['csv'] ?? $payload['file'] ?? null;
-        }
+        $uploadedFile = $request->file('csv') ?? $request->file('file');
 
-        // If CSV/file provided, parse and either attach existing question ids or create new questions from rows
         if ($uploadedFile) {
             try {
-                if (is_string($uploadedFile) && file_exists($uploadedFile)) {
-                    $path = $uploadedFile;
-                } elseif (method_exists($uploadedFile, 'getRealPath')) {
-                    $path = $uploadedFile->getRealPath();
-                } else {
-                    Log::warning('attachQuestionsToBattle: invalid uploadedFile type', ['uploadedFile' => is_object($uploadedFile) ? get_class($uploadedFile) : gettype($uploadedFile)]);
-                    return response()->json(['message' => 'Invalid uploaded file'], 422);
-                }
-
-                $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-                try { Log::info('attachQuestionsToBattle: parsing uploaded file', ['path' => $path, 'ext' => $ext, 'tournament_id' => $tournament->id, 'battle_id' => $battle->id]); } catch (\Throwable $_) {}
-
-                // helper to normalize tabular file into headers + rows (rows as plain arrays)
-                $parseTabular = function (string $path, string $ext) {
-                    $headers = [];
-                    $rows = [];
-                    if (in_array($ext, ['xls', 'xlsx', 'xlsm'])) {
-                        // Use PhpSpreadsheet to read Excel files
-                        $spreadsheet = IOFactory::load($path);
-                        $sheet = $spreadsheet->getActiveSheet();
-                        $array = $sheet->toArray(null, true, true, true);
-                        if (empty($array)) return [[], []];
-                        // convert first row to headers
-                        $first = array_shift($array);
-                        $headers = array_map(function ($h) { return strtolower(trim((string)$h)); }, array_values($first));
-                        foreach ($array as $r) {
-                            $rows[] = array_values($r);
-                        }
-                    } else {
-                        // CSV/TXT
-                        $FH = fopen($path, 'r');
-                        if (!$FH) return [[], []];
-                        $rawHeaders = fgetcsv($FH);
-                        if ($rawHeaders === false) { fclose($FH); return [[], []]; }
-                        $headers = array_map(function ($h) { return strtolower(trim((string)$h)); }, $rawHeaders);
-                        while (($row = fgetcsv($FH)) !== false) {
-                            $rows[] = $row;
-                        }
-                        fclose($FH);
-                    }
-                    return [$headers, $rows];
-                };
-
-                [$headers, $rows] = $parseTabular($path, $ext);
-                try { Log::info('attachQuestionsToBattle: parsed tabular file', ['headers_count' => count($headers), 'rows_count' => count($rows), 'headers' => $headers]); } catch (\Throwable $_) {}
-                if (empty($headers)) {
-                    try { Log::warning('attachQuestionsToBattle: parsed file had no headers', ['path' => $path, 'ext' => $ext, 'tournament_id' => $tournament->id]); } catch (\Throwable $_) {}
-                    return response()->json(['message' => 'Empty or unreadable file'], 422);
-                }
-
-                // If there's an id column, treat this as "attach existing questions by id"
-                $idKeyIndexes = [];
-                foreach ($headers as $i => $h) {
-                    if (in_array($h, ['id', 'question_id', 'questionid', 'question id'])) { $idKeyIndexes[] = $i; }
-                }
-
-                DB::beginTransaction();
-                $attachData = [];
-
-                if (!empty($idKeyIndexes)) {
-                    // prefer first id column
-                    $idIdx = $idKeyIndexes[0];
-                    $ids = [];
-                    foreach ($rows as $row) {
-                        if (!isset($row[$idIdx])) continue;
-                        $val = trim((string)$row[$idIdx]);
-                        if ($val === '') continue;
-                        if (is_numeric($val)) $ids[] = intval($val);
-                    }
-                    if (empty($ids)) {
-                        try { Log::warning('attachQuestionsToBattle: id-column present but no ids parsed', ['path' => $path, 'tournament_id' => $tournament->id]); } catch (\Throwable $_) {}
-                        DB::rollBack();
-                        return response()->json(['message' => 'No question ids found in file'], 422);
-                    }
-                    $questions = Question::whereIn('id', $ids)->get()->keyBy('id');
-                    $missing = [];
-                    foreach ($ids as $i => $qid) {
-                        if ($questions->has($qid)) {
-                            $attachData[$qid] = ['position' => $i];
-                        } else {
-                            $missing[] = $qid;
-                        }
-                    }
-                    try { Log::info('attachQuestionsToBattle: attaching existing questions by id', ['requested' => count($ids), 'found' => $questions->count(), 'missing_ids' => $missing]); } catch (\Throwable $_) {}
-                    if (!empty($attachData)) {
-                        $battle->questions()->detach();
-                        $battle->questions()->attach($attachData);
-                    }
-                    DB::commit();
-                    return response()->json(['attached' => count($attachData), 'questions' => $battle->questions()->get()]);
-                }
-
-                // Otherwise: assume rows contain question definitions; attempt to create them then attach
-                // map header names to canonical keys
-                $canonical = array_map(function ($h) { return preg_replace('/[^a-z0-9_]/', '_', $h); }, $headers);
-
-                $created = [];
-                $userId = null;
-                if ($request instanceof Request && $request->user()) $userId = $request->user()->id;
-                try { Log::info('attachQuestionsToBattle: creating questions from rows', ['rows' => count($rows), 'tournament_id' => $tournament->id]); } catch (\Throwable $_) {}
-                foreach ($rows as $rIdx => $row) {
-                    $rowData = [];
-                    foreach ($canonical as $i => $key) {
-                        $rowData[$key] = isset($row[$i]) ? trim((string)$row[$i]) : null;
-                    }
-
-                    // Minimal mapping rules: body/prompt -> body, type -> type
-                    // support multiple common column names for question text
-                    $body = $rowData['body'] ?? $rowData['prompt'] ?? $rowData['question'] ?? $rowData['text'] ?? null;
-                    if (!$body) continue; // skip invalid rows
-                    $type = $rowData['type'] ?? $rowData['question_type'] ?? 'mcq';
-
-                    // Build options array: check for 'options' JSON, 'choices' pipe-delimited, or option_1..option_10
-                    $options = [];
-                    if (!empty($rowData['options'])) {
-                        $maybe = $rowData['options'];
-                        $decoded = json_decode($maybe, true);
-                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                            // normalize to array of ['text' => ...]
-                            foreach ($decoded as $opt) {
-                                if (is_array($opt) && isset($opt['text'])) $options[] = ['text' => $opt['text']];
-                                elseif (is_string($opt)) $options[] = ['text' => $opt];
-                            }
-                        } else {
-                            // try pipe-splitting
-                            $parts = array_filter(array_map('trim', explode('|', $maybe)));
-                            foreach ($parts as $p) $options[] = ['text' => $p];
-                        }
-                    } elseif (!empty($rowData['choices'])) {
-                        $parts = array_filter(array_map('trim', preg_split('/[|,]/', $rowData['choices'])));
-                        foreach ($parts as $p) $options[] = ['text' => $p];
-                    } else {
-                        // option_1..option_10 or option1..option10 (both common patterns)
-                        for ($i = 1; $i <= 10; $i++) {
-                            $k1 = 'option_' . $i;
-                            $k2 = 'option' . $i;
-                            if (!empty($rowData[$k1])) {
-                                $options[] = ['text' => $rowData[$k1]];
-                            } elseif (!empty($rowData[$k2])) {
-                                $options[] = ['text' => $rowData[$k2]];
-                            }
-                        }
-                    }
-
-                    // correct/answer mapping: could be index or text
-                    $correct = null;
-                    $corrects = null;
-                    $rawCorrect = $rowData['correct'] ?? $rowData['correct_answer'] ?? $rowData['answers'] ?? null;
-                    if ($rawCorrect !== null) {
-                        // supports multiple with | or , delimiter
-                        if (strpos($rawCorrect, '|') !== false || strpos($rawCorrect, ',') !== false) {
-                            $parts = array_map('trim', preg_split('/[|,]/', $rawCorrect));
-                            $mapped = [];
-                            foreach ($parts as $p) {
-                                if (is_numeric($p)) $mapped[] = intval($p);
-                                else {
-                                    $idx = null;
-                                    foreach ($options as $oi => $opt) { if (strcasecmp($opt['text'], $p) === 0) { $idx = $oi; break; } }
-                                    if ($idx !== null) $mapped[] = $idx;
-                                }
-                            }
-                            $corrects = array_values(array_unique(array_filter($mapped, 'is_int')));
-                        } else {
-                            $p = trim((string)$rawCorrect);
-                            if (is_numeric($p)) $correct = intval($p);
-                            else {
-                                foreach ($options as $oi => $opt) { if (strcasecmp($opt['text'], $p) === 0) { $correct = $oi; break; } }
-                            }
-                        }
-                    }
-
-                    $createData = [
-                        'body' => $body,
-                        'type' => $type,
-                        'options' => $options ?: null,
-                        'marks' => isset($rowData['marks']) && is_numeric($rowData['marks']) ? floatval($rowData['marks']) : null,
-                        'difficulty' => $rowData['difficulty'] ?? null,
-                        'explanation' => $rowData['explanation'] ?? null,
-                        'youtube_url' => $rowData['youtube_url'] ?? $rowData['youtube'] ?? null,
-                        'subject_id' => isset($rowData['subject_id']) && is_numeric($rowData['subject_id']) ? intval($rowData['subject_id']) : (isset($rowData['subject']) && is_numeric($rowData['subject']) ? intval($rowData['subject']) : null),
-                        'topic_id' => isset($rowData['topic_id']) && is_numeric($rowData['topic_id']) ? intval($rowData['topic_id']) : (isset($rowData['topic']) && is_numeric($rowData['topic']) ? intval($rowData['topic']) : null),
-                        'grade_id' => isset($rowData['grade_id']) && is_numeric($rowData['grade_id']) ? intval($rowData['grade_id']) : null,
-                        'level_id' => isset($rowData['level_id']) && is_numeric($rowData['level_id']) ? intval($rowData['level_id']) : null,
-                        'is_banked' => true,
-                        'is_approved' => true,
-                    ];
-                    if ($corrects !== null) $createData['corrects'] = $corrects;
-                    if ($correct !== null) $createData['correct'] = $correct;
-                    if ($userId) $createData['created_by'] = $userId;
-
-                    $question = Question::create($createData);
-                    $created[] = $question;
-                }
-                // attach created questions preserving order
-                foreach ($created as $i => $q) {
-                    $attachData[$q->id] = ['position' => $i];
-                }
-                try { Log::info('attachQuestionsToBattle: created questions', ['created_count' => count($created), 'attached_count' => count($attachData)]); } catch (\Throwable $_) {}
-                if (!empty($attachData)) {
-                    $battle->questions()->detach();
-                    $battle->questions()->attach($attachData);
-                }
-
-                DB::commit();
-                return response()->json(['created' => count($created), 'attached' => count($attachData), 'questions' => $battle->questions()->get()]);
+                $result = $this->tournamentQuestionService->attachQuestionsFromCsv($tournament, $battle, $uploadedFile);
+                return response()->json($result);
             } catch (\Throwable $e) {
-                DB::rollBack();
-                try {
-                    $sample = null;
-                    if (isset($path) && @file_exists($path)) {
-                        $sample = @file_get_contents($path, false, null, 0, 4096);
-                    }
-                    Log::error('attachQuestionsToBattle: exception processing uploaded file', [
-                        'error' => $e->getMessage(),
-                        'trace' => $e->getTraceAsString(),
-                        'tournament_id' => $tournament->id ?? null,
-                        'battle_id' => $battle->id ?? null,
-                        'sample' => $sample ? substr($sample, 0, 2048) : null,
-                    ]);
-                } catch (\Throwable $_) {}
                 return response()->json(['message' => 'Failed to process file: ' . $e->getMessage()], 500);
             }
         }
 
         // Fallback: select from bank using filters (existing behavior)
+        $payload = $request->all();
         $settings = $payload['settings'] ?? [];
         $data = array_merge($settings, $payload);
 

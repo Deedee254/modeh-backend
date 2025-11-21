@@ -19,7 +19,8 @@ class QuizMaster extends Model
         'bio',
         'grade_id',
         'level_id',
-        'institution',
+        'institution_id',  // NEW: Foreign key to institutions table
+        'institution',  // KEEP: Text field for user input or legacy data
     ];
 
     protected $casts = [
@@ -44,6 +45,11 @@ class QuizMaster extends Model
     public function grade()
     {
         return $this->belongsTo(Grade::class);
+    }
+
+    public function level()
+    {
+        return $this->belongsTo(Level::class);
     }
 
     public function getSubjectsModelsAttribute()

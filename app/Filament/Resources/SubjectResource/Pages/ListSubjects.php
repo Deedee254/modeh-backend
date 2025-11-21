@@ -6,6 +6,7 @@ use App\Filament\Resources\SubjectResource;
 use App\Models\Subject;
 use Filament\Actions\Action;
 use Filament\Tables\Filters\Filter;
+use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListSubjects extends ListRecords
@@ -15,7 +16,7 @@ class ListSubjects extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            \Filament\Actions\CreateAction::make()->label('Add Subject'),
+            CreateAction::make()->label('Add Subject'),
         ];
     }
 

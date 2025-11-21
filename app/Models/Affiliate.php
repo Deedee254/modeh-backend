@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
  * @property-read \App\Models\User $user
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\AffiliateReferral[] $referrals
  * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\AffiliatePayout[] $payouts
  * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\AffiliateLinkClick[] $linkClicks
  */
@@ -33,6 +34,11 @@ class Affiliate extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function referrals()
+    {
+        return $this->hasMany(AffiliateReferral::class);
     }
 
     public function payouts()
