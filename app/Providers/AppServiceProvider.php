@@ -32,13 +32,15 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
+use App\Policies\TournamentPolicy;
+use App\Policies\QuizPolicy;
      * Bootstrap any application services.
      */
     public function boot(): void
     {
-        // Register model policies
-        Gate::policy(Quiz::class, QuizPolicy::class);
-        Gate::policy(Tournament::class, TournamentPolicy::class);
+    // Register model policies
+    Gate::policy(\App\Models\Quiz::class, \App\Policies\QuizPolicy::class);
+    Gate::policy(\App\Models\Tournament::class, \App\Policies\TournamentPolicy::class);
         Gate::define('viewFilament', function ($user = null) {
             // Allow unauthenticated users to reach the Filament login page.
             // Filament may evaluate the gate while serving the panel route, so
@@ -87,9 +89,14 @@ class AppServiceProvider extends ServiceProvider
 
         // Explicitly register Livewire admin components aliases (fix component-not-found errors)
         try {
-            Livewire::component('admin.bank-questions-table', \App\Http\Livewire\Admin\BankQuestionsTable::class);
+            // Register Livewire component alias only when Livewire is installed and available.
+            if (class_exists('\\Livewire\\Livewire')) {
+                call_user_func(['\\Livewire\\Livewire', 'component'], 'admin.bank-questions-table', \App\Http\Livewire\Admin\BankQuestionsTable::class);
+            } else {
+                logger()->debug('Livewire not present, skipping admin component registration');
+            }
         } catch (\Throwable $e) {
-            // Don't block boot if Livewire not available in some contexts
+            // Don't block boot if Livewire registration fails in some contexts
             logger()->debug('Livewire component registration skipped: ' . $e->getMessage());
         }
 
