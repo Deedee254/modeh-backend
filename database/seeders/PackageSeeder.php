@@ -25,6 +25,7 @@ class PackageSeeder extends Seeder
                 ]
             ],
             'is_active' => true,
+            'is_default' => true,
             'duration_days' => 30,
         ]);
 
