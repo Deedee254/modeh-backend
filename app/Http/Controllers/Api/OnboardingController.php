@@ -48,14 +48,10 @@ class OnboardingController extends Controller
     {
         $user = $request->user();
 
-        // Check if email is verified before completing profile
-        if (!$user->hasVerifiedEmail()) {
-            return response()->json([
-                'error' => 'Email not verified',
-                'message' => 'Please verify your email before completing profile'
-            ], 403);
-        }
-
+        // NOTE: Removed email verified requirement — onboarding finalize
+        // now completes regardless of email verification status. Email
+        // verification is reserved for invite flows and not required for
+        // general onboarding in this deployment.
         $onboarding = $this->service->completeStep($user, 'profile_complete');
         return response()->json(['onboarding' => $onboarding, 'user' => $user->fresh()]);
     }

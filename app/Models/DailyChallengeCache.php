@@ -9,6 +9,8 @@ class DailyChallengeCache extends Model
 {
     use HasFactory;
 
+    protected $table = 'daily_challenges_cache';
+
     protected $fillable = [
         'date',
         'level_id',

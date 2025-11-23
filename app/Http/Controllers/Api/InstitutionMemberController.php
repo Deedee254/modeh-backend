@@ -865,27 +865,19 @@ class InstitutionMemberController extends Controller
             ];
         }
 
-        $topPerformers = DB::table('quiz_attempts')
-            ->whereIn('user_id', $memberIds)
-            ->selectRaw('user_id, AVG(score) as avg_score, COUNT(*) as attempts')
-            ->groupBy('user_id')
-            ->orderByDesc('avg_score')
-            ->limit(10)
-            ->with('user')
-            ->get();
-
-        $topPerformersFormatted = DB::table('quiz_attempts')
-            ->whereIn('user_id', $memberIds)
-            ->selectRaw('user_id, AVG(score) as avg_score, COUNT(*) as attempts')
-            ->groupBy('user_id')
+        // Efficiently fetch top performers with a join to users to avoid N+1 queries
+        $topPerformersFormatted = DB::table('quiz_attempts as qa')
+            ->join('users as u', 'u.id', '=', 'qa.user_id')
+            ->whereIn('qa.user_id', $memberIds)
+            ->selectRaw('qa.user_id as user_id, u.name as user_name, AVG(qa.score) as avg_score, COUNT(*) as attempts')
+            ->groupBy('qa.user_id', 'u.name')
             ->orderByDesc('avg_score')
             ->limit(10)
             ->get()
             ->map(function ($item) {
-                $u = User::find($item->user_id);
                 return [
                     'user_id' => $item->user_id,
-                    'name' => $u ? $u->name : 'Unknown',
+                    'name' => $item->user_name ?? 'Unknown',
                     'avg_score' => round($item->avg_score, 2),
                     'attempts' => $item->attempts
                 ];

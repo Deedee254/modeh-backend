@@ -25,6 +25,8 @@ class AuthController extends Controller
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:6',
             'institution' => 'nullable|string',
+            'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\\s\\.]?[0-9]{3}[-\\s\\.]?[0-9]{4,6}$/'],
+            'bio' => 'nullable|string|max:500',
             'level_id' => 'required|exists:levels,id',
             'grade_id' => 'required|exists:grades,id',
             'subjects' => 'required|array|min:1',
@@ -42,6 +44,8 @@ class AuthController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'quizee',
+            'phone' => $request->phone,
+            'bio' => $request->bio,
         ]);
 
         // Create quizee profile with institution and required taxonomy
@@ -95,10 +99,14 @@ class AuthController extends Controller
             }
         }
 
-        // Send email verification notification
-        $user->sendEmailVerificationNotification();
+    // Send email verification notification
+    $user->sendEmailVerificationNotification();
 
-        return response()->json(['user' => $user, 'quizee' => $quizee, 'message' => 'Registration successful. Please verify your email.'], 201);
+    // Ensure frontend receives profile relations so clients that don't immediately
+    // refresh auth state still have access to the created profile fields.
+    $user->loadMissing(['quizeeProfile.grade', 'quizeeProfile.level', 'institutions']);
+
+    return response()->json(['user' => $user, 'quizee' => $quizee, 'message' => 'Registration successful. Please verify your email.'], 201);
     }
 
     public function registerQuizMaster(Request $request)
@@ -163,10 +171,13 @@ class AuthController extends Controller
             }
         }
 
-        // Send email verification notification
-        $user->sendEmailVerificationNotification();
+    // Send email verification notification
+    $user->sendEmailVerificationNotification();
 
-        return response()->json(['user' => $user, 'quizMaster' => $quizMaster, 'message' => 'Registration successful. Please verify your email.'], 201);
+    // Load profile relations for a richer response (phone, subjects, grade)
+    $user->loadMissing(['quizMasterProfile.grade', 'quizMasterProfile.level', 'institutions']);
+
+    return response()->json(['user' => $user, 'quizMaster' => $quizMaster, 'message' => 'Registration successful. Please verify your email.'], 201);
     }
 
     public function registerInstitutionManager(Request $request)
@@ -222,6 +233,9 @@ class AuthController extends Controller
                 Log::warning('Failed to create affiliate referral', ['error' => $e->getMessage()]);
             }
         }
+
+        // Load institutions relation so frontend receives the attached institution (if any)
+        $user->loadMissing(['institutions']);
 
         return response()->json([
             'user' => $user,

@@ -139,6 +139,14 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     }
 
     /**
+     * Alias for quizeeProfile() for backwards compatibility
+     */
+    public function quizee()
+    {
+        return $this->quizeeProfile();
+    }
+
+    /**
      * Relation to the Affiliate record (if any) for this user.
      */
     public function affiliate()

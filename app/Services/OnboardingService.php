@@ -70,26 +70,43 @@ class OnboardingService
                 case 'grade':
                     if (! $skipped) {
                         $onboarding->grade_selected = true;
-                        if ($user->role === 'quiz-master' && !empty($data['grade_id'])) {
-                            $user->quizMasterProfile->update(['grade_id' => $data['grade_id']]);
-                        } elseif ($user->role === 'quizee' && !empty($data['grade_id'])) {
-                            // Update quizee profile grade and also persist the associated level
+                        if (!empty($data['grade_id'])) {
                             $grade = Grade::find($data['grade_id']);
                             $update = ['grade_id' => $data['grade_id']];
                             if ($grade && isset($grade->level_id)) {
                                 $update['level_id'] = $grade->level_id;
                             }
-                            $user->quizeeProfile->update($update);
+
+                            // If role is known, update the corresponding profile; otherwise update both profiles
+                            if ($user->role === 'quiz-master') {
+                                $user->quizMasterProfile->update($update);
+                            } elseif ($user->role === 'quizee') {
+                                $user->quizeeProfile->update($update);
+                            } else {
+                                // create profiles if missing and update both so the data is retained regardless of later role selection
+                                $quizee = $user->quizeeProfile ?? $user->quizeeProfile()->create([]);
+                                $quizMaster = $user->quizMasterProfile ?? $user->quizMasterProfile()->create([]);
+                                $quizee->update($update);
+                                $quizMaster->update($update);
+                            }
                         }
                     }
                     break;
                 case 'subjects':
                     if (! $skipped) {
                         $onboarding->subject_selected = true;
-                        if ($user->role === 'quiz-master' && !empty($data['subjects'])) {
-                            $user->quizMasterProfile->update(['subjects' => $data['subjects']]);
-                        } elseif ($user->role === 'quizee' && !empty($data['subjects'])) {
-                            $user->quizeeProfile->update(['subjects' => $data['subjects']]);
+                        if (!empty($data['subjects'])) {
+                            // If role known, update corresponding profile; otherwise preserve subjects on both profiles
+                            if ($user->role === 'quiz-master') {
+                                $user->quizMasterProfile->update(['subjects' => $data['subjects']]);
+                            } elseif ($user->role === 'quizee') {
+                                $user->quizeeProfile->update(['subjects' => $data['subjects']]);
+                            } else {
+                                $quizee = $user->quizeeProfile ?? $user->quizeeProfile()->create([]);
+                                $quizMaster = $user->quizMasterProfile ?? $user->quizMasterProfile()->create([]);
+                                $quizee->update(['subjects' => $data['subjects']]);
+                                $quizMaster->update(['subjects' => $data['subjects']]);
+                            }
                         }
                     }
                     break;
