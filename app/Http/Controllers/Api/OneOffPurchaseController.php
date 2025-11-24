@@ -41,7 +41,7 @@ class OneOffPurchaseController extends Controller
         $config = $setting ? ($setting->config ?? []) : [];
         $service = new MpesaService($config);
         $phone = $data['phone'] ?? ($user->phone ?? null);
-        $res = $service->initiateStkPush($phone, $purchase->amount, 'OneOff-'.$purchase->id);
+        $res = $service->initiateStkPush($phone, (float)$purchase->amount, 'OneOff-'.$purchase->id);
 
         if ($res['ok']) {
             $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], ['tx' => $res['tx'], 'initiated_at' => now()]);

@@ -187,7 +187,7 @@ class QuizAnalyticsController extends Controller
         $rows[] = ['question_id','question','attempts','correct','correct_rate'];
         foreach ($quiz->questions as $q) {
             // compute stats on the fly (reuse logic from show)
-            $attempts = \App\Models\QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('answers')->get();
+            $attempts = QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('answers')->get();
             $attemptCount = 0; $correctCount = 0;
             foreach ($attempts as $a) {
                 $answers = $a->answers ?? [];

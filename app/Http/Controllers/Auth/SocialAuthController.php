@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\SocialAuthService;
+use App\Models\UserOnboarding;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -44,8 +45,36 @@ class SocialAuthController extends Controller
             // The session will persist across requests, including to the API.
             Auth::login($user);
 
-            // If profile is not complete, return different response
-            $requiresCompletion = !$user->is_profile_completed;
+            // Reload user with onboarding relationship
+            $user->load('onboarding');
+
+            // Ensure onboarding record exists for users who need it
+            // If user has no role or incomplete profile, they need onboarding
+            $hasRole = !empty($user->role);
+            $needsOnboarding = !$hasRole || !$user->is_profile_completed;
+            
+            if ($needsOnboarding && !$user->onboarding) {
+                // Create onboarding record if it doesn't exist and user needs onboarding
+                UserOnboarding::firstOrCreate(
+                    ['user_id' => $user->id],
+                    [
+                        'profile_completed' => false,
+                        'institution_added' => false,
+                        'role_selected' => !empty($user->role), // Set to true if user already has role
+                        'subject_selected' => false,
+                        'grade_selected' => false,
+                        'completed_steps' => ['social_auth'],
+                        'last_step_completed_at' => now()
+                    ]
+                );
+                // Reload the relationship
+                $user->load('onboarding');
+            }
+
+            // Determine if user needs onboarding/profile completion
+            // New users (no role) always need onboarding
+            // Existing users need onboarding if profile is incomplete or missing role
+            $requiresCompletion = $needsOnboarding;
             $nextStep = $this->determineNextStep($user);
 
             // If the request expects JSON (API/client), return JSON with user data.
@@ -92,20 +121,34 @@ class SocialAuthController extends Controller
      */
     protected function determineNextStep($user)
     {
-        $onboarding = $user->onboarding ?? null;
-
-        // If there's no onboarding record yet, treat as not started and ask for institution
-        if (!$onboarding || empty($onboarding)) {
-            return 'institution';
+        // If user has no role, they need to choose role first (new users)
+        if (empty($user->role)) {
+            return 'new-user';
         }
 
-        // Null-safe checks for boolean flags
+        $onboarding = $user->onboarding;
+
+        // If there's no onboarding record yet, create one or determine based on role
+        // For existing users without onboarding record, check if they have a role
+        // If they have a role and profile is complete, they're done
+        if (!$onboarding) {
+            // Existing user without onboarding record but has role and completed profile
+            if (!empty($user->role) && $user->is_profile_completed) {
+                return 'complete';
+            }
+            // Otherwise, they need to start onboarding - choose role first
+            return 'new-user';
+        }
+
+        // Priority: role selection comes first for new users
+        // If role is not selected, go to role selection
+        if (empty($onboarding->role_selected) || !$onboarding->role_selected) {
+            return 'new-user';
+        }
+
+        // After role is selected, check institution
         if (empty($onboarding->institution_added) || !$onboarding->institution_added) {
             return 'institution';
-        }
-
-        if (empty($onboarding->role_selected) || !$onboarding->role_selected) {
-            return 'role';
         }
 
         // Based on role, determine next step. completed_steps may be stored as array or JSON string.
@@ -115,11 +158,12 @@ class SocialAuthController extends Controller
             $completedSteps = is_array($decoded) ? $decoded : [];
         }
 
-        if (in_array('role_quizee', (array)$completedSteps) && empty($onboarding->grade_selected)) {
+        // Check role-specific requirements
+        if ($user->role === 'quizee' && (empty($onboarding->grade_selected) || !$onboarding->grade_selected)) {
             return 'grade';
         }
 
-        if (in_array('role_quiz-master', (array)$completedSteps) && empty($onboarding->subject_selected)) {
+        if ($user->role === 'quiz-master' && (empty($onboarding->subject_selected) || !$onboarding->subject_selected)) {
             return 'subjects';
         }
 

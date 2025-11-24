@@ -196,4 +196,12 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     {
         return $this->hasMany(\App\Models\SubscriptionAssignment::class);
     }
+
+    /**
+     * Relationship to the user's onboarding record.
+     */
+    public function onboarding()
+    {
+        return $this->hasOne(UserOnboarding::class);
+    }
 }
