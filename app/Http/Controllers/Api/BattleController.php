@@ -67,7 +67,7 @@ class BattleController extends Controller
             return $battle;
         });
 
-        return response()->json($battle);
+        return response()->json(['ok' => true, 'battle' => $battle]);
     }
 
     public function index(Request $request)

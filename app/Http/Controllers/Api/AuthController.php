@@ -57,24 +57,27 @@ class AuthController extends Controller
             'subjects' => $request->subjects ?? [],
         ]);
 
-        // Assign default package subscription (idempotent). If an active, non-expired
-        // subscription already exists, do nothing. Otherwise create/update and activate
-        // using the model helper so duration logic is consistent.
-        $defaultPackage = \App\Models\Package::where('is_default', true)->first();
-        if ($defaultPackage) {
-            $existingSub = \App\Models\Subscription::where('user_id', $user->id)->orderByDesc('created_at')->first();
-            if (!($existingSub && $existingSub->status === 'active' && (is_null($existingSub->ends_at) || $existingSub->ends_at->gt(now())))) {
-                $sub = \App\Models\Subscription::updateOrCreate([
-                    'user_id' => $user->id,
-                ], [
-                    'package_id' => $defaultPackage->id,
-                    'status' => 'active',
-                    'gateway' => 'seed',
-                    'gateway_meta' => null,
-                ]);
-                $sub->load('package');
-                $sub->activate();
+        // Assign default package subscription to quizee (idempotent)
+        try {
+            $defaultPackage = \App\Models\Package::where('is_default', true)->first();
+            if ($defaultPackage) {
+                $existingSub = \App\Models\Subscription::where('user_id', $user->id)->orderByDesc('created_at')->first();
+                if (!($existingSub && $existingSub->status === 'active' && (is_null($existingSub->ends_at) || $existingSub->ends_at->gt(now())))) {
+                    \App\Models\Subscription::updateOrCreate([
+                        'user_id' => $user->id,
+                    ], [
+                        'package_id' => $defaultPackage->id,
+                        'status' => 'active',
+                        'gateway' => 'seed',
+                        'gateway_meta' => null,
+                        'started_at' => now(),
+                        'ends_at' => now()->addDays($defaultPackage->duration_days ?? 30),
+                    ]);
+                }
             }
+        } catch (\Exception $e) {
+            Log::warning('Failed to assign default subscription to quizee', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+            // Continue registration even if subscription assignment fails
         }
 
         // Handle affiliate referral attribution
