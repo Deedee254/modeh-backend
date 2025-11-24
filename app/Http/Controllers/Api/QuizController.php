@@ -283,9 +283,11 @@ class QuizController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-    // Eager-load topic->subject so frontend can access subject data directly
+    // Eager-load topic->subject, grade, and level so frontend can access data directly
     // and include a questions_count for each quiz using withCount
-    $query = Quiz::query()->with(['topic.subject'])->withCount('questions');
+    $query = Quiz::query()
+      ->with(['topic.subject', 'grade', 'level'])
+      ->withCount('questions');
 
         // search
         if ($q = $request->get('q')) {
@@ -323,6 +325,28 @@ class QuizController extends Controller
         $query->orderBy('created_at', 'desc');
         $perPage = max(1, (int)$request->get('per_page', 10));
         $data = $query->paginate($perPage);
+        
+        // Add grade_name, level_name, topic_name, and subject_name to each quiz
+        $data->getCollection()->transform(function ($quiz) {
+            // Grade name
+            $quiz->grade_name = $quiz->grade?->name ?? null;
+            
+            // Level name (handle course_name for tertiary)
+            if ($quiz->level) {
+                $quiz->level_name = ($quiz->level->name === 'Tertiary') ? ($quiz->level->course_name ?? $quiz->level->name) : $quiz->level->name;
+            } else {
+                $quiz->level_name = null;
+            }
+            
+            // Topic name
+            $quiz->topic_name = $quiz->topic?->name ?? null;
+            
+            // Subject name
+            $quiz->subject_name = $quiz->topic?->subject?->name ?? null;
+            
+            return $quiz;
+        });
+        
         return response()->json(['quizzes' => $data]);
     }
 

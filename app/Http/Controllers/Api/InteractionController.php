@@ -164,13 +164,14 @@ class InteractionController extends Controller
         $followers = [];
         if (! empty($followerIds)) {
             $followers = User::whereIn('id', array_values(array_unique($followerIds)))
-                ->get(['id', 'name', 'email', 'social_avatar'])
+                ->get(['id', 'name', 'email', 'social_avatar', 'avatar_url'])
                 ->map(function ($u) {
                     return [
                         'id' => $u->id,
                         'name' => $u->name,
                         'email' => $u->email,
-                        'avatar' => $u->social_avatar,
+                        // Prefer explicit uploaded avatar_url then fall back to social_avatar
+                        'avatar' => $u->avatar_url ?? $u->social_avatar,
                     ];
                 })->values();
         }
@@ -179,13 +180,13 @@ class InteractionController extends Controller
         $likers = [];
         if (! empty($likerIds)) {
             $likers = User::whereIn('id', array_values(array_unique($likerIds)))
-                ->get(['id', 'name', 'email', 'social_avatar'])
+                ->get(['id', 'name', 'email', 'social_avatar', 'avatar_url'])
                 ->map(function ($u) {
                     return [
                         'id' => $u->id,
                         'name' => $u->name,
                         'email' => $u->email,
-                        'avatar' => $u->social_avatar,
+                        'avatar' => $u->avatar_url ?? $u->social_avatar,
                     ];
                 })->values();
         }

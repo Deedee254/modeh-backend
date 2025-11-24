@@ -41,7 +41,7 @@ class LeaderboardController extends Controller
             try {
                 // Avoid selecting optional columns such as `country` which may not exist
                 // across all environments. Select a minimal safe set and normalize later.
-                $query = User::query()->select(['id', 'name', 'email', 'points', 'social_avatar', 'created_at']);
+                $query = User::query()->select(['id', 'name', 'email', 'points', 'social_avatar', 'avatar_url', 'created_at']);
             } catch (\Exception $e) {
                 \Log::warning('Failed to query with points column: ' . $e->getMessage());
                 $query = User::query()->selectRaw('id, name, email, 0 as points, social_avatar, created_at');
@@ -88,7 +88,8 @@ class LeaderboardController extends Controller
                 return [
                     'id' => $u->id,
                     'name' => $u->name ?? ($u->email ?? 'Unknown'),
-                    'avatar' => property_exists($u, 'avatar') && $u->avatar ? $u->avatar : ($u->social_avatar ?? null),
+                    // Prefer uploaded avatar_url, then any avatar property, then social_avatar
+                    'avatar' => $u->avatar_url ?? ($u->avatar ?? $u->social_avatar ?? null),
                     'points' => (int)($u->points ?? 0), // Force integer
                     'country' => $u->country ?? null,
                 ];

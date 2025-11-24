@@ -225,6 +225,53 @@ class Tournament extends Model
     }
 
     /**
+     * Generate matches for the tournament. Can be called from Filament UI or API.
+     * This wraps the createBattlesForRound logic with proper request handling.
+     */
+    public function generateMatches($participantIds = null, $round = 1, $scheduledAt = null)
+    {
+        // If no explicit participant ids provided, use registered participants
+        if (!is_array($participantIds) || empty($participantIds)) {
+            // Only generate if tournament is upcoming
+            if ($this->status !== 'upcoming') {
+                throw new \Exception('Can only generate matches for upcoming tournaments');
+            }
+
+            $participants = $this->participants()->get()->pluck('id')->toArray();
+            $participantIds = $participants;
+        }
+
+        if (count($participantIds) < 2) {
+            // If only one participant remains, finalize
+            if (count($participantIds) === 1) {
+                $this->finalizeWithWinner((int) $participantIds[0]);
+                return ['message' => 'Tournament completed with single participant', 'battles' => []];
+            }
+            throw new \Exception('Need at least 2 participants');
+        }
+
+        // If this is the first round for an upcoming tournament, randomize entry order
+        if ($round === 1 && $this->status === 'upcoming') {
+            shuffle($participantIds);
+        }
+
+        // create battles using the Tournament helper
+        $created = $this->createBattlesForRound($participantIds, $round, $scheduledAt);
+
+        // Activate tournament if this is the first round
+        if ($round === 1 && $this->status === 'upcoming') {
+            $this->status = 'active';
+            $this->save();
+        }
+
+        return [
+            'message' => 'Tournament battles generated successfully',
+            'created' => count($created),
+            'battles' => $this->battles()->where('round', $round)->with(['player1', 'player2'])->get()
+        ];
+    }
+
+    /**
      * Finalize tournament when only one winner remains: mark participant rank and complete tournament.
      */
     public function finalizeWithWinner(int $userId)

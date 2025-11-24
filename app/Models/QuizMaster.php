@@ -27,6 +27,17 @@ class QuizMaster extends Model
         'subjects' => 'array',
     ];
 
+    /**
+     * Get the full name by concatenating first_name and last_name.
+     * This accessor provides a 'name' attribute that Filament expects.
+     */
+    public function getNameAttribute()
+    {
+        $firstName = $this->first_name ?? '';
+        $lastName = $this->last_name ?? '';
+        return trim("{$firstName} {$lastName}") ?: 'Unknown';
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);
