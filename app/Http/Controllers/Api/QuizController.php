@@ -6,6 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Quiz;
 use App\Services\AchievementService;
 use App\Models\Topic;
+use App\Models\Subject;
+use App\Models\Grade;
+use App\Models\SiteSetting;
+use App\Models\Question;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
@@ -153,39 +157,43 @@ class QuizController extends Controller
             } elseif ($request->has('is_paid')) {
                 $quiz->is_paid = $request->boolean('is_paid');
             }
+            // Load subject->grade to allow safe inference of subject/grade/level
             $newTopic = Topic::with(['subject.grade'])->find($request->get('topic_id'));
             if (!$newTopic) {
                 return response()->json(['message' => 'Topic not found'], 422);
             }
             // If the caller also supplied a subject_id, ensure it matches the topic's subject
-            if ($request->has('subject_id') && (string)$request->get('subject_id') !== (string)$newTopic->subject_id) {
+            $topicSubjectId = $newTopic->subject_id ?? $newTopic->subject?->id ?? null;
+            if ($request->has('subject_id') && (string)$request->get('subject_id') !== (string)$topicSubjectId) {
                 return response()->json(['message' => 'Supplied topic does not belong to the supplied subject'], 422);
             }
             $quiz->topic_id = $newTopic->id;
-            $quiz->subject_id = $newTopic->subject_id;
-            $quiz->grade_id = $newTopic->subject?->grade_id;
-            $quiz->level_id = $newTopic->subject?->grade?->level_id;
+            // Use explicit FK if present, otherwise fall back to loaded relation ids
+            $quiz->subject_id = $newTopic->subject_id ?? $newTopic->subject?->id ?? null;
+            $quiz->grade_id = $newTopic->subject?->grade_id ?? $newTopic->subject?->grade?->id ?? null;
+            $quiz->level_id = $newTopic->subject?->grade?->level_id ?? $newTopic->subject?->grade?->level?->id ?? null;
         } elseif ($request->has('subject_id')) {
-            $newSubject = \App\Models\Subject::with('grade')->find($request->get('subject_id'));
+            // prefer imported Subject model (avoids fully-qualified names)
+            $newSubject = Subject::with('grade')->find($request->get('subject_id'));
             if (!$newSubject) {
                 return response()->json(['message' => 'Subject not found'], 422);
             }
             $quiz->subject_id = $newSubject->id;
-            $quiz->grade_id = $newSubject->grade?->id;
-            $quiz->level_id = $newSubject->grade?->level_id;
+            $quiz->grade_id = $newSubject->grade_id ?? $newSubject->grade?->id ?? null;
+            $quiz->level_id = $newSubject->grade?->level_id ?? $newSubject->grade?->level?->id ?? null;
             // If the new subject is different from the old one, nullify the topic
-            if ($quiz->topic && ($quiz->topic->subject_id ?? null) !== $newSubject->id) {
+            if ($quiz->topic && (($quiz->topic->subject_id ?? $quiz->topic->subject?->id ?? null) !== $newSubject->id)) {
                 $quiz->topic_id = null;
             }
         } elseif ($request->has('grade_id')) {
-            $newGrade = \App\Models\Grade::find($request->get('grade_id'));
+            $newGrade = Grade::find($request->get('grade_id'));
             if (!$newGrade) {
                 return response()->json(['message' => 'Grade not found'], 422);
             }
             $quiz->grade_id = $newGrade->id;
             $quiz->level_id = $newGrade->level_id;
             // If the new grade is different, nullify subject and topic
-            if ($quiz->subject && ($quiz->subject->grade_id ?? null) !== $newGrade->id) {
+            if ($quiz->subject && (($quiz->subject->grade_id ?? $quiz->subject->grade?->id ?? null) !== $newGrade->id)) {
                 $quiz->subject_id = null;
                 $quiz->topic_id = null;
             }
@@ -267,7 +275,7 @@ class QuizController extends Controller
             $mediaType = $file->getClientMimeType();
         }
 
-        $siteSettings = \App\Models\SiteSetting::current();
+    $siteSettings = SiteSetting::current();
         $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
         // If topic/subject information is unavailable, default to site setting
         $questionIsApproved = $siteAutoQuestions || (($topic && $topic->subject) ? (bool)($topic->subject->auto_approve ?? false) : false);
@@ -318,7 +326,7 @@ class QuizController extends Controller
             $questionData['corrects'] = $qCorrects;
         }
 
-        $createdQuestion = \App\Models\Question::create($questionData);
+    $createdQuestion = Question::create($questionData);
         try {
             \Log::info('QuizController@update question created', [
                 'quiz_id' => $quiz->id,
@@ -547,7 +555,8 @@ class QuizController extends Controller
         // (buildQuizPayload) is expected to include canonical IDs.
         $providedSubjectId = $request->get('subject_id');
         if ($providedSubjectId) {
-            if ((string)$topic->subject_id !== (string)$providedSubjectId) {
+            $topicSubjectId = $topic->subject_id ?? $topic->subject?->id ?? null;
+            if ((string)$topicSubjectId !== (string)$providedSubjectId) {
                 return response()->json(['message' => 'Topic does not belong to the supplied subject'], 422);
             }
         }
@@ -556,12 +565,13 @@ class QuizController extends Controller
         // if a grade_id was provided, ensure consistency. Do not infer missing ids.
         $subject = null;
         if ($request->has('subject_id')) {
-            $subject = \App\Models\Subject::find($request->get('subject_id'));
+            $subject = Subject::find($request->get('subject_id'));
             if (!$subject) {
                 return response()->json(['message' => 'Subject not found'], 422);
             }
             if ($request->has('grade_id')) {
-                if ((string)$subject->grade_id !== (string)$request->get('grade_id')) {
+                $subjectGradeId = $subject->grade_id ?? $subject->grade?->id ?? null;
+                if ((string)$subjectGradeId !== (string)$request->get('grade_id')) {
                     return response()->json(['message' => 'Subject does not belong to the supplied grade'], 422);
                 }
             }
@@ -618,7 +628,7 @@ class QuizController extends Controller
 
         // If level_id wasn't supplied explicitly, try to infer from grade
         if (!$quiz->level_id && $quiz->grade_id) {
-            try { $quiz->level_id = \App\Models\Grade::find($quiz->grade_id)->level_id ?? null; $quiz->save(); } catch (\Throwable $_) {}
+            try { $quiz->level_id = Grade::find($quiz->grade_id)->level_id ?? null; $quiz->save(); } catch (\Throwable $_) {}
         }
 
         // Load relations for frontend consumption (grade with level, subject, topic)
@@ -637,7 +647,7 @@ class QuizController extends Controller
             }
         } catch (\Throwable $_) {}
         // If subject/topic auto-approve and settings allow, set approved
-        if ($topic->subject->auto_approve) {
+        if ($topic->subject?->auto_approve) {
             $quiz->is_approved = true;
             $quiz->save();
         }
@@ -719,7 +729,7 @@ class QuizController extends Controller
                     $questionData['corrects'] = $qCorrects;
                 }
 
-                $createdQuestion = \App\Models\Question::create($questionData);
+                $createdQuestion = Question::create($questionData);
                 try {
                     \Log::info('QuizController@store question created', [
                         'quiz_id' => $quiz->id,
