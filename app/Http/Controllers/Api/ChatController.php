@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Message;
+use App\Models\User;
 use App\Events\MessageSent;
+use App\Events\MessageRead;
 use App\Models\ChatMetric;
 
 class ChatController extends Controller
@@ -109,6 +111,12 @@ class ChatController extends Controller
         $user = $request->user();
         $to = intval($request->recipient_id);
 
+        // Verify the recipient exists
+        $recipient = \App\Models\User::find($to);
+        if (!$recipient) {
+            return response()->json(['error' => 'Recipient not found'], 404);
+        }
+
         // There's no separate threads table; return last message preview if available.
         $last = Message::where(function ($q) use ($user, $to) {
             $q->where('sender_id', $user->id)->where('recipient_id', $to);
@@ -125,6 +133,10 @@ class ChatController extends Controller
         $request->validate(['other_user_id' => 'required|integer']);
         $other = intval($request->other_user_id);
         Message::where('sender_id', $other)->where('recipient_id', $user->id)->update(['is_read' => true]);
+        
+        // Broadcast to the sender that messages were read
+        broadcast(new MessageRead($other, $user->id))->toOthers();
+        
         return response()->json(['ok' => true]);
     }
 
@@ -141,39 +153,94 @@ class ChatController extends Controller
 
     public function send(Request $request)
     {
-
-        // Require new field names only.
         $request->validate([
             'content' => 'required|string',
             'recipient_id' => 'nullable|integer',
             'group_id' => 'nullable|integer'
         ]);
-        $fromId = $request->user()->id;
 
-        // Handle attachments if present
-        $attachmentsMeta = null;
-        if ($request->hasFile('attachments')) {
-            $files = $request->file('attachments');
-            $attachmentsMeta = [];
-            foreach ($files as $file) {
-                try {
-                    $path = $file->store('chat_attachments', ['disk' => 'public']);
-                    $attachmentsMeta[] = [
-                        'name' => $file->getClientOriginalName(),
-                        'path' => $path,
-                        'url' => asset('storage/' . $path),
-                        'size' => $file->getSize(),
-                        'mime' => $file->getClientMimeType(),
-                    ];
-                } catch (\Exception $e) {
-                    \Log::warning('Failed to store chat attachment: ' . $e->getMessage());
-                }
+        $fromId = $request->user()->id;
+        $attachmentsMeta = $this->processAttachments($request);
+        $isSupportMessage = intval($request->input('recipient_id', 0)) === -1;
+
+        if ($isSupportMessage) {
+            $messages = $this->handleSupportMessage($fromId, $request, $attachmentsMeta);
+            return response()->json(['message' => $messages[0] ?? null], 201);
+        }
+
+        $msg = $this->createMessage($fromId, $request, $attachmentsMeta);
+        $this->notifyRecipients($msg);
+        $this->broadcastMessage($msg);
+        $this->updateMetrics(1);
+
+        return response()->json(['message' => $msg], 201);
+    }
+
+    private function processAttachments(Request $request): ?array
+    {
+        if (!$request->hasFile('attachments')) {
+            return null;
+        }
+
+        $attachmentsMeta = [];
+        foreach ($request->file('attachments') as $file) {
+            try {
+                $path = $file->store('chat_attachments', ['disk' => 'public']);
+                $attachmentsMeta[] = [
+                    'name' => $file->getClientOriginalName(),
+                    'path' => $path,
+                    'url' => asset('storage/' . $path),
+                    'size' => $file->getSize(),
+                    'mime' => $file->getClientMimeType(),
+                ];
+            } catch (\Exception $e) {
+                \Log::warning('Failed to store chat attachment: ' . $e->getMessage());
             }
         }
 
-        if ($request->filled('group_id')) {
-            // Group message
+        return $attachmentsMeta ?: null;
+    }
+
+    private function handleSupportMessage(int $fromId, Request $request, ?array $attachmentsMeta): array
+    {
+        $admins = User::where('role', 'admin')->get();
+        $messages = [];
+
+        foreach ($admins as $admin) {
             $msg = Message::create([
+                'sender_id' => $fromId,
+                'recipient_id' => $admin->id,
+                'content' => $request->input('content'),
+                'type' => 'support',
+                'is_read' => false,
+                'attachments' => $attachmentsMeta,
+            ]);
+            $messages[] = $msg;
+
+            try {
+                $admin->notify(new \App\Notifications\NewMessageNotification($msg));
+            } catch (\Exception $e) {
+                \Log::error('Failed to send support notification to admin ' . $admin->id . ': ' . $e->getMessage());
+            }
+        }
+
+        foreach ($messages as $msg) {
+            try {
+                event(new MessageSent($msg));
+            } catch (\Exception $e) {
+                \Log::error('Failed to broadcast message: ' . $e->getMessage());
+            }
+        }
+
+        $this->updateMetrics(count($messages));
+
+        return $messages;
+    }
+
+    private function createMessage(int $fromId, Request $request, ?array $attachmentsMeta): Message
+    {
+        if ($request->filled('group_id')) {
+            return Message::create([
                 'sender_id' => $fromId,
                 'group_id' => $request->input('group_id'),
                 'content' => $request->input('content'),
@@ -181,78 +248,56 @@ class ChatController extends Controller
                 'is_read' => false,
                 'attachments' => $attachmentsMeta,
             ]);
-        } else {
-            // Direct message
-            $msg = Message::create([
-                'sender_id' => $fromId,
-                'recipient_id' => $request->input('recipient_id'),
-                'content' => $request->input('content'),
-                'type' => 'direct',
-                'is_read' => false,
-                'attachments' => $attachmentsMeta,
-            ]);
         }
 
-        // Update metrics: messages_total, messages_last_minute (simple rolling window), last_message_at
-        try {
-            // messages_total (atomic increment)
-            \DB::table('chat_metrics')->where('key', 'messages_total')->increment('value', 1, ['last_updated_at' => now()]);
+        return Message::create([
+            'sender_id' => $fromId,
+            'recipient_id' => $request->input('recipient_id'),
+            'content' => $request->input('content'),
+            'type' => 'direct',
+            'is_read' => false,
+            'attachments' => $attachmentsMeta,
+        ]);
+    }
 
-            // per-minute bucket key, format YYYYMMDDHHMM
-            $bucket = now()->format('YmdHi');
-            \App\Models\ChatMetricBucket::updateOrCreate(
-                ['metric_key' => 'messages_per_minute', 'bucket' => $bucket],
-                ['value' => \DB::raw('COALESCE(value,0) + 1'), 'last_updated_at' => now()]
-            );
-
-            // last_message_at
-            ChatMetric::updateOrCreate(['key' => 'last_message_at'], ['value' => now()->getTimestamp(), 'last_updated_at' => now()]);
-        } catch (\Exception $e) {
-            // log metric update failure but don't break send
-            \Log::error('Failed to update chat metrics: ' . $e->getMessage());
-        }
-
-        // If it's a 1:1 message, notify recipient
-        if (!empty($msg->recipient_id)) {
-            $recipient = \App\Models\User::find($msg->recipient_id);
+    private function notifyRecipients(Message $msg): void
+    {
+        if ($msg->recipient_id) {
+            $recipient = User::find($msg->recipient_id);
             if ($recipient) {
                 try {
                     $recipient->notify(new \App\Notifications\NewMessageNotification($msg));
                 } catch (\Exception $e) {
-                    // Don't fail the request if notifications are misconfigured in this environment.
                     \Log::error('Failed to send NewMessageNotification: ' . $e->getMessage());
                 }
             }
-        } else if (!empty($msg->group_id)) {
-            // Optionally, notify group members via Notification (omitted to avoid spam)
         }
+    }
 
-        // Broadcast event for Echo listeners (MessageSent handles group vs user channel)
+    private function broadcastMessage(Message $msg): void
+    {
         try {
-            \Log::info('ChatController: about to dispatch MessageSent', ['message_id' => $msg->id]);
-            // Log the current event dispatcher class to ensure Event::fake() is in effect during tests
-            try {
-                $dispatcherClass = get_class(app('events'));
-            } catch (\Throwable $e) {
-                $dispatcherClass = 'unknown';
-            }
-            \Log::info('ChatController: event dispatcher class before dispatch', ['class' => $dispatcherClass]);
-
             event(new MessageSent($msg));
-
-            try {
-                $dispatcherClassAfter = get_class(app('events'));
-            } catch (\Throwable $e) {
-                $dispatcherClassAfter = 'unknown';
-            }
-            \Log::info('ChatController: event dispatcher class after dispatch', ['class' => $dispatcherClassAfter]);
-            \Log::info('ChatController: dispatched MessageSent', ['message_id' => $msg->id]);
         } catch (\Exception $e) {
-            // Broadcasting misconfiguration should not cause request failure.
             \Log::error('Broadcast MessageSent failed: ' . $e->getMessage());
         }
+    }
 
-        return response()->json(['message' => $msg], 201);
+    private function updateMetrics(int $count = 1): void
+    {
+        try {
+            \DB::table('chat_metrics')->where('key', 'messages_total')->increment('value', $count, ['last_updated_at' => now()]);
+            
+            $bucket = now()->format('YmdHi');
+            \App\Models\ChatMetricBucket::updateOrCreate(
+                ['metric_key' => 'messages_per_minute', 'bucket' => $bucket],
+                ['value' => \DB::raw('COALESCE(value,0) + ' . $count), 'last_updated_at' => now()]
+            );
+
+            ChatMetric::updateOrCreate(['key' => 'last_message_at'], ['value' => now()->getTimestamp(), 'last_updated_at' => now()]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to update chat metrics: ' . $e->getMessage());
+        }
     }
 
     // Edit a message

@@ -121,7 +121,7 @@ class ProfileController extends Controller
         
         return response()->json([
             'message' => 'Profile updated successfully',
-            'profile' => $user->quizeeProfile->load('grade', 'level')->toArray(),
+            'profile' => $user->quizeeProfile->load('grade', 'level')->append('subjectModels')->toArray(),
         ]);
     }
 }

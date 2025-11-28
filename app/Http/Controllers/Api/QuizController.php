@@ -102,6 +102,7 @@ class QuizController extends Controller
             'description' => 'sometimes|nullable|string',
             'youtube_url' => 'sometimes|nullable|url',
             'is_paid' => 'sometimes|boolean',
+            'one_off_price' => 'sometimes|nullable|numeric|min:0',
             'timer_seconds' => 'sometimes|nullable|integer|min:0',
             'per_question_seconds' => 'sometimes|nullable|integer|min:10',
             'use_per_question_timer' => 'sometimes|boolean',
@@ -127,7 +128,7 @@ class QuizController extends Controller
 
     private function updateBasicFields(Quiz $quiz, Request $request): void
     {
-        $fields = ['title','description','youtube_url','timer_seconds','per_question_seconds','use_per_question_timer','attempts_allowed','shuffle_questions','shuffle_answers','visibility','scheduled_at','is_draft'];
+        $fields = ['title','description','youtube_url','timer_seconds','per_question_seconds','use_per_question_timer','attempts_allowed','shuffle_questions','shuffle_answers','visibility','scheduled_at','is_draft','one_off_price'];
         foreach ($fields as $f) {
             if ($request->has($f)) {
                 $quiz->{$f} = $request->get($f);
@@ -527,6 +528,7 @@ class QuizController extends Controller
             'description' => 'nullable|string',
             'youtube_url' => 'nullable|url',
             'is_paid' => 'boolean',
+            'one_off_price' => 'nullable|numeric|min:0',
             'timer_seconds' => 'nullable|integer|min:1',
             'per_question_seconds' => 'nullable|integer|min:10',
             'use_per_question_timer' => 'nullable|boolean',
@@ -614,6 +616,7 @@ class QuizController extends Controller
             'cover_image' => $coverUrl,
             // if frontend sent 'access' === 'paywall' treat as paid
             'is_paid' => $request->get('access') === 'paywall' ? true : $request->get('is_paid', false),
+            'one_off_price' => $request->get('one_off_price') ?? null,
             'timer_seconds' => $request->timer_seconds ?? null,
             'per_question_seconds' => $request->get('per_question_seconds') ?? null,
             'use_per_question_timer' => (bool)$request->get('use_per_question_timer', false),

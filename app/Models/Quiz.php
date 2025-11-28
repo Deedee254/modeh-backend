@@ -51,6 +51,7 @@ class Quiz extends Model
     protected $casts = [
         'is_paid' => 'boolean',
         'is_approved' => 'boolean',
+        'use_per_question_timer' => 'boolean',
         'shuffle_questions' => 'boolean',
         'shuffle_answers' => 'boolean',
         'difficulty' => 'float',

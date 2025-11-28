@@ -1,11 +1,14 @@
 <template>
-  <div class="flex min-h-[calc(100vh-6rem)] md:min-h-[calc(100vh-8rem)] bg-[#f0f2f5] px-4 py-6 md:px-6">
-    <div class="hidden md:flex w-96 flex-shrink-0">
-  <div class="flex h-full w-full flex-col rounded-3xl border border-border/50 bg-white text-foreground shadow-xl">
-  <div class="p-4 border-b border-border bg-white text-foreground rounded-t-3xl sticky top-0 z-60">
+  <div class="flex flex-1 min-h-0 bg-[#f0f2f5] px-4 py-6 md:px-6">
+    <!-- Sidebar -->
+    <div class="hidden md:flex w-80 flex-shrink-0">
+      <div class="flex h-full w-full flex-col rounded-3xl border border-border/50 bg-white text-foreground shadow-xl min-h-0">
+        <!-- Header -->
+        <div class="p-4 border-b border-border bg-white text-foreground rounded-t-3xl flex-shrink-0">
           <div class="flex items-center justify-between mb-4">
             <h1 class="text-xl font-semibold">Threads</h1>
           </div>
+          <!-- Search -->
           <div class="relative">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary-foreground/70">
               <circle cx="11" cy="11" r="8"></circle>
@@ -19,7 +22,8 @@
             >
           </div>
         </div>
-  <div class="px-4 py-3 border-b border-border bg-transparent sticky top-[128px] z-50">
+        <!-- Tabs -->
+        <div class="px-4 py-3 border-b border-border bg-transparent flex-shrink-0">
           <div dir="ltr" data-orientation="horizontal">
             <div role="tablist" aria-orientation="horizontal" class="h-10 items-center justify-center rounded-md p-1 text-muted-foreground grid w-full grid-cols-3 bg-muted/50">
               <button
@@ -37,12 +41,13 @@
             </div>
           </div>
         </div>
-        <div class="flex-1 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
+        <!-- Chat List -->
+        <div class="flex-1 overflow-y-auto min-h-0" style="-webkit-overflow-scrolling: touch;">
           <transition-group name="list" tag="div">
             <button
               v-for="thread in filteredThreads"
               :key="threadKey(thread)"
-              class="w-full p-4 flex items-start gap-3 hover:bg-muted/20 transition-colors border-b border-border/60 text-left"
+              class="w-full p-4 flex items-start gap-3 hover:bg-muted/20 transition-colors border-b border-border/60"
               :class="String(thread.id) === String(activeThread?.id) ? 'bg-muted/10' : ''"
               @click="openThread(thread)"
               type="button"
@@ -56,7 +61,7 @@
                 </span>
                 <div v-if="thread.status === 'online'" class="absolute bottom-0 right-0 h-3 w-3 bg-primary rounded-full border-2 border-white"></div>
               </div>
-              <div class="flex-1 min-w-0">
+              <div class="flex-1 min-w-0 text-left">
                 <div class="flex items-baseline justify-between mb-1">
                   <h3 class="font-semibold text-foreground truncate">{{ thread.name || thread.other_name || ('User ' + thread.id) }}</h3>
                   <div class="flex items-center gap-2">
@@ -71,9 +76,12 @@
         </div>
       </div>
     </div>
+
+    <!-- Mobile: show list when not viewing a chat -->
     <div v-if="isMobile && !showChatWindowOnMobile" class="md:hidden flex flex-1 flex-col min-w-0 overflow-hidden rounded-3xl h-full min-h-0">
       <div class="flex flex-col h-full min-h-0 bg-white text-foreground">
-        <div class="p-4 border-b border-border bg-white text-foreground sticky top-0 z-50 w-full">
+        <!-- Header (mobile list) -->
+        <div class="p-4 border-b border-border bg-white text-foreground flex-shrink-0 w-full">
           <div class="flex items-center justify-between mb-4">
             <h1 class="text-xl font-semibold">Threads</h1>
           </div>
@@ -90,12 +98,12 @@
             >
           </div>
         </div>
-        <div class="flex-1 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
+        <div class="flex-1 overflow-y-auto min-h-0" style="-webkit-overflow-scrolling: touch;">
           <transition-group name="list" tag="div">
             <button
               v-for="thread in filteredThreads"
               :key="threadKey(thread)"
-              class="w-full p-4 flex items-start gap-3 hover:bg-muted/20 transition-colors border-b border-border/60 text-left"
+              class="w-full p-4 flex items-start gap-3 hover:bg-muted/20 transition-colors border-b border-border/60"
               :class="String(thread.id) === String(activeThread?.id) ? 'bg-muted/10' : ''"
               @click="openThread(thread)"
               type="button"
@@ -109,13 +117,11 @@
                 </span>
                 <div v-if="thread.status === 'online'" class="absolute bottom-0 right-0 h-3 w-3 bg-primary rounded-full border-2 border-white"></div>
               </div>
-              <div class="flex-1 min-w-0">
+              <div class="flex-1 min-w-0 text-left">
                 <div class="flex items-baseline justify-between mb-1">
                   <h3 class="font-semibold text-foreground truncate">{{ thread.name || thread.other_name || ('User ' + thread.id) }}</h3>
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-muted-foreground flex-shrink-0">{{ formatTime(thread.last_at || thread.updated_at) }}</span>
-                    <span v-if="(thread.unread_count || 0) > 0" class="inline-flex items-center justify-center bg-primary text-white text-xs rounded-full px-2 py-0.5">{{ thread.unread_count }}</span>
-                  </div>
+                  <span class="text-xs text-muted-foreground ml-2 flex-shrink-0">{{ formatTime(thread.last_at || thread.updated_at) }}</span>
+                  <span v-if="(thread.unread_count || 0) > 0" class="inline-flex items-center justify-center bg-primary text-white text-xs rounded-full px-2 py-0.5">{{ thread.unread_count }}</span>
                 </div>
                 <p class="text-sm text-muted-foreground whitespace-normal break-words overflow-hidden">{{ thread.last_preview || '' }}</p>
               </div>
@@ -124,179 +130,168 @@
         </div>
       </div>
     </div>
-    <div v-if="!isMobile || showChatWindowOnMobile" class="flex flex-1 flex-col min-w-0 overflow-hidden rounded-3xl md:rounded-none">
-      <div class="flex flex-col h-full bg-[#efeae2]">
-        <div class="sticky top-0 z-20 flex items-center gap-3 p-4 bg-white border-b border-border md:static md:z-auto">
-          <button
-            v-if="isMobile && showChatWindowOnMobile"
-            class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground md:hidden h-9 w-9"
-            @click="showChatWindowOnMobile = false"
-            aria-label="Back to threads"
-            type="button"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left h-5 w-5">
-              <path d="m12 19-7-7 7-7"></path>
-              <path d="M19 12H5"></path>
-            </svg>
-          </button>
-          <div class="relative" v-if="activeThread">
-            <span class="relative flex shrink-0 overflow-hidden rounded-full h-10 w-10">
-              <img v-if="activeThread.avatar" :src="activeThread.avatar" :alt="activeThread.name || 'Avatar'" class="h-full w-full object-cover rounded-full" loading="lazy" decoding="async" />
-              <span v-else class="flex h-full w-full items-center justify-center rounded-full bg-primary text-primary-foreground">
-                {{ (activeThread.name || 'U').slice(0, 1).toUpperCase() }}
-              </span>
-            </span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <h2 class="font-semibold text-foreground truncate">{{ activeThread?.name || activeThread?.other_name || 'Select a conversation' }}</h2>
-            <p class="text-xs text-muted-foreground">{{ activeThread?.status || '' }}</p>
-          </div>
-          <button type="button" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-9 w-9 text-muted-foreground">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ellipsis-vertical h-5 w-5">
-              <circle cx="12" cy="12" r="1"></circle>
-              <circle cx="12" cy="5" r="1"></circle>
-              <circle cx="12" cy="19" r="1"></circle>
-            </svg>
-          </button>
-        </div>
-        <div
-          ref="messagesPane"
-          class="flex-1 overflow-y-auto p-4 space-y-6"
-          style="padding-bottom: 120px;"
-          @scroll="handleScroll"
+
+    <!-- Main Chat Area -->
+    <div v-if="!isMobile || showChatWindowOnMobile" class="flex flex-1 flex-col min-w-0 overflow-hidden rounded-3xl md:rounded-none md:pl-6 bg-[#efeae2] min-h-0">
+      <!-- Chat Header -->
+      <div class="flex items-center gap-3 p-4 bg-white border-b border-border flex-shrink-0 relative z-20">
+        <button
+          v-if="isMobile && showChatWindowOnMobile"
+          class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground md:hidden h-9 w-9"
+          @click="showChatWindowOnMobile = false"
+          aria-label="Back to threads"
+          type="button"
         >
-          <div v-if="loadingMore" class="text-center text-xs text-muted-foreground">Loading more messages...</div>
-          <template v-for="(group, index) in messageGroups" :key="index">
-            <div class="space-y-4">
-              <div class="text-xs text-muted-foreground text-center">{{ formatDate(group.date) }}</div>
-              <div
-                v-for="message in group.messages"
-                :key="message.id"
-                class="flex w-full"
-                :class="String(message.sender_id) === String(adminId) ? 'justify-end' : 'justify-start'"
-              >
-                <div :class="String(message.sender_id) === String(adminId) ? 'chat-bubble sent' : 'chat-bubble received'" class="rounded-lg px-4 py-2">
-                  <template v-if="message.attachments && message.attachments.length">
-                    <div class="mb-2 space-y-2">
-                      <div v-for="(a, i) in message.attachments" :key="i" class="rounded overflow-hidden border bg-background">
-                        <a :href="a.url || a.path" target="_blank" class="block p-2 text-sm underline text-primary-foreground">{{ a.name || a.filename || a.url }}</a>
-                      </div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left h-5 w-5">
+            <path d="m12 19-7-7 7-7"></path>
+            <path d="M19 12H5"></path>
+          </svg>
+        </button>
+        <div class="relative" v-if="activeThread">
+          <span class="relative flex shrink-0 overflow-hidden rounded-full h-10 w-10">
+            <img v-if="activeThread.avatar" :src="activeThread.avatar" :alt="activeThread.name || 'Avatar'" class="h-full w-full object-cover rounded-full" loading="lazy" decoding="async" />
+            <span v-else class="flex h-full w-full items-center justify-center rounded-full bg-primary text-primary-foreground">
+              {{ (activeThread.name || activeThread.other_name || 'U').slice(0, 1).toUpperCase() }}
+            </span>
+          </span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h2 class="font-semibold text-foreground truncate">{{ activeThread?.name || activeThread?.other_name || 'Select a conversation' }}</h2>
+          <p class="text-xs text-muted-foreground">{{ activeThread?.status || '' }}</p>
+        </div>
+        <button type="button" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-9 w-9">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ellipsis-vertical h-5 w-5">
+            <circle cx="12" cy="12" r="1"></circle>
+            <circle cx="12" cy="5" r="1"></circle>
+            <circle cx="12" cy="19" r="1"></circle>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Messages Container -->
+      <div ref="messagesPane" class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0" style="padding-bottom: 90px;" @scroll="handleScroll">
+        <div v-if="loadingMore" class="text-center text-xs text-muted-foreground">Loading more messages...</div>
+        <template v-for="(group, index) in messageGroups" :key="index">
+          <div class="space-y-4">
+            <div class="text-xs text-muted-foreground text-center">{{ formatDate(group.date) }}</div>
+            <div
+              v-for="message in group.messages"
+              :key="message.id"
+              class="flex w-full"
+              :class="String(message.sender_id) === String(adminId) ? 'justify-end' : 'justify-start'"
+            >
+              <div :class="String(message.sender_id) === String(adminId) ? 'chat-bubble sent' : 'chat-bubble received'" class="rounded-lg px-4 py-2">
+                <!-- attachments (if any) -->
+                <template v-if="message.attachments && message.attachments.length">
+                  <div class="mb-2 space-y-2">
+                    <div v-for="(a, i) in message.attachments" :key="i" class="rounded overflow-hidden border bg-background">
+                      <a :href="a.url || a.path" target="_blank" class="block p-2 text-sm underline text-primary-foreground">{{ a.name || a.filename || a.url }}</a>
                     </div>
-                  </template>
-                  <div v-if="!message.isEditing">
-                    <p class="text-sm whitespace-pre-wrap">{{ message.content || message.body || message.message || '' }}</p>
                   </div>
-                  <div v-else class="flex items-center gap-2">
-                    <input v-model="message.editText" class="flex-1 px-2 py-1 border rounded" @keyup.enter="updateMessage(message)" @keyup.esc="cancelEdit(message)" />
-                    <button @click="updateMessage(message)" class="text-green-600 text-sm">Save</button>
-                    <button @click="cancelEdit(message)" class="text-rose-500 text-sm">Cancel</button>
-                  </div>
-                  <div class="flex items-center justify-end gap-2 mt-1">
-                    <p class="text-xs" :class="String(message.sender_id) === String(adminId) ? 'text-muted-foreground/80' : 'text-muted-foreground'">{{ formatTime(message.created_at) }}</p>
-                    <template v-if="String(message.sender_id) === String(adminId)">
-                      <span class="ml-1">
-                        <template v-if="message.sending">
-                          <svg class="tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
-                        </template>
-                        <template v-else-if="message.failed">
-                          <svg class="tick text-rose-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v6"></path><path d="M12 15v.01"></path></svg>
-                        </template>
+                </template>
+
+                <p class="text-sm whitespace-pre-wrap">{{ message.content || message.text || message.body }}</p>
+
+                <div class="flex items-center justify-end gap-2 mt-1">
+                  <p class="text-xs" :class="String(message.sender_id) === String(adminId) ? 'text-muted-foreground/80' : 'text-muted-foreground'">{{ formatTime(message.created_at) }}</p>
+                  <!-- outgoing message ticks -->
+                  <template v-if="String(message.sender_id) === String(adminId)">
+                    <span class="ml-1">
+                      <template v-if="message.sending">
+                        <svg class="tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
+                      </template>
+                      <template v-else-if="message.failed">
+                        <svg class="tick text-rose-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v6"></path><path d="M12 15v.01"></path></svg>
+                      </template>
                         <template v-else>
                           <svg v-if="getTickState(message) === 'single'" class="tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
                           <svg v-else-if="getTickState(message) === 'double'" class="tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path><path d="M22 6 11 17l-5-5"></path></svg>
-                          <svg v-else-if="getTickState(message) === 'read'" class="tick tick-read" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#39B3FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path><path d="M22 6 11 17l-5-5"></path></svg>
+                          <svg v-else-if="getTickState(message) === 'read'" class="tick tick-read" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f7b932" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path><path d="M22 6 11 17l-5-5"></path></svg>
                         </template>
-                      </span>
-                    </template>
-                    <div v-if="message.failed && String(message.sender_id) === String(adminId)" class="flex items-center gap-2">
-                      <button @click="resendFailedMessage(message)" class="text-xs text-rose-500 underline">Retry</button>
-                    </div>
-                  </div>
-                  <div class="flex items-center justify-end gap-2 mt-1" v-if="!message.isEditing">
-                    <button v-if="String(message.sender_id) === String(adminId)" @click="startEdit(message)" class="text-xs text-muted-foreground underline">Edit</button>
-                    <button v-if="String(message.sender_id) === String(adminId)" @click="confirmDelete(message)" class="text-xs text-rose-500 underline">Delete</button>
+                    </span>
+                  </template>
+                  <div v-if="message.failed && String(message.sender_id) === String(adminId)" class="flex items-center gap-2">
+                    <button @click="resendFailedMessage(message)" class="text-xs text-rose-500 underline">Retry</button>
                   </div>
                 </div>
               </div>
             </div>
-          </template>
-          <div v-if="typing" class="flex items-center gap-2 text-muted-foreground text-sm">
-            <div class="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden">
-              <img v-if="activeThread && activeThread.avatar" :src="activeThread.avatar" class="w-full h-full object-cover" />
-              <div v-else class="w-full h-full bg-primary text-primary-foreground flex items-center justify-center">
-                {{ activeThread && activeThread.name ? activeThread.name.slice(0, 1).toUpperCase() : 'U' }}
-              </div>
-            </div>
-            <div class="typing-indicator">
-              <span></span>
-              <span></span>
-              <span></span>
+          </div>
+        </template>
+        <div v-if="typing" class="flex items-center gap-2 text-muted-foreground text-sm">
+          <div class="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden">
+            <img v-if="activeThread && activeThread.avatar" :src="activeThread.avatar" class="w-full h-full object-cover" />
+            <div v-else class="w-full h-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
+              {{ (activeThread?.name || activeThread?.other_name || 'U').slice(0, 1).toUpperCase() }}
             </div>
           </div>
-          <div ref="messagesEnd"></div>
+          <div class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
         </div>
-        <div class="p-3 bg-white/5 border-t border-border sticky bottom-0 z-30">
-          <div class="flex items-end gap-2" style="margin-bottom:8px">
-            <input ref="fileInput" type="file" class="hidden" @change="onFileChange" multiple>
-            <button
-              class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent h-10 w-10 flex-shrink-0 text-muted-foreground hover:text-foreground"
-              @click="triggerFileInput"
-              type="button"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-paperclip h-5 w-5">
-                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+        <div ref="messagesEnd"></div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="p-3 bg-white/5 border-t border-border flex-shrink-0 relative z-30">
+        <div class="flex items-end gap-2" style="margin-bottom:8px">
+          <input ref="fileInput" type="file" class="hidden" @change="onFileChange" multiple>
+          <button
+            class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent h-10 w-10 flex-shrink-0 text-muted-foreground hover:text-foreground"
+            @click="triggerFileInput()"
+            type="button"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-paperclip h-5 w-5">
+              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </button>
+          <div class="flex-1 relative bg-background border border-input rounded-lg flex items-center pr-2">
+            <input
+              ref="messageInput"
+              v-model="composer"
+              class="flex h-10 w-full rounded-md px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
+              placeholder="Type a message..."
+              @keyup.enter="send"
+              @input="notifyTyping"
+              @blur="notifyTypingStopped"
+            />
+            <button @click="toggleEmojiPicker" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground" style="margin-bottom:6px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-smile h-5 w-5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                <line x1="9" x2="9.01" y1="9" y2="9"></line>
+                <line x1="15" x2="15.01" y1="9" y2="9"></line>
               </svg>
             </button>
-            <div class="flex-1 relative bg-background border border-input rounded-lg flex items-center pr-2">
-              <input
-                v-model="composer"
-                ref="messageInput"
-                class="flex h-10 w-full rounded-md px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
-                placeholder="Type a message..."
-                @keyup.enter="send"
-                @input="notifyTyping"
-                @blur="notifyTypingStopped"
-              />
-              <button
-                @click="toggleEmojiPicker"
-                class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground"
-                type="button"
-                style="margin-bottom:6px"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-smile h-5 w-5">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
-                  <line x1="9" x2="9.01" y1="9" y2="9"></line>
-                  <line x1="15" x2="15.01" y1="9" y2="9"></line>
-                </svg>
-              </button>
-              <div v-if="showEmojiPicker" class="absolute bottom-12 left-2 z-40 bg-white border rounded shadow p-2 grid grid-cols-6 gap-2 w-56">
-                <button v-for="emoji in ['😀','😂','😍','👍','🙏','🎉','😅','🙌','😉','🔥','😢','🤔']" :key="emoji" @click.prevent="insertEmoji(emoji)" class="text-lg">{{ emoji }}</button>
-              </div>
-              <button
-                class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 text-primary-foreground h-8 w-8 flex-shrink-0 bg-primary hover:bg-primary/90 ml-1"
-                @click="send"
-                :disabled="(!composer || !composer.trim()) && !attachments.length"
-                type="button"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send h-4 w-4">
-                  <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
-                  <path d="m21.854 2.147-10.94 10.939"></path>
-                </svg>
-              </button>
+            <div v-if="showEmojiPicker" class="absolute bottom-12 left-2 z-50 bg-white border rounded shadow p-2 grid grid-cols-6 gap-2 w-56">
+              <button v-for="emoji in emojis" :key="emoji" @click.prevent="insertEmoji(emoji)" class="text-lg">{{ emoji }}</button>
             </div>
+            <button
+              class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 text-primary-foreground h-8 w-8 flex-shrink-0 bg-primary hover:bg-primary/90 ml-1"
+              @click="send"
+              :disabled="!composer || !composer.trim()"
+              type="button"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send h-4 w-4">
+                <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
+                <path d="m21.854 2.147-10.94 10.939"></path>
+              </svg>
+            </button>
           </div>
-          <div v-if="attachments.length" class="flex gap-2 items-center">
-            <div v-for="(f, i) in attachments" :key="i" class="flex items-center gap-2 border px-2 py-1 rounded bg-gray-50">
-              <div class="text-sm">{{ f.name }}</div>
-              <button @click.prevent="attachments.splice(i, 1)" class="text-xs text-rose-500">Remove</button>
-            </div>
+        </div>
+        <div v-if="attachments.length" class="flex gap-2 items-center flex-wrap">
+          <div v-for="(f, i) in attachments" :key="i" class="flex items-center gap-2 border px-2 py-1 rounded bg-gray-50 text-xs">
+            <span>{{ f.name }}</span>
+            <button @click="attachments.splice(i, 1)" class="text-rose-500 hover:text-rose-700 font-bold">×</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 </template>
+
 
 <script>
 export default {
@@ -785,6 +780,34 @@ export default {
 </script>
 
 <style scoped>
+.chat-bubble {
+  max-width: 70%;
+  word-wrap: break-word;
+}
+
+.chat-bubble.sent {
+  background: #891f21;
+  color: #ffffff;
+  border-radius: 18px 18px 4px 18px;
+}
+
+.chat-bubble.received {
+  background: #f5f5f5;
+  color: #111827;
+  border-radius: 18px 18px 18px 4px;
+}
+
+.tick {
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+}
+
+.tick-read {
+  stroke: #f7b932;
+  color: #f7b932;
+}
+
 .typing-indicator {
   display: flex;
   gap: 2px;

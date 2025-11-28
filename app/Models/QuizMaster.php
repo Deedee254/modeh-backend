@@ -27,6 +27,10 @@ class QuizMaster extends Model
         'subjects' => 'array',
     ];
 
+    protected $appends = [
+        'subjectModels',  // Include subject models when converting to array
+    ];
+
     /**
      * Get the full name by concatenating first_name and last_name.
      * This accessor provides a 'name' attribute that Filament expects.

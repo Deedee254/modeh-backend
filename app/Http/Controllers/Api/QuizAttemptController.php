@@ -104,7 +104,14 @@ class QuizAttemptController extends Controller
             if (!$q) continue;
 
             $isCorrect = false;
-            $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+            if (is_array($q->answers)) {
+                $correctAnswers = $q->answers;
+            } elseif (is_string($q->answers) && $q->answers !== '') {
+                $decoded = json_decode($q->answers, true);
+                $correctAnswers = is_array($decoded) ? $decoded : [];
+            } else {
+                $correctAnswers = [];
+            }
 
             $optionMap = $this->buildOptionMap($q);
 
@@ -534,7 +541,21 @@ class QuizAttemptController extends Controller
                 if ((int)($a['question_id'] ?? 0) === (int)$q->id) { $provided = $a['selected'] ?? null; break; }
             }
 
-            $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+            $answersValue = $q->answers;
+            if ($answersValue instanceof \Illuminate\Support\Collection) {
+                $answersValue = $answersValue->toArray();
+            } elseif ($answersValue instanceof \ArrayObject) {
+                $answersValue = $answersValue->getArrayCopy();
+            }
+
+            if (is_array($answersValue)) {
+                $correctAnswers = $answersValue;
+            } elseif (is_string($answersValue) && $answersValue !== '') {
+                $decoded = json_decode($answersValue, true);
+                $correctAnswers = is_array($decoded) ? $decoded : [];
+            } else {
+                $correctAnswers = [];
+            }
 
             // Build option map and compute readable/provided values
             $optionMap = $this->buildOptionMap($q);

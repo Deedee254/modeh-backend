@@ -175,24 +175,29 @@ class MessageController extends Controller
     {
         $user = Auth::user();
         
-        // Find the first admin user for support
-            $admin = User::whereHas('roles', function($query) {
-                    $query->where('name', 'support');
-                })
-                ->orderBy('last_active_at', 'desc')
-                ->first();
+        // Get all admin users for support (any admin can handle support chats)
+        $admins = User::where('role', 'admin')
+                ->orderBy('updated_at', 'desc')
+                ->get();
         
-        if (!$admin) {
-            return response()->json(['error' => 'Support unavailable'], 404);
+        if ($admins->isEmpty()) {
+            return response()->json(['error' => 'No support staff available', 'message' => 'Support chat is currently unavailable. Please try again later.'], 503);
         }
         
+        $adminIds = $admins->pluck('id')->toArray();
+        
+        // Return a virtual "Support" contact that represents all admins
+        // The frontend will use id = -1 to identify support chats
+        // The backend will route support messages to all admins
         return response()->json([
             'contact' => [
-                'id' => $admin->id,
-                'name' => 'Admin Support',
-                'email' => $admin->email,
-                'avatar' => $admin->avatar,
-                    'role' => 'support',
+                'id' => -1, // Special ID for support group chat
+                'name' => 'Support',
+                'email' => 'support@modeh.app',
+                'avatar' => null,
+                'role' => 'admin',
+                'is_support' => true,
+                'admin_ids' => $adminIds // List of admin IDs
             ]
         ]);
     }

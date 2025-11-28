@@ -32,6 +32,11 @@ class Quizee extends Model
         'subject_progress' => 'array',
     ];
 
+    protected $appends = [
+        'bio',  // Alias 'profile' field as 'bio' for API consistency
+        'subjectModels',  // Include full subject objects when serializing
+    ];
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -54,18 +59,13 @@ class Quizee extends Model
 
     /**
      * Get the full Subject models for the subject IDs stored in the 'subjects' JSON array.
-     * Note: subjects are stored as JSON array of IDs, not as a traditional pivot table.
+     * Backwards-compatibility accessor: subjectModels
+     * Note: We DO NOT mutate the 'subjects' field - it stays as array of IDs.
+     * Full objects are accessed via 'subjectModels' accessor instead.
      */
-    public function getSubjectsAttribute($value)
+    public function getSubjectModelsAttribute()
     {
-        $ids = is_array($value) ? $value : [];
-        if (empty($ids)) return [];
-        
-        // Query the subjects in the order they appear in the array
-        $subjects = Subject::whereIn('id', $ids)->get();
-        
-        // Return as array of models (or keyed by id for easier lookup)
-        return $subjects->toArray();
+        return Subject::whereIn('id', $this->subjects ?? [])->get();
     }
 
     /**
@@ -76,6 +76,15 @@ class Quizee extends Model
         if (!empty($this->profile)) return $this->profile;
         if ($this->relationLoaded('user') && $this->user && !empty($this->user->avatar)) return $this->user->avatar;
         return null;
+    }
+
+    /**
+     * Alias 'bio' to 'profile' field for API consistency.
+     * When accessed via API, frontend expects 'bio' field.
+     */
+    public function getBioAttribute()
+    {
+        return $this->profile;
     }
 
     public function badges()

@@ -463,6 +463,7 @@ class TournamentController extends Controller
             return [
                 'id' => $p->id,
                 'name' => $p->name,
+                'avatar_url' => $p->avatar_url ?? null,
                 'avatar' => $p->avatar ?? null,
                 // normalize pivot score to `points` for frontend convenience
                 'points' => $p->pivot->score ?? null,

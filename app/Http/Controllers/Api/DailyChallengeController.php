@@ -38,7 +38,8 @@ class DailyChallengeController extends Controller
     public function today(Request $request)
     {
         $user = $request->user();
-        $quizee = $user->quizee;
+        // Ensure grade and level relationships are loaded
+        $quizee = $user->quizee()->with(['grade', 'level'])->first();
 
         if (!$quizee || !$quizee->grade || !$quizee->level) {
             return response()->json(['error' => 'User grade or level not found'], 400);
@@ -156,7 +157,8 @@ class DailyChallengeController extends Controller
     public function submit(Request $request)
     {
         $user = $request->user();
-        $quizee = $user->quizee;
+        // Ensure grade and level relationships are loaded
+        $quizee = $user->quizee()->with(['grade', 'level'])->first();
 
         if (!$quizee || !$quizee->grade || !$quizee->level) {
             return response()->json(['error' => 'User grade or level not found'], 400);

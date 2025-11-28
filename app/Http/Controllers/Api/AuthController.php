@@ -299,11 +299,19 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        // Expire the role-specific cookie on logout
+        // Create response and clear cookies
         $response = response()->json(['message' => 'Logged out']);
+        
+        // Expire the session cookie
         if ($cookieName) {
-            $response->headers->clearCookie($cookieName);
+            $response->headers->clearCookie($cookieName, config('session.path'), config('session.domain'));
         }
+        
+        // Also clear XSRF-TOKEN cookie to force re-fetch on next login
+        $response->headers->clearCookie('XSRF-TOKEN', config('session.path'), config('session.domain'));
+        
+        // Clear any Laravel session-related cookies
+        $response->headers->clearCookie('LARAVEL_SESSION', config('session.path'), config('session.domain'));
 
         return $response;
     }

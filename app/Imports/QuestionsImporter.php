@@ -118,12 +118,24 @@ class QuestionsImporter extends Importer
                 $first = $answers[0];
                 if (is_numeric($first)) {
                     // treat numeric answers as 1-based positions -> convert to zero-based
-                    $record->correct = intval($first) - 1;
+                    $position = intval($first);
+                    // Validate position is within option bounds
+                    $optionCount = count($record->options ?? []);
+                    if ($position >= 1 && $position <= $optionCount) {
+                        $record->correct = $position - 1;
+                    } else {
+                        // Invalid position, leave as null
+                        $record->correct = null;
+                    }
                 } else {
-                    // match by option text
+                    // match by option text - trim both sides and compare
                     $idx = null;
+                    $firstTrimmed = trim((string)$first);
                     foreach (($record->options ?? []) as $ii => $opt) {
-                        if (trim((string)$opt) === (string)$first) { $idx = $ii; break; }
+                        if (trim((string)$opt) === $firstTrimmed) { 
+                            $idx = $ii; 
+                            break; 
+                        }
                     }
                     $record->correct = $idx ?? null;
                 }

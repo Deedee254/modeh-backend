@@ -124,6 +124,13 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
 
         $user->loadMissing($relations);
 
+        // Ensure profile accessors (like bio, subjectModels) are included when serializing
+        if ($user->role === 'quizee' && $user->quizeeProfile) {
+            $user->quizeeProfile->append('subjectModels');
+        } elseif ($user->role === 'quiz-master' && $user->quizMasterProfile) {
+            $user->quizMasterProfile->append('subjectModels');
+        }
+
         // Compute missing profile fields so frontend can guide completion.
         $missing = [];
         // role
@@ -160,6 +167,28 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
 
         // Return the user along with missing fields and onboarding/completed steps so frontend can display guidance
         $payload = $user->toArray();
+        
+        // Make sure nested profile relationships (grade, level) are properly serialized
+        if ($user->role === 'quizee' && isset($payload['quizee_profile'])) {
+            // Ensure grade and level are included in the profile array
+            if ($user->quizeeProfile && $user->quizeeProfile->relationLoaded('grade') && $user->quizeeProfile->grade) {
+                $payload['quizee_profile']['grade'] = $user->quizeeProfile->grade->toArray();
+            }
+            if ($user->quizeeProfile && $user->quizeeProfile->relationLoaded('level') && $user->quizeeProfile->level) {
+                $payload['quizee_profile']['level'] = $user->quizeeProfile->level->toArray();
+            }
+        }
+        
+        if ($user->role === 'quiz-master' && isset($payload['quiz_master_profile'])) {
+            // Ensure grade and level are included in the profile array
+            if ($user->quizMasterProfile && $user->quizMasterProfile->relationLoaded('grade') && $user->quizMasterProfile->grade) {
+                $payload['quiz_master_profile']['grade'] = $user->quizMasterProfile->grade->toArray();
+            }
+            if ($user->quizMasterProfile && $user->quizMasterProfile->relationLoaded('level') && $user->quizMasterProfile->level) {
+                $payload['quiz_master_profile']['level'] = $user->quizMasterProfile->level->toArray();
+            }
+        }
+        
         $payload['missing_profile_fields'] = $missing;
 
         // Human-friendly messages for missing fields
