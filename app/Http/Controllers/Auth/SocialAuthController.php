@@ -41,43 +41,39 @@ class SocialAuthController extends Controller
             $socialUser = Socialite::driver($provider)->user();
             $user = $this->socialAuthService->findOrCreateUser($socialUser, $provider);
 
-            // Log the user into the session. This sets the session cookie automatically.
-            // The session will persist across requests, including to the API.
-            Auth::login($user);
+            // Log the user into the session with persistent login
+            Auth::login($user, true);
 
-            // Reload user with onboarding relationship
+            // Regenerate session for security (prevents session fixation attacks)
+            $request->session()->regenerate();
+
+            // Load user with onboarding relationship
             $user->load('onboarding');
 
             // Ensure onboarding record exists for users who need it
-            // If user has no role or incomplete profile, they need onboarding
             $hasRole = !empty($user->role);
             $needsOnboarding = !$hasRole || !$user->is_profile_completed;
             
             if ($needsOnboarding && !$user->onboarding) {
-                // Create onboarding record if it doesn't exist and user needs onboarding
                 UserOnboarding::firstOrCreate(
                     ['user_id' => $user->id],
                     [
                         'profile_completed' => false,
                         'institution_added' => false,
-                        'role_selected' => !empty($user->role), // Set to true if user already has role
+                        'role_selected' => !empty($user->role),
                         'subject_selected' => false,
                         'grade_selected' => false,
                         'completed_steps' => ['social_auth'],
                         'last_step_completed_at' => now()
                     ]
                 );
-                // Reload the relationship
                 $user->load('onboarding');
             }
 
-            // Determine if user needs onboarding/profile completion
-            // New users (no role) always need onboarding
-            // Existing users need onboarding if profile is incomplete or missing role
             $requiresCompletion = $needsOnboarding;
             $nextStep = $this->determineNextStep($user);
 
-            // If the request expects JSON (API/client), return JSON with user data.
+            // If the request expects JSON (API/client), return JSON with user data
             if ($request->wantsJson() || $request->ajax() || str_contains($request->header('accept',''), '/json')) {
                 return response()->json([
                     'user' => $user,
@@ -86,20 +82,14 @@ class SocialAuthController extends Controller
                 ], 200);
             }
 
-            // Browser OAuth flow: redirect back to frontend.
-            // The session cookie is automatically set by Auth::login() and will be
-            // sent by the browser on all subsequent requests (credentials: 'include').
-            // No token cookie needed - just use session-based auth like normal login.
+            // Browser OAuth flow: redirect back to frontend
             $frontend = env('FRONTEND_APP_URL', config('app.url') ?? 'http://localhost:3000');
             $nextUrl = session()->pull('auth_redirect_url', '/auth/callback');
 
-            // Ensure the path starts with a slash to prevent open redirect vulnerabilities.
             if (!str_starts_with($nextUrl, '/')) {
                 $nextUrl = '/auth/callback';
             }
 
-            // Build redirect URL with only safe metadata.
-            // The session cookie will authenticate all subsequent API requests.
             $query = http_build_query([
                 'requires_profile_completion' => $requiresCompletion ? '1' : '0',
                 'next_step' => $nextStep,

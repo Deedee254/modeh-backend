@@ -14,6 +14,9 @@ Route::get('/auth/verify-status', [AuthController::class, 'verifyStatus']);
 // Endpoint used by the frontend to trigger verification after landing from email link
 Route::post('/auth/verify-email', [AuthController::class, 'verifyEmail']);
 
+// Get a fresh CSRF token (public endpoint for pre-login CSRF preparation)
+Route::get('/csrf-token', [AuthController::class, 'getCsrfToken'])->middleware('web');
+
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.
 Route::post('/login', [AuthController::class, 'login'])->middleware('web');
@@ -21,6 +24,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('web');
 // Logout and authenticated routes also need the session middleware.
 // Social authentication routes
 Route::middleware('web')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('auth/{provider}/redirect', [SocialAuthController::class, 'redirect']);
     Route::get('auth/{provider}/callback', [SocialAuthController::class, 'callback']);
 });
@@ -78,8 +82,6 @@ Route::get('/institutions/{institution}', [\App\Http\Controllers\Api\Institution
 Route::get('/institutions/invitation/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'getInvitationDetails']);
 
 Route::middleware(['web', 'auth:sanctum'])->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout']);
-
     // Institution creation (authenticated users become institution-manager)
     Route::post('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'store']);
     // Institution member management (institution manager only)
@@ -126,7 +128,7 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
 
         // Ensure profile accessors (like bio, subjectModels) are included when serializing
         if ($user->role === 'quizee' && $user->quizeeProfile) {
-            $user->quizeeProfile->append('subjectModels');
+            $user->quizeeProfile->append(['subjectModels', 'bio']);
         } elseif ($user->role === 'quiz-master' && $user->quizMasterProfile) {
             $user->quizMasterProfile->append('subjectModels');
         }
@@ -177,6 +179,15 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
             if ($user->quizeeProfile && $user->quizeeProfile->relationLoaded('level') && $user->quizeeProfile->level) {
                 $payload['quizee_profile']['level'] = $user->quizeeProfile->level->toArray();
             }
+            // Ensure subjectModels are included
+            if (!isset($payload['quizee_profile']['subject_models']) && $user->quizeeProfile->relationLoaded('subjectModels')) {
+                $payload['quizee_profile']['subject_models'] = $user->quizeeProfile->subjectModels->toArray();
+            }
+            // Convert 'profile' field to 'bio' for API consistency
+            if (isset($payload['quizee_profile']['profile'])) {
+                $payload['quizee_profile']['bio'] = $payload['quizee_profile']['profile'];
+                unset($payload['quizee_profile']['profile']);
+            }
         }
         
         if ($user->role === 'quiz-master' && isset($payload['quiz_master_profile'])) {
@@ -186,6 +197,10 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
             }
             if ($user->quizMasterProfile && $user->quizMasterProfile->relationLoaded('level') && $user->quizMasterProfile->level) {
                 $payload['quiz_master_profile']['level'] = $user->quizMasterProfile->level->toArray();
+            }
+            // Ensure subjectModels are included
+            if (!isset($payload['quiz_master_profile']['subject_models']) && $user->quizMasterProfile->relationLoaded('subjectModels')) {
+                $payload['quiz_master_profile']['subject_models'] = $user->quizMasterProfile->subjectModels->toArray();
             }
         }
         

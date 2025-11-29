@@ -45,13 +45,13 @@ class AuthController extends Controller
             'password' => Hash::make($request->password),
             'role' => 'quizee',
             'phone' => $request->phone,
-            'bio' => $request->bio,
         ]);
 
-        // Create quizee profile with institution and required taxonomy
+        // Create quizee profile with institution, bio, and required taxonomy
         $quizee = Quizee::create([
             'user_id' => $user->id,
             'institution' => $request->institution,
+            'profile' => $request->bio,
             'level_id' => $request->level_id,
             'grade_id' => $request->grade_id,
             'subjects' => $request->subjects ?? [],
@@ -123,6 +123,7 @@ class AuthController extends Controller
             'grade_id' => 'nullable|exists:grades,id',
             'subjects' => 'required|array|min:1',
             'subjects.*' => 'exists:subjects,id',
+            'bio' => 'nullable|string|max:500',
             'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/']
         ]);
 
@@ -130,26 +131,23 @@ class AuthController extends Controller
             return response()->json(['errors' => $v->errors()], 422);
         }
 
-        // Create user with provided name
+        // Create user with provided name and optional phone
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'quiz-master',
+            'phone' => $request->phone,
         ]);
 
-        // Persist phone on user record if provided
-        if ($request->filled('phone')) {
-            try { $user->phone = $request->phone; $user->save(); } catch (\Exception $e) { /* ignore save errors */ }
-        }
-
-        // Create quiz master profile with institution and required taxonomy
+        // Create quiz master profile with institution, bio, and required taxonomy
         $quizMaster = QuizMaster::create([
             'user_id' => $user->id,
             'institution' => $request->institution,
             'level_id' => $request->level_id,
             'grade_id' => $request->grade_id,
             'subjects' => $request->subjects ?? [],
+            'bio' => $request->bio,
         ]);
 
         // Handle affiliate referral attribution
@@ -257,63 +255,51 @@ class AuthController extends Controller
             return response()->json(['errors' => $v->errors()], 422);
         }
 
-        // Attempt to authenticate using session (cookie-based) auth
-        // Support "remember me" so clients can request a persistent login.
-        $remember = $request->boolean('remember', false);
-        // Log the login attempt for debugging (temporary)
-        Log::info('Login attempt', ['email' => $request->input('email')]);
-        // Additional debug: check whether a user exists and whether the password matches
-        try {
-            $dbgUser = User::where('email', $request->input('email'))->first();
-            if ($dbgUser) {
-                $pwMatch = \Illuminate\Support\Facades\Hash::check($request->input('password'), $dbgUser->password);
-                Log::info('Login debug user found', ['email' => $dbgUser->email, 'pw_match' => $pwMatch]);
-            } else {
-                Log::info('Login debug user not found', ['email' => $request->input('email')]);
-            }
-        } catch (\Exception $ex) {
-            Log::error('Login debug error', ['err' => $ex->getMessage()]);
+        // Get credentials
+        $credentials = $request->only('email', 'password');
+        
+        // If there's an active session from a previous user, ensure it's fully cleared
+        if ($request->user()) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
         }
-        if (! Auth::attempt($request->only('email', 'password'), $remember)) {
-            Log::warning('Login failed', ['email' => $request->input('email')]);
+
+        // Regenerate session before login to prevent session fixation
+        $request->session()->regenerate();
+
+        // Attempt to authenticate with persistent login (remember = true)
+        if (! Auth::attempt($credentials, true)) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-    // Obtain the authenticated user and ensure affiliate and institutions relations are loaded
-    $user = Auth::user();
-    // Load affiliate relation and institutions so frontend receives institution data without a second request
-    $user->loadMissing(['affiliate', 'institutions']);
+        // Load user data
+        $user = Auth::user();
+        $user->loadMissing(['affiliate', 'institutions']);
 
-    // Regenerate session id for security (uses the configured single session cookie)
-    $request->session()->regenerate();
-
-    return response()->json(['role' => $user->getAttribute('role'), 'user' => $user]);
+        return response()->json(['role' => $user->getAttribute('role'), 'user' => $user]);
     }
 
     public function logout(Request $request)
     {
-        // Determine which cookie name is currently in use so we can clear it
-        $cookieName = config('session.cookie');
-
+        // Fully clear authentication
         Auth::guard('web')->logout();
         $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        
+        // Create a new session with a new token (prevents session fixation after logout)
+        $request->session()->regenerate();
 
-        // Create response and clear cookies
-        $response = response()->json(['message' => 'Logged out']);
-        
-        // Expire the session cookie
-        if ($cookieName) {
-            $response->headers->clearCookie($cookieName, config('session.path'), config('session.domain'));
-        }
-        
-        // Also clear XSRF-TOKEN cookie to force re-fetch on next login
-        $response->headers->clearCookie('XSRF-TOKEN', config('session.path'), config('session.domain'));
-        
-        // Clear any Laravel session-related cookies
-        $response->headers->clearCookie('LARAVEL_SESSION', config('session.path'), config('session.domain'));
+        return response()->json(['message' => 'Logged out']);
+    }
 
-        return $response;
+    /**
+     * Get a fresh CSRF token. Call this after logout to prepare for the next login.
+     * GET /api/csrf-token
+     */
+    public function getCsrfToken(Request $request)
+    {
+        return response()->json([
+            'token' => $request->session()->token()
+        ]);
     }
 
     /**

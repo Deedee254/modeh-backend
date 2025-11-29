@@ -19,8 +19,16 @@ class AuthWebController extends Controller
             'password' => ['required'],
         ]);
 
-        if (Auth::attempt($credentials, $request->boolean('remember'))) {
-            $request->session()->regenerate();
+        // Clear any previous session
+        if ($request->user()) {
+            Auth::logout();
+            $request->session()->invalidate();
+        }
+
+        // Regenerate before login
+        $request->session()->regenerate();
+
+        if (Auth::attempt($credentials, true)) {
             return redirect()->intended('/dashboard');
         }
 
@@ -33,7 +41,7 @@ class AuthWebController extends Controller
     {
         Auth::logout();
         $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        $request->session()->regenerate();
         return redirect('/login');
     }
 

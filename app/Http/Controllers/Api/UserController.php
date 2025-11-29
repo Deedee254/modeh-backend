@@ -60,9 +60,6 @@ class UserController extends Controller
     {
         $user = $request->user();
 
-        // Resolve OnboardingService when needed
-        $onboardingService = app(OnboardingService::class);
-
         $data = $request->all();
 
         $rules = [
@@ -70,6 +67,7 @@ class UserController extends Controller
             'email' => 'sometimes|email|max:255',
             'phone' => 'sometimes|nullable|string|max:20',
             'bio' => 'sometimes|nullable|string|max:1000',
+            'institution' => 'sometimes|nullable|string',
         ];
 
         $validator = \Validator::make($data, $rules);
@@ -77,29 +75,34 @@ class UserController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // Handle avatar upload
         if ($request->hasFile('avatar')) {
             $file = $request->file('avatar');
             $path = $file->store('avatars', 'public');
             $user->avatar_url = '/storage/' . $path;
         }
 
-        if (isset($data['name'])) $user->name = $data['name'];
-        if (isset($data['email'])) $user->email = $data['email'];
-        if (isset($data['phone'])) $user->phone = $data['phone'];
-        if (isset($data['bio'])) $user->bio = $data['bio'];
+        // Only update fields that were actually provided
+        if ($request->has('name')) {
+            $user->name = $data['name'];
+        }
+        if ($request->has('email')) {
+            $user->email = $data['email'];
+        }
+        if ($request->has('phone')) {
+            $user->phone = $data['phone'];
+        }
+        if ($request->has('bio')) {
+            $user->bio = $data['bio'];
+        }
+        if ($request->has('institution')) {
+            $user->institution = $data['institution'];
+        }
 
         $user->save();
 
-        // Optionally finalize profile completion if requested by client
-        // Payload: { finalize_profile: true }
-        if (!empty($data['finalize_profile'])) {
-            // Use onboarding service to finalize (idempotent)
-            try {
-                $onboardingService->completeStep($user, 'profile_complete');
-            } catch (\Exception $e) {
-                // swallow so profile update still returns success; client can retry finalize
-            }
-        }
+        // Load relationships for full response
+        $user->loadMissing(['quizeeProfile', 'quizMasterProfile', 'affiliate', 'institutions']);
 
         return response()->json($user);
     }

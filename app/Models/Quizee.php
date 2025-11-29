@@ -33,7 +33,6 @@ class Quizee extends Model
     ];
 
     protected $appends = [
-        'bio',  // Alias 'profile' field as 'bio' for API consistency
         'subjectModels',  // Include full subject objects when serializing
     ];
 
@@ -79,8 +78,8 @@ class Quizee extends Model
     }
 
     /**
-     * Alias 'bio' to 'profile' field for API consistency.
-     * When accessed via API, frontend expects 'bio' field.
+     * Bio accessor — return profile field for API consistency
+     * (The 'profile' field in Quizee is aliased as 'bio' in API responses)
      */
     public function getBioAttribute()
     {
