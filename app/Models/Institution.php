@@ -51,7 +51,12 @@ class Institution extends Model
      */
     public function profileQuizMasters()
     {
-        return QuizMaster::where('institution', $this->name)->orWhere('institution', $this->slug);
+        // Match either explicit foreign key (institution_id) or the legacy/text field
+        return QuizMaster::where(function($q) {
+            $q->where('institution_id', $this->id)
+              ->orWhere('institution', $this->name)
+              ->orWhere('institution', $this->slug);
+        });
     }
 
     /**
@@ -66,7 +71,12 @@ class Institution extends Model
 
     public function profileQuizees()
     {
-        return Quizee::where('institution', $this->name)->orWhere('institution', $this->slug);
+        // Match either explicit foreign key (institution_id) or the legacy/text field
+        return Quizee::where(function($q) {
+            $q->where('institution_id', $this->id)
+              ->orWhere('institution', $this->name)
+              ->orWhere('institution', $this->slug);
+        });
     }
 
     public function allQuizees()

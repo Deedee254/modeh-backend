@@ -25,6 +25,8 @@ class Quizee extends Model
         'subject_progress',
         'institution',  // KEEP: Text field for user input or legacy data
         'subjects',
+        'institution_verified',
+        'verified_institution_id',
     ];
 
     protected $casts = [

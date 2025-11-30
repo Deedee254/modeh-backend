@@ -187,6 +187,19 @@ class InstitutionMemberController extends Controller
             ]);
         }
 
+        // Mark user's profile as verified with this institution
+        if ($u->role === 'quizee' && $u->quizeeProfile) {
+            $u->quizeeProfile->update([
+                'institution_verified' => true,
+                'verified_institution_id' => $institution->id,
+            ]);
+        } elseif ($u->role === 'quiz-master' && $u->quizMasterProfile) {
+            $u->quizMasterProfile->update([
+                'institution_verified' => true,
+                'verified_institution_id' => $institution->id,
+            ]);
+        }
+
         // If institution has an active subscription, attempt to assign a seat to this user
         if ($activeSub && $activeSub->package) {
             try {
@@ -204,7 +217,7 @@ class InstitutionMemberController extends Controller
             }
         }
 
-        return response()->json(['ok' => true, 'message' => 'User accepted into institution']);
+        return response()->json(['ok' => true, 'message' => 'User accepted into institution', 'institution_id' => $institution->id]);
     }
 
     public function remove(Request $request, Institution $institution, $userId)

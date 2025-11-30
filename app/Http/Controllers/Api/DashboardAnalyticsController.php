@@ -82,6 +82,13 @@ class DashboardAnalyticsController extends Controller
             : 0;
 
         // Calculate trends (percentage change)
+        $currentQuizzes = Quiz::where('user_id', $user->id)->where('created_at', '>=', $thirtyDaysAgo)->count();
+        $previousQuizzes = Quiz::where('user_id', $user->id)->whereBetween('created_at', [$sixtyDaysAgo, $thirtyDaysAgo])->count();
+        
+        $quizzesTrend = $previousQuizzes > 0
+            ? round((($currentQuizzes - $previousQuizzes) / $previousQuizzes) * 100, 1)
+            : null;
+
         $attemptsTrend = $previousAttempts > 0 
             ? round((($currentAttempts - $previousAttempts) / $previousAttempts) * 100, 1) 
             : null;
@@ -120,6 +127,7 @@ class DashboardAnalyticsController extends Controller
                 'totalAttempts' => $totalAttempts,
                 'avgScore' => $avgScore,
                 'completionRate' => $completionRate,
+                'totalQuizzesTrend' => $quizzesTrend,
                 'totalAttemptsTrend' => $attemptsTrend,
                 'avgScoreTrend' => $scoreTrend,
                 'completionRateTrend' => $completionTrend

@@ -21,6 +21,8 @@ class QuizMaster extends Model
         'level_id',
         'institution_id',  // NEW: Foreign key to institutions table
         'institution',  // KEEP: Text field for user input or legacy data
+        'institution_verified',
+        'verified_institution_id',
     ];
 
     protected $casts = [

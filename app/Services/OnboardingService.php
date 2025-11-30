@@ -190,11 +190,13 @@ class OnboardingService
 
     /**
      * Handle institution step for onboarding - works for both quizee and quiz-master
+     * Supports branch_id to link user to a specific sub-institution/branch
      */
     private function handleInstitutionStep(User $user, array $data)
     {
         $institutionId = $data['institution_id'] ?? null;
         $institutionText = $data['institution'] ?? null;
+        $branchId = $data['branch_id'] ?? null;
 
         // Get or create profile based on role
         if ($user->role === 'quizee') {
@@ -207,7 +209,14 @@ class OnboardingService
 
         // Link to existing institution or store as text
         if ($institutionId) {
-            $profile->update(['institution_id' => $institutionId]);
+            $updateData = ['institution_id' => $institutionId];
+            
+            // If branch_id is provided, also store it (for multi-branch institutions)
+            if ($branchId) {
+                $updateData['branch_id'] = $branchId;
+            }
+            
+            $profile->update($updateData);
         } elseif ($institutionText) {
             $profile->update(['institution' => $institutionText]);
             $this->createApprovalRequestIfNeeded($user, $profile, $profileType, $institutionText);
