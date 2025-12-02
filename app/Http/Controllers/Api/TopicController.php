@@ -67,26 +67,52 @@ class TopicController extends Controller
             // admins see all topics (no additional where)
         }
 
-        $query->orderBy('created_at', 'desc');
-        $perPage = max(1, (int)$request->get('per_page', 10));
-        $data = $query->paginate($perPage);
-            // Attach an image for each topic if available: topic.image or representative quiz cover
-            $data->getCollection()->transform(function ($t) {
-                $orig = $t->getAttribute('image') ?? null;
-                $t->image = null;
-                if (!empty($orig)) {
-                    try { $t->image = Storage::url($orig); } catch (\Exception $e) { $t->image = null; }
-                }
-                if (empty($t->image)) {
-                    $quiz = Quiz::where('topic_id', $t->id)->whereNotNull('cover_image')->orderBy('created_at', 'desc')->first();
-                    if ($quiz && $quiz->cover_image) {
-                        try { $t->image = Storage::url($quiz->cover_image); } catch (\Exception $e) { $t->image = null; }
-                    }
-                }
-                return $t;
+        // Allow frontend to filter topics by grade_id or level_id via query params.
+        // Example: /api/topics?grade_id=12  or /api/topics?level_id=3
+        if ($gradeId = $request->get('grade_id')) {
+            $query->whereHas('subject', function ($q) use ($gradeId) {
+                $q->where('grade_id', $gradeId);
             });
+        }
 
-            return response()->json(['topics' => $data]);
+        if ($levelId = $request->get('level_id')) {
+            $query->whereHas('subject', function ($q) use ($levelId) {
+                $q->whereHas('grade', function ($g) use ($levelId) {
+                    $g->where('level_id', $levelId);
+                });
+            });
+        }
+
+        $query->orderBy('created_at', 'desc');
+
+        $transformer = function ($t) {
+            $orig = $t->getAttribute('image') ?? null;
+            $t->image = null;
+            if (!empty($orig)) {
+                try { $t->image = Storage::url($orig); } catch (\Exception $e) { $t->image = null; }
+            }
+            if (empty($t->image)) {
+                $quiz = Quiz::where('topic_id', $t->id)->whereNotNull('cover_image')->orderBy('created_at', 'desc')->first();
+                if ($quiz && $quiz->cover_image) {
+                    try { $t->image = Storage::url($quiz->cover_image); } catch (\Exception $e) { $t->image = null; }
+                }
+            }
+            return $t;
+        };
+
+        // If filtering by level or grade, the frontend expects a full list.
+        if ($request->has('level_id') || $request->has('grade_id')) {
+            $topics = $query->get();
+            $topics->transform($transformer);
+            return response()->json($topics);
+        }
+
+        // Default behavior is to paginate
+        $perPage = max(1, (int)$request->get('per_page', 10));
+        $paginatedTopics = $query->paginate($perPage);
+        $paginatedTopics->getCollection()->transform($transformer);
+
+        return response()->json(['topics' => $paginatedTopics]);
     }
 
     // Show a single topic (public-safe view)
@@ -127,17 +153,7 @@ class TopicController extends Controller
             return $quiz;
         });
 
-        return response()->json([
-            'quizzes' => $data->items(),
-            'meta' => [
-                'current_page' => $data->currentPage(),
-                'from' => $data->firstItem(),
-                'last_page' => $data->lastPage(),
-                'per_page' => $data->perPage(),
-                'to' => $data->lastItem(),
-                'total' => $data->total()
-            ]
-        ]);
+        return response()->json(['quizzes' => $data]);
     }
 
     // quiz-master creates a topic under a subject (subject must be approved)

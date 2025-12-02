@@ -31,6 +31,13 @@ class SubjectController extends Controller
             $query->where('grade_id', $gradeId);
         }
 
+        // Filter by level_id if provided
+        if ($levelId = $request->get('level_id')) {
+            $query->whereHas('grade', function ($q) use ($levelId) {
+                $q->where('level_id', $levelId);
+            });
+        }
+
         $query->orderBy('created_at', 'desc');
         $perPage = max(1, (int)$request->get('per_page', 50)); // More for browsing
         $data = $query->paginate($perPage);
@@ -121,7 +128,9 @@ class SubjectController extends Controller
     {
         $user = $request->user();
         if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
-        if ($subject->created_by !== $user->id && empty($user->is_admin)) {
+        // Use getAttribute to avoid PHP notices if the attribute is missing
+        $subjectOwner = $subject->getAttribute('created_by');
+        if ((string)($subjectOwner ?? '') !== (string)($user->id ?? '') && empty($user->is_admin)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

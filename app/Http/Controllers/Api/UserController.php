@@ -92,6 +92,7 @@ class UserController extends Controller
         if ($request->has('phone')) {
             $user->phone = $data['phone'];
         }
+        // Save bio on users table for all roles
         if ($request->has('bio')) {
             $user->bio = $data['bio'];
         }

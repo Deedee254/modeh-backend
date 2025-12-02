@@ -119,16 +119,18 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
         if ($user->role === 'quiz-master') {
             $relations[] = 'quizMasterProfile.grade';
             $relations[] = 'quizMasterProfile.level';
+            $relations[] = 'quizMasterProfile.institution';
         } elseif ($user->role === 'quizee') {
             $relations[] = 'quizeeProfile.grade';
             $relations[] = 'quizeeProfile.level';
+            $relations[] = 'quizeeProfile.institution';
         }
 
         $user->loadMissing($relations);
 
-        // Ensure profile accessors (like bio, subjectModels) are included when serializing
+        // Ensure profile accessors (like subjectModels) are included when serializing
         if ($user->role === 'quizee' && $user->quizeeProfile) {
-            $user->quizeeProfile->append(['subjectModels', 'bio']);
+            $user->quizeeProfile->append(['subjectModels']);
         } elseif ($user->role === 'quiz-master' && $user->quizMasterProfile) {
             $user->quizMasterProfile->append('subjectModels');
         }
@@ -182,11 +184,6 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
             // Ensure subjectModels are included
             if (!isset($payload['quizee_profile']['subject_models']) && $user->quizeeProfile->relationLoaded('subjectModels')) {
                 $payload['quizee_profile']['subject_models'] = $user->quizeeProfile->subjectModels->toArray();
-            }
-            // Convert 'profile' field to 'bio' for API consistency
-            if (isset($payload['quizee_profile']['profile'])) {
-                $payload['quizee_profile']['bio'] = $payload['quizee_profile']['profile'];
-                unset($payload['quizee_profile']['profile']);
             }
         }
         

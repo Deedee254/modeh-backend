@@ -23,6 +23,7 @@ class ProfileController extends Controller
 
         $validator = Validator::make($request->all(), [
             'institution' => 'nullable|string',
+            'institution_id' => 'nullable|exists:institutions,id',
             'grade_id' => 'nullable|exists:grades,id',
             'level_id' => 'nullable|exists:levels,id',
             'subjects' => 'nullable|array',
@@ -41,6 +42,9 @@ class ProfileController extends Controller
         $updateData = [];
         if ($request->has('institution')) {
             $updateData['institution'] = $request->input('institution');
+        }
+        if ($request->has('institution_id')) {
+            $updateData['institution_id'] = $request->input('institution_id');
         }
         if ($request->has('grade_id')) {
             $updateData['grade_id'] = $request->input('grade_id');
@@ -73,7 +77,7 @@ class ProfileController extends Controller
         }
 
         // Return updated user with relationships
-        $user->load(['quizMasterProfile.grade', 'quizMasterProfile.level']);
+        $user->load(['quizMasterProfile.grade', 'quizMasterProfile.level', 'quizMasterProfile.institution']);
         
         return response()->json([
             'message' => 'Profile updated',
@@ -94,6 +98,7 @@ class ProfileController extends Controller
 
         $validator = Validator::make($request->all(), [
             'institution' => 'nullable|string',
+            'institution_id' => 'nullable|exists:institutions,id',
             'grade_id' => 'nullable|exists:grades,id',
             'level_id' => 'nullable|exists:levels,id',
             'subjects' => 'nullable|array',
@@ -113,6 +118,9 @@ class ProfileController extends Controller
         $updateData = [];
         if ($request->has('institution')) {
             $updateData['institution'] = $request->input('institution');
+        }
+        if ($request->has('institution_id')) {
+            $updateData['institution_id'] = $request->input('institution_id');
         }
         if ($request->has('grade_id')) {
             $updateData['grade_id'] = $request->input('grade_id');
@@ -149,7 +157,7 @@ class ProfileController extends Controller
         }
 
         // Return updated user with relationships, convert 'profile' to 'bio' in response
-        $user->load(['quizeeProfile.grade', 'quizeeProfile.level']);
+        $user->load(['quizeeProfile.grade', 'quizeeProfile.level', 'quizeeProfile.institution']);
         $payload = $user->toArray();
         
         // Convert 'profile' field to 'bio' in the response for API consistency
