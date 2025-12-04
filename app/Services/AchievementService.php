@@ -389,8 +389,8 @@ class AchievementService
 
         // All-Rounder - Above 80% in 5 different subjects
         if ($score >= 80) {
-            $distinctSubjects = QuizAttempt::where('user_id', $user->id)
-                ->where('score', '>=', 80)
+            $distinctSubjects = QuizAttempt::where('quiz_attempts.user_id', $user->id)
+                ->where('quiz_attempts.score', '>=', 80)
                 ->whereHas('quiz')
                 ->join('quizzes', 'quiz_attempts.quiz_id', '=', 'quizzes.id')
                 ->select('quizzes.subject_id')
@@ -494,8 +494,8 @@ class AchievementService
 
         // Topic Explorer - Score 90%+ in quizzes from 3 different topics
         if ($score >= 90) {
-            $distinctTopics = QuizAttempt::where('user_id', $user->id)
-                ->where('score', '>=', 90)
+            $distinctTopics = QuizAttempt::where('quiz_attempts.user_id', $user->id)
+                ->where('quiz_attempts.score', '>=', 90)
                 ->whereHas('quiz')
                 ->join('quizzes', 'quiz_attempts.quiz_id', '=', 'quizzes.id')
                 ->select('quizzes.topic_id')

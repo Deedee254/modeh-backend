@@ -47,6 +47,7 @@ Route::get('/topics', [\App\Http\Controllers\Api\TopicController::class, 'index'
 Route::get('/topics/{topic}/quizzes', [\App\Http\Controllers\Api\TopicController::class, 'quizzes']);
 // Public show endpoints for detail pages
 Route::get('/grades/{grade}', [\App\Http\Controllers\Api\GradeController::class, 'show']);
+Route::get('/grades/{grade}/topics', [\App\Http\Controllers\Api\GradeController::class, 'topics']);
 Route::get('/topics/{topic}', [\App\Http\Controllers\Api\TopicController::class, 'show']);
 Route::get('/subjects/{subject}', [\App\Http\Controllers\Api\SubjectController::class, 'show']);
 // Get topics by subject
@@ -84,6 +85,9 @@ Route::get('/institutions/invitation/{token}', [\App\Http\Controllers\Api\Instit
 Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // Institution creation (authenticated users become institution-manager)
     Route::post('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'store']);
+    // Institution update (institution manager only)
+    Route::patch('/institutions/{institution}', [\App\Http\Controllers\Api\InstitutionController::class, 'update']);
+    Route::put('/institutions/{institution}', [\App\Http\Controllers\Api\InstitutionController::class, 'update']);
     // Institution member management (institution manager only)
     Route::get('/institutions/{institution}/members', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'index']);
     Route::get('/institutions/{institution}/requests', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'requests']);

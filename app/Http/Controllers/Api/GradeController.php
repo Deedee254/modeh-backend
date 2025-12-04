@@ -51,6 +51,23 @@ class GradeController extends Controller
         return response()->json(['grade' => $grade]);
     }
 
+    // Get topics for a specific grade (through its subjects)
+    public function topics(Grade $grade)
+    {
+        $topics = $grade->subjects()
+            ->where('is_approved', true)
+            ->with(['topics' => function($q) {
+                $q->withCount('quizzes');
+            }])
+            ->get()
+            ->pluck('topics')
+            ->flatten()
+            ->sortBy('name')
+            ->values();
+
+        return response()->json(['topics' => $topics]);
+    }
+
     // Create a grade (requires authenticated user - routes should protect this)
     public function store(Request $request)
     {

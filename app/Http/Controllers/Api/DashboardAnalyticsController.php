@@ -20,7 +20,8 @@ class DashboardAnalyticsController extends Controller
     {
         // Ensure user is a quiz master
         $user = $request->user();
-        if (!$user || !$user->isQuizMaster()) {
+        // The User model does not provide an `isQuizMaster()` helper. Check the role field instead.
+        if (!$user || (string)($user->role ?? '') !== 'quiz-master') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

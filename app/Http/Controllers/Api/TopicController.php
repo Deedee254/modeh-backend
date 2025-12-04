@@ -14,8 +14,8 @@ class TopicController extends Controller
 {
     public function __construct()
     {
-        // Protect most endpoints but allow public listing and show (index, show)
-        $this->middleware('auth:sanctum')->except(['index', 'show']);
+        // Protect most endpoints but allow public listing, show, and quizzes listing
+        $this->middleware('auth:sanctum')->except(['index', 'show', 'quizzes']);
     }
 
     // quiz-master uploads an image for a topic
@@ -135,8 +135,8 @@ class TopicController extends Controller
     {
         $query = Quiz::where('topic_id', $topic->id)
                     ->where('is_approved', true)
-                    ->with(['topic', 'subject', 'grade', 'creator'])
-                    ->withCount(['attempts', 'likes']);
+                    ->with(['topic', 'subject', 'grade', 'author'])
+                    ->withCount(['attempts']);
 
         $perPage = min(100, max(1, (int)$request->get('per_page', 10)));
         $data = $query->paginate($perPage);

@@ -40,6 +40,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property-read \App\Models\User|null $author
  * @property-read \App\Models\QuizMaster|null $quizMaster
  * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\Question[] $questions
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\QuizAttempt[] $attempts
  */
 class Quiz extends Model
 {
@@ -96,6 +97,11 @@ class Quiz extends Model
     public function questions()
     {
         return $this->hasMany(Question::class);
+    }
+
+    public function attempts()
+    {
+        return $this->hasMany(\App\Models\QuizAttempt::class, 'quiz_id');
     }
 
     public function recalcDifficulty()
