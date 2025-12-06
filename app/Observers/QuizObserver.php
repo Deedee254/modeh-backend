@@ -12,21 +12,26 @@ class QuizObserver
      */
     public function saved(Quiz $quiz): void
     {
-        // Propagate topic/subject/grade information to questions attached to this quiz
+        // Propagate taxonomy information to questions attached to this quiz
+        // Use quiz's direct IDs as source of truth, not topic nested values
         try {
-            $topic = $quiz->topic;
-            $subjectId = $topic->subject_id ?? null;
+            $levelId = $quiz->level_id ?? null;
+            $gradeId = $quiz->grade_id ?? null;
+            $subjectId = $quiz->subject_id ?? null;
             $topicId = $quiz->topic_id ?? null;
-            $gradeId = $topic->grade_id ?? null;
 
-            $quiz->questions()->where(function($q) use ($subjectId, $topicId, $gradeId) {
-                $q->whereNull('subject_id')->orWhere('subject_id', '!=', $subjectId)
-                  ->orWhereNull('topic_id')->orWhere('topic_id', '!=', $topicId)
-                  ->orWhereNull('grade_id')->orWhere('grade_id', '!=', $gradeId);
+            $quiz->questions()->where(function($q) use ($levelId, $gradeId, $subjectId, $topicId) {
+                $q->where(function($inner) use ($levelId, $gradeId, $subjectId, $topicId) {
+                    $inner->whereNull('level_id')->orWhere('level_id', '!=', $levelId)
+                      ->orWhereNull('grade_id')->orWhere('grade_id', '!=', $gradeId)
+                      ->orWhereNull('subject_id')->orWhere('subject_id', '!=', $subjectId)
+                      ->orWhereNull('topic_id')->orWhere('topic_id', '!=', $topicId);
+                });
             })->update([
+                'level_id' => $levelId,
+                'grade_id' => $gradeId,
                 'subject_id' => $subjectId,
                 'topic_id' => $topicId,
-                'grade_id' => $gradeId,
             ]);
         } catch (\Throwable $e) {
             Log::warning('QuizObserver failed to sync question metadata: ' . $e->getMessage());

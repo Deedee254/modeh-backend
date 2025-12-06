@@ -27,9 +27,9 @@ class QuestionController extends Controller
         // the created_by restriction so non-admin quizees can fetch the
         // public question bank.
         $user = $request->user();
-    $query = Question::query()->with(['grade.level', 'subject', 'topic', 'quiz']);
+        $query = Question::query()->with(['grade.level', 'subject', 'topic', 'quiz']);
 
-    $isBankQuery = $request->boolean('random') || $request->boolean('banked');
+        $isBankQuery = $request->boolean('random') || $request->boolean('banked');
         if (!$isBankQuery) {
             if (!isset($user->is_admin) || !$user->is_admin) {
                 $query->where('created_by', $user->id);
@@ -42,9 +42,9 @@ class QuestionController extends Controller
         }
         // Basic search by text/type
         if ($q = $request->get('q')) {
-            $query->where(function($qq) use ($q) {
+            $query->where(function ($qq) use ($q) {
                 $qq->where('body', 'like', "%{$q}%")
-                   ->orWhere('type', 'like', "%{$q}%");
+                    ->orWhere('type', 'like', "%{$q}%");
             });
         }
         // randomize when requested
@@ -54,17 +54,17 @@ class QuestionController extends Controller
             $query->orderByDesc('id');
         }
 
-    // Optional server-side limit to avoid accidental huge payloads. Frontend will paginate client-side.
-    $limit = (int) ($request->get('limit') ?? 0);
-    if ($limit > 0) {
-        // enforce a reasonable cap
-        $limit = min($limit, 1000);
-        $query->limit($limit);
-    }
+        // Optional server-side limit to avoid accidental huge payloads. Frontend will paginate client-side.
+        $limit = (int) ($request->get('limit') ?? 0);
+        if ($limit > 0) {
+            // enforce a reasonable cap
+            $limit = min($limit, 1000);
+            $query->limit($limit);
+        }
 
-    // Return all matching questions (frontend will handle pagination)
-    $results = $query->get();
-    return response()->json(['questions' => $results]);
+        // Return all matching questions (frontend will handle pagination)
+        $results = $query->get();
+        return response()->json(['questions' => $results]);
     }
 
     /**
@@ -79,14 +79,18 @@ class QuestionController extends Controller
         // The public question bank is independent of any quiz-master-set `for_battle` flag.
         // We intentionally do not filter by `for_battle` here.
         // Accept either explicit *_id keys or shorthand keys used by frontend (grade, subject, topic)
-    $grade = $request->get('grade_id') ?? $request->get('grade');
-    $subject = $request->get('subject_id') ?? $request->get('subject');
-    $topic = $request->get('topic_id') ?? $request->get('topic');
-    $difficulty = $request->get('difficulty');
-    if ($grade) $baseQuery->where('grade_id', $grade);
-    if ($subject) $baseQuery->where('subject_id', $subject);
-    if ($topic) $baseQuery->where('topic_id', $topic);
-    if ($difficulty) $baseQuery->where('difficulty', $difficulty);
+        $grade = $request->get('grade_id') ?? $request->get('grade');
+        $subject = $request->get('subject_id') ?? $request->get('subject');
+        $topic = $request->get('topic_id') ?? $request->get('topic');
+        $difficulty = $request->get('difficulty');
+        if ($grade)
+            $baseQuery->where('grade_id', $grade);
+        if ($subject)
+            $baseQuery->where('subject_id', $subject);
+        if ($topic)
+            $baseQuery->where('topic_id', $topic);
+        if ($difficulty)
+            $baseQuery->where('difficulty', $difficulty);
 
         // Support filtering by level (frontend may send `level` or `level_id`). If provided,
         // constrain questions to grades that belong to that level (if grades table has level_id).
@@ -108,9 +112,9 @@ class QuestionController extends Controller
         }
 
         if ($q = $request->get('q')) {
-            $baseQuery->where(function($qq) use ($q) {
+            $baseQuery->where(function ($qq) use ($q) {
                 $qq->where('body', 'like', "%{$q}%")
-                   ->orWhere('type', 'like', "%{$q}%");
+                    ->orWhere('type', 'like', "%{$q}%");
             });
         }
 
@@ -148,10 +152,34 @@ class QuestionController extends Controller
 
         // Build final query for fetching results (with relations)
         $query = (clone $baseQuery)->with(['grade.level', 'subject', 'topic', 'quiz']);
-        if ($request->boolean('random')) {
-            $query->inRandomOrder();
-        } else {
-            $query->orderByDesc('id');
+        // Sorting
+        $sort = $request->get('sort_by', 'latest');
+        switch ($sort) {
+            case 'oldest':
+                $query->orderBy('id', 'asc');
+                break;
+            case 'alpha_asc':
+                $query->orderBy('body', 'asc');
+                break;
+            case 'alpha_desc':
+                $query->orderBy('body', 'desc');
+                break;
+            case 'difficulty_asc':
+                $query->orderBy('difficulty', 'asc');
+                break;
+            case 'difficulty_desc':
+                $query->orderBy('difficulty', 'desc');
+                break;
+            case 'marks_asc':
+                $query->orderBy('marks', 'asc');
+                break;
+            case 'marks_desc':
+                $query->orderBy('marks', 'desc');
+                break;
+            case 'latest':
+            default:
+                $query->orderByDesc('id');
+                break;
         }
 
         // Apply paging/offset
@@ -161,13 +189,15 @@ class QuestionController extends Controller
 
         $lastPage = (int) max(1, ceil($total / max(1, $perPage)));
 
-        return response()->json(['questions' => [
-            'data' => $results,
-            'total' => $total,
-            'per_page' => $perPage,
-            'current_page' => $page,
-            'last_page' => $lastPage,
-        ]]);
+        return response()->json([
+            'questions' => [
+                'data' => $results,
+                'total' => $total,
+                'per_page' => $perPage,
+                'current_page' => $page,
+                'last_page' => $lastPage,
+            ]
+        ]);
     }
 
     public function store(Request $request)
@@ -222,7 +252,7 @@ class QuestionController extends Controller
             $mediaFile = $request->file('media');
             $mediaPath = Storage::disk('public')->putFile('question_media', $mediaFile);
             $mediaPath = Storage::url($mediaPath);
-            
+
             // Determine media type
             $mimeType = $mediaFile->getMimeType();
             if (strpos($mimeType, 'image/') === 0) {
@@ -309,7 +339,7 @@ class QuestionController extends Controller
                 // Set is_correct based on answers array for option-based question types
                 $isCorrect = false;
                 if (in_array($payloadType, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq', 'multi'], true) && is_array($answers)) {
-                    $isCorrect = in_array((string)$idx, $answers, true);
+                    $isCorrect = in_array((string) $idx, $answers, true);
                 }
 
                 return [
@@ -329,16 +359,20 @@ class QuestionController extends Controller
         }
 
         $siteSettings = \App\Models\SiteSetting::current();
-        $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
+        $siteAutoQuestions = $siteSettings ? (bool) $siteSettings->auto_approve_questions : true;
         // If a quiz id is provided, try to infer missing taxonomy values from the quiz
         $quizObj = null;
         if ($request->quiz_id) {
-            try { $quizObj = Quiz::find($request->quiz_id); } catch (\Throwable $_) { $quizObj = null; }
+            try {
+                $quizObj = Quiz::find($request->quiz_id);
+            } catch (\Throwable $_) {
+                $quizObj = null;
+            }
         }
 
         $question = Question::create([
             'quiz_id' => $request->quiz_id,
-            'created_by' => $user->id,
+            'created_by' => $request->get('created_by') ?? $user->id,
             'type' => $request->type,
             'body' => $request->body,
             'explanation' => $request->get('explanation'),
@@ -367,14 +401,18 @@ class QuestionController extends Controller
         if ($question->quiz_id) {
             try {
                 $quiz = Quiz::find($question->quiz_id);
-                if ($quiz) $quiz->recalcDifficulty();
+                if ($quiz)
+                    $quiz->recalcDifficulty();
             } catch (\Exception $e) {
                 // ignore
             }
         }
 
         // Load nested relations for client convenience
-        try { $question->load(['grade.level', 'subject', 'topic', 'quiz']); } catch (\Throwable $_) {}
+        try {
+            $question->load(['grade.level', 'subject', 'topic', 'quiz']);
+        } catch (\Throwable $_) {
+        }
 
         return response()->json(['question' => $question], 201);
     }
@@ -391,7 +429,10 @@ class QuestionController extends Controller
         }
 
         // Ensure nested relations are available to the client
-        try { $question->load(['grade.level', 'subject', 'topic', 'quiz']); } catch (\Throwable $_) {}
+        try {
+            $question->load(['grade.level', 'subject', 'topic', 'quiz']);
+        } catch (\Throwable $_) {
+        }
         return response()->json(['question' => $question]);
     }
 
@@ -417,7 +458,10 @@ class QuestionController extends Controller
         try {
             return $this->store($request);
         } catch (\Throwable $e) {
-            try { \Log::error('QuestionController@storeForQuiz failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
+            try {
+                \Log::error('QuestionController@storeForQuiz failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            } catch (\Throwable $_) {
+            }
             return response()->json(['message' => 'Failed to store question for quiz'], 500);
         }
 
@@ -482,7 +526,8 @@ class QuestionController extends Controller
         // Fallback: ensure we still handle when request->get returned something unexpected
         if (empty($items) && $request->has('questions')) {
             $maybe = $request->get('questions');
-            if (is_array($maybe) && array_values($maybe) === $maybe) $items = $maybe;
+            if (is_array($maybe) && array_values($maybe) === $maybe)
+                $items = $maybe;
         }
 
         return $items;
@@ -501,7 +546,8 @@ class QuestionController extends Controller
                 'incoming_count' => is_array($items) ? count($items) : null,
                 'media_keys' => is_array($mediaFiles) ? array_keys($mediaFiles) : [],
             ]);
-        } catch (\Throwable $_) {}
+        } catch (\Throwable $_) {
+        }
         foreach ($items as $idx => $q) {
             try {
                 // Expect canonical 'type' key (mcq, multi, short, numeric, fill_blank, math, code).
@@ -564,7 +610,7 @@ class QuestionController extends Controller
                         // Set is_correct based on answers array for option-based question types
                         $isCorrect = false;
                         if (in_array($type, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq', 'multi'], true) && is_array($rawAnswers)) {
-                            $isCorrect = in_array((string)$idx, $rawAnswers, true);
+                            $isCorrect = in_array((string) $idx, $rawAnswers, true);
                         }
 
                         return [
@@ -602,34 +648,40 @@ class QuestionController extends Controller
                     'grade_id' => $q['grade_id'] ?? $quiz->grade_id ?? null,
                     'level_id' => $q['level_id'] ?? $quiz->level_id ?? null,
                 ];
-                    // If there's an uploaded file for this question, store it and attach metadata
-                    try {
-                        $file = null;
-                        // prefer numeric index key
-                        if (is_array($mediaFiles) && array_key_exists($idx, $mediaFiles) && $mediaFiles[$idx]) {
-                            $file = $mediaFiles[$idx];
-                        }
-                        // fallback to uid key if provided in question payload
-                        elseif (isset($q['uid']) && is_array($mediaFiles) && array_key_exists($q['uid'], $mediaFiles) && $mediaFiles[$q['uid']]) {
-                            $file = $mediaFiles[$q['uid']];
-                        }
-
-                        if ($file) {
-                            $mPath = Storage::disk('public')->putFile('question_media', $file);
-                            $mediaPath = Storage::url($mPath);
-                            $mime = $file->getClientMimeType();
-                            $mediaType = null;
-                            if (strpos($mime, 'image/') === 0) $mediaType = 'image';
-                            elseif (strpos($mime, 'audio/') === 0) $mediaType = 'audio';
-                            elseif (strpos($mime, 'video/') === 0) $mediaType = 'video';
-                            if ($mediaPath) {
-                                $qData['media_path'] = $mediaPath;
-                                $qData['media_type'] = $mediaType;
-                            }
-                        }
-                    } catch (\Throwable $e) {
-                        try { \Log::error('QuestionController@bulkUpdateForQuiz file storage failed', ['quiz_id' => $quiz->id, 'index' => $idx, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
+                // If there's an uploaded file for this question, store it and attach metadata
+                try {
+                    $file = null;
+                    // prefer numeric index key
+                    if (is_array($mediaFiles) && array_key_exists($idx, $mediaFiles) && $mediaFiles[$idx]) {
+                        $file = $mediaFiles[$idx];
                     }
+                    // fallback to uid key if provided in question payload
+                    elseif (isset($q['uid']) && is_array($mediaFiles) && array_key_exists($q['uid'], $mediaFiles) && $mediaFiles[$q['uid']]) {
+                        $file = $mediaFiles[$q['uid']];
+                    }
+
+                    if ($file) {
+                        $mPath = Storage::disk('public')->putFile('question_media', $file);
+                        $mediaPath = Storage::url($mPath);
+                        $mime = $file->getClientMimeType();
+                        $mediaType = null;
+                        if (strpos($mime, 'image/') === 0)
+                            $mediaType = 'image';
+                        elseif (strpos($mime, 'audio/') === 0)
+                            $mediaType = 'audio';
+                        elseif (strpos($mime, 'video/') === 0)
+                            $mediaType = 'video';
+                        if ($mediaPath) {
+                            $qData['media_path'] = $mediaPath;
+                            $qData['media_type'] = $mediaType;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    try {
+                        \Log::error('QuestionController@bulkUpdateForQuiz file storage failed', ['quiz_id' => $quiz->id, 'index' => $idx, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+                    } catch (\Throwable $_) {
+                    }
+                }
 
                 // If the question has an id, attempt update
                 if (!empty($q['id'])) {
@@ -637,21 +689,23 @@ class QuestionController extends Controller
                     if ($existing) {
                         $existing->fill($qData);
                         $incomingIds[] = $existing->id;
-                            // If we stored media above, ensure existing question gets the path
-                            if (isset($qData['media_path'])) $existing->media_path = $qData['media_path'];
-                            if (isset($qData['media_type'])) $existing->media_type = $qData['media_type'];
+                        // If we stored media above, ensure existing question gets the path
+                        if (isset($qData['media_path']))
+                            $existing->media_path = $qData['media_path'];
+                        if (isset($qData['media_type']))
+                            $existing->media_type = $qData['media_type'];
                         $existing->save();
                         $saved[] = $existing;
                         continue;
                     }
                 }
-                    // Create new question
-                    $qData['created_by'] = $user->id;
-                    // apply auto-approve settings
-                    $siteSettings = \App\Models\SiteSetting::current();
-                    $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
-                    $qData['is_approved'] = $siteAutoQuestions;
-                    $created = Question::create($qData);
+                // Create new question
+                $qData['created_by'] = $q['created_by'] ?? $user->id;
+                // apply auto-approve settings
+                $siteSettings = \App\Models\SiteSetting::current();
+                $siteAutoQuestions = $siteSettings ? (bool) $siteSettings->auto_approve_questions : true;
+                $qData['is_approved'] = $siteAutoQuestions;
+                $created = Question::create($qData);
                 $incomingIds[] = $created->id;
                 $saved[] = $created;
             } catch (\Throwable $e) {
@@ -674,7 +728,8 @@ class QuestionController extends Controller
                     $s->load(['grade.level', 'subject', 'topic', 'quiz']);
                 }
             }
-        } catch (\Throwable $_) {}
+        } catch (\Throwable $_) {
+        }
 
         // Delete questions that were part of the quiz but not in the incoming payload
         $existingIds = $quiz->questions()->pluck('id')->all();
@@ -684,7 +739,14 @@ class QuestionController extends Controller
         }
 
         // recalc quiz difficulty
-    try { $quiz->recalcDifficulty(); } catch (\Throwable $e) { try { \Log::error('QuestionController@bulkUpdateForQuiz recalcDifficulty failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage()]); } catch (\Throwable $_) {} }
+        try {
+            $quiz->recalcDifficulty();
+        } catch (\Throwable $e) {
+            try {
+                \Log::error('QuestionController@bulkUpdateForQuiz recalcDifficulty failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage()]);
+            } catch (\Throwable $_) {
+            }
+        }
     }
 
     /**
@@ -833,7 +895,7 @@ class QuestionController extends Controller
                 // Set is_correct based on answers array for option-based question types
                 $isCorrect = false;
                 if (in_array($payloadType, ['mcq', 'image_mcq', 'audio_mcq', 'video_mcq', 'multi'], true) && is_array($answersNormalized)) {
-                    $isCorrect = in_array((string)$idx, $answersNormalized, true);
+                    $isCorrect = in_array((string) $idx, $answersNormalized, true);
                 }
 
                 return [
@@ -873,17 +935,24 @@ class QuestionController extends Controller
         }
 
         // additional fields (including level_id)
-        foreach (['tags','solution_steps','subject_id','topic_id','grade_id','level_id','for_battle','is_quiz-master_marked','explanation'] as $f) {
-            if ($request->has($f)) $question->{$f} = $request->get($f);
+        foreach (['tags', 'solution_steps', 'subject_id', 'topic_id', 'grade_id', 'level_id', 'for_battle', 'is_quiz-master_marked', 'explanation'] as $f) {
+            if ($request->has($f))
+                $question->{$f} = $request->get($f);
         }
         $question->save();
 
         if ($question->quiz_id) {
-            try { $question->quiz->recalcDifficulty(); } catch (\Exception $e) {}
+            try {
+                $question->quiz->recalcDifficulty();
+            } catch (\Exception $e) {
+            }
         }
 
         // Return with relations loaded
-        try { $question->load(['grade.level', 'subject', 'topic', 'quiz']); } catch (\Throwable $_) {}
+        try {
+            $question->load(['grade.level', 'subject', 'topic', 'quiz']);
+        } catch (\Throwable $_) {
+        }
         return response()->json(['question' => $question]);
     }
 
@@ -923,7 +992,10 @@ class QuestionController extends Controller
             $question->delete();
             return response()->json(['message' => 'Deleted'], 200);
         } catch (\Throwable $e) {
-            try { \Log::error('QuestionController@destroy failed', ['question_id' => $question->id ?? null, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); } catch (\Throwable $_) {}
+            try {
+                \Log::error('QuestionController@destroy failed', ['question_id' => $question->id ?? null, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            } catch (\Throwable $_) {
+            }
             return response()->json(['message' => 'Failed to delete'], 500);
         }
     }

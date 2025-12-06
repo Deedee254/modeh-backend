@@ -44,7 +44,10 @@ class QuizController extends Controller
 
         $v = $this->validateUpdateRequest($request);
         if ($v->fails()) {
-            try { \Log::error('QuizController@update validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]); } catch (\Throwable $_) {}
+            try {
+                \Log::error('QuizController@update validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]);
+            } catch (\Throwable $_) {
+            }
             return response()->json(['errors' => $v->errors()], 422);
         }
 
@@ -71,7 +74,7 @@ class QuizController extends Controller
     private function normalizeUpdateRequestData(Request $request): void
     {
         // Normalize empty-string inputs (common from browser selects) to null for nullable numeric fields
-        foreach (['subject_id','grade_id','timer_seconds','per_question_seconds','attempts_allowed','scheduled_at'] as $k) {
+        foreach (['subject_id', 'grade_id', 'timer_seconds', 'per_question_seconds', 'attempts_allowed', 'scheduled_at'] as $k) {
             if ($request->has($k) && $request->get($k) === '') {
                 $request->merge([$k => null]);
             }
@@ -128,7 +131,7 @@ class QuizController extends Controller
 
     private function updateBasicFields(Quiz $quiz, Request $request): void
     {
-        $fields = ['title','description','youtube_url','timer_seconds','per_question_seconds','use_per_question_timer','attempts_allowed','shuffle_questions','shuffle_answers','visibility','scheduled_at','is_draft','one_off_price'];
+        $fields = ['title', 'description', 'youtube_url', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'is_draft', 'one_off_price'];
         foreach ($fields as $f) {
             if ($request->has($f)) {
                 $quiz->{$f} = $request->get($f);
@@ -165,23 +168,32 @@ class QuizController extends Controller
             }
             // If the caller also supplied a subject_id, ensure it matches the topic's subject
             $topicSubjectId = $newTopic->subject_id ?? $newTopic->subject?->id ?? null;
-            if ($request->has('subject_id') && (string)$request->get('subject_id') !== (string)$topicSubjectId) {
+            if ($request->has('subject_id') && (string) $request->get('subject_id') !== (string) $topicSubjectId) {
                 return response()->json(['message' => 'Supplied topic does not belong to the supplied subject'], 422);
             }
             $quiz->topic_id = $newTopic->id;
             // Use explicit FK if present, otherwise fall back to loaded relation ids
-            $quiz->subject_id = $newTopic->subject_id ?? $newTopic->subject?->id ?? null;
-            $quiz->grade_id = $newTopic->subject?->grade_id ?? $newTopic->subject?->grade?->id ?? null;
-            $quiz->level_id = $newTopic->subject?->grade?->level_id ?? $newTopic->subject?->grade?->level?->id ?? null;
+            // Direct assignment from payload as single source of truth - no inference fallbacks
+            if ($request->has('subject_id'))
+                $quiz->subject_id = $request->get('subject_id');
+            if ($request->has('grade_id'))
+                $quiz->grade_id = $request->get('grade_id');
+            if ($request->has('level_id'))
+                $quiz->level_id = $request->get('level_id');
         } elseif ($request->has('subject_id')) {
             // prefer imported Subject model (avoids fully-qualified names)
-            $newSubject = Subject::with('grade')->find($request->get('subject_id'));
+            $newSubject = Subject::find($request->get('subject_id'));
             if (!$newSubject) {
                 return response()->json(['message' => 'Subject not found'], 422);
             }
             $quiz->subject_id = $newSubject->id;
-            $quiz->grade_id = $newSubject->grade_id ?? $newSubject->grade?->id ?? null;
-            $quiz->level_id = $newSubject->grade?->level_id ?? $newSubject->grade?->level?->id ?? null;
+
+            // Direct assignment from payload as single source of truth - no inference fallbacks
+            if ($request->has('grade_id'))
+                $quiz->grade_id = $request->get('grade_id');
+            if ($request->has('level_id'))
+                $quiz->level_id = $request->get('level_id');
+
             // If the new subject is different from the old one, nullify the topic
             if ($quiz->topic && (($quiz->topic->subject_id ?? $quiz->topic->subject?->id ?? null) !== $newSubject->id)) {
                 $quiz->topic_id = null;
@@ -225,7 +237,8 @@ class QuizController extends Controller
                 'questions_count' => is_array($request->questions) ? count($request->questions) : null,
                 'files' => array_keys($request->files->all()),
             ]);
-        } catch (\Throwable $_) {}
+        } catch (\Throwable $_) {
+        }
 
         // Support per-question file uploads: keys may be numeric index or question uid
         $mediaFiles = $request->file('question_media', []);
@@ -239,15 +252,17 @@ class QuizController extends Controller
                         'index' => $index,
                         'error' => $e->getMessage(),
                         'trace' => $e->getTraceAsString(),
-                        'payload_preview' => is_array($q) ? array_slice($q,0,10) : $q,
+                        'payload_preview' => is_array($q) ? array_slice($q, 0, 10) : $q,
                     ]);
-                } catch (\Throwable $_) {}
+                } catch (\Throwable $_) {
+                }
             }
         }
 
         try {
             $quiz->recalcDifficulty();
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+        }
     }
 
     private function createQuestionForUpdate(Quiz $quiz, $user, array $q, $index, array $mediaFiles, $topic): void
@@ -276,29 +291,30 @@ class QuizController extends Controller
             $mediaType = $file->getClientMimeType();
         }
 
-    $siteSettings = SiteSetting::current();
-        $siteAutoQuestions = $siteSettings ? (bool)$siteSettings->auto_approve_questions : true;
+        $siteSettings = SiteSetting::current();
+        $siteAutoQuestions = $siteSettings ? (bool) $siteSettings->auto_approve_questions : true;
         // If topic/subject information is unavailable, default to site setting
-        $questionIsApproved = $siteAutoQuestions || (($topic && $topic->subject) ? (bool)($topic->subject->auto_approve ?? false) : false);
+        $questionIsApproved = $siteAutoQuestions || (($topic && $topic->subject) ? (bool) ($topic->subject->auto_approve ?? false) : false);
 
         // Determine correct/corrects for MCQ/MULTI types when frontend provided them
         $qCorrect = null;
         $qCorrects = [];
         if (isset($q['correct']) && is_numeric($q['correct'])) {
-            $qCorrect = (int)$q['correct'];
+            $qCorrect = (int) $q['correct'];
         } elseif (is_array($answers) && isset($answers[0]) && is_numeric($answers[0])) {
             // fallback: answers[0] may contain the correct index
-            $qCorrect = (int)$answers[0];
+            $qCorrect = (int) $answers[0];
         }
         if (isset($q['corrects']) && is_array($q['corrects'])) {
             $qCorrects = array_values(array_filter(array_map(static function ($c) {
-                return is_numeric($c) ? (int)$c : null;
+                return is_numeric($c) ? (int) $c : null;
             }, $q['corrects']), static fn($v) => $v !== null));
         }
 
         $questionData = [
             'quiz_id' => $quiz->id,
-            'created_by' => $user->id,
+            // User requested to respect creation payload if present (e.g. admin masquerading or explicit set), otherwise fallback to auth user
+            'created_by' => $q['created_by'] ?? $user->id,
             'type' => $qType,
             'body' => $body,
             'explanation' => $q['explanation'] ?? null,
@@ -312,11 +328,11 @@ class QuizController extends Controller
             'marks' => isset($q['marks']) ? $q['marks'] : null,
             'is_quiz-master_marked' => true,
             'is_approved' => $questionIsApproved,
-            'is_banked' => isset($q['is_banked']) ? (bool)$q['is_banked'] : false,
-            'level_id' => $quiz->level_id,
-            'grade_id' => $quiz->grade_id, // Always use quiz's grade to ensure consistency
-            'subject_id' => $quiz->subject_id,
-            'topic_id' => $quiz->topic_id,
+            'is_banked' => isset($q['is_banked']) ? (bool) $q['is_banked'] : false,
+            'level_id' => $quiz->level_id ?? $q['level_id'],
+            'grade_id' => $quiz->grade_id ?? $q['grade_id'],
+            'subject_id' => $quiz->subject_id ?? $q['subject_id'],
+            'topic_id' => $quiz->topic_id ?? $q['topic_id'],
         ];
 
         if ($this->questionsTableHasColumn('correct')) {
@@ -327,7 +343,7 @@ class QuizController extends Controller
             $questionData['corrects'] = $qCorrects;
         }
 
-    $createdQuestion = Question::create($questionData);
+        $createdQuestion = Question::create($questionData);
         try {
             \Log::info('QuizController@update question created', [
                 'quiz_id' => $quiz->id,
@@ -337,7 +353,8 @@ class QuizController extends Controller
                 'index' => $index,
                 'payload_keys' => is_array($q) ? array_values(array_keys($q)) : null,
             ]);
-        } catch (\Throwable $_) {}
+        } catch (\Throwable $_) {
+        }
     }
 
     private function finalizeQuizUpdate(Quiz $quiz): void
@@ -358,18 +375,19 @@ class QuizController extends Controller
                     'subject_id' => $quiz->subject_id,
                 ]);
             }
-        } catch (\Throwable $_) {}
+        } catch (\Throwable $_) {
+        }
     }
 
     // Paginated list for quizzes with search and filter support
     public function index(Request $request)
     {
         $user = $request->user();
-    // Eager-load topic->subject, grade, and level so frontend can access data directly
-    // and include a questions_count for each quiz using withCount
-    $query = Quiz::query()
-      ->with(['topic.subject', 'grade', 'level'])
-      ->withCount('questions');
+        // Eager-load topic->subject, grade, and level so frontend can access data directly
+        // and include a questions_count for each quiz using withCount
+        $query = Quiz::query()
+            ->with(['topic.subject', 'grade', 'level'])
+            ->withCount('questions');
 
         // search
         if ($q = $request->get('q')) {
@@ -401,34 +419,34 @@ class QuizController extends Controller
             $query->where('grade_id', $gradeId);
         }
         if (!is_null($request->get('approved'))) {
-            $query->where('is_approved', (bool)$request->get('approved'));
+            $query->where('is_approved', (bool) $request->get('approved'));
         }
 
         $query->orderBy('created_at', 'desc');
-        $perPage = max(1, (int)$request->get('per_page', 10));
+        $perPage = max(1, (int) $request->get('per_page', 10));
         $data = $query->paginate($perPage);
-        
+
         // Add grade_name, level_name, topic_name, and subject_name to each quiz
         $data->getCollection()->transform(function ($quiz) {
             // Grade name
             $quiz->grade_name = $quiz->grade?->name ?? null;
-            
+
             // Level name (handle course_name for tertiary)
             if ($quiz->level) {
                 $quiz->level_name = ($quiz->level->name === 'Tertiary') ? ($quiz->level->course_name ?? $quiz->level->name) : $quiz->level->name;
             } else {
                 $quiz->level_name = null;
             }
-            
+
             // Topic name
             $quiz->topic_name = $quiz->topic?->name ?? null;
-            
+
             // Subject name
             $quiz->subject_name = $quiz->topic?->subject?->name ?? null;
-            
+
             return $quiz;
         });
-        
+
         return response()->json(['quizzes' => $data]);
     }
 
@@ -451,7 +469,7 @@ class QuizController extends Controller
             }
 
             if (is_numeric($value)) {
-                $request->merge([$key => (bool)(int)$value]);
+                $request->merge([$key => (bool) (int) $value]);
                 continue;
             }
 
@@ -490,7 +508,7 @@ class QuizController extends Controller
         $user = $request->user();
 
         // Normalize empty-string inputs (common from browser selects) to null for nullable numeric fields
-        foreach (['subject_id','grade_id','timer_seconds','per_question_seconds','attempts_allowed','scheduled_at'] as $k) {
+        foreach (['subject_id', 'grade_id', 'timer_seconds', 'per_question_seconds', 'attempts_allowed', 'scheduled_at'] as $k) {
             if ($request->has($k) && $request->get($k) === '') {
                 $request->merge([$k => null]);
             }
@@ -517,7 +535,10 @@ class QuizController extends Controller
                 'files' => array_keys($request->files->all()),
             ]);
         } catch (\Throwable $e) {
-            try { \Log::error('QuizController@store dump failed', ['error' => $e->getMessage()]); } catch (\Throwable $_) {}
+            try {
+                \Log::error('QuizController@store dump failed', ['error' => $e->getMessage()]);
+            } catch (\Throwable $_) {
+            }
         }
         $v = Validator::make($request->all(), [
             'topic_id' => 'required|exists:topics,id',
@@ -543,8 +564,11 @@ class QuizController extends Controller
         ]);
 
         if ($v->fails()) {
-              try { \Log::error('QuizController@store validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]); } catch (\Throwable $_) {}
-              return response()->json(['errors' => $v->errors()], 422);
+            try {
+                \Log::error('QuizController@store validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]);
+            } catch (\Throwable $_) {
+            }
+            return response()->json(['errors' => $v->errors()], 422);
         }
 
         $topic = Topic::find($request->topic_id);
@@ -558,7 +582,7 @@ class QuizController extends Controller
         $providedSubjectId = $request->get('subject_id');
         if ($providedSubjectId) {
             $topicSubjectId = $topic->subject_id ?? $topic->subject?->id ?? null;
-            if ((string)$topicSubjectId !== (string)$providedSubjectId) {
+            if ((string) $topicSubjectId !== (string) $providedSubjectId) {
                 return response()->json(['message' => 'Topic does not belong to the supplied subject'], 422);
             }
         }
@@ -573,7 +597,7 @@ class QuizController extends Controller
             }
             if ($request->has('grade_id')) {
                 $subjectGradeId = $subject->grade_id ?? $subject->grade?->id ?? null;
-                if ((string)$subjectGradeId !== (string)$request->get('grade_id')) {
+                if ((string) $subjectGradeId !== (string) $request->get('grade_id')) {
                     return response()->json(['message' => 'Subject does not belong to the supplied grade'], 422);
                 }
             }
@@ -619,10 +643,10 @@ class QuizController extends Controller
             'one_off_price' => $request->get('one_off_price') ?? null,
             'timer_seconds' => $request->timer_seconds ?? null,
             'per_question_seconds' => $request->get('per_question_seconds') ?? null,
-            'use_per_question_timer' => (bool)$request->get('use_per_question_timer', false),
+            'use_per_question_timer' => (bool) $request->get('use_per_question_timer', false),
             'attempts_allowed' => $request->get('attempts_allowed') ?? null,
-            'shuffle_questions' => (bool)$request->get('shuffle_questions', false),
-            'shuffle_answers' => (bool)$request->get('shuffle_answers', false),
+            'shuffle_questions' => (bool) $request->get('shuffle_questions', false),
+            'shuffle_answers' => (bool) $request->get('shuffle_answers', false),
             'visibility' => $request->get('visibility', 'published'),
             'scheduled_at' => $request->get('scheduled_at') ? \Carbon\Carbon::parse($request->get('scheduled_at')) : null,
             'is_approved' => false,
@@ -631,7 +655,11 @@ class QuizController extends Controller
 
         // If level_id wasn't supplied explicitly, try to infer from grade
         if (!$quiz->level_id && $quiz->grade_id) {
-            try { $quiz->level_id = Grade::find($quiz->grade_id)->level_id ?? null; $quiz->save(); } catch (\Throwable $_) {}
+            try {
+                $quiz->level_id = Grade::find($quiz->grade_id)->level_id ?? null;
+                $quiz->save();
+            } catch (\Throwable $_) {
+            }
         }
 
         // Load relations for frontend consumption (grade with level, subject, topic)
@@ -648,7 +676,8 @@ class QuizController extends Controller
                     'subject_id' => $quiz->subject_id,
                 ]);
             }
-        } catch (\Throwable $_) {}
+        } catch (\Throwable $_) {
+        }
         // If subject/topic auto-approve and settings allow, set approved
         if ($topic->subject?->auto_approve) {
             $quiz->is_approved = true;
@@ -686,24 +715,24 @@ class QuizController extends Controller
                     $mediaType = $file->getClientMimeType();
                 }
 
-                $isBanked = isset($q['is_banked']) ? (bool)$q['is_banked'] : false;
+                $isBanked = isset($q['is_banked']) ? (bool) $q['is_banked'] : false;
 
                 $qCorrect = null;
                 $qCorrects = [];
                 if (isset($q['correct']) && is_numeric($q['correct'])) {
-                    $qCorrect = (int)$q['correct'];
+                    $qCorrect = (int) $q['correct'];
                 } elseif (is_array($answers) && isset($answers[0]) && is_numeric($answers[0])) {
-                    $qCorrect = (int)$answers[0];
+                    $qCorrect = (int) $answers[0];
                 }
                 if (isset($q['corrects']) && is_array($q['corrects'])) {
                     $qCorrects = array_values(array_filter(array_map(static function ($c) {
-                        return is_numeric($c) ? (int)$c : null;
+                        return is_numeric($c) ? (int) $c : null;
                     }, $q['corrects']), static fn($v) => $v !== null));
                 }
 
                 $questionData = [
                     'quiz_id' => $quiz->id,
-                    'created_by' => $user->id,
+                    'created_by' => $q['created_by'] ?? $user->id,
                     'type' => $qType,
                     'body' => $body,
                     'explanation' => $q['explanation'] ?? null,
@@ -742,7 +771,8 @@ class QuizController extends Controller
                         'index' => $index,
                         'payload_keys' => is_array($q) ? array_values(array_keys($q)) : null,
                     ]);
-                } catch (\Throwable $_) {}
+                } catch (\Throwable $_) {
+                }
             } catch (\Throwable $e) {
                 try {
                     \Log::error('QuizController@store question failed', [
@@ -750,13 +780,17 @@ class QuizController extends Controller
                         'index' => $index,
                         'error' => $e->getMessage(),
                         'trace' => $e->getTraceAsString(),
-                        'payload_preview' => is_array($q) ? array_slice($q,0,10) : $q,
+                        'payload_preview' => is_array($q) ? array_slice($q, 0, 10) : $q,
                     ]);
-                } catch (\Throwable $_) {}
+                } catch (\Throwable $_) {
+                }
             }
         }
 
-        try { $quiz->recalcDifficulty(); } catch (\Exception $e) {}
+        try {
+            $quiz->recalcDifficulty();
+        } catch (\Exception $e) {
+        }
     }
 
     // quiz-master creates a quiz under a topic (topic must be approved)
