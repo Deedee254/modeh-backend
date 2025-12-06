@@ -5,7 +5,52 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\Level;
+use Illuminate\Support\Facades\Schema;
+use App\Models\Question;
 
+/**
+ * Class Tournament
+ *
+ * @property int $id
+ * @property string $name
+ * @property string $description
+ * @property string $status
+ * @property float|null $entry_fee
+ * @property float|null $prize_pool
+ * @property int|null $max_participants
+ * @property int|null $min_participants
+ * @property \Illuminate\Support\Carbon|null $registration_end_date
+ * @property \Illuminate\Support\Carbon|null $start_date
+ * @property \Illuminate\Support\Carbon|null $end_date
+ * @property int|null $qualifier_days
+ * @property int|null $round_delay_days
+ * @property int $battle_question_count
+ * @property int $qualifier_question_count
+ * @property int $battle_per_question_seconds
+ * @property int $qualifier_per_question_seconds
+ * @property string $qualifier_tie_breaker
+ * @property int $bracket_slots
+ * @property string $format
+ * @property array|string $rules
+ * @property array|string|null $timeline
+ * @property int|null $grade_id
+ * @property int|null $subject_id
+ * @property int|null $topic_id
+ * @property int|null $level_id
+ * @property int|null $winner_id
+ * @property int|null $sponsor_id
+ * @property string|null $sponsor_banner
+ * @property array|string|null $sponsor_details
+ * @property bool $requires_approval
+ * @property bool $is_featured
+ * @property int $created_by
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ *
+ * Relations:
+ * @property \Illuminate\Database\Eloquent\Collection|\App\Models\User[] $participants
+ * @property \Illuminate\Database\Eloquent\Collection|\App\Models\TournamentBattle[] $battles
+ */
 class Tournament extends Model
 {
     use HasFactory;
@@ -35,6 +80,18 @@ class Tournament extends Model
         'sponsor_details',
         'requires_approval',
         'is_featured',
+        // Qualifier configuration
+        'qualifier_per_question_seconds',
+        'qualifier_question_count',
+        // Battle configuration
+        'battle_per_question_seconds',
+        'battle_question_count',
+        // Tie-breaker and selection
+        'qualifier_tie_breaker',
+        'bracket_slots',
+        // Day-based scheduling
+        'qualifier_days',
+        'round_delay_days',
     ];
 
     protected $casts = [
@@ -200,18 +257,73 @@ class Tournament extends Model
         // Balanced pairing: first with last, second with second-last, etc.
         $i = 0; $j = $count - 1;
         while ($i < $j) {
-            $player1 = $p[$i];
-            $player2 = $p[$j];
+            $rawPlayer1 = $p[$i];
+            $rawPlayer2 = $p[$j];
 
-            $battle = TournamentBattle::create([
+            // To make creation idempotent and avoid duplicate swapped pairs,
+            // canonicalize the player ordering: smaller id becomes player1_id.
+            $player1 = min($rawPlayer1, $rawPlayer2);
+            $player2 = max($rawPlayer1, $rawPlayer2);
+
+            // Use firstOrNew so repeated runs won't create duplicates. If an existing record
+            // is found, we update scheduled_at/status if needed.
+            $battle = TournamentBattle::firstOrNew([
                 'tournament_id' => $this->id,
                 'round' => $round,
                 'player1_id' => $player1,
                 'player2_id' => $player2,
-                'status' => 'scheduled',
-                'scheduled_at' => $scheduledAt ? $scheduledAt : $this->start_date,
             ]);
+
+            $needsSave = false;
+            if (! $battle->exists) {
+                $battle->status = 'scheduled';
+                $battle->scheduled_at = $scheduledAt ? $scheduledAt : $this->start_date;
+                $needsSave = true;
+            } else {
+                // Ensure scheduled_at is set appropriately if missing
+                if (empty($battle->scheduled_at) && ($scheduledAt || $this->start_date)) {
+                    $battle->scheduled_at = $scheduledAt ? $scheduledAt : $this->start_date;
+                    $needsSave = true;
+                }
+            }
+
+            if ($needsSave) $battle->save();
+
             $created[] = $battle;
+            // Auto-attach questions based on tournament filters limited to battle_question_count
+            try {
+                // Only attach if no questions already attached (preserve previously attached payloads)
+                if ($battle->questions()->count() === 0) {
+                    $perBattle = $this->battle_question_count ?? 10;
+
+                    $q = Question::query();
+                    if ($this->topic_id && Schema::hasColumn('questions', 'topic_id')) $q->where('topic_id', $this->topic_id);
+                    if ($this->subject_id && Schema::hasColumn('questions', 'subject_id')) $q->where('subject_id', $this->subject_id);
+                    if ($this->grade_id && Schema::hasColumn('questions', 'grade_id')) $q->where('grade_id', $this->grade_id);
+                    if ($this->level_id) {
+                        if (Schema::hasTable('grades') && Schema::hasColumn('grades', 'level_id') && Schema::hasColumn('questions', 'grade_id')) {
+                            $gradeIds = \App\Models\Grade::where('level_id', $this->level_id)->pluck('id')->toArray();
+                            if (!empty($gradeIds)) $q->whereIn('grade_id', $gradeIds);
+                        }
+                    }
+
+                    $questions = $q->inRandomOrder()->limit(max(1, (int)$perBattle))->get();
+
+                    if ($questions->isEmpty()) {
+                        $questions = Question::inRandomOrder()->limit(max(1, (int)$perBattle))->get();
+                    }
+
+                    $attachData = [];
+                    foreach ($questions as $i => $question) {
+                        $attachData[$question->id] = ['position' => $i];
+                    }
+                    if (!empty($attachData)) {
+                        $battle->questions()->attach($attachData);
+                    }
+                }
+            } catch (\Throwable $_) {
+                // non-fatal; skip auto-attach on error
+            }
             $i++; $j--;
         }
 

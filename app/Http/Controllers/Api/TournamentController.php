@@ -7,6 +7,7 @@ use App\Models\Tournament;
 use App\Models\TournamentMatch;
 use App\Models\TournamentBattle;
 use App\Models\TournamentBattleAttempt;
+use App\Models\TournamentQualificationAttempt;
 use App\Services\AchievementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -453,27 +454,229 @@ class TournamentController extends Controller
 
     public function leaderboard(Tournament $tournament)
     {
-        // Load participants (only quizee users) and map pivot values to keys the frontend expects
-        $participants = $tournament->participants()
-            ->where('role', 'quizee')
-            ->withPivot('score', 'rank', 'completed_at')
-            ->get();
+        // Detect if tournament is in qualifier phase: upcoming status and no battles created yet
+        $hasAnyBattle = $tournament->battles()->exists();
+        $isQualifierPhase = $tournament->status === 'upcoming' && !$hasAnyBattle;
 
-        $leaderboard = $participants->map(function ($p) {
-            return [
-                'id' => $p->id,
-                'name' => $p->name,
-                'avatar_url' => $p->avatar_url ?? null,
-                'avatar' => $p->avatar ?? null,
-                // normalize pivot score to `points` for frontend convenience
-                'points' => $p->pivot->score ?? null,
-                'rank' => $p->pivot->rank ?? null,
-                'completed_at' => $p->pivot->completed_at ?? null,
-            ];
-        })->sortByDesc('points')->values();
+        if ($isQualifierPhase) {
+            // Return qualifier leaderboard from qualification attempts (sorted by score desc, then duration asc for tie-breaking)
+            $attempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+                ->orderByDesc('score')
+                ->orderBy('duration_seconds')
+                ->get();
+
+            $leaderboard = $attempts->map(function ($attempt) {
+                $user = $attempt->user;
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'avatar_url' => $user->avatar_url ?? null,
+                    'avatar' => $user->avatar ?? null,
+                    'points' => $attempt->score,
+                    'duration_seconds' => $attempt->duration_seconds,
+                    'completed_at' => $attempt->created_at,
+                ];
+            })->values();
+        } else {
+            // Return bracket leaderboard from tournament battles
+            $participants = $tournament->participants()
+                ->where('role', 'quizee')
+                ->withPivot('score', 'rank', 'completed_at')
+                ->get();
+
+            $leaderboard = $participants->map(function ($p) {
+                return [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'avatar_url' => $p->avatar_url ?? null,
+                    'avatar' => $p->avatar ?? null,
+                    'points' => $p->pivot->score ?? null,
+                    'rank' => $p->pivot->rank ?? null,
+                    'completed_at' => $p->pivot->completed_at ?? null,
+                ];
+            })->sortByDesc('points')->values();
+        }
 
         return response()->json([
             'tournament' => $tournament->only(['id', 'name', 'status']),
+            'leaderboard' => $leaderboard,
+            'is_qualifier_phase' => $isQualifierPhase
+        ]);
+    }
+
+    /**
+     * Get current user's qualification status for a tournament
+     */
+    public function qualificationStatus(Request $request, Tournament $tournament)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['qualified' => false, 'attempt' => null, 'rank' => null]);
+        }
+
+        // Check if user has submitted a qualification attempt
+        $attempt = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (! $attempt) {
+            return response()->json(['qualified' => false, 'attempt' => null, 'rank' => null]);
+        }
+
+        // Compute rank: count how many unique users have better scores or same score with faster duration
+        $betterAttempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+            ->where(function ($q) use ($attempt) {
+                $q->where('score', '>', $attempt->score)
+                    ->orWhere(function ($q2) use ($attempt) {
+                        $q2->where('score', $attempt->score)
+                            ->where('duration_seconds', '<', $attempt->duration_seconds ?? PHP_INT_MAX);
+                    });
+            })
+            ->distinct('user_id')
+            ->count('user_id');
+
+        $rank = $betterAttempts + 1;
+
+        return response()->json([
+            'qualified' => true,
+            'attempt' => [
+                'score' => $attempt->score,
+                'duration_seconds' => $attempt->duration_seconds,
+                'created_at' => $attempt->created_at
+            ],
+            'rank' => $rank,
+            'message' => "You are ranked #{$rank}"
+        ]);
+    }
+
+    /**
+     * Submit qualifier attempt (single attempt per user). Grades server-side and records duration.
+     */
+    public function qualifySubmit(Request $request, Tournament $tournament)
+    {
+        $user = $request->user();
+        if (! $user) return response()->json(['message' => 'Unauthorized'], 401);
+
+        // Check tournament window
+        $now = now();
+        if ($tournament->start_date && $now->lt($tournament->start_date)) {
+            return response()->json(['message' => 'Qualification has not started'], 400);
+        }
+        if ($tournament->end_date && $now->gt($tournament->end_date)) {
+            return response()->json(['message' => 'Qualification is closed'], 400);
+        }
+
+        // Ensure user is registered and approved
+        $participant = $tournament->participants()->where('user_id', $user->id)->first();
+        if (! $participant || ($participant->pivot->status ?? 'approved') !== 'approved') {
+            return response()->json(['message' => 'You must be registered and approved to take this qualifier'], 403);
+        }
+
+        // Single attempt policy: prevent a second attempt
+        $existing = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+            ->where('user_id', $user->id)
+            ->first();
+        if ($existing) {
+            return response()->json(['message' => 'Only a single qualification attempt is allowed'], 400);
+        }
+
+        $data = $request->validate([
+            'answers' => 'required|array',
+            'answers.*.question_id' => 'required|integer',
+            'answers.*.answer' => 'nullable',
+            'duration_seconds' => 'nullable|integer|min:0'
+        ]);
+
+        $questions = $tournament->questions()->get()->keyBy('id');
+
+        $computedScore = 0.0;
+        $answersToStore = [];
+
+        foreach ($data['answers'] as $ans) {
+            $qId = (int) ($ans['question_id'] ?? 0);
+            $given = $ans['answer'] ?? null;
+
+            if (! $questions->has($qId)) {
+                return response()->json(['message' => "Question {$qId} not found for this tournament"], 400);
+            }
+
+            $q = $questions->get($qId);
+            $marks = $q->marks ?? 1;
+
+            $points = 0;
+            if ($q->type === 'mcq') {
+                if (! is_null($q->correct) && (string) $q->correct === (string) $given) {
+                    $points = $marks;
+                } elseif (is_string($given)) {
+                    $idx = $q->findOptionIndexByText($given);
+                    if (! is_null($idx) && (string) $idx === (string) ($q->correct ?? '')) {
+                        $points = $marks;
+                    }
+                }
+            } elseif ($q->type === 'multi') {
+                $givenArr = is_array($given) ? $given : (is_string($given) ? json_decode($given, true) : null);
+                if (is_array($givenArr) && is_array($q->corrects)) {
+                    $corrects = array_map('strval', $q->corrects);
+                    $givenStr = array_map('strval', $givenArr);
+                    sort($corrects); sort($givenStr);
+                    if ($corrects === $givenStr) {
+                        $points = $marks;
+                    }
+                }
+            } else {
+                if (! empty($q->answers)) {
+                    $expected = $q->answers;
+                    if (is_string($given) && in_array($given, (array) $expected, true)) {
+                        $points = $marks;
+                    }
+                }
+            }
+
+            $answersToStore[] = [
+                'question_id' => $qId,
+                'answer' => is_array($given) ? $given : (string) ($given ?? ''),
+                'points' => round((float) $points, 2)
+            ];
+
+            $computedScore += (float) $points;
+        }
+
+        $attempt = TournamentQualificationAttempt::create([
+            'tournament_id' => $tournament->id,
+            'user_id' => $user->id,
+            'score' => round($computedScore, 2),
+            'answers' => $answersToStore,
+            'duration_seconds' => $data['duration_seconds'] ?? null
+        ]);
+
+        // Update participant pivot score so leaderboard endpoints reflect qualifier standings
+        try {
+            $tournament->participants()->updateExistingPivot($user->id, [
+                'score' => $attempt->score,
+                'completed_at' => now()
+            ]);
+        } catch (\Exception $_) {
+            // non-fatal; continue
+        }
+
+        // Build a small qualifier leaderboard (top 10) to return context
+        $leaderboard = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+            ->orderByDesc('score')
+            ->orderBy('duration_seconds')
+            ->limit(10)
+            ->get()
+            ->map(function($a) {
+                return [
+                    'user_id' => $a->user_id,
+                    'score' => $a->score,
+                    'duration_seconds' => $a->duration_seconds,
+                    'created_at' => $a->created_at
+                ];
+            });
+
+        return response()->json([
+            'message' => 'Qualification attempt recorded',
+            'attempt' => $attempt,
             'leaderboard' => $leaderboard
         ]);
     }

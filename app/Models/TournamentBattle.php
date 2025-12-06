@@ -8,6 +8,33 @@ use App\Events\Tournament\BattleCompleted;
 use App\Events\Tournament\BattleForfeited;
 use App\Events\Tournament\BattleCancelled;
 
+/**
+ * Class TournamentBattle
+ *
+ * @property int $id
+ * @property int $tournament_id
+ * @property int $round
+ * @property int $player1_id
+ * @property int $player2_id
+ * @property int|null $winner_id
+ * @property string $status
+ * @property float|null $player1_score
+ * @property float|null $player2_score
+ * @property \Illuminate\Support\Carbon|null $scheduled_at
+ * @property \Illuminate\Support\Carbon|null $started_at
+ * @property \Illuminate\Support\Carbon|null $completed_at
+ * @property \Illuminate\Support\Carbon|null $timeout_at
+ * @property int|null $battle_duration
+ * @property bool $is_active
+ * @property bool $can_start
+ * @property int|null $time_remaining
+ * @property bool $has_timed_out
+ *
+ * Relations:
+ * @property \App\Models\User $player1
+ * @property \App\Models\User $player2
+ * @property \Illuminate\Database\Eloquent\Collection|\App\Models\Question[] $questions
+ */
 class TournamentBattle extends Model
 {
     protected $fillable = [

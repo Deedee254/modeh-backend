@@ -15,14 +15,17 @@ use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Models\Quiz;
 use App\Services\AchievementService;
+use App\Services\QuestionMarkingService;
 
 class BattleController extends Controller
 {
     protected $achievementService;
+    protected $questionMarkingService;
 
     public function __construct(AchievementService $achievementService)
     {
         $this->achievementService = $achievementService;
+        $this->questionMarkingService = new QuestionMarkingService();
     }
     public function store(Request $request)
     {
@@ -422,16 +425,10 @@ class BattleController extends Controller
                 $q = $questionMap->get($qid) ?? Question::find($qid);
                 if (!$q) return;
 
-                $isCorrect = false;
-                // Normalize correct answers to an array regardless of how they are stored
+                // Use shared QuestionMarkingService to determine correctness (handles indices/texts/arrays)
+                $isCorrect = $this->questionMarkingService->isAnswerCorrect($selected, $q->answers ?? [], $q);
+                // Keep the raw correct answers for payload (normalizeAnswers preserves original shape)
                 $correctAnswers = $this->normalizeAnswers($q->answers);
-                if (is_array($selected)) {
-                    // Compare arrays by values (order-insensitive if both are simple indexed arrays)
-                    $isCorrect = array_values($selected) == array_values($correctAnswers);
-                } else {
-                    // Ensure $correctAnswers is an array and use strict in_array to avoid type coercion
-                    $isCorrect = is_array($correctAnswers) ? in_array($selected, $correctAnswers, true) : false;
-                }
 
                 // Persist or update the per-question submission
                 BattleSubmission::updateOrCreate([
@@ -581,14 +578,8 @@ class BattleController extends Controller
                 $q = $questionMap->get($s->question_id) ?? Question::find($s->question_id);
                 if (!$q) continue;
 
-                $correctAnswers = $this->normalizeAnswers($q->answers);
-
-                $selected = $s->selected;
-                if (is_array($selected)) {
-                    $isCorrect = array_values($selected) == array_values($correctAnswers);
-                } else {
-                    $isCorrect = in_array($selected, $correctAnswers);
-                }
+                // Use shared service for correctness
+                $isCorrect = $this->questionMarkingService->isAnswerCorrect($s->selected, $q->answers ?? [], $q);
 
                 $s->correct_flag = $isCorrect;
                 $s->save();
@@ -698,13 +689,8 @@ class BattleController extends Controller
                 $q = $questionMap->get($qid) ?? Question::find($qid);
                 if (!$q) continue;
 
-                $isCorrect = false;
-                $correctAnswers = $this->normalizeAnswers($q->answers);
-                if (is_array($selected)) {
-                    $isCorrect = array_values($selected) == array_values($correctAnswers);
-                } else {
-                    $isCorrect = in_array($selected, $correctAnswers);
-                }
+                // Use shared QuestionMarkingService for solo completion mark
+                $isCorrect = $this->questionMarkingService->isAnswerCorrect($selected, $q->answers ?? [], $q);
 
                 BattleSubmission::updateOrCreate([
                     'battle_id' => $battle->getKey(),
@@ -813,11 +799,37 @@ class BattleController extends Controller
             $submissionsByQuestion[$s->question_id][$s->user_id] = $s;
         }
 
+        // Detect whether each participant has any real submissions. If not, we'll synthesize
+        // a deterministic bot response for the missing side in the result payload (do NOT persist).
+        $opponentId = $battle->opponent_id;
+        $initiatorId = $battle->initiator_id;
+        $opponentHasSubmissions = false;
+        $initiatorHasSubmissions = false;
+        foreach ($subs as $s) {
+            if ($s->user_id && $opponentId && intval($s->user_id) === intval($opponentId)) { $opponentHasSubmissions = true; }
+            if ($s->user_id && $initiatorId && intval($s->user_id) === intval($initiatorId)) { $initiatorHasSubmissions = true; }
+            if ($opponentHasSubmissions && $initiatorHasSubmissions) break;
+        }
+
         // If battle not completed yet, still return present points if any
         $initiatorPoints = $battle->initiator_points ?? 0;
         $opponentPoints = $battle->opponent_points ?? 0;
 
         $questions = [];
+
+        // If opponent has no submissions, we'll synthesize answers in the response (not persisted).
+        $botAccuracy = 0.6;
+        try {
+            $settings = is_array($battle->settings) ? $battle->settings : (array) ($battle->settings ?? []);
+            if (isset($settings['bot_accuracy'])) $botAccuracy = floatval($settings['bot_accuracy']);
+        } catch (\Throwable $_) {}
+
+        $seed = crc32($battle->uuid ?? $battle->id);
+    $synthOpponentPoints = 0;
+    $synthInitiatorPoints = 0;
+    $computedInitiatorPoints = 0;
+    $computedOpponentPoints = 0;
+
         foreach ($battle->questions as $q) {
             $qid = $q->id;
             $initiatorSub = $submissionsByQuestion[$qid][$battle->initiator_id] ?? null;
@@ -825,21 +837,104 @@ class BattleController extends Controller
 
             $correctAnswers = $this->normalizeAnswers($q->answers);
 
+            // Prepare initiator payload: use real submission if present, otherwise synthesize
+            $initiatorPayload = null;
+            if (!$initiatorHasSubmissions) {
+                // synthesize initiator answer deterministically
+                $ri = (crc32($seed . 'i|' . $qid) % 100) / 100;
+                $isCorrectI = $ri < $botAccuracy;
+                if ($isCorrectI) {
+                    $selectedI = $correctAnswers;
+                } else {
+                    $optsI = $q->getAllOptionTexts();
+                    $selectedI = null;
+                    foreach ($optsI as $opt) {
+                        if (!in_array($opt, (array) $correctAnswers, true)) { $selectedI = $opt; break; }
+                    }
+                }
+                $perI = intval($settings['time_per_question'] ?? $battle->time_per_question ?? 20);
+                $tti = 1 + (crc32($seed . ':ti:' . $qid) % max(1, $perI));
+                $initiatorPayload = [
+                    'selected' => $selectedI,
+                    'time_taken' => $tti,
+                    'correct_flag' => $isCorrectI,
+                ];
+                if ($isCorrectI) $synthInitiatorPoints++;
+            } else {
+                if ($initiatorSub) {
+                    $initiatorPayload = [
+                        'selected' => $initiatorSub->selected,
+                        'time_taken' => $initiatorSub->time_taken,
+                        'correct_flag' => (bool) $initiatorSub->correct_flag,
+                    ];
+                    if ($initiatorSub->correct_flag) $computedInitiatorPoints++;
+                }
+            }
+
+            // Prepare opponent payload: use real submission if present, otherwise synthesize
+            $opponentPayload = null;
+            if (!$opponentHasSubmissions) {
+                // deterministic pseudo-random using crc32
+                $r = (crc32($seed . '|' . $qid) % 100) / 100;
+                $isCorrect = $r < $botAccuracy;
+
+                // choose a selected payload: prefer the canonical correct answers when correct
+                if ($isCorrect) {
+                    $selected = $correctAnswers;
+                } else {
+                    // pick a first non-correct option text if available
+                    $opts = $q->getAllOptionTexts();
+                    $selected = null;
+                    foreach ($opts as $opt) {
+                        if (!in_array($opt, (array) $correctAnswers, true)) { $selected = $opt; break; }
+                    }
+                }
+
+                $per = intval($settings['time_per_question'] ?? $battle->time_per_question ?? 20);
+                $tt = 1 + (crc32($seed . ':t:' . $qid) % max(1, $per));
+
+                $opponentPayload = [
+                    'selected' => $selected,
+                    'time_taken' => $tt,
+                    'correct_flag' => $isCorrect,
+                ];
+
+                if ($isCorrect) $synthOpponentPoints++;
+            } else {
+                // Use real opponent submission if present
+                if ($opponentSub) {
+                    $opponentPayload = [
+                        'selected' => $opponentSub->selected,
+                        'time_taken' => $opponentSub->time_taken,
+                        'correct_flag' => (bool) $opponentSub->correct_flag,
+                    ];
+                    if ($opponentSub->correct_flag) $computedOpponentPoints++;
+                } else {
+                    $opponentPayload = null;
+                }
+            }
             $questions[] = [
                 'question_id' => $qid,
                 'body' => $q->body,
-                'initiator' => $initiatorSub ? [
-                    'selected' => $initiatorSub->selected,
-                    'time_taken' => $initiatorSub->time_taken,
-                    'correct_flag' => (bool) $initiatorSub->correct_flag,
-                ] : null,
-                'opponent' => $opponentSub ? [
-                    'selected' => $opponentSub->selected,
-                    'time_taken' => $opponentSub->time_taken,
-                    'correct_flag' => (bool) $opponentSub->correct_flag,
-                ] : null,
+                'initiator' => $initiatorPayload,
+                'opponent' => $opponentPayload,
                 'correct' => $correctAnswers,
             ];
+        }
+
+        // Decide points to show in the result payload. Prefer persisted values, fall back to computed/simulated values.
+        // Decide points to show in the result payload. Prefer persisted values,
+        // fall back to computed (from real submissions) or synthesized values.
+        if ($battle->initiator_points !== null) {
+            $initiatorPoints = $battle->initiator_points;
+        } else {
+            $initiatorPoints = $initiatorHasSubmissions ? $computedInitiatorPoints : $synthInitiatorPoints;
+        }
+
+        if ($battle->opponent_points !== null) {
+            $opponentPoints = $battle->opponent_points;
+        } else {
+            $opponentPoints = $opponentHasSubmissions ? $computedOpponentPoints : $synthOpponentPoints;
         }
 
         $result = [

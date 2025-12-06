@@ -242,8 +242,8 @@ class DailyChallengeController extends Controller
                     'daily_challenge_submissions.user_id',
                     'daily_challenge_submissions.score',
                     'daily_challenge_submissions.completed_at',
-                    'users.name as user_name',
-                    'users.avatar as user_avatar',
+                        'users.name as user_name',
+                        'users.avatar_url as user_avatar',
                     'grades.name as grade_name',
                     'levels.name as level_name'
                 )
@@ -302,8 +302,12 @@ class DailyChallengeController extends Controller
                 ]
             ]);
         } catch (\Exception $e) {
+            // Log full exception for server-side inspection
             \Log::error('Error fetching daily challenge leaderboard: ' . $e->getMessage());
-            return response()->json([
+
+            // Include the exception message in the JSON response to aid debugging during development.
+            // In production you may want to remove the exception details to avoid leaking internals.
+            $payload = [
                 'message' => 'Error fetching leaderboard data',
                 'data' => [],
                 'meta' => [
@@ -311,8 +315,15 @@ class DailyChallengeController extends Controller
                     'last_page' => 1,
                     'per_page' => 20,
                     'total' => 0,
-                ]
-            ], 500);
+                ],
+                'error' => $e->getMessage(),
+            ];
+
+            if (app()->environment('local') || app()->environment('testing')) {
+                $payload['trace'] = $e->getTraceAsString();
+            }
+
+            return response()->json($payload, 500);
         }
     }
 

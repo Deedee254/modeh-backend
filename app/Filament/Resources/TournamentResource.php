@@ -9,8 +9,6 @@ use Filament\Forms;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
 use Filament\Actions\Action;
-use Filament\Schemas\Components\Utilities\Get;
-use Filament\Schemas\Components\Utilities\Set;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -48,11 +46,11 @@ class TournamentResource extends Resource
                     Forms\Components\TextInput::make('sponsor_banner_url')
                         ->url()
                         ->maxLength(255)
-                        ->visible(fn (Get $get): bool => filled($get('sponsor_id'))),
+                        ->visible(fn ($get): bool => filled($get('sponsor_id'))),
 
                     Forms\Components\Textarea::make('sponsor_message')
                         ->maxLength(65535)
-                        ->visible(fn (Get $get): bool => filled($get('sponsor_id'))),
+                        ->visible(fn ($get): bool => filled($get('sponsor_id'))),
 
                     Grid::make(2)
                         ->schema([
@@ -88,7 +86,7 @@ class TournamentResource extends Resource
                         ->searchable()
                         ->preload()
                         ->live()
-                        ->afterStateUpdated(function (Set $set) {
+                        ->afterStateUpdated(function ($set) {
                             $set('grade_id', null);
                             $set('subject_id', null);
                             $set('topic_id', null);
@@ -96,7 +94,7 @@ class TournamentResource extends Resource
                         }),
 
                     Forms\Components\Select::make('grade_id')
-                        ->relationship('grade', 'display_name', function (Builder $query, Get $get) {
+                        ->relationship('grade', 'display_name', function (Builder $query, $get) {
                             $levelId = $get('level_id');
                             if ($levelId) {
                                 $query->where('level_id', $levelId);
@@ -106,14 +104,14 @@ class TournamentResource extends Resource
                         ->searchable()
                         ->preload()
                         ->live()
-                        ->afterStateUpdated(function (Set $set) {
+                        ->afterStateUpdated(function ($set) {
                             $set('subject_id', null);
                             $set('topic_id', null);
                             $set('questions', []);
                         }),
 
                     Forms\Components\Select::make('subject_id')
-                        ->relationship('subject', 'name', function (Builder $query, Get $get) {
+                        ->relationship('subject', 'name', function (Builder $query, $get) {
                             $gradeId = $get('grade_id');
                             if ($gradeId) {
                                 $query->where('grade_id', $gradeId);
@@ -123,13 +121,13 @@ class TournamentResource extends Resource
                         ->searchable()
                         ->preload()
                         ->live()
-                        ->afterStateUpdated(function (Set $set) {
+                        ->afterStateUpdated(function ($set) {
                             $set('topic_id', null);
                             $set('questions', []);
                         }),
 
                     Forms\Components\Select::make('topic_id')
-                        ->relationship('topic', 'name', function (Builder $query, Get $get) {
+                        ->relationship('topic', 'name', function (Builder $query, $get) {
                             $subjectId = $get('subject_id');
                             if ($subjectId) {
                                 $query->where('subject_id', $subjectId);
@@ -138,11 +136,11 @@ class TournamentResource extends Resource
                         ->searchable()
                         ->preload()
                         ->live()
-                        ->afterStateUpdated(fn (Set $set) => $set('questions', [])),
+                        ->afterStateUpdated(fn ($set) => $set('questions', [])),
 
                     Forms\Components\Select::make('questions')
                         ->multiple()
-                        ->relationship('questions', 'body', function (Builder $query, Get $get) {
+                        ->relationship('questions', 'body', function (Builder $query, $get) {
                             if ($get('grade_id')) $query->where('grade_id', $get('grade_id'));
                             if ($get('subject_id')) $query->where('subject_id', $get('subject_id'));
                             if ($get('topic_id')) $query->where('topic_id', $get('topic_id'));
@@ -158,14 +156,15 @@ class TournamentResource extends Resource
                             ->icon('heroicon-o-circle-stack')
                             ->modalHeading('Browse Question Bank')
                             ->modalWidth('7xl')
-                            ->modalContent(function (Get $get) {
-                                $filters = [
-                                    'level_id' => $get('level_id'),
-                                    'grade_id' => $get('grade_id'),
-                                    'subject_id' => $get('subject_id'),
-                                    'topic_id' => $get('topic_id'),
-                                ];
-                                return view('filament.modals.bank-questions-table', ['filters' => $filters]);
+                            ->modalContent(function ($get) {
+                                return view('filament.modals.bank-questions-table', [
+                                    'filters' => [
+                                        'level_id' => $get('level_id'),
+                                        'grade_id' => $get('grade_id'),
+                                        'subject_id' => $get('subject_id'),
+                                        'topic_id' => $get('topic_id'),
+                                    ]
+                                ]);
                             })
                             ->modalSubmitAction(false) // We handle selection via JS events
                             ->modalCancelAction(false)
@@ -185,7 +184,7 @@ class TournamentResource extends Resource
                                     ->visibility('private')
                                     ->helperText('Upload a CSV file with columns: type,text,option1,option2,option3,option4,answers,marks,difficulty,explanation,youtube_url,media'),
                             ])
-                            ->action(function (array $data, Set $set, Get $get) {
+                            ->action(function (array $data, $set, $get) {
                                 $uploadedFileName = $data['file'] ?? null;
                                 
                                 if (!$uploadedFileName) {
@@ -365,7 +364,7 @@ class TournamentResource extends Resource
 
                     Forms\Components\Placeholder::make('total_questions')
                         ->label('Selected Questions')
-                        ->content(fn (Get $get): string => sprintf('%d questions', count($get('questions') ?? []))),
+                        ->content(fn ($get): string => sprintf('%d questions', count($get('questions') ?? []))),
 
                     Forms\Components\TagsInput::make('rules')
                         ->placeholder('Add a rule')
@@ -373,6 +372,68 @@ class TournamentResource extends Resource
                         ->helperText('Press Enter or Tab to add a rule'),
                 ])
                 ->columns(1),
+
+            Section::make('Tournament Configuration')
+                ->description('Configure timing, question counts, and bracket settings')
+                ->schema([
+                    Grid::make(2)->schema([
+                        Grid::make(1)->schema([
+                            Forms\Components\TextInput::make('qualifier_per_question_seconds')
+                                ->label('Qualifier: Seconds per Question')
+                                ->numeric()
+                                ->minValue(5)
+                                ->maxValue(300)
+                                ->default(30)
+                                ->helperText('Time allowed per question in qualifier phase (5-300 seconds)'),
+
+                            Forms\Components\TextInput::make('qualifier_question_count')
+                                ->label('Qualifier: Number of Questions')
+                                ->numeric()
+                                ->minValue(1)
+                                ->maxValue(100)
+                                ->default(10)
+                                ->helperText('How many questions in qualifier phase (1-100)'),
+
+                            Forms\Components\Select::make('qualifier_tie_breaker')
+                                ->label('Qualifier: Tie-Breaker Rule')
+                                ->options([
+                                    'score_then_duration' => 'Score (higher) then Speed (faster)',
+                                    'duration' => 'Speed (faster only)',
+                                ])
+                                ->default('score_then_duration')
+                                ->helperText('How to rank participants with same scores'),
+                        ]),
+
+                        Grid::make(1)->schema([
+                            Forms\Components\TextInput::make('battle_per_question_seconds')
+                                ->label('Battle: Seconds per Question')
+                                ->numeric()
+                                ->minValue(5)
+                                ->maxValue(300)
+                                ->default(30)
+                                ->helperText('Time allowed per question in battle phase (5-300 seconds)'),
+
+                            Forms\Components\TextInput::make('battle_question_count')
+                                ->label('Battle: Number of Questions')
+                                ->numeric()
+                                ->minValue(1)
+                                ->maxValue(100)
+                                ->default(10)
+                                ->helperText('How many questions per battle (1-100)'),
+
+                            Forms\Components\Select::make('bracket_slots')
+                                ->label('Tournament Bracket Size')
+                                ->options([
+                                    2 => '2 Players (1 Battle)',
+                                    4 => '4 Players (2 Semifinals → 1 Final)',
+                                    8 => '8 Players (4 Quarters → 2 Semis → 1 Final)',
+                                ])
+                                ->default(8)
+                                ->helperText('Top N from qualifier will advance to bracket'),
+                        ]),
+                    ]),
+                ])
+                ->collapsible(),
         ]);
     }
 

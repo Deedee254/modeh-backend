@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
 use App\Services\TournamentQuestionService;
 use Illuminate\Http\UploadedFile;
+use App\Models\TournamentQualificationAttempt;
 
 class AdminTournamentController extends Controller
 {
@@ -23,6 +24,19 @@ class AdminTournamentController extends Controller
         $this->tournamentQuestionService = $tournamentQuestionService;
     }
 
+    // Helper to safely read status without triggering static analyzer warnings
+    private function getTournamentStatus(Tournament $tournament): string
+    {
+        return (string) $tournament->getAttribute('status');
+    }
+
+    // Helper to safely set status and optionally persist immediately
+    private function setTournamentStatus(Tournament $tournament, string $status, bool $save = true): void
+    {
+        $tournament->setAttribute('status', $status);
+        if ($save) $tournament->save();
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -31,16 +45,50 @@ class AdminTournamentController extends Controller
             'start_date' => 'required|date',
             'end_date' => 'required|date|after:start_date',
             'prize_pool' => 'nullable|numeric|min:0',
-            'max_participants' => 'nullable|integer|min:2|max:8',
+            'max_participants' => 'nullable|integer|min:2|max:1000',
             'entry_fee' => 'nullable|numeric|min:0',
             'rules' => 'nullable|array',
             'subject_id' => 'required|exists:subjects,id',
             'topic_id' => 'nullable|exists:topics,id',
-            'grade_id' => 'required|exists:grades,id'
+            'grade_id' => 'required|exists:grades,id',
+            // Qualifier configuration
+            'qualifier_per_question_seconds' => 'nullable|integer|min:5|max:300',
+            'qualifier_question_count' => 'nullable|integer|min:1|max:100',
+            // Qualifier days
+            'qualifier_days' => 'nullable|integer|min:0|max:365',
+            // Battle configuration
+            'battle_per_question_seconds' => 'nullable|integer|min:5|max:300',
+            'battle_question_count' => 'nullable|integer|min:1|max:100',
+            // Tie-breaker rule
+            'qualifier_tie_breaker' => 'nullable|in:duration,score_then_duration',
+            // Bracket slots
+            'bracket_slots' => 'nullable|integer|in:2,4,8',
+            // Round delay in days between rounds
+            'round_delay_days' => 'nullable|integer|min:0|max:365',
         ]);
 
         $data['created_by'] = $request->user()->id;
         $data['status'] = 'upcoming';
+        
+        // Set defaults if not provided
+        $data['qualifier_per_question_seconds'] = $data['qualifier_per_question_seconds'] ?? 30;
+        $data['qualifier_question_count'] = $data['qualifier_question_count'] ?? 10;
+        $data['battle_per_question_seconds'] = $data['battle_per_question_seconds'] ?? 30;
+        $data['battle_question_count'] = $data['battle_question_count'] ?? 10;
+        $data['qualifier_tie_breaker'] = $data['qualifier_tie_breaker'] ?? 'score_then_duration';
+        $data['bracket_slots'] = $data['bracket_slots'] ?? 8;
+        $data['qualifier_days'] = array_key_exists('qualifier_days', $data) ? $data['qualifier_days'] : null;
+        $data['round_delay_days'] = array_key_exists('round_delay_days', $data) ? $data['round_delay_days'] : null;
+
+        // If qualifier_days provided and start_date provided, set end_date automatically when not explicitly provided
+        if (!isset($data['end_date']) && isset($data['start_date']) && $data['qualifier_days']) {
+            try {
+                $sd = \Illuminate\Support\Carbon::parse($data['start_date']);
+                $data['end_date'] = $sd->copy()->addDays((int) $data['qualifier_days']);
+            } catch (\Throwable $_) {
+                // ignore parse errors
+            }
+        }
 
         $tournament = Tournament::create($data);
 
@@ -55,16 +103,38 @@ class AdminTournamentController extends Controller
             'start_date' => 'sometimes|date',
             'end_date' => 'sometimes|date|after:start_date',
             'prize_pool' => 'nullable|numeric|min:0',
-            'max_participants' => 'nullable|integer|min:2|max:8',
+            'max_participants' => 'nullable|integer|min:2|max:1000',
             'entry_fee' => 'nullable|numeric|min:0',
             'rules' => 'nullable|array',
             'status' => 'sometimes|in:upcoming,active,completed',
             'subject_id' => 'sometimes|exists:subjects,id',
             'topic_id' => 'nullable|exists:topics,id',
-            'grade_id' => 'sometimes|exists:grades,id'
+            'grade_id' => 'sometimes|exists:grades,id',
+            // Qualifier configuration
+            'qualifier_per_question_seconds' => 'nullable|integer|min:5|max:300',
+            'qualifier_question_count' => 'nullable|integer|min:1|max:100',
+            // Qualifier days
+            'qualifier_days' => 'nullable|integer|min:0|max:365',
+            // Battle configuration
+            'battle_per_question_seconds' => 'nullable|integer|min:5|max:300',
+            'battle_question_count' => 'nullable|integer|min:1|max:100',
+            // Tie-breaker rule
+            'qualifier_tie_breaker' => 'nullable|in:duration,score_then_duration',
+            // Bracket slots
+            'bracket_slots' => 'nullable|integer|in:2,4,8',
+            // Round delay in days between rounds
+            'round_delay_days' => 'nullable|integer|min:0|max:365',
         ]);
 
         $tournament->update($data);
+
+        // If qualifier_days and start_date provided and end_date not explicitly set, compute end_date
+        if (! $tournament->end_date && $tournament->start_date && isset($data['qualifier_days']) && $data['qualifier_days']) {
+            try {
+                $tournament->end_date = \Illuminate\Support\Carbon::parse($tournament->start_date)->addDays((int) $data['qualifier_days']);
+                $tournament->save();
+            } catch (\Throwable $_) {}
+        }
 
         return response()->json($tournament);
     }
@@ -99,7 +169,7 @@ class AdminTournamentController extends Controller
         // If no explicit participant ids provided, use registered participants
         if (!is_array($participantIds) || empty($participantIds)) {
             // Only generate if tournament is upcoming
-            if ($tournament->status !== 'upcoming') {
+            if ($this->getTournamentStatus($tournament) !== 'upcoming') {
                 return response()->json(['message' => 'Can only generate matches for upcoming tournaments'], 400);
             }
 
@@ -117,7 +187,7 @@ class AdminTournamentController extends Controller
         }
 
         // If this is the first round for an upcoming tournament, randomize entry order
-        if ($round === 1 && $tournament->status === 'upcoming') {
+        if ($round === 1 && $this->getTournamentStatus($tournament) === 'upcoming') {
             shuffle($participantIds);
         }
 
@@ -125,9 +195,8 @@ class AdminTournamentController extends Controller
         $created = $tournament->createBattlesForRound($participantIds, $round, $scheduledAt);
 
         // Activate tournament if this is the first round
-        if ($round === 1 && $tournament->status === 'upcoming') {
-            $tournament->status = 'active';
-            $tournament->save();
+        if ($round === 1 && $this->getTournamentStatus($tournament) === 'upcoming') {
+            $this->setTournamentStatus($tournament, 'active', true);
         }
 
         return response()->json([
@@ -135,6 +204,51 @@ class AdminTournamentController extends Controller
             'created' => count($created),
             'battles' => $tournament->battles()->where('round', $round)->with(['player1', 'player2'])->get()
         ]);
+    }
+
+    /**
+     * Finalize qualification: select top N participants from qualification attempts and generate first-round matches
+     */
+    public function finalizeQualification(Request $request, Tournament $tournament)
+    {
+        // Only allow for upcoming tournaments
+        if ($this->getTournamentStatus($tournament) !== 'upcoming') {
+            return response()->json(['message' => 'Can only finalize qualification for upcoming tournaments'], 400);
+        }
+
+        // Fetch all approved participants who submitted an attempt
+        $approvedIds = $tournament->participants()->wherePivot('status', 'approved')->get()->pluck('id')->toArray();
+
+        $attempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+            ->whereIn('user_id', $approvedIds)
+            ->orderByDesc('score')
+            ->orderBy('duration_seconds')
+            ->get();
+
+        if ($attempts->isEmpty()) {
+            return response()->json(['message' => 'No qualification attempts found'], 400);
+        }
+
+        // Determine number of slots: use bracket_slots config, default to 8
+        $slots = $tournament->bracket_slots ?? 8;
+
+        // Select top unique users in order
+        $selected = $attempts->groupBy('user_id')->map(function($g) { return $g->first(); })->values();
+        $selected = $selected->take($slots);
+        $participantIds = $selected->pluck('user_id')->toArray();
+
+        if (count($participantIds) === 0) {
+            return response()->json(['message' => 'No eligible participants selected'], 400);
+        }
+
+        if (count($participantIds) === 1) {
+            $tournament->finalizeWithWinner((int) $participantIds[0]);
+            return response()->json(['message' => 'Tournament finalized with single participant']);
+        }
+
+        // Call existing generateMatches flow by providing explicit participant ids
+        $request->merge(['participant_ids' => $participantIds, 'round' => 1]);
+        return $this->generateMatches($request, $tournament);
     }
 
     public function destroy(Tournament $tournament)
