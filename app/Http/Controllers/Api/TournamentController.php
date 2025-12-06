@@ -72,6 +72,43 @@ class TournamentController extends Controller
         ]);
     }
 
+    /**
+     * Get all battles for a tournament (paginated)
+     */
+    public function battles(Tournament $tournament, Request $request)
+    {
+        // Filter by round if specified
+        $query = $tournament->battles();
+        
+        if ($request->has('round')) {
+            $query->where('round', $request->get('round'));
+        }
+
+        // Filter by status if specified
+        if ($request->has('status')) {
+            $query->where('status', $request->get('status'));
+        }
+
+        // Load related data
+        $battles = $query
+            ->with(['player1', 'player2', 'winner', 'questions'])
+            ->orderBy('round', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->paginate($request->get('per_page', 20));
+
+        return response()->json([
+            'ok' => true,
+            'data' => $battles->items(),
+            'pagination' => [
+                'total' => $battles->total(),
+                'count' => $battles->count(),
+                'per_page' => $battles->perPage(),
+                'current_page' => $battles->currentPage(),
+                'last_page' => $battles->lastPage(),
+            ]
+        ]);
+    }
+
     public function join(Request $request, Tournament $tournament)
     {
         $user = $request->user();
