@@ -505,9 +505,58 @@ class BattleController extends Controller
 
         $scorePercent = $total ? round($correct / $total * 100, 1) : 0;
 
+        // Allow client to provide best-effort scores (e.g. frontend computed) and optionally persist them.
+        // This enables bot matches to submit an opponent_score for display without necessarily persisting it.
+        $clientScore = $request->input('score', null);
+        $clientOpponentScore = $request->input('opponent_score', null);
+        $persistInitiator = $request->boolean('persist_initiator', true);
+        $persistOpponent = $request->boolean('persist_opponent', true);
+
+        // If marking was deferred, accept client scores and persist them only when requested.
+        if ($defer && ($clientScore !== null || $clientOpponentScore !== null)) {
+            $shouldSave = false;
+            if ($clientScore !== null && $persistInitiator) {
+                $battle->initiator_points = intval($clientScore);
+                $shouldSave = true;
+            }
+            if ($clientOpponentScore !== null && $persistOpponent) {
+                $battle->opponent_points = intval($clientOpponentScore);
+                $shouldSave = true;
+            }
+
+            // If both sides now have points, determine winner and complete the battle
+            if (!is_null($battle->initiator_points) && !is_null($battle->opponent_points)) {
+                if ($battle->initiator_points > $battle->opponent_points) $battle->winner_id = $battle->initiator_id;
+                elseif ($battle->opponent_points > $battle->initiator_points) $battle->winner_id = $battle->opponent_id;
+                else $battle->winner_id = null;
+                $battle->status = 'completed';
+                $battle->completed_at = now();
+                $shouldSave = true;
+            } else {
+                // keep in-progress if only one side has submitted/persisted
+                $battle->status = 'in_progress';
+                if ($shouldSave) $battle->completed_at = null;
+            }
+
+            if ($shouldSave) $battle->save();
+        }
+
+        // Build a response-battle shape that may include non-persisted client scores when requested
+        $responseBattle = $battle;
+        // If client provided a score but did not request persistence, inject into the response only
+        if ($clientScore !== null && !$persistInitiator) {
+            $copy = $battle->toArray();
+            $copy['initiator_points'] = intval($clientScore);
+            $responseBattle = $copy;
+        }
+        if ($clientOpponentScore !== null && !$persistOpponent) {
+            if (!is_array($responseBattle)) $responseBattle = $responseBattle->toArray();
+            $responseBattle['opponent_points'] = intval($clientOpponentScore);
+        }
+
         // Include any awarded achievements and refreshed user (requesting user)
         $refreshedUser = $user->fresh()->load('achievements');
-        return response()->json(['ok' => true, 'result' => ['score' => $scorePercent, 'correct' => $correct, 'total' => $total, 'questions' => $detailed], 'battle' => $battle, 'deferred' => $defer, 'awarded_achievements' => $awarded, 'user' => $refreshedUser]);
+        return response()->json(['ok' => true, 'result' => ['score' => $scorePercent, 'correct' => $correct, 'total' => $total, 'questions' => $detailed], 'battle' => $responseBattle, 'deferred' => $defer, 'awarded_achievements' => $awarded, 'user' => $refreshedUser]);
     }
 
     /**
