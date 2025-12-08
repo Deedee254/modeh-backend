@@ -32,13 +32,13 @@ class WithdrawalRequestResource extends Resource
     public static function table(Table $table): Table
     {
         return $table->columns([
-            \Filament\Tables\Columns\TextColumn::make('quiz-master.name')->label('quiz-master'),
-            \Filament\Tables\Columns\TextColumn::make('amount')->money('KES'),
-            \Filament\Tables\Columns\TextColumn::make('method'),
-            \Filament\Tables\Columns\TextColumn::make('status'),
-            \Filament\Tables\Columns\TextColumn::make('created_at')->date(),
+            TextColumn::make('quiz-master.name')->label('quiz-master'),
+            TextColumn::make('amount')->money('KES'),
+            TextColumn::make('method'),
+            TextColumn::make('status'),
+            TextColumn::make('created_at')->date(),
         ])->actions([
-            \Filament\Actions\Action::make('approve')
+            Action::make('approve')
                 ->label('Approve')
                 ->requiresConfirmation()
                 ->color('primary')
@@ -51,7 +51,7 @@ class WithdrawalRequestResource extends Resource
                     });
                     try { event(new \App\Events\WithdrawalRequestUpdated($record->quiz_master_id, $record->toArray())); } catch (\Throwable $_) {}
                 }),
-            \Filament\Actions\Action::make('reject_refund')
+            Action::make('reject_refund')
                 ->label('Reject + Refund')
                 ->requiresConfirmation()
                 ->color('danger')
@@ -73,7 +73,7 @@ class WithdrawalRequestResource extends Resource
                     try { event(new \App\Events\WithdrawalRequestUpdated($record->quiz_master_id, $record->toArray())); } catch (\Throwable $_) {}
                     if ($wallet) { try { event(new \App\Events\WalletUpdated($wallet->toArray(), $record->quiz_master_id)); } catch (\Throwable $_) {} }
                 }),
-            \Filament\Actions\Action::make('mark_paid')
+            Action::make('mark_paid')
                 ->label('Mark as Paid')
                 ->requiresConfirmation()
                 ->color('success')

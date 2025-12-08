@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\SponsorResource\Pages;
 use App\Models\Sponsor;
 use Filament\Forms;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 
@@ -81,7 +82,7 @@ class SponsorResource extends Resource
                 \Filament\Actions\DeleteAction::make()
                     ->before(function (Sponsor $record) {
                         if ($record->tournaments()->count() > 0) {
-                            Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->warning()
                                 ->title('Cannot delete sponsor')
                                 ->body('This sponsor has tournaments associated with it.')
