@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\Level;
 use Illuminate\Support\Facades\Schema;
 use App\Models\Question;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+use App\Events\Tournament\BattleCompleted;
 
 /**
  * Class Tournament
@@ -409,5 +412,290 @@ class Tournament extends Model
     public function sponsor()
     {
         return $this->belongsTo(Sponsor::class);
+    }
+
+    /**
+     * Get current round number
+     * @return int
+     */
+    public function getCurrentRound(): int
+    {
+        return (int) ($this->battles()->max('round') ?? 0);
+    }
+
+    /**
+     * Get next round number
+     * @return int
+     */
+    public function getNextRound(): int
+    {
+        return $this->getCurrentRound() + 1;
+    }
+
+    /**
+     * Check if a round is complete (all battles finished)
+     * @param int $round
+     * @return bool
+     */
+    public function isRoundComplete(int $round): bool
+    {
+        $total = $this->battles()->where('round', $round)->count();
+
+        if ($total === 0) {
+            return false;
+        }
+
+        $completed = $this->battles()
+            ->where('round', $round)
+            ->where('status', TournamentBattle::STATUS_COMPLETED)
+            ->count();
+
+        return $total === $completed;
+    }
+
+    /**
+     * Get round status (total battles, completed battles, pending)
+     * @param int $round
+     * @return array
+     */
+    public function getRoundStatus(int $round): array
+    {
+        $battles = $this->battles()->where('round', $round)->get();
+
+        $total = $battles->count();
+        $completed = $battles->where('status', TournamentBattle::STATUS_COMPLETED)->count();
+        $pending = $total - $completed;
+
+        return [
+            'round' => $round,
+            // backward-compatible keys expected by frontend
+            'total' => $total,
+            'completed' => $completed,
+            'pending' => $pending,
+            'total_battles' => $total,
+            'completed_battles' => $completed,
+            'pending_battles' => $pending,
+            'is_complete' => $total > 0 && $pending === 0,
+            'battle_ids' => $battles->pluck('id')->toArray(),
+        ];
+    }
+
+    /**
+     * Close a round by resolving incomplete battles when the round end date has passed,
+     * determine winners and automatically create the next round battles. This method
+     * performs DB changes inside a transaction and only dispatches events after commit
+     * to avoid broadcasting before persistence.
+     *
+     * @param int|null $round If null, uses current round
+     * @param bool $force If true, ignore end-date checks and force closure
+     * @return array Result details including winners and created battles
+     */
+    public function closeRoundAndAdvance(?int $round = null, bool $force = false): array
+    {
+        $round = $round ?? $this->getCurrentRound();
+        if ($round <= 0) {
+            return ['ok' => false, 'message' => 'No active round to close'];
+        }
+
+        // Determine round scheduled start (latest scheduled_at for this round)
+        $roundBattles = $this->battles()->where('round', $round)->get();
+        if ($roundBattles->isEmpty()) {
+            return ['ok' => false, 'message' => 'No battles found for round ' . $round];
+        }
+
+        $roundStart = $roundBattles->pluck('scheduled_at')->filter()->max();
+        $roundStart = $roundStart ? Carbon::parse($roundStart) : null;
+
+        // Compute end date using configured round_delay_days
+        $roundDelay = (int) ($this->round_delay_days ?? 0);
+        $roundEnd = $roundStart ? $roundStart->copy()->addDays(max(1, $roundDelay)) : null;
+
+        if (! $force && $roundEnd && now()->lt($roundEnd)) {
+            return ['ok' => false, 'message' => 'Round end date not reached', 'round_end' => $roundEnd];
+        }
+
+        $changedBattles = [];
+        $eventsToDispatch = [];
+
+        DB::beginTransaction();
+        try {
+            foreach ($roundBattles as $battle) {
+                // If already completed, skip
+                if ($battle->status === TournamentBattle::STATUS_COMPLETED || $battle->status === TournamentBattle::STATUS_FORFEITED) {
+                    continue;
+                }
+
+                // Compute scores from attempts if available
+                $p1Score = (float) $battle->attempts()->where('player_id', $battle->player1_id)->sum('points');
+                $p2Score = (float) $battle->attempts()->where('player_id', $battle->player2_id)->sum('points');
+
+                // Determine winner by rules:
+                // 1) If one player has >0 points and the other has 0 -> that player wins
+                // 2) Else higher score wins
+                // 3) If tied, deterministic tie-breaker: lower user id advances
+                $winnerId = null;
+                if ($p1Score > 0 && $p2Score === 0) {
+                    $winnerId = $battle->player1_id;
+                } elseif ($p2Score > 0 && $p1Score === 0) {
+                    $winnerId = $battle->player2_id;
+                } elseif ($p1Score > $p2Score) {
+                    $winnerId = $battle->player1_id;
+                } elseif ($p2Score > $p1Score) {
+                    $winnerId = $battle->player2_id;
+                } else {
+                    // tie or both 0
+                    $winnerId = min($battle->player1_id, $battle->player2_id);
+                }
+
+                // Persist computed scores and winner
+                $battle->player1_score = $p1Score;
+                $battle->player2_score = $p2Score;
+                $battle->winner_id = $winnerId;
+                $battle->status = TournamentBattle::STATUS_COMPLETED;
+                if (empty($battle->completed_at)) $battle->completed_at = now();
+                $battle->save();
+
+                $changedBattles[] = $battle;
+                $eventsToDispatch[] = new BattleCompleted($battle);
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            \Log::error('Failed to close round: ' . $e->getMessage());
+            return ['ok' => false, 'message' => 'Failed to close round: ' . $e->getMessage()];
+        }
+
+        // Dispatch events after successful commit
+        try {
+            foreach ($eventsToDispatch as $ev) {
+                // Use AfterCommitDispatcher to ensure consistent behavior with model-level event dispatching
+                \App\Services\AfterCommitDispatcher::dispatch($ev);
+            }
+        } catch (\Throwable $_) {
+            // Non-fatal: broadcasting may fail, but data is persisted
+            \Log::warning('Failed to dispatch post-commit events for tournament round closure');
+        }
+
+        // Collect winners and create next round if needed
+        $winners = $this->getWinnersFromRound($round);
+
+        if (count($winners) < 2) {
+            // If only one winner remains, finalize tournament
+            if (count($winners) === 1) {
+                $this->update(['status' => 'completed', 'winner_id' => $winners[0]]);
+                try {
+                    app('App\Services\AchievementService')->checkAchievements(
+                        $winners[0],
+                        ['type' => 'tournament_won', 'tournament_id' => $this->id, 'rank' => 1]
+                    );
+                } catch (\Throwable $e) {
+                    \Log::warning('Failed awarding tournament_won achievement: ' . $e->getMessage());
+                }
+
+                return ['ok' => true, 'message' => 'Tournament finalized', 'winner' => $winners[0]];
+            }
+            return ['ok' => false, 'message' => 'Insufficient winners to continue', 'winners' => $winners];
+        }
+
+        // Create next round scheduled date: use last round end + round_delay_days
+        $nextRound = $round + 1;
+        $scheduledAt = null;
+        if ($roundEnd) {
+            $scheduledAt = $roundEnd->copy()->addDays(max(1, $roundDelay));
+        } else {
+            $scheduledAt = now()->addDays(max(1, $roundDelay));
+        }
+
+        try {
+            $created = $this->createBattlesForRound($winners, $nextRound, $scheduledAt);
+        } catch (\Throwable $e) {
+            \Log::error('Failed to create next round battles: ' . $e->getMessage());
+            return ['ok' => false, 'message' => 'Failed to create next round battles', 'error' => $e->getMessage()];
+        }
+
+        return [
+            'ok' => true,
+            'message' => 'Round closed and next round created',
+            'winners' => $winners,
+            'created' => count($created),
+            'next_round' => $nextRound,
+            'scheduled_at' => $scheduledAt,
+        ];
+    }
+
+    /**
+     * Get all winners from a completed round
+     * Handles regular winners and byes (participants with only 1 battle in round)
+     * @param int $round
+     * @return array Winner user IDs
+     */
+    public function getWinnersFromRound(int $round): array
+    {
+        // Get all battles in this round
+        $battles = $this->battles()
+            ->where('round', $round)
+            ->with(['winner'])
+            ->get();
+
+        if ($battles->isEmpty()) {
+            return [];
+        }
+
+        // Collect winners from completed battles
+        $winners = [];
+        $participants = [];  // Track all participants in this round
+
+        foreach ($battles as $battle) {
+            // Track participants
+            $participants[] = $battle->player1_id;
+            $participants[] = $battle->player2_id;
+
+            // Add winner if battle is completed
+            if ($battle->status === TournamentBattle::STATUS_COMPLETED && $battle->winner_id) {
+                $winners[$battle->winner_id] = true;
+            }
+        }
+
+        // Get unique participants in this round
+        $participants = array_unique($participants);
+
+        // Check for byes (participants with only 1 battle)
+        // If tournament is single elimination and participant has only 1 battle, they got a bye
+        foreach ($participants as $participantId) {
+            $battleCount = collect($battles)
+                ->filter(function($b) use ($participantId) {
+                    return $b->player1_id === $participantId || $b->player2_id === $participantId;
+                })
+                ->count();
+
+            // Bye: participant has only 1 battle (auto-advance)
+            if ($battleCount === 1 && !isset($winners[$participantId])) {
+                $winners[$participantId] = true;
+            }
+        }
+
+        return array_keys($winners);
+    }
+
+    /**
+     * Check if tournament is complete and finalize if needed
+     * Called when a final battle is completed
+     * @return bool True if tournament was finalized
+     */
+    public function checkAndFinalizeIfComplete(): bool
+    {
+        // Delegate to the centralized close/advance routine. Force=false will only finalize
+        // when the round is actually complete or meet conditions in closeRoundAndAdvance.
+        $finalized = false;
+        try {
+            $res = $this->closeRoundAndAdvance(null, false);
+            $finalized = !empty($res['ok']) && $res['ok'] === true && isset($res['winner']);
+        } catch (\Throwable $e) {
+            \Log::warning('checkAndFinalizeIfComplete failed: ' . $e->getMessage());
+            $finalized = false;
+        }
+
+        return $finalized;
     }
 }

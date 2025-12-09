@@ -5,9 +5,9 @@ namespace App\Filament\Resources\TournamentResource\Pages;
 use App\Filament\Resources\TournamentResource;
 use Filament\Actions\EditAction;
 use Filament\Actions\Action;
+use Filament\Schemas\Components\Grid;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Pages\ViewRecord;
-use Filament\Tables;
-use Illuminate\Database\Eloquent\Builder;
 
 class ViewTournament extends ViewRecord
 {
@@ -32,61 +32,43 @@ class ViewTournament extends ViewRecord
         ];
     }
 
-    public function getTabs(): array
+    protected function getInfolistSchema(): array
     {
         return [
-            'details' => \Filament\Schemas\Components\Tabs\Tab::make('Details')
+            // Details
+            TextEntry::make('name'),
+            TextEntry::make('description'),
+            Grid::make(2)
                 ->schema([
-                    // Tournament details form schema here...
-                    Forms\Components\TextInput::make('name')
-                        ->disabled(),
-                    Forms\Components\RichEditor::make('description')
-                        ->disabled(),
-                    Forms\Components\Grid::make(2)
-                        ->schema([
-                            Forms\Components\DateTimePicker::make('start_date')
-                                ->disabled(),
-                            Forms\Components\DateTimePicker::make('end_date')
-                                ->disabled(),
-                            Forms\Components\TextInput::make('prize_pool')
-                                ->disabled()
-                                ->prefix('$'),
-                            Forms\Components\TextInput::make('entry_fee')
-                                ->disabled()
-                                ->prefix('$'),
-                        ]),
+                    TextEntry::make('start_date'),
+                    TextEntry::make('end_date'),
+                    TextEntry::make('prize_pool')
+                        ->prefix('$'),
+                    TextEntry::make('entry_fee')
+                        ->prefix('$'),
                 ]),
 
-            'participants' => \Filament\Schemas\Components\Tabs\Tab::make('Participants')
-                ->schema([
-                    \Filament\Schemas\Components\EmbeddedTable::make('embedded-tables.participants-table', fn () => ['tournamentId' => $this->record->id]),
-                ]),
+            // Participants
+            TextEntry::make('participants_count')
+                ->label('Total Participants'),
 
-            'battles' => \Filament\Schemas\Components\Tabs\Tab::make('Battles')
-                ->schema([
-                    \Filament\Schemas\Components\EmbeddedTable::make('embedded-tables.battles-table', fn () => ['tournamentId' => $this->record->id]),
-                ]),
+            // Battles
+            TextEntry::make('battles_count')
+                ->label('Total Battles'),
 
-            'questions' => \Filament\Schemas\Components\Tabs\Tab::make('Questions')
-                ->schema([
-                    \Filament\Schemas\Components\EmbeddedTable::make('embedded-tables.questions-table', fn () => ['tournamentId' => $this->record->id]),
-                ]),
+            // Rounds
+            TextEntry::make('current_round')
+                ->label('Current Round'),
 
-            'sponsor' => Tables\Actions\Tab::make('Sponsor')
-                ->schema([
-                    \Filament\Schemas\Components\Section::make()
-                        ->schema([
-                            Forms\Components\TextInput::make('sponsor.name')
-                                ->disabled(),
-                            Forms\Components\TextInput::make('sponsor_banner_url')
-                                ->disabled(),
-                            Forms\Components\Textarea::make('sponsor_message')
-                                ->disabled(),
-                            Forms\Components\TextInput::make('sponsor.website_url')
-                                ->disabled(),
-                        ])
-                        ->visible(fn () => $this->record->sponsor_id !== null)
-                ])
+            // Questions
+            TextEntry::make('questions_count')
+                ->label('Total Questions'),
+
+            // Sponsor
+            TextEntry::make('sponsor.name'),
+            TextEntry::make('sponsor_banner_url'),
+            TextEntry::make('sponsor_message'),
+            TextEntry::make('sponsor.website_url')
                 ->visible(fn () => $this->record->sponsor_id !== null),
         ];
     }

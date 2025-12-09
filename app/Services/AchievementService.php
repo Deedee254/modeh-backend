@@ -146,10 +146,6 @@ class AchievementService
 
         $awarded = [];
 
-        // First check standard achievement types
-        $standardAwarded = $this->checkStandardAchievements($user, $payload);
-        $awarded = array_merge($awarded, $standardAwarded);
-
         // Check time-based achievements
         if (isset($payload['time']) && isset($payload['score']) && isset($payload['question_count'])) {
             $timeAwarded = $this->checkTimeAchievements($user, $payload['time'], $payload['score'], $payload['question_count'], $payload['attempt_id'] ?? null);
@@ -203,6 +199,13 @@ class AchievementService
         if (($payload['type'] ?? null) === 'quiz_created') {
             $createdAwards = $this->checkQuizCreatedAchievements($user, $payload);
             $awarded = array_merge($awarded, $createdAwards);
+        }
+
+        // Tournament battle achievements
+        $type = $payload['type'] ?? null;
+        if ($type === 'tournament_battle_won' || $type === 'tournament_battle_completed') {
+            $battleAwards = $this->checkTournamentBattleAchievements($user, $payload);
+            $awarded = array_merge($awarded, $battleAwards);
         }
 
         return $awarded;
@@ -276,6 +279,93 @@ class AchievementService
                 }
             } catch (\Throwable $e) {
                 try { \Log::warning('Failed to evaluate quiz_created achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+            }
+        }
+
+        return $awarded;
+    }
+
+    /**
+     * Check and award tournament battle-related achievements
+     * Handles: tournament_battle_won, tournament_battle_completed
+     */
+    private function checkTournamentBattleAchievements(User $user, array $payload): array
+    {
+        $awarded = [];
+        $type = $payload['type'] ?? null;
+        $score = $payload['score'] ?? 0;
+        $tournamentId = $payload['tournament_id'] ?? null;
+
+        if (!$type || !$tournamentId) {
+            return [];
+        }
+
+        // Get all tournament battle achievements
+        $achievements = Achievement::whereIn('type', ['tournament_battle_won', 'tournament_battle_completed', 'tournament_battle_perfect'])
+            ->whereDoesntHave('users', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            })
+            ->get();
+
+        if ($achievements->isEmpty()) {
+            return [];
+        }
+
+        // For win achievements, only award if user won
+        if ($type === 'tournament_battle_won') {
+            foreach ($achievements as $achievement) {
+                try {
+                    // tournament_battle_won: criteria_value = number of wins needed
+                    if ($achievement->type === 'tournament_battle_won') {
+                        // Count wins by this user in this tournament
+                        $winCount = \App\Models\TournamentBattle::where('tournament_id', $tournamentId)
+                            ->where('winner_id', $user->id)
+                            ->count();
+
+                        if ($winCount >= $achievement->criteria_value) {
+                            $awardedAchievement = $this->awardAchievement($user, $achievement, $payload['attempt_id'] ?? null);
+                            if ($awardedAchievement) {
+                                $awarded[] = $awardedAchievement;
+                            }
+                        }
+                    }
+                    // Perfect battle: scored 100% in a win
+                    elseif ($achievement->type === 'tournament_battle_perfect' && $score >= 100) {
+                        $awardedAchievement = $this->awardAchievement($user, $achievement, $payload['attempt_id'] ?? null);
+                        if ($awardedAchievement) {
+                            $awarded[] = $awardedAchievement;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    try { \Log::warning('Failed to award tournament battle achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+                }
+            }
+        }
+        // For completed battles, any participant qualifies
+        elseif ($type === 'tournament_battle_completed') {
+            foreach ($achievements as $achievement) {
+                try {
+                    // tournament_battle_completed: criteria_value = number of battles needed
+                    if ($achievement->type === 'tournament_battle_completed') {
+                        // Count battles participated by this user in this tournament
+                        $battleCount = \App\Models\TournamentBattle::where('tournament_id', $tournamentId)
+                            ->where(function ($q) use ($user) {
+                                $q->where('player1_id', $user->id)
+                                  ->orWhere('player2_id', $user->id);
+                            })
+                            ->where('status', \App\Models\TournamentBattle::STATUS_COMPLETED)
+                            ->count();
+
+                        if ($battleCount >= $achievement->criteria_value) {
+                            $awardedAchievement = $this->awardAchievement($user, $achievement, $payload['attempt_id'] ?? null);
+                            if ($awardedAchievement) {
+                                $awarded[] = $awardedAchievement;
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    try { \Log::warning('Failed to award tournament battle achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+                }
             }
         }
 

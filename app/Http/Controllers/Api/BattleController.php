@@ -740,6 +740,7 @@ class BattleController extends Controller
 
                 // Use shared QuestionMarkingService for solo completion mark
                 $isCorrect = $this->questionMarkingService->isAnswerCorrect($selected, $q->answers ?? [], $q);
+                $correctAnswers = $this->normalizeAnswers($q->answers);
 
                 BattleSubmission::updateOrCreate([
                     'battle_id' => $battle->getKey(),

@@ -356,4 +356,58 @@ class AdminTournamentController extends Controller
 
         return response()->json(['attached' => count($questions), 'questions' => $battle->questions()->get()]);
     }
+
+    /**
+     * Advance tournament to next round automatically
+     * Extracts winners from current round and creates next round battles
+     * For first round, admin must trigger manually with qualified participants
+     * 
+     * @param Request $request
+     * @param Tournament $tournament
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function advanceRound(Request $request, Tournament $tournament)
+    {
+        // Validate tournament is active
+        if ($this->getTournamentStatus($tournament) !== 'active') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Tournament must be active to advance round'
+            ], 400);
+        }
+
+        // Get current round
+        $currentRound = $tournament->getCurrentRound();
+
+        if ($currentRound === 0) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No rounds created yet. Admin must trigger first round with qualified participants.'
+            ], 400);
+        }
+
+        // Check if current round is complete
+        if (!$tournament->isRoundComplete($currentRound)) {
+            $status = $tournament->getRoundStatus($currentRound);
+            return response()->json([
+                'ok' => false,
+                'message' => 'Current round not complete. All battles must be finished to advance.',
+                'round_status' => $status
+            ], 400);
+        }
+
+        // Use the Tournament model's close/advance helper (force=true since admin triggered)
+        try {
+            $result = $tournament->closeRoundAndAdvance($currentRound, true);
+        } catch (\Throwable $e) {
+            \Log::error('Failed to advance round (admin): ' . $e->getMessage());
+            return response()->json(['ok' => false, 'message' => 'Failed to advance round: ' . $e->getMessage()], 500);
+        }
+
+        if (!empty($result['ok']) && $result['ok'] === true) {
+            return response()->json(array_merge(['ok' => true, 'message' => 'Round advanced successfully'], $result));
+        }
+
+        return response()->json(array_merge(['ok' => false], $result), 400);
+    }
 }

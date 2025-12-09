@@ -482,6 +482,28 @@ class TournamentController extends Controller
             $battle->save();
         });
 
+        // Auto-check: if round complete, close and advance; if round end date passed, attempt automatic closure too.
+        try {
+            $tournament = $battle->tournament;
+            if ($tournament) {
+                if ($tournament->isRoundComplete($battle->round)) {
+                    // Round finished by play; force close and advance
+                    $tournament->closeRoundAndAdvance($battle->round, true);
+                } else {
+                    // If round scheduled start + round_delay_days has passed, attempt to close automatically
+                    $roundStart = $tournament->battles()->where('round', $battle->round)->pluck('scheduled_at')->filter()->max();
+                    if ($roundStart && $tournament->round_delay_days) {
+                        $roundEnd = \Carbon\Carbon::parse($roundStart)->addDays(max(1, (int)$tournament->round_delay_days));
+                        if (now()->gte($roundEnd)) {
+                            $tournament->closeRoundAndAdvance($battle->round, false);
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::info('Auto-round-check failed (non-critical): ' . $e->getMessage());
+        }
+
         return response()->json([
             'battle' => $battle->fresh(['player1', 'player2', 'winner']),
             'message' => 'Battle submission successful',
@@ -538,6 +560,121 @@ class TournamentController extends Controller
             'tournament' => $tournament->only(['id', 'name', 'status']),
             'leaderboard' => $leaderboard,
             'is_qualifier_phase' => $isQualifierPhase
+        ]);
+    }
+
+    /**
+     * Get tournament bracket structure organized by rounds
+     * Returns complete bracket with player info, scores, and match results
+     */
+    public function tree(Tournament $tournament, Request $request)
+    {
+        // Load battles with player info, questions, and attempts
+        $battles = $tournament->battles()
+            ->with([
+                'player1:id,name,avatar_url,avatar',
+                'player2:id,name,avatar_url,avatar',
+                'winner:id,name,avatar_url,avatar',
+                'questions:id,marks',
+                'attempts:id,battle_id,player_id,points'
+            ])
+            ->get();
+
+        // Group battles by round
+        $roundGroups = $battles->groupBy('round');
+        $totalRounds = $roundGroups->count() ?: 0;
+        $currentRound = $roundGroups->keys()->max() ?? 0;
+
+        // Build bracket structure organized by round
+        $bracket = [];
+        
+        foreach ($roundGroups as $roundNum => $roundBattles) {
+            $matches = [];
+            
+            foreach ($roundBattles as $battle) {
+                // Use stored player scores (already calculated during marking)
+                $player1Score = $battle->player1_score ?? 0;
+                $player2Score = $battle->player2_score ?? 0;
+
+                $matches[] = [
+                    'id' => $battle->id,
+                    'round' => (int) $roundNum,
+                    'status' => $battle->status,
+                    'scheduled_at' => $battle->scheduled_at,
+                    'completed_at' => $battle->completed_at,
+                    'player1' => [
+                        'id' => $battle->player1_id,
+                        'name' => $battle->player1?->name ?? 'Unknown',
+                        'avatar_url' => $battle->player1?->avatar_url,
+                        'avatar' => $battle->player1?->avatar,
+                        'score' => round($player1Score, 2),
+                        'total_questions' => count($battle->questions ?? []),
+                    ],
+                    'player2' => [
+                        'id' => $battle->player2_id,
+                        'name' => $battle->player2?->name ?? 'Unknown',
+                        'avatar_url' => $battle->player2?->avatar_url,
+                        'avatar' => $battle->player2?->avatar,
+                        'score' => round($player2Score, 2),
+                        'total_questions' => count($battle->questions ?? []),
+                    ],
+                    'winner_id' => $battle->winner_id,
+                    'winner' => $battle->winner ? [
+                        'id' => $battle->winner->id,
+                        'name' => $battle->winner->name,
+                        'avatar_url' => $battle->winner->avatar_url,
+                        'avatar' => $battle->winner->avatar,
+                    ] : null,
+                ];
+            }
+            
+            $bracket[$roundNum] = [
+                'round' => (int) $roundNum,
+                'matches' => $matches,
+                'match_count' => count($matches),
+            ];
+        }
+
+        // Sort bracket by round number
+        ksort($bracket);
+
+        // Add round progress information
+        foreach ($bracket as $roundNum => &$roundData) {
+            $roundBattles = $roundGroups[$roundNum];
+            
+            // Get round status (total, completed, pending)
+            $roundStatus = $tournament->getRoundStatus($roundNum);
+            
+            // Calculate round end date from latest scheduled battle in this round
+            $roundEndDate = $roundBattles
+                ->pluck('scheduled_at')
+                ->filter()
+                ->max();
+            
+            $roundData['status'] = $roundStatus;
+            $roundData['round_end_date'] = $roundEndDate;
+            $roundData['is_complete'] = $roundStatus['completed'] === $roundStatus['total'] && $roundStatus['total'] > 0;
+            $roundData['is_current'] = $roundNum === $currentRound;
+        }
+        unset($roundData);
+
+        return response()->json([
+            'ok' => true,
+            'tournament' => $tournament->only(['id', 'name', 'status', 'format']),
+            'winner' => $tournament->winner_id ? [
+                'id' => $tournament->winner->id,
+                'name' => $tournament->winner->name,
+                'avatar_url' => $tournament->winner->avatar_url,
+                'avatar' => $tournament->winner->avatar,
+            ] : null,
+            'bracket' => array_values($bracket),
+            'total_rounds' => $totalRounds,
+            'current_round' => $currentRound,
+            'summary' => [
+                'total_matches' => $battles->count(),
+                'completed_matches' => $battles->where('status', TournamentBattle::STATUS_COMPLETED)->count(),
+                'pending_matches' => $battles->where('status', '!=', TournamentBattle::STATUS_COMPLETED)->count(),
+            ]
         ]);
     }
 

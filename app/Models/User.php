@@ -162,6 +162,15 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         return $this->affiliate ? $this->affiliate->referral_code : null;
     }
 
+    /**
+     * Backwards-compatible avatar alias.
+     * Some frontend clients expect `avatar` while the canonical column is `avatar_url`.
+     */
+    public function getAvatarAttribute()
+    {
+        return $this->avatar_url;
+    }
+
     public function quizzes()
     {
         return $this->hasMany(Quiz::class);

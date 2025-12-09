@@ -7,6 +7,7 @@ use App\Events\Tournament\BattleStarted;
 use App\Events\Tournament\BattleCompleted;
 use App\Events\Tournament\BattleForfeited;
 use App\Events\Tournament\BattleCancelled;
+use App\Services\AfterCommitDispatcher;
 
 /**
  * Class TournamentBattle
@@ -149,7 +150,8 @@ class TournamentBattle extends Model
         $this->timeout_at = now()->addMinutes(30); // Configure timeout duration
         $this->save();
 
-        event(new BattleStarted($this));
+        // Ensure events are dispatched only after DB commit
+        AfterCommitDispatcher::dispatch(new BattleStarted($this));
     }
 
     public function complete($winnerId = null, $isDraw = false)
@@ -161,7 +163,8 @@ class TournamentBattle extends Model
         $this->battle_duration = $this->started_at->diffInSeconds($this->completed_at);
         $this->save();
 
-        event(new BattleCompleted($this));
+        // Dispatch after commit to avoid sending events before DB is saved
+        AfterCommitDispatcher::dispatch(new BattleCompleted($this));
     }
 
     public function forfeit($playerId, $reason = null)
@@ -173,7 +176,7 @@ class TournamentBattle extends Model
         $this->battle_duration = $this->started_at->diffInSeconds($this->completed_at);
         $this->save();
 
-        event(new BattleForfeited($this));
+        AfterCommitDispatcher::dispatch(new BattleForfeited($this));
     }
 
     public function cancel()
@@ -182,7 +185,7 @@ class TournamentBattle extends Model
         $this->completed_at = now();
         $this->save();
 
-        event(new BattleCancelled($this));
+        AfterCommitDispatcher::dispatch(new BattleCancelled($this));
     }
 
     public function questions()

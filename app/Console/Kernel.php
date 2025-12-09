@@ -11,8 +11,8 @@ class Kernel extends ConsoleKernel
     {
         // Run prune command daily at 02:00
         $schedule->command('metrics:prune-buckets')->dailyAt('02:00');
-    // Tournament round processing is now event-driven via a TournamentBattle observer and queued job.
-    // Removed the scheduled `tournaments:check-rounds` task to avoid scanning inactive tournaments.
+        // Process tournament rounds every 10 minutes to auto-close rounds whose end-date passed
+        $schedule->command('tournaments:process-rounds')->everyTenMinutes();
     }
 
     protected function commands()

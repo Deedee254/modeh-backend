@@ -210,6 +210,78 @@ class AchievementSeeder extends Seeder
                 'type' => 'completion',
                 'criteria_value' => 100,
                 'slug' => 'completionist'
+            ],
+
+            // Tournament Battle Achievements
+            [
+                'name' => 'Battle Master',
+                'description' => 'Win 5 tournament battles',
+                'icon' => '⚔️',
+                'points' => 300,
+                'type' => 'tournament_battle_won',
+                'criteria_value' => 5,
+                'slug' => 'battle-master',
+                'category' => 'tournament'
+            ],
+            [
+                'name' => 'Battle Warrior',
+                'description' => 'Complete 10 tournament battles',
+                'icon' => '🛡️',
+                'points' => 250,
+                'type' => 'tournament_battle_completed',
+                'criteria_value' => 10,
+                'slug' => 'battle-warrior',
+                'category' => 'tournament'
+            ],
+            [
+                'name' => 'Perfect Match',
+                'description' => 'Win a tournament battle with 100% accuracy',
+                'icon' => '💯',
+                'points' => 400,
+                'type' => 'tournament_battle_perfect',
+                'criteria_value' => 100,
+                'slug' => 'perfect-match',
+                'category' => 'tournament'
+            ],
+            [
+                'name' => 'Tournament Champion',
+                'description' => 'Win a tournament',
+                'icon' => '👑',
+                'points' => 1000,
+                'type' => 'tournament_won',
+                'criteria_value' => 1,
+                'slug' => 'tournament-champion',
+                'category' => 'tournament'
+            ],
+            [
+                'name' => 'Qualifier Star',
+                'description' => 'Rank in top 10 in tournament qualification round',
+                'icon' => '⭐',
+                'points' => 250,
+                'type' => 'tournament_qualifier',
+                'criteria_value' => 10,
+                'slug' => 'qualifier-star',
+                'category' => 'tournament'
+            ],
+            [
+                'name' => 'Finalist',
+                'description' => 'Reach tournament finals (last 2 competitors)',
+                'icon' => '🥈',
+                'points' => 500,
+                'type' => 'tournament_finalist',
+                'criteria_value' => 1,
+                'slug' => 'finalist',
+                'category' => 'tournament'
+            ],
+            [
+                'name' => 'Multi-Tournament Winner',
+                'description' => 'Win 3 tournaments',
+                'icon' => '👑👑👑',
+                'points' => 1500,
+                'type' => 'tournament_multi_win',
+                'criteria_value' => 3,
+                'slug' => 'multi-tournament-winner',
+                'category' => 'tournament'
             ]
         ];
 
