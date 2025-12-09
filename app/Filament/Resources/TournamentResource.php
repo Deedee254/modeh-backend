@@ -523,6 +523,7 @@ class TournamentResource extends Resource
         return [
             'index' => Pages\ListTournaments::route('/'),
             'create' => Pages\CreateTournament::route('/create'),
+            'leaderboard' => Pages\Leaderboard::route('/{record}/leaderboard'),
             'edit' => Pages\EditTournament::route('/{record}/edit'),
             'view' => Pages\ViewTournament::route('/{record}'),
         ];

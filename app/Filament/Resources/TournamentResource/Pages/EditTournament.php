@@ -23,6 +23,7 @@ class EditTournament extends EditRecord
                 ->icon('heroicon-o-play'),
             Action::make('view_leaderboard')
                 ->url(fn () => route('admin.tournaments.leaderboard', $this->record))
+                ->openUrlInNewTab()
                 ->visible(fn () => in_array($this->record->status, ['active', 'completed']))
                 ->color('secondary')
                 ->icon('heroicon-o-chart-bar'),

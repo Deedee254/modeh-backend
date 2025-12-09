@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthWebController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
+use App\Filament\Resources\TournamentResource;
+use App\Models\Tournament;
 
 Route::middleware('web')->group(function () {
     Route::get('/', [AuthWebController::class, 'showLogin'])->name('login');
@@ -106,3 +108,8 @@ Route::get('/email/verify/{id}/{hash}', function (Request $request, $id, $hash) 
 	if ($ftoken) $url .= '&ftoken=' . $ftoken . '&invite=' . urlencode($inv->invitation_token);
 	return redirect($url);
 })->middleware('signed')->name('verification.verify');
+
+// Admin leaderboard shortcut that redirects into the Filament resource page.
+Route::get('/admin/tournaments/{tournament}/leaderboard', function (Tournament $tournament) {
+	return redirect(TournamentResource::getUrl('leaderboard', ['record' => $tournament]));
+})->name('admin.tournaments.leaderboard');

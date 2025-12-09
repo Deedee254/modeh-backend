@@ -206,18 +206,23 @@ class QuizAttemptController extends Controller
             }
         }
 
-        // Public / attempt view: Load questions and taxonomy so the frontend can display details
+        // Public / attempt view: Load questions and taxonomy so the frontend can display details.
+        // Use the model helper to prepare questions so server-side shuffling of questions
+        // and answers is applied when the quiz is configured to shuffle them.
         $quiz->load(['topic.subject', 'subject', 'grade.level', 'questions', 'author']);
-        $questions = $quiz->questions->map(function ($q) {
-            return [
-                'id' => $q->id,
-                'type' => $q->type,
-                'body' => $q->body,
-                'options' => $q->options,
-                'media_path' => $q->media_path,
-                'marks' => $q->marks ?? 1, // Ensure marks are available per question if needed
+        $prepared = $quiz->getPreparedQuestions();
+        $questions = [];
+        foreach ($prepared as $q) {
+            $questions[] = [
+                'id' => isset($q['id']) ? $q['id'] : (isset($q->id) ? $q->id : null),
+                'type' => isset($q['type']) ? $q['type'] : (isset($q->type) ? $q->type : null),
+                'body' => isset($q['body']) ? $q['body'] : (isset($q->body) ? $q->body : (isset($q['text']) ? $q['text'] : '')),
+                'options' => isset($q['options']) ? $q['options'] : (isset($q->options) ? $q->options : []),
+                'media_path' => isset($q['media_path']) ? $q['media_path'] : (isset($q->media_path) ? $q->media_path : null),
+                'marks' => isset($q['marks']) ? $q['marks'] : (isset($q->marks) ? $q->marks : 1), // Ensure marks are available per question if needed
+                'answers' => isset($q['answers']) ? $q['answers'] : (isset($q->answers) ? $q->answers : []),
             ];
-        });
+        }
 
         // Calculate total marks dynamically (defaulting to 1 per question if marks is null/0)
         $totalMarks = $quiz->questions->reduce(function ($carry, $q) {
@@ -243,7 +248,7 @@ class QuizAttemptController extends Controller
                 'video_url' => $quiz->video_url ?? null,
                 'cover_image' => $quiz->cover_image ?? null,
                 'questions' => $questions,
-                'questions_count' => $questions->count(),
+                'questions_count' => count($questions),
                 'marks' => $totalMarks, // Ensure specific total marks are included
                 'is_paid' => (bool) $quiz->is_paid,
                 'price' => $quiz->one_off_price,
