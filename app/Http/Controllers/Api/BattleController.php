@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Battle;
 use App\Models\Question;
+use App\Models\DailyUsageTracking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
@@ -16,6 +17,7 @@ use App\Models\Wallet;
 use App\Models\Quiz;
 use App\Services\AchievementService;
 use App\Services\QuestionMarkingService;
+use App\Services\SubscriptionLimitService;
 
 class BattleController extends Controller
 {
@@ -805,42 +807,22 @@ class BattleController extends Controller
     public function result(Request $request, Battle $battle)
     {
         $user = $request->user();
-        // Check subscription
-        $activeSub = \App\Models\Subscription::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where(function($q) {
-                $now = now();
-                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-            })
-            ->orderByDesc('started_at')
-            ->first();
-        if (!$activeSub) {
-            return response()->json(['ok' => false, 'message' => 'Subscription required'], 403);
-        }
-
-        // Enforce package limits for returning battle results
-        if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
-            $features = $activeSub->package->features;
-            $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
-            if ($limit !== null) {
-                $today = now()->startOfDay();
-                $used = Battle::where(function($q) use ($user) {
-                        $q->where('initiator_id', $user->id)->orWhere('opponent_id', $user->id);
-                    })->whereNotNull('completed_at')
-                    ->where('completed_at', '>=', $today)
-                    ->count();
-                if ($used >= intval($limit)) {
-                    return response()->json([
-                        'ok' => false,
-                        'code' => 'limit_reached',
-                        'limit' => [
-                            'type' => 'battle_results',
-                            'value' => intval($limit)
-                        ],
-                        'message' => 'Daily battle result reveal limit reached for your plan'
-                    ], 403);
-                }
-            }
+        
+        // Check subscription and daily limits using the service
+        $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
+        
+        if (!$limitCheck['allowed']) {
+            return response()->json([
+                'ok' => false,
+                'code' => 'limit_reached',
+                'message' => 'Daily result reveal limit reached for your plan',
+                'limit' => [
+                    'type' => 'quiz_results',
+                    'value' => $limitCheck['limit'],
+                    'used' => $limitCheck['used'],
+                    'remaining' => $limitCheck['remaining'],
+                ]
+            ], 403);
         }
 
         $battle->load('questions');
@@ -990,6 +972,14 @@ class BattleController extends Controller
             $opponentPoints = $opponentHasSubmissions ? $computedOpponentPoints : $synthOpponentPoints;
         }
 
+        // Get active subscription and calculate remaining after this reveal
+        $activeSub = SubscriptionLimitService::getActiveSubscription($user);
+        $limit = $activeSub ? SubscriptionLimitService::getPackageLimit($activeSub->package, 'quiz_results') : 10;
+        
+        // Calculate remaining after this reveal
+        $used = SubscriptionLimitService::countTodayUsage($user->id) + 1;
+        $remaining = $limit ? max(0, $limit - $used) : null;
+
         $result = [
             'score' => max($initiatorPoints, $opponentPoints),
             'initiator_correct' => $initiatorPoints,
@@ -999,6 +989,11 @@ class BattleController extends Controller
             'battle' => $battle,
         ];
 
-        return response()->json(['ok' => true, 'result' => $result]);
+        return response()->json(['ok' => true, 'result' => $result, 'usage' => [
+            'limit' => $limit,
+            'used' => $used,
+            'remaining' => $remaining,
+            'type' => 'reveals'
+        ]]);
     }
 }

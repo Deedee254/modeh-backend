@@ -7,7 +7,9 @@ use Illuminate\Http\Request;
 use App\Models\Quiz;
 use App\Models\Question;
 use App\Models\QuizAttempt;
+use App\Models\DailyUsageTracking;
 use App\Services\AchievementService;
+use App\Services\SubscriptionLimitService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -549,49 +551,34 @@ class QuizAttemptController extends Controller
         if (!$user)
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
 
-        // Subscription check
-        $activeSub = \App\Models\Subscription::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where(function ($q) {
-                $now = now();
-                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-            })
-            ->orderByDesc('started_at')
-            ->first();
-        if (!$activeSub) {
-            return response()->json(['ok' => false, 'message' => 'Subscription required'], 403);
-        }
-
-        // enforce package limits (e.g. number of revealed results per day)
-        if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
-            $features = $activeSub->package->features;
-            $limit = $features['limits']['quiz_results'] ?? $features['limits']['results'] ?? null;
-            if ($limit !== null) {
-                $today = now()->startOfDay();
-                $used = QuizAttempt::where('user_id', $user->id)
-                    ->whereNotNull('score')
-                    ->where('created_at', '>=', $today)
-                    ->count();
-                if ($used >= intval($limit)) {
-                    $remaining = max(0, intval($limit) - intval($used));
-                    return response()->json([
-                        'ok' => false,
-                        'code' => 'limit_reached',
-                        'limit' => [
-                            'type' => 'quiz_results',
-                            'value' => intval($limit),
-                            'used' => intval($used),
-                            'remaining' => $remaining,
-                        ],
-                        'message' => 'Daily result reveal limit reached for your plan'
-                    ], 403);
-                }
-            }
+        // Check subscription and daily limits using the service
+        $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
+        
+        if (!$limitCheck['allowed']) {
+            return response()->json([
+                'ok' => false,
+                'code' => 'limit_reached',
+                'message' => 'Daily result reveal limit reached for your plan',
+                'limit' => [
+                    'type' => 'quiz_results',
+                    'value' => $limitCheck['limit'],
+                    'used' => $limitCheck['used'],
+                    'remaining' => $limitCheck['remaining'],
+                ]
+            ], 403);
         }
 
         if ($attempt->user_id !== $user->id) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
+
+        // Get active subscription for tracking
+        $activeSub = SubscriptionLimitService::getActiveSubscription($user);
+        $limit = $activeSub ? SubscriptionLimitService::getPackageLimit($activeSub->package, 'quiz_results') : 10;
+        
+        // Calculate remaining after this reveal
+        $used = SubscriptionLimitService::countTodayUsage($user->id) + 1;
+        $remaining = $limit ? max(0, $limit - $used) : null;
 
         $quiz = $attempt->quiz()->with('questions')->first();
 
@@ -749,6 +736,12 @@ class QuizAttemptController extends Controller
             'response_analysis' => [
                 'fastest' => $fastestAnswer,
                 'slowest' => $slowestAnswer
+            ],
+            'usage' => [
+                'limit' => $limit,
+                'used' => $used,
+                'remaining' => $remaining,
+                'type' => 'reveals'
             ]
         ]);
     }
