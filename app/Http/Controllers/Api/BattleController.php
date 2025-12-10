@@ -599,12 +599,15 @@ class BattleController extends Controller
                     ->where('completed_at', '>=', $today)
                     ->count();
                 if ($used >= intval($limit)) {
+                    $remaining = max(0, intval($limit) - intval($used));
                     return response()->json([
                         'ok' => false,
                         'code' => 'limit_reached',
                         'limit' => [
                             'type' => 'battle_results',
-                            'value' => intval($limit)
+                            'value' => intval($limit),
+                            'used' => intval($used),
+                            'remaining' => $remaining,
                         ],
                         'message' => 'Daily battle result reveal limit reached for your plan'
                     ], 403);

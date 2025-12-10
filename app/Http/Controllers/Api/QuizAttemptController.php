@@ -478,12 +478,15 @@ class QuizAttemptController extends Controller
                     ->where('created_at', '>=', $today)
                     ->count();
                 if ($used >= intval($limit)) {
+                    $remaining = max(0, intval($limit) - intval($used));
                     return response()->json([
                         'ok' => false,
                         'code' => 'limit_reached',
                         'limit' => [
                             'type' => 'quiz_results',
-                            'value' => intval($limit)
+                            'value' => intval($limit),
+                            'used' => intval($used),
+                            'remaining' => $remaining,
                         ],
                         'message' => 'Result access limit reached for your plan'
                     ], 403);
@@ -570,12 +573,15 @@ class QuizAttemptController extends Controller
                     ->where('created_at', '>=', $today)
                     ->count();
                 if ($used >= intval($limit)) {
+                    $remaining = max(0, intval($limit) - intval($used));
                     return response()->json([
                         'ok' => false,
                         'code' => 'limit_reached',
                         'limit' => [
                             'type' => 'quiz_results',
-                            'value' => intval($limit)
+                            'value' => intval($limit),
+                            'used' => intval($used),
+                            'remaining' => $remaining,
                         ],
                         'message' => 'Daily result reveal limit reached for your plan'
                     ], 403);
