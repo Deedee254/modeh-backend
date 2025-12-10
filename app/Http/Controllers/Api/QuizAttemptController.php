@@ -256,8 +256,9 @@ class QuizAttemptController extends Controller
                 'created_by' => $quiz->author ? [
                     'id' => $quiz->author->id,
                     'name' => $quiz->author->name,
-                    'avatar' => $quiz->author->profile_photo_url ?? null, // Assuming Laravel Jetstream or similar
+                    'avatar' => $quiz->author->avatar_url ?? $quiz->author->social_avatar ?? null,
                 ] : null,
+                'likes_count' => $quiz->likes_count ?? 0,
                 'topic' => $quiz->topic ?? null,
                 'subject' => $quiz->subject ?? null,
                 'grade' => $quiz->grade ?? null,

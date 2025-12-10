@@ -43,7 +43,8 @@ class TopicController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Topic::query()->with('subject')->withCount('quizzes');
+    // eager-load subject and the subject's grade so frontend can read nested grade info
+    $query = Topic::query()->with(['subject.grade'])->withCount('quizzes');
 
         if ($q = $request->get('q')) {
             $query->where('name', 'like', "%{$q}%");
@@ -97,6 +98,18 @@ class TopicController extends Controller
                     try { $t->image = Storage::url($quiz->cover_image); } catch (\Exception $e) { $t->image = null; }
                 }
             }
+            // Attach grade name if subject->grade is available to make it easier for clients
+            try {
+                if (isset($t->subject) && isset($t->subject->grade) && $t->subject->grade) {
+                    $t->grade = $t->subject->grade;
+                    $t->grade_name = $t->subject->grade->name ?? ($t->subject->grade->display_name ?? null);
+                } elseif (isset($t->grade_name) && !$t->grade_name) {
+                    $t->grade_name = $t->grade_name ?? null;
+                }
+            } catch (\Exception $e) {
+                // ignore
+            }
+
             return $t;
         };
 
@@ -118,7 +131,8 @@ class TopicController extends Controller
     // Show a single topic (public-safe view)
     public function show(Topic $topic)
     {
-        $topic->load('subject');
+    // include subject and its grade for richer client-side rendering
+    $topic->load('subject.grade');
         // Attach image url if present
         $orig = $topic->getAttribute('image') ?? null;
         $topic->image = null;
@@ -127,6 +141,11 @@ class TopicController extends Controller
         }
         // quiz count
         $topic->quizzes_count = Quiz::where('topic_id', $topic->id)->count();
+        // attach grade name if available
+        if ($topic->subject && $topic->subject->grade) {
+            $topic->grade = $topic->subject->grade;
+            $topic->grade_name = $topic->subject->grade->name ?? ($topic->subject->grade->display_name ?? null);
+        }
         return response()->json(['topic' => $topic]);
     }
 

@@ -384,10 +384,10 @@ class QuizController extends Controller
     {
         $user = $request->user();
         // Eager-load topic->subject, grade, and level so frontend can access data directly
-        // and include a questions_count for each quiz using withCount
+        // and include a questions_count and attempts_count for each quiz using withCount
         $query = Quiz::query()
             ->with(['topic.subject', 'grade', 'level'])
-            ->withCount('questions');
+            ->withCount(['questions', 'attempts']);
 
         // search
         if ($q = $request->get('q')) {
