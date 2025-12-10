@@ -1,10 +1,10 @@
 {
-	"authHost": "http://127.0.0.1:8000",
+	"authHost": "https://admin.modeh.co.ke",
 	"authEndpoint": "/broadcasting/auth",
 	"clients": [
 		{
-			"appId": "1966525",
-			"key": "c631b05ce9d7217de73e"
+			"appId": "2089131",
+			"key": "5a6916ce972fd4a06074"
 		}
 	],
 	"database": "mysql",
@@ -20,7 +20,7 @@
 	"devMode": true,
 	"host": null,
 	"port": "6001",
-	"protocol": "http",
+	"protocol": "https",
 	"socketio": {},
 	"secureOptions": 67108864,
 	"sslCertPath": "",
