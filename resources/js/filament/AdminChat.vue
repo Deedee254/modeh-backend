@@ -1,36 +1,31 @@
 <template>
-  <div class="flex flex-1 min-h-0 bg-[#f0f2f5] px-4 py-6 md:px-6">
-    <!-- Sidebar -->
-    <div class="hidden md:flex w-80 flex-shrink-0">
-      <div class="flex h-full w-full flex-col rounded-3xl border border-border/50 bg-white text-foreground shadow-xl min-h-0">
-        <!-- Header -->
-        <div class="p-4 border-b border-border bg-white text-foreground rounded-t-3xl flex-shrink-0">
+  <main class="flex-1 overflow-auto p-3 md:p-4">
+    <div class="md:flex h-[calc(100vh-6rem)] overflow-hidden bg-background">
+      <div class="w-72 duration-300 xl:w-80 border-r flex flex-col max-md:absolute max-md:top-20 max-md:border-t max-md:left-0 max-md:h-full max-md:z-10 max-md:bg-background max-md:w-full min-h-0" :class="isMobile && showChatWindowOnMobile ? 'max-md:-translate-x-full' : 'max-md:translate-x-0'">
+        <div class="p-4 border-b border-border bg-white text-foreground sticky top-0 z-10 flex-shrink-0">
           <div class="flex items-center justify-between mb-4">
-            <h1 class="text-xl font-semibold">Threads</h1>
+            <h1 class="text-xl font-semibold">Chats</h1>
           </div>
-          <!-- Search -->
           <div class="relative">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary-foreground/70">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground">
               <circle cx="11" cy="11" r="8"></circle>
               <path d="m21 21-4.3-4.3"></path>
             </svg>
-            <input
-              class="flex h-10 w-full rounded-md border border-border px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-9 bg-muted/20 text-foreground placeholder:text-muted-foreground"
+            <input 
+              class="flex h-10 w-full rounded-md border border-border px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-9 bg-muted/20 text-foreground placeholder:text-muted-foreground" 
               placeholder="Search conversations..."
               v-model="q"
-              @input="loadThreads"
             >
           </div>
         </div>
-        <!-- Tabs -->
-        <div class="px-4 py-3 border-b border-border bg-transparent flex-shrink-0">
+        <div class="px-4 py-3 border-b border-border bg-white sticky top-[88px] z-10 flex-shrink-0">
           <div dir="ltr" data-orientation="horizontal">
             <div role="tablist" aria-orientation="horizontal" class="h-10 items-center justify-center rounded-md p-1 text-muted-foreground grid w-full grid-cols-3 bg-muted/50">
-              <button
-                v-for="tab in tabs"
+              <button 
+                v-for="tab in tabs" 
                 :key="tab.value"
-                type="button"
-                role="tab"
+                type="button" 
+                role="tab" 
                 :aria-selected="activeTab === tab.value"
                 class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 text-sm"
                 :data-state="activeTab === tab.value ? 'active' : 'inactive'"
@@ -41,105 +36,43 @@
             </div>
           </div>
         </div>
-        <!-- Chat List -->
         <div class="flex-1 overflow-y-auto min-h-0" style="-webkit-overflow-scrolling: touch;">
           <transition-group name="list" tag="div">
-            <button
-              v-for="thread in filteredThreads"
-              :key="threadKey(thread)"
-              class="w-full p-4 flex items-start gap-3 hover:bg-muted/20 transition-colors border-b border-border/60"
-              :class="String(thread.id) === String(activeThread?.id) ? 'bg-muted/10' : ''"
-              @click="openThread(thread)"
-              type="button"
-            >
-              <div class="relative flex-shrink-0">
-                <span class="relative flex shrink-0 overflow-hidden rounded-full h-12 w-12">
-                  <img v-if="thread.avatar" :src="thread.avatar" :alt="thread.name || 'Avatar'" class="h-full w-full object-cover rounded-full" loading="lazy" decoding="async" />
-                  <span v-else class="flex h-full w-full items-center justify-center rounded-full bg-primary text-primary-foreground">
-                    {{ (thread.name || thread.other_name || 'U').slice(0, 1).toUpperCase() }}
-                  </span>
-                </span>
-                <div v-if="thread.status === 'online'" class="absolute bottom-0 right-0 h-3 w-3 bg-primary rounded-full border-2 border-white"></div>
-              </div>
-              <div class="flex-1 min-w-0 text-left">
-                <div class="flex items-baseline justify-between mb-1">
-                  <h3 class="font-semibold text-foreground truncate">{{ thread.name || thread.other_name || ('User ' + thread.id) }}</h3>
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-muted-foreground flex-shrink-0">{{ formatTime(thread.last_at || thread.updated_at) }}</span>
-                    <span v-if="(thread.unread_count || 0) > 0" class="inline-flex items-center justify-center bg-primary text-white text-xs rounded-full px-2 py-0.5">{{ thread.unread_count }}</span>
-                  </div>
+          <button 
+            v-for="thread in filteredThreads" 
+            :key="threadKey(thread)" 
+            class="w-full p-4 flex items-start gap-3 hover:bg-muted/20 transition-colors border-b border-border/60"
+            :class="String(thread.id) === String(activeThread?.id) ? 'bg-muted/10' : ''"
+            @click="openThread(thread)"
+            type="button"
+          >
+            <div class="relative flex-shrink-0">
+              <span class="relative flex shrink-0 overflow-hidden rounded-full h-12 w-12">
+                <img :src="thread._resolvedAvatar" :alt="thread.name" class="h-full w-full object-cover rounded-full" loading="lazy" decoding="async" />
+              </span>
+              <div v-if="thread.status === 'online'" class="absolute bottom-0 right-0 h-3 w-3 bg-primary rounded-full border-2 border-white"></div>
+            </div>
+            <div class="flex-1 min-w-0 text-left">
+              <div class="flex items-baseline justify-between mb-1">
+                <h3 class="font-semibold text-foreground truncate">{{ thread.name || thread.other_name || ('User ' + thread.id) }}</h3>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-muted-foreground flex-shrink-0">{{ formatTime(thread.last_at || thread.updated_at) }}</span>
+                  <span v-if="((thread.unread_count ?? thread.unread) || 0) > 0" class="inline-flex items-center justify-center bg-primary text-white text-xs rounded-full px-2 py-0.5">{{ thread.unread_count ?? thread.unread }}</span>
                 </div>
-                <p class="text-sm text-muted-foreground whitespace-normal break-words overflow-hidden">{{ thread.last_preview || '' }}</p>
               </div>
-            </button>
+              <p class="text-sm text-muted-foreground whitespace-normal break-words overflow-hidden">{{ thread.last_preview || '' }}</p>
+            </div>
+          </button>
           </transition-group>
         </div>
       </div>
-    </div>
-
-    <!-- Mobile: show list when not viewing a chat -->
-    <div v-if="isMobile && !showChatWindowOnMobile" class="md:hidden flex flex-1 flex-col min-w-0 overflow-hidden rounded-3xl h-full min-h-0">
-      <div class="flex flex-col h-full min-h-0 bg-white text-foreground">
-        <!-- Header (mobile list) -->
-        <div class="p-4 border-b border-border bg-white text-foreground flex-shrink-0 w-full">
-          <div class="flex items-center justify-between mb-4">
-            <h1 class="text-xl font-semibold">Threads</h1>
-          </div>
-          <div class="relative">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70">
-              <circle cx="11" cy="11" r="8"></circle>
-              <path d="m21 21-4.3-4.3"></path>
-            </svg>
-            <input
-              class="flex h-10 w-full rounded-md border border-border px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-9 bg-gray-100 text-foreground placeholder:text-muted-foreground"
-              placeholder="Search conversations..."
-              v-model="q"
-              @input="loadThreads"
-            >
-          </div>
-        </div>
-        <div class="flex-1 overflow-y-auto min-h-0" style="-webkit-overflow-scrolling: touch;">
-          <transition-group name="list" tag="div">
-            <button
-              v-for="thread in filteredThreads"
-              :key="threadKey(thread)"
-              class="w-full p-4 flex items-start gap-3 hover:bg-muted/20 transition-colors border-b border-border/60"
-              :class="String(thread.id) === String(activeThread?.id) ? 'bg-muted/10' : ''"
-              @click="openThread(thread)"
-              type="button"
-            >
-              <div class="relative flex-shrink-0">
-                <span class="relative flex shrink-0 overflow-hidden rounded-full h-12 w-12">
-                  <img v-if="thread.avatar" :src="thread.avatar" :alt="thread.name || 'Avatar'" class="h-full w-full object-cover rounded-full" loading="lazy" decoding="async" />
-                  <span v-else class="flex h-full w-full items-center justify-center rounded-full bg-primary text-primary-foreground">
-                    {{ (thread.name || thread.other_name || 'U').slice(0, 1).toUpperCase() }}
-                  </span>
-                </span>
-                <div v-if="thread.status === 'online'" class="absolute bottom-0 right-0 h-3 w-3 bg-primary rounded-full border-2 border-white"></div>
-              </div>
-              <div class="flex-1 min-w-0 text-left">
-                <div class="flex items-baseline justify-between mb-1">
-                  <h3 class="font-semibold text-foreground truncate">{{ thread.name || thread.other_name || ('User ' + thread.id) }}</h3>
-                  <span class="text-xs text-muted-foreground ml-2 flex-shrink-0">{{ formatTime(thread.last_at || thread.updated_at) }}</span>
-                  <span v-if="(thread.unread_count || 0) > 0" class="inline-flex items-center justify-center bg-primary text-white text-xs rounded-full px-2 py-0.5">{{ thread.unread_count }}</span>
-                </div>
-                <p class="text-sm text-muted-foreground whitespace-normal break-words overflow-hidden">{{ thread.last_preview || '' }}</p>
-              </div>
-            </button>
-          </transition-group>
-        </div>
-      </div>
-    </div>
-
-    <!-- Main Chat Area -->
-    <div v-if="!isMobile || showChatWindowOnMobile" class="flex flex-1 flex-col min-w-0 overflow-hidden rounded-3xl md:rounded-none md:pl-6 bg-[#efeae2] min-h-0">
-      <!-- Chat Header -->
-      <div class="flex items-center gap-3 p-4 bg-white border-b border-border flex-shrink-0 relative z-20">
-        <button
-          v-if="isMobile && showChatWindowOnMobile"
+      <div v-if="!isMobile || showChatWindowOnMobile" class="flex flex-1 flex-col min-w-0 overflow-hidden bg-gradient-to-b from-muted/30 to-background min-h-0 max-md:absolute max-md:inset-0 max-md:top-20">
+      <div class="flex items-center gap-3 p-4 bg-white border-b border-border sticky top-0 z-10 flex-shrink-0">
+        <button 
+          v-if="isMobile && showChatWindowOnMobile" 
           class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground md:hidden h-9 w-9"
           @click="showChatWindowOnMobile = false"
-          aria-label="Back to threads"
+          aria-label="Back to chats"
           type="button"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left h-5 w-5">
@@ -149,17 +82,14 @@
         </button>
         <div class="relative" v-if="activeThread">
           <span class="relative flex shrink-0 overflow-hidden rounded-full h-10 w-10">
-            <img v-if="activeThread.avatar" :src="activeThread.avatar" :alt="activeThread.name || 'Avatar'" class="h-full w-full object-cover rounded-full" loading="lazy" decoding="async" />
-            <span v-else class="flex h-full w-full items-center justify-center rounded-full bg-primary text-primary-foreground">
-              {{ (activeThread.name || activeThread.other_name || 'U').slice(0, 1).toUpperCase() }}
-            </span>
+            <img :src="activeThread._resolvedAvatar" :alt="activeThread.name" class="h-full w-full object-cover rounded-full" loading="lazy" decoding="async" />
           </span>
         </div>
         <div class="flex-1 min-w-0">
           <h2 class="font-semibold text-foreground truncate">{{ activeThread?.name || activeThread?.other_name || 'Select a conversation' }}</h2>
           <p class="text-xs text-muted-foreground">{{ activeThread?.status || '' }}</p>
         </div>
-        <button type="button" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-9 w-9">
+        <button class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-9 w-9" type="button">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ellipsis-vertical h-5 w-5">
             <circle cx="12" cy="12" r="1"></circle>
             <circle cx="12" cy="5" r="1"></circle>
@@ -167,9 +97,7 @@
           </svg>
         </button>
       </div>
-
-      <!-- Messages Container -->
-      <div ref="messagesPane" class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0" style="padding-bottom: 90px;" @scroll="handleScroll">
+      <div ref="messagesPane" class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         <div v-if="loadingMore" class="text-center text-xs text-muted-foreground">Loading more messages...</div>
         <template v-for="(group, index) in messageGroups" :key="index">
           <div class="space-y-4">
@@ -181,7 +109,6 @@
               :class="String(message.sender_id) === String(adminId) ? 'justify-end' : 'justify-start'"
             >
               <div :class="String(message.sender_id) === String(adminId) ? 'chat-bubble sent' : 'chat-bubble received'" class="rounded-lg px-4 py-2">
-                <!-- attachments (if any) -->
                 <template v-if="message.attachments && message.attachments.length">
                   <div class="mb-2 space-y-2">
                     <div v-for="(a, i) in message.attachments" :key="i" class="rounded overflow-hidden border bg-background">
@@ -189,12 +116,9 @@
                     </div>
                   </div>
                 </template>
-
                 <p class="text-sm whitespace-pre-wrap">{{ message.content || message.text || message.body }}</p>
-
                 <div class="flex items-center justify-end gap-2 mt-1">
                   <p class="text-xs" :class="String(message.sender_id) === String(adminId) ? 'text-muted-foreground/80' : 'text-muted-foreground'">{{ formatTime(message.created_at) }}</p>
-                  <!-- outgoing message ticks -->
                   <template v-if="String(message.sender_id) === String(adminId)">
                     <span class="ml-1">
                       <template v-if="message.sending">
@@ -203,11 +127,11 @@
                       <template v-else-if="message.failed">
                         <svg class="tick text-rose-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v6"></path><path d="M12 15v.01"></path></svg>
                       </template>
-                        <template v-else>
-                          <svg v-if="getTickState(message) === 'single'" class="tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
-                          <svg v-else-if="getTickState(message) === 'double'" class="tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path><path d="M22 6 11 17l-5-5"></path></svg>
-                          <svg v-else-if="getTickState(message) === 'read'" class="tick tick-read" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f7b932" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path><path d="M22 6 11 17l-5-5"></path></svg>
-                        </template>
+                      <template v-else>
+                        <svg v-if="getTickState(message) === 'single'" class="tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                        <svg v-else-if="getTickState(message) === 'double'" class="tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path><path d="M22 6 11 17l-5-5"></path></svg>
+                        <svg v-else-if="getTickState(message) === 'read'" class="tick tick-read" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path><path d="M22 6 11 17l-5-5"></path></svg>
+                      </template>
                     </span>
                   </template>
                   <div v-if="message.failed && String(message.sender_id) === String(adminId)" class="flex items-center gap-2">
@@ -233,9 +157,7 @@
         </div>
         <div ref="messagesEnd"></div>
       </div>
-
-      <!-- Input Area -->
-      <div class="p-3 bg-white/5 border-t border-border flex-shrink-0 relative z-30">
+      <div class="p-4 bg-white border-t border-border sticky bottom-0 z-10 flex-shrink-0">
         <div class="flex items-end gap-2" style="margin-bottom:8px">
           <input ref="fileInput" type="file" class="hidden" @change="onFileChange" multiple>
           <button
@@ -257,7 +179,7 @@
               @input="notifyTyping"
               @blur="notifyTypingStopped"
             />
-            <button @click="toggleEmojiPicker" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground" style="margin-bottom:6px">
+            <button @click="toggleEmojiPicker" class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground" style="margin-bottom:6px" type="button">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-smile h-5 w-5">
                 <circle cx="12" cy="12" r="10"></circle>
                 <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
@@ -265,8 +187,8 @@
                 <line x1="15" x2="15.01" y1="9" y2="9"></line>
               </svg>
             </button>
-            <div v-if="showEmojiPicker" class="absolute bottom-12 left-2 z-50 bg-white border rounded shadow p-2 grid grid-cols-6 gap-2 w-56">
-              <button v-for="emoji in emojis" :key="emoji" @click.prevent="insertEmoji(emoji)" class="text-lg">{{ emoji }}</button>
+            <div v-if="showEmojiPicker" class="absolute bottom-12 left-2 z-30 bg-white border rounded shadow p-2 grid grid-cols-6 gap-2 w-56">
+              <button v-for="emoji in emojis" :key="emoji" @click.prevent="insertEmoji(emoji)" class="text-lg" type="button">{{ emoji }}</button>
             </div>
             <button
               class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 text-primary-foreground h-8 w-8 flex-shrink-0 bg-primary hover:bg-primary/90 ml-1"
@@ -284,14 +206,14 @@
         <div v-if="attachments.length" class="flex gap-2 items-center flex-wrap">
           <div v-for="(f, i) in attachments" :key="i" class="flex items-center gap-2 border px-2 py-1 rounded bg-gray-50 text-xs">
             <span>{{ f.name }}</span>
-            <button @click="attachments.splice(i, 1)" class="text-rose-500 hover:text-rose-700 font-bold">×</button>
+            <button @click="attachments.splice(i, 1)" class="text-rose-500 hover:text-rose-700 font-bold" type="button">×</button>
           </div>
         </div>
       </div>
     </div>
-  </div>
+    </div>
+  </main>
 </template>
-
 
 <script>
 export default {
@@ -308,7 +230,6 @@ export default {
       messages: [],
       activeThread: null,
       composer: '',
-      sendingMessages: {},
       attachments: [],
       showEmojiPicker: false,
       q: '',
@@ -322,6 +243,7 @@ export default {
       autoScrollOnNew: true,
       isMobile: false,
       showChatWindowOnMobile: false,
+      emojis: ['😀','😂','😍','👍','🙏','🎉','😅','🙌','😉','🔥','😢','🤔'],
     }
   },
   computed: {
@@ -345,10 +267,27 @@ export default {
         const B = new Date(b.last_at || b.updated_at || 0).getTime()
         return B - A
       })
-      return filtered
+      return filtered.map(t => ({
+        ...t,
+        _resolvedAvatar: this.resolveAvatar(t)
+      }))
     }
   },
   methods: {
+    resolveAvatar(thread) {
+      const avatarPlaceholder = '/logo/avatar-placeholder.png'
+      try {
+        let val = null
+        if (thread && typeof thread === 'object') {
+          val = thread.avatar_url || thread.avatar || thread.photo || thread.profile_image || null
+        } else {
+          val = thread
+        }
+        return val || avatarPlaceholder
+      } catch {
+        return (typeof thread === 'string' ? thread : null) || avatarPlaceholder
+      }
+    },
     threadKey(thread) {
       if (!thread) return 'thread-null'
       return thread.id ?? thread.other_id ?? thread.other_user_id ?? thread.thread_id ?? thread.uuid ?? (thread.email ? `email-${thread.email}` : `name-${(thread.name || thread.other_name || 'unknown')}`)
@@ -358,7 +297,6 @@ export default {
         const res = await fetch('/api/chat/threads', { credentials: 'include' })
         if (res.ok) {
           const j = await res.json()
-          // normalize threads to include unread_count and avatar
           this.threads = (j.conversations || j.threads || []).map(t => ({
             id: t.id || t.other_id || t.other_user_id || null,
             ...t,
@@ -384,11 +322,9 @@ export default {
             const j = await res.json()
             this.messages = j.messages || []
             this.groupMessages()
-            // ensure we scroll to the bottom of the thread after loading
             this.$nextTick(() => { this.scrollToBottom(true) })
           }
       } catch (e) { console.error(e) }
-      // If on mobile, switch to single chat view
       try {
         const mobile = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width: 767px)').matches : false
         if (mobile) this.showChatWindowOnMobile = true
@@ -407,20 +343,16 @@ export default {
         sending: true,
         attachments: this.attachments.map(a => ({ name: a.name }))
       }
-      // optimistic append
       this.messages.push(tempMsg)
       this.groupMessages()
       this.composer = ''
-      // scroll to bottom so user sees their message
       this.$nextTick(() => { this.scrollToBottom(true) })
 
-      // prepare send: if attachments present, use FormData, else JSON
       try {
         let res
         const tokenMeta = document.querySelector('meta[name="csrf-token"]')
         const headers = {}
         if (tokenMeta) headers['X-CSRF-TOKEN'] = tokenMeta.getAttribute('content')
-        // include Echo socket id if available
         try {
           if (window.Echo) {
             if (typeof window.Echo.socketId === 'function') headers['X-Socket-Id'] = window.Echo.socketId()
@@ -433,10 +365,8 @@ export default {
           fd.append('content', content)
           if (this.activeThread.id) fd.append('recipient_id', this.activeThread.id)
           this.attachments.forEach((f, i) => {
-            // backend expects file fields as attachments[]
             fd.append('attachments[]', f)
           })
-          // send as multipart/form-data (browser sets Content-Type)
           res = await fetch('/api/chat/send', { method: 'POST', credentials: 'include', headers, body: fd })
         } else {
           const payload = { content }
@@ -448,7 +378,6 @@ export default {
         if (res && res.ok) {
           const j = await res.json()
           const serverMsg = j.message || j
-          // replace temp message
           const idx = this.messages.findIndex(m => m.id === tempId)
           if (idx > -1) {
             this.messages.splice(idx, 1, serverMsg)
@@ -457,7 +386,6 @@ export default {
           }
           this.groupMessages()
           this.$nextTick(() => { this.scrollToBottom(true) })
-          // clear attachments on success
           this.attachments = []
         } else {
           const idx = this.messages.findIndex(m => m.id === tempId)
@@ -466,7 +394,6 @@ export default {
             this.$set ? this.$set(this.messages[idx], 'sending', false) : (this.messages[idx].sending = false)
           }
         }
-        // Notify typing stopped
         this.notifyTypingStopped()
       } catch (e) {
         console.error(e)
@@ -477,60 +404,12 @@ export default {
         }
       }
     },
-    startEdit(message) {
-      message.isEditing = true
-      message.editText = message.content || message.body || message.message || ''
-    },
-    async updateMessage(message) {
-      if (!message.editText.trim()) return
-      try {
-        const headers = { 'Content-Type': 'application/json' }
-        const tokenMeta = document.querySelector('meta[name="csrf-token"]')
-        if (tokenMeta) headers['X-CSRF-TOKEN'] = tokenMeta.getAttribute('content')
-        const res = await fetch(`/api/chat/messages/${message.id}`, {
-          method: 'PUT',
-          credentials: 'include',
-          headers,
-          body: JSON.stringify({ body: message.editText })
-        })
-        if (res.ok) {
-          message.content = message.editText
-          message.isEditing = false
-          this.groupMessages()
-        }
-      } catch (e) { console.error(e) }
-    },
-    cancelEdit(message) {
-      message.isEditing = false
-      message.editText = ''
-    },
-    async confirmDelete(message) {
-      if (!confirm('Are you sure you want to delete this message?')) return
-      try {
-        const headers = {}
-        const tokenMeta = document.querySelector('meta[name="csrf-token"]')
-        if (tokenMeta) headers['X-CSRF-TOKEN'] = tokenMeta.getAttribute('content')
-        const res = await fetch(`/api/chat/messages/${message.id}`, {
-          method: 'DELETE',
-          credentials: 'include',
-          headers
-        })
-        if (res.ok) {
-          const index = this.messages.findIndex(m => m.id === message.id)
-          if (index > -1) {
-            this.messages.splice(index, 1)
-            this.groupMessages()
-          }
-        }
-      } catch (e) { console.error(e) }
-    },
     notifyTyping() {
       if (!this.activeThread) return
       try {
         const headers = { 'Content-Type': 'application/json' }
         const tokenMeta = document.querySelector('meta[name="csrf-token"]')
         if (tokenMeta) headers['X-CSRF-TOKEN'] = tokenMeta.getAttribute('content')
-        // include Echo socket id if available to allow server-side broadcasting to exclude sender
         try {
           if (window.Echo) {
             if (typeof window.Echo.socketId === 'function') headers['X-Socket-Id'] = window.Echo.socketId()
@@ -569,15 +448,11 @@ export default {
       try {
         const files = e.target.files ? Array.from(e.target.files) : []
         for (const f of files) {
-          // store File object; keep name for preview
           this.attachments.push(f)
         }
-        // reset input so same file can be selected again if removed
         if (this.$refs && this.$refs.fileInput) this.$refs.fileInput.value = null
       } catch (err) { console.error(err) }
     },
-
-    // UI helpers
     toggleEmojiPicker() {
       this.showEmojiPicker = !this.showEmojiPicker
     },
@@ -592,7 +467,6 @@ export default {
     },
     getTickState(message) {
       if (!message) return 'none'
-      // treat server-persisted messages as delivered/read for UI (show blue ticks)
       if (message.is_read === true) return 'read'
       const id = message.id
       const isOptimistic = typeof id === 'string' && id.startsWith('msg-')
@@ -617,7 +491,6 @@ export default {
           }).catch(() => { m.sending = false; m.failed = true })
       } catch (e) { m.sending = false; m.failed = true }
     },
-
     groupMessages() {
       try {
         const msgs = Array.isArray(this.messages) ? this.messages.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at)) : []
@@ -630,13 +503,11 @@ export default {
             groups.push({ date: currentDate, messages: [] })
           }
           const group = groups[groups.length - 1]
-          // ensure message shape for template
           const copy = Object.assign({}, m)
           copy.isEditing = !!copy.isEditing
           copy.editText = copy.editText || ''
           group.messages.push(copy)
         }
-        // add index for template checks
         groups.forEach(g => g.messages.forEach((mm, idx) => { mm.index = idx }))
         this.messageGroups = groups
       } catch (e) {
@@ -644,12 +515,10 @@ export default {
         this.messageGroups = []
       }
     },
-    // Scroll helpers
     scrollToBottom(force = false) {
       try {
         const el = this.$refs.messagesPane
         if (!el) return
-        // el may be the actual DOM node or a Vue ref depending on build; normalize
         const node = el instanceof Element ? el : (el.$el || el)
         if (!node) return
         const atBottom = (node.scrollHeight - node.scrollTop - node.clientHeight) <= 200
@@ -658,16 +527,6 @@ export default {
         }
       } catch (e) {}
     },
-    isScrolledNearBottom() {
-      try {
-        const el = this.$refs.messagesPane
-        if (!el) return true
-        const node = el instanceof Element ? el : (el.$el || el)
-        if (!node) return true
-        return (node.scrollHeight - node.scrollTop - node.clientHeight) <= 200
-      } catch (e) { return true }
-    },
-    // Date/time formatting helpers used by the template
     formatDate(d) {
       try {
         if (!d) return ''
@@ -675,7 +534,6 @@ export default {
         if (isNaN(date.getTime())) return String(d)
         const today = new Date()
         if (date.toDateString() === today.toDateString()) return 'Today'
-        // show month/day or full year if different year
         if (date.getFullYear() !== today.getFullYear()) return date.toLocaleDateString()
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       } catch (e) { return String(d) }
@@ -687,13 +545,6 @@ export default {
         if (isNaN(date.getTime())) return String(ts)
         return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
       } catch (e) { return String(ts) }
-    },
-    handleScroll(e) {
-      if (!this.hasMoreMessages || this.loadingMore) return
-      const el = e.target
-      if (el.scrollTop <= 100) {
-        this.loadMoreMessages()
-      }
     },
     async loadMoreMessages() {
       if (!this.activeThread || !this.hasMoreMessages || this.loadingMore) return
@@ -720,7 +571,7 @@ export default {
     attachEcho() {
       if (!window.Echo) return
       try {
-    const channel = window.Echo.private('App.Models.User.' + this.adminId)
+        const channel = window.Echo.private('App.Models.User.' + this.adminId)
         
         channel.listen('.MessageSent', (payload) => {
           const msg = payload.message ?? payload
@@ -752,10 +603,8 @@ export default {
     }
   },
   async mounted() {
-    // set admin id
     this.adminId = window.__ADMIN_ID__ || null
     await this.loadThreads()
-    // Wait for Echo to be available, then attach
     const tryAttachEcho = () => {
       if (window.Echo) {
         this.attachEcho()
@@ -764,15 +613,12 @@ export default {
       }
     }
     tryAttachEcho()
-    // mobile detection
     try {
       this.isMobile = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width: 767px)').matches : false
       this._resizeHandler = () => { try { this.isMobile = window.matchMedia('(max-width: 767px)').matches; if (!this.isMobile) this.showChatWindowOnMobile = false } catch (e) {} }
       window.addEventListener('resize', this._resizeHandler)
     } catch (e) {}
-  }
-
-  ,
+  },
   beforeUnmount() {
     try { if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler) } catch (e) {}
   }
@@ -780,9 +626,23 @@ export default {
 </script>
 
 <style scoped>
+::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 .chat-bubble {
-  max-width: 70%;
+  display: inline-block;
+  /* keep the window shape stable: limit width by ch (characters) and percentage */
+  max-width: min(65%, 36ch);
+  min-width: 6ch;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
 }
 
 .chat-bubble.sent {
@@ -795,18 +655,20 @@ export default {
   background: #f5f5f5;
   color: #111827;
   border-radius: 18px 18px 18px 4px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.05);
 }
 
-.tick {
-  width: 14px;
-  height: 14px;
-  display: inline-block;
-}
+/* make sure message row doesn't overflow */
+.flex.w-full > .chat-bubble { max-width: 70%; }
 
-.tick-read {
-  stroke: #f7b932;
-  color: #f7b932;
-}
+/* tick icon styles */
+.tick { display: inline-block; vertical-align: middle; stroke: #8696a0; color: #8696a0; }
+.tick-read { stroke: #f7b932; color: #f7b932; }
+.chat-bubble.received .tick { stroke: rgba(0,0,0,0.45); color: rgba(0,0,0,0.45); }
+.chat-bubble.sent .tick { stroke: #8696a0; color: #8696a0; }
+.tick { width: 14px; height: 14px; margin-left: 6px }
+
+.chat-bubble .meta { font-size: 11px; opacity: 0.8 }
 
 .typing-indicator {
   display: flex;

@@ -93,7 +93,10 @@ use App\Policies\QuizPolicy;
         try {
             // Register Livewire component alias only when Livewire is installed and available.
             if (class_exists('\\Livewire\\Livewire')) {
+                // Register known admin Livewire components used by Filament pages
                 call_user_func(['\\Livewire\\Livewire', 'component'], 'admin.bank-questions-table', \App\Http\Livewire\Admin\BankQuestionsTable::class);
+                call_user_func(['\\Livewire\\Livewire', 'component'], 'admin.chat-senders-table', \App\Http\Livewire\Admin\ChatSendersTable::class);
+                call_user_func(['\\Livewire\\Livewire', 'component'], 'admin.sender-messages-table', \App\Http\Livewire\Admin\SenderMessagesTable::class);
             } else {
                 logger()->debug('Livewire not present, skipping admin component registration');
             }

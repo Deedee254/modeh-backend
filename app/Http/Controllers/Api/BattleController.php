@@ -15,6 +15,7 @@ use App\Models\BattleSubmission;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Models\Quiz;
+use App\Models\User;
 use App\Services\AchievementService;
 use App\Services\QuestionMarkingService;
 use App\Services\SubscriptionLimitService;
@@ -396,6 +397,11 @@ class BattleController extends Controller
         $user = $request->user();
         if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
 
+        // Use the admin user as the configured bot opponent (explicit requirement).
+        // Pick the first user with role 'admin' (if any).
+        $admin = User::where('role', 'admin')->orderBy('id')->first();
+        $botUserId = $admin ? $admin->id : null;
+
         // ensure the user is a participant
         if (!in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
             return response()->json(['message' => 'Forbidden'], 403);
@@ -486,15 +492,20 @@ class BattleController extends Controller
         if ($battle->status === 'completed') {
             // Check achievements for winner
             if ($battle->winner_id) {
-                $this->achievementService->checkAchievements($battle->winner_id, [
+                // Skip awarding achievements to the configured bot user
+                if (intval($battle->winner_id) !== intval($botUserId)) {
+                    $this->achievementService->checkAchievements($battle->winner_id, [
                     'type' => 'battle_won',
                     'score' => $battle->winner_id === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points,
                     'total' => $total
-                ]);
+                    ]);
+                }
             }
             
             // Check achievements for both participants
             foreach ([$battle->initiator_id, $battle->opponent_id] as $userId) {
+                // skip bot user
+                if (intval($userId) === intval($botUserId)) continue;
                 $userPoints = $userId === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points;
                 $aw = $this->achievementService->checkAchievements($userId, [
                     'type' => 'battle_completed', 
@@ -569,6 +580,14 @@ class BattleController extends Controller
         $user = $request->user();
         if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
 
+        // Only allow participants
+        if (!in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // Check if this is a free battle
+        $isFreeBattle = !$battle->one_off_price || $battle->one_off_price == 0;
+
         // Subscription or one-off purchase check
         $activeSub = \App\Models\Subscription::where('user_id', $user->id)
             ->where('status', 'active')
@@ -579,132 +598,165 @@ class BattleController extends Controller
             ->orderByDesc('started_at')
             ->first();
 
+        // Check for institution subscriptions as well
+        $institutionSubs = \App\Models\Subscription::where('user_id', $user->id)
+            ->where('subscription_type', 'institution')
+            ->where('status', 'active')
+            ->where(function($q) {
+                $now = now();
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
+            })
+            ->get();
+
         $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'battle')
             ->where('item_id', $battle->getKey())
             ->where('status', 'confirmed')
             ->exists();
 
-        if (!$activeSub && !$hasOneOff) {
+        // User needs: subscription (personal or institution) OR one-off purchase (only if not free)
+        $hasValidSubscription = $activeSub || $institutionSubs->count() > 0;
+        
+        if (!$isFreeBattle && !$hasValidSubscription && !$hasOneOff) {
             return response()->json(['ok' => false, 'message' => 'Subscription or one-off purchase required'], 403);
         }
 
-        // Enforce package limits for battle results/marks
-        if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
-            $features = $activeSub->package->features;
-            $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
-            if ($limit !== null) {
-                $today = now()->startOfDay();
-                $used = Battle::where(function($q) use ($user) {
-                        $q->where('initiator_id', $user->id)->orWhere('opponent_id', $user->id);
-                    })->whereNotNull('completed_at')
-                    ->where('completed_at', '>=', $today)
-                    ->count();
-                if ($used >= intval($limit)) {
-                    $remaining = max(0, intval($limit) - intval($used));
-                    return response()->json([
-                        'ok' => false,
-                        'code' => 'limit_reached',
-                        'limit' => [
+        // Only check limits if battle is NOT free
+        if (!$isFreeBattle) {
+            // Check both personal and institution limits
+            $limitExceeded = false;
+            $limitInfo = null;
+
+            // Check personal subscription limit
+            if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
+                $features = $activeSub->package->features;
+                $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
+                if ($limit !== null) {
+                    $today = now()->startOfDay();
+                    $used = Battle::where(function($q) use ($user) {
+                            $q->where('initiator_id', $user->id)->orWhere('opponent_id', $user->id);
+                        })->whereNotNull('completed_at')
+                        ->where('completed_at', '>=', $today)
+                        ->count();
+                    if ($used >= intval($limit)) {
+                        $limitExceeded = true;
+                        $limitInfo = [
                             'type' => 'battle_results',
                             'value' => intval($limit),
                             'used' => intval($used),
-                            'remaining' => $remaining,
-                        ],
-                        'message' => 'Daily battle result reveal limit reached for your plan'
-                    ], 403);
+                            'remaining' => 0,
+                            'subscription_type' => 'personal'
+                        ];
+                    }
                 }
+            }
+
+            // Check institution subscription limits (if personal limit not exceeded)
+            if (!$limitExceeded && $institutionSubs->count() > 0) {
+                foreach ($institutionSubs as $instSub) {
+                    if ($instSub->package && is_array($instSub->package->features)) {
+                        $features = $instSub->package->features;
+                        $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
+                        if ($limit !== null) {
+                            $today = now()->startOfDay();
+                            $used = Battle::where(function($q) use ($user) {
+                                    $q->where('initiator_id', $user->id)->orWhere('opponent_id', $user->id);
+                                })->whereNotNull('completed_at')
+                                ->where('completed_at', '>=', $today)
+                                ->count();
+                            if ($used >= intval($limit)) {
+                                $limitExceeded = true;
+                                $limitInfo = [
+                                    'type' => 'battle_results',
+                                    'value' => intval($limit),
+                                    'used' => intval($used),
+                                    'remaining' => 0,
+                                    'subscription_type' => 'institution'
+                                ];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ($limitExceeded && $limitInfo) {
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'limit_reached',
+                    'limit' => $limitInfo,
+                    'message' => 'Daily battle result reveal limit reached for your plan'
+                ], 403);
             }
         }
 
-        // Only allow participants
-        if (!in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        try {
+            DB::beginTransaction();
 
-        // Recompute correct_flag for any submissions with null correct_flag
-        $questionMap = $battle->questions()->get()->keyBy('id');
-        $submissions = $battle->submissions()->whereNull('correct_flag')->get();
-        $totalMarked = 0;
+            // Recompute correct_flag for any submissions with null correct_flag
+            $questionMap = $battle->questions()->get()->keyBy('id');
+            $submissions = $battle->submissions()->whereNull('correct_flag')->get();
 
-        DB::transaction(function () use ($submissions, $battle, $questionMap, &$totalMarked) {
             foreach ($submissions as $s) {
                 $q = $questionMap->get($s->question_id) ?? Question::find($s->question_id);
                 if (!$q) continue;
 
                 // Use shared service for correctness
                 $isCorrect = $this->questionMarkingService->isAnswerCorrect($s->selected, $q->answers ?? [], $q);
-
                 $s->correct_flag = $isCorrect;
                 $s->save();
-                $totalMarked++;
             }
 
-            // Recompute aggregated points
+            // Recompute aggregated points from submissions
             $initiatorCorrect = $battle->submissions()->where('user_id', $battle->initiator_id)->where('correct_flag', true)->count();
             $opponentCorrect = $battle->submissions()->where('user_id', $battle->opponent_id)->where('correct_flag', true)->count();
 
             $battle->initiator_points = $initiatorCorrect;
             $battle->opponent_points = $opponentCorrect;
 
-            if ($battle->initiator_points !== null && $battle->opponent_points !== null) {
-                if ($battle->initiator_points > $battle->opponent_points) $battle->winner_id = $battle->initiator_id;
-                elseif ($battle->opponent_points > $battle->initiator_points) $battle->winner_id = $battle->opponent_id;
-                else $battle->winner_id = null; // tie
-                $battle->status = 'completed';
-                $battle->completed_at = now();
+            // Determine winner
+            if ($battle->initiator_points > $battle->opponent_points) {
+                $battle->winner_id = $battle->initiator_id;
+            } elseif ($battle->opponent_points > $battle->initiator_points) {
+                $battle->winner_id = $battle->opponent_id;
+            } else {
+                $battle->winner_id = null; // tie
             }
-
+            
+            $battle->status = 'completed';
+            $battle->completed_at = now();
             $battle->save();
-        });
 
-        // After marking, award points to participants and check achievements
-        // Points: each correct answer = 10 points (similar to quizzes)
-        $initiatorPoints = $battle->initiator_points ?? 0;
-        $opponentPoints = $battle->opponent_points ?? 0;
-
-        try {
-            DB::beginTransaction();
-            // increment user points where model supports it
+            // Award points to participants
             $initUser = \App\Models\User::find($battle->initiator_id);
             $oppUser = \App\Models\User::find($battle->opponent_id);
             if ($initUser && method_exists($initUser, 'increment')) {
-                try { $initUser->increment('points', $initiatorPoints * 1); } catch (\Throwable $_) {}
+                try { $initUser->increment('points', $battle->initiator_points); } catch (\Throwable $_) {}
             }
             if ($oppUser && method_exists($oppUser, 'increment')) {
-                try { $oppUser->increment('points', $opponentPoints * 1); } catch (\Throwable $_) {}
+                try { $oppUser->increment('points', $battle->opponent_points); } catch (\Throwable $_) {}
             }
 
-            // Achievements for both participants
+            // Check achievements for the current user
             $awarded = [];
-            foreach ([$battle->initiator_id, $battle->opponent_id] as $userId) {
-                $userPoints = $userId === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points;
-                $aw = $this->achievementService->checkAchievements($userId, [
-                    'type' => 'battle_completed',
-                    'score' => $userPoints,
-                    'total' => $totalMarked
-                ]);
-                if (is_array($aw) && count($aw)) $awarded = array_merge($awarded, $aw);
-            }
+            $userPoints = $user->id === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points;
+            $aw = $this->achievementService->checkAchievements($user, [
+                'type' => 'battle_completed',
+                'score' => $userPoints,
+                'total' => $battle->questions()->count(),
+                'battle_id' => $battle->id
+            ]);
+            if (is_array($aw) && count($aw)) $awarded = $aw;
 
             DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();
-            try { Log::warning('Failed to award points after battle mark: '.$e->getMessage()); } catch (\Throwable $_) {}
+            try { Log::error('Failed marking battle: '.$e->getMessage()); } catch (\Throwable $_) {}
+            return response()->json(['ok' => false, 'message' => 'Failed to mark battle'], 500);
         }
 
-        // Reuse result to return latest view and include awarded achievements and user
-        $res = $this->result($request, $battle);
-        // $this->result returns a JsonResponse; append awarded_achievements and user if possible
-        try {
-            $refreshedUser = $request->user()->fresh()->load('achievements');
-            $original = $res->getData(true);
-            $original['awarded_achievements'] = $awarded ?? [];
-            $original['user'] = $refreshedUser;
-            return response()->json($original);
-        } catch (\Throwable $_) {
-            return $res;
-        }
+        // Return result using same result() method (cleaner architecture)
+        return $this->result($request, $battle);
     }
 
     /**
@@ -735,7 +787,11 @@ class BattleController extends Controller
         $total = count($answers);
         $correct = 0;
 
-        DB::transaction(function () use ($answers, $user, $battle, $questionMap, &$detailed, &$correct) {
+        // Use the admin user explicitly as the bot opponent.
+        $admin = User::where('role', 'admin')->orderBy('id')->first();
+        $botUserId = $admin ? $admin->id : null;
+
+        DB::transaction(function () use ($answers, $user, $battle, $questionMap, &$detailed, &$correct, $botUserId) {
             foreach ($answers as $a) {
                 $qid = intval($a['question_id'] ?? 0);
                 $selected = $a['selected'] ?? null;
@@ -771,8 +827,55 @@ class BattleController extends Controller
             // Set initiator points from persisted submissions
             $initiatorCorrect = $battle->submissions()->where('user_id', $battle->initiator_id)->where('correct_flag', true)->count();
             $battle->initiator_points = $initiatorCorrect;
-            // set opponent points to 0 for solo completion
-            $battle->opponent_points = 0;
+            // If a system bot user is configured, persist bot answers under that user so
+            // the bot becomes a real opponent that can be marked and awarded like a normal user.
+            // Otherwise, fall back to setting opponent points to 0 (no opponent persisted).
+            if ($botUserId && $botUserId > 0) {
+                $battle->opponent_id = $botUserId;
+                $botAccuracy = 0.6;
+                try {
+                    $settings = is_array($battle->settings) ? $battle->settings : (array) ($battle->settings ?? []);
+                    if (isset($settings['bot_accuracy'])) $botAccuracy = floatval($settings['bot_accuracy']);
+                } catch (\Throwable $_) {}
+
+                $seed = crc32($battle->uuid ?? $battle->id);
+                $synthOpponentCorrect = 0;
+                foreach ($battle->questions as $q) {
+                    $qid = $q->id;
+                    $r = (crc32($seed . '|' . $qid) % 100) / 100;
+                    $isCorrect = $r < $botAccuracy;
+                    $correctAnswers = $this->normalizeAnswers($q->answers);
+                    if ($isCorrect) {
+                        $selected = $correctAnswers;
+                        $synthOpponentCorrect++;
+                    } else {
+                        $opts = $q->getAllOptionTexts();
+                        $selected = null;
+                        foreach ($opts as $opt) {
+                            if (!in_array($opt, (array) $correctAnswers, true)) { $selected = $opt; break; }
+                        }
+                    }
+                    $per = intval($settings['time_per_question'] ?? $battle->time_per_question ?? 20);
+                    $tt = 1 + (crc32($seed . ':t:' . $qid) % max(1, $per));
+
+                    // persist a submission record for the bot user
+                    BattleSubmission::updateOrCreate([
+                        'battle_id' => $battle->getKey(),
+                        'user_id' => $botUserId,
+                        'question_id' => $qid,
+                    ], [
+                        'selected' => $selected,
+                        'time_taken' => $tt,
+                        'correct_flag' => $isCorrect,
+                    ]);
+                }
+
+                // set opponent points from synthesized submissions
+                $battle->opponent_points = $synthOpponentCorrect;
+            } else {
+                // No bot user configured; keep behavior compatible with older logic
+                $battle->opponent_points = 0;
+            }
 
             // determine winner
             if ($battle->initiator_points > $battle->opponent_points) $battle->winner_id = $battle->initiator_id;
@@ -787,7 +890,8 @@ class BattleController extends Controller
 
         // achievements
         $awarded = [];
-        if ($battle->winner_id) {
+        // Only award achievements for real users and skip the configured bot user (if any)
+        if ($battle->winner_id && intval($battle->winner_id) > 0 && intval($battle->winner_id) !== intval($botUserId)) {
             $aw = $this->achievementService->checkAchievements($battle->winner_id, [
                 'type' => 'battle_won',
                 'score' => $battle->winner_id === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points,
@@ -956,6 +1060,7 @@ class BattleController extends Controller
             $questions[] = [
                 'question_id' => $qid,
                 'body' => $q->body,
+                'marks' => $q->marks ?? 1,
                 'initiator' => $initiatorPayload,
                 'opponent' => $opponentPayload,
                 'correct' => $correctAnswers,
@@ -977,6 +1082,35 @@ class BattleController extends Controller
             $opponentPoints = $opponentHasSubmissions ? $computedOpponentPoints : $synthOpponentPoints;
         }
 
+        // Ensure battle has winner_id set (in case it wasn't marked yet)
+        $winnerId = null;
+        if ($battle->status === 'completed' && $battle->winner_id !== null) {
+            $winnerId = $battle->winner_id;
+        } elseif ($initiatorPoints > $opponentPoints) {
+            $winnerId = $battle->initiator_id;
+        } elseif ($opponentPoints > $initiatorPoints) {
+            $winnerId = $battle->opponent_id;
+        }
+        // else tie: $winnerId remains null
+
+        // Check achievements for the current user
+        $awarded = [];
+        try {
+            $userPoints = $user->id === $battle->initiator_id ? $initiatorPoints : $opponentPoints;
+            $awarded = $this->achievementService->checkAchievements($user, [
+                'type' => 'battle_completed',
+                'score' => $userPoints,
+                'total' => count($questions),
+                'battle_id' => $battle->id
+            ]);
+        } catch (\Throwable $e) {
+            try { \Log::warning('Failed to check achievements in result: '.$e->getMessage()); } catch (\Throwable $_) {}
+        }
+
+        // Calculate total points earned (from correct answers * marks)
+        $userIsInitiator = $user->id === $battle->initiator_id;
+        $userPoints = $userIsInitiator ? $initiatorPoints : $opponentPoints;
+
         // Get active subscription and calculate remaining after this reveal
         $activeSub = SubscriptionLimitService::getActiveSubscription($user);
         $limit = $activeSub ? SubscriptionLimitService::getPackageLimit($activeSub->package, 'quiz_results') : 10;
@@ -989,16 +1123,44 @@ class BattleController extends Controller
             'score' => max($initiatorPoints, $opponentPoints),
             'initiator_correct' => $initiatorPoints,
             'opponent_correct' => $opponentPoints,
+            'initiator_points' => $initiatorPoints,
+            'opponent_points' => $opponentPoints,
             'total' => count($questions),
             'questions' => $questions,
             'battle' => $battle,
+            'winner_id' => $winnerId,
         ];
 
-        return response()->json(['ok' => true, 'result' => $result, 'usage' => [
-            'limit' => $limit,
-            'used' => $used,
-            'remaining' => $remaining,
-            'type' => 'reveals'
-        ]]);
+        // Detect whether the opponent is the configured admin-bot and expose to frontend
+        try {
+            $admin = \App\Models\User::where('role', 'admin')->orderBy('id')->first();
+            $botUserId = $admin ? $admin->id : null;
+            $result['opponent_is_bot'] = ($botUserId && $battle->opponent_id && intval($battle->opponent_id) === intval($botUserId));
+            // also set a convenience flag on the battle payload when possible
+            if (is_array($result['battle'])) {
+                $result['battle']['opponent_is_bot'] = $result['opponent_is_bot'];
+                $result['battle']['winner_id'] = $winnerId;
+            } else {
+                try { 
+                    $result['battle']->opponent_is_bot = $result['opponent_is_bot'];
+                    $result['battle']->winner_id = $winnerId;
+                } catch (\Throwable $_) {}
+            }
+        } catch (\Throwable $_) {
+            // ignore failures here; it's just a convenience flag for the frontend
+            $result['opponent_is_bot'] = false;
+        }
+
+        return response()->json([
+            'ok' => true,
+            'result' => $result,
+            'awarded_achievements' => $awarded,
+            'usage' => [
+                'limit' => $limit,
+                'used' => $used,
+                'remaining' => $remaining,
+                'type' => 'reveals'
+            ]
+        ]);
     }
 }

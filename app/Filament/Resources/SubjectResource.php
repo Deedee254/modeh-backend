@@ -53,10 +53,7 @@ class SubjectResource extends Resource
                 ->searchable()
                 ->preload(),
 
-            Forms\Components\TextInput::make('created_by')
-                ->label('Created By (user id)')
-                ->numeric()
-                ->nullable(),
+            // created_by is set automatically for admins during create - not editable in the form
 
             Forms\Components\Textarea::make('description')
                 ->rows(4)
@@ -72,13 +69,9 @@ class SubjectResource extends Resource
                 ->required()
                 ->default(false),
 
-            Forms\Components\Toggle::make('auto_approve')
-                ->required()
-                ->default(false),
+            // auto_approve handled by site settings / API logic; not editable on this form
 
-            Forms\Components\DateTimePicker::make('approval_requested_at')
-                ->label('Approval Requested At')
-                ->nullable(),
+            // approval_requested_at is set automatically on create, not editable in the form
 
             Forms\Components\Toggle::make('is_active')
                 ->required()

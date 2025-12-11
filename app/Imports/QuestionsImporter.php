@@ -11,6 +11,9 @@ use App\Models\Subject;
 use App\Models\Topic;
 use App\Models\Level;
 use Illuminate\Support\Str;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
+use Filament\Schemas\Components\Utilities\Get;
 
 class QuestionsImporter extends Importer
 {
@@ -18,37 +21,32 @@ class QuestionsImporter extends Importer
 
     public static function getColumns(): array
     {
-        // Define common importable columns. The ImportAction UI will allow mapping CSV headers to these.
+        // Clean, simplified columns for tournament question import
         return [
-            ImportColumn::make('id')->label('ID')->guess(['id','question_id'])->exampleHeader('id'),
             ImportColumn::make('type')->label('Type')->guess(['type'])->example('mcq')->exampleHeader('type'),
             ImportColumn::make('body')->label('Text')->requiredMapping()->exampleHeader('text'),
 
-            // options can be provided as pipe-separated in 'options' or as option1..option6 columns
-            ImportColumn::make('options')->label('Options')->guess(['options','choices'])->exampleHeader('options'),
+            // Four options
             ImportColumn::make('option1')->label('Option 1')->guess(['option1','opt1'])->exampleHeader('option1'),
             ImportColumn::make('option2')->label('Option 2')->guess(['option2','opt2'])->exampleHeader('option2'),
             ImportColumn::make('option3')->label('Option 3')->guess(['option3','opt3'])->exampleHeader('option3'),
             ImportColumn::make('option4')->label('Option 4')->guess(['option4','opt4'])->exampleHeader('option4'),
-            ImportColumn::make('option5')->label('Option 5')->guess(['option5','opt5'])->exampleHeader('option5'),
-            ImportColumn::make('option6')->label('Option 6')->guess(['option6','opt6'])->exampleHeader('option6'),
 
             ImportColumn::make('answers')->label('Answers')->guess(['answers'])->exampleHeader('answers'),
             ImportColumn::make('marks')->label('Marks')->guess(['marks'])->exampleHeader('marks'),
             ImportColumn::make('difficulty')->label('Difficulty')->guess(['difficulty'])->exampleHeader('difficulty'),
-            ImportColumn::make('explanation')->label('Explanation')->guess(['explanation'])->exampleHeader('explanation'),
-            ImportColumn::make('youtube_url')->label('YouTube URL')->guess(['youtube','youtube_url'])->exampleHeader('youtube_url'),
-            ImportColumn::make('media')->label('Media')->guess(['media'])->exampleHeader('media'),
+        ];
+    }
 
-            // bank & approval flags
-            ImportColumn::make('is_banked')->label('Is Banked')->guess(['is_banked','banked'])->exampleHeader('is_banked'),
-            ImportColumn::make('is_approved')->label('Is Approved')->guess(['is_approved','approved'])->exampleHeader('is_approved'),
+    public static function getOptionsFormComponents(): array
+    {
+        // Minimal options form - just auto-flag for tournament imports
+        return [
+            Hidden::make('auto_banked')
+                ->default(true),
 
-            // taxonomy fields (id or name)
-            ImportColumn::make('grade_id')->label('Grade')->guess(['grade','grade_id','grade_name'])->relationship('grade', ['id','name']),
-            ImportColumn::make('subject_id')->label('Subject')->guess(['subject','subject_id','subject_name'])->relationship('subject', ['id','name']),
-            ImportColumn::make('topic_id')->label('Topic')->guess(['topic','topic_id','topic_name'])->relationship('topic', ['id','name']),
-            ImportColumn::make('level_id')->label('Level')->guess(['level','level_id','level_name'])->relationship('level', ['id','name']),
+            Hidden::make('auto_approved')
+                ->default(true),
         ];
     }
 
@@ -67,44 +65,38 @@ class QuestionsImporter extends Importer
 
     public function fillRecord(): void
     {
-        // Build attributes from parsed CSV row and write them to the record instance.
         $record = $this->record ?? new Question();
-
         $data = $this->data;
+        $options = $this->options ?? [];
 
         // Basic fields
         $record->type = Str::lower(trim($data['type'] ?? 'mcq'));
         $record->body = trim($data['body'] ?? $data['text'] ?? '') ?: '';
-        $record->marks = is_numeric($data['marks'] ?? null) ? floatval($data['marks']) : ($data['marks'] ?? null);
-        $record->difficulty = is_numeric($data['difficulty'] ?? null) ? intval($data['difficulty']) : ($data['difficulty'] ?? null);
-        $record->explanation = $data['explanation'] ?? null;
-        $record->youtube_url = $data['youtube_url'] ?? null;
+        $record->marks = is_numeric($data['marks'] ?? null) ? floatval($data['marks']) : 1;
+        $record->difficulty = is_numeric($data['difficulty'] ?? null) ? intval($data['difficulty']) : 2;
 
-        // Flags
-        $record->is_banked = filter_var($data['is_banked'] ?? ($data['banked'] ?? false), FILTER_VALIDATE_BOOLEAN);
-        $record->is_approved = filter_var($data['is_approved'] ?? ($data['approved'] ?? false), FILTER_VALIDATE_BOOLEAN);
+        // Auto-flags from tournament context
+        $record->is_banked = filter_var(
+            $options['auto_banked'] ?? true,
+            FILTER_VALIDATE_BOOLEAN
+        );
 
-        // Options: collect option1..6, or parse 'options' column separated by | or ||
-        $options = [];
-        for ($i = 1; $i <= 6; $i++) {
+        $record->is_approved = filter_var(
+            $options['auto_approved'] ?? true,
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        // Collect 4 options from option1..option4
+        $opts = [];
+        for ($i = 1; $i <= 4; $i++) {
             $k = "option{$i}";
             if (isset($data[$k]) && (string)($data[$k]) !== '') {
-                $options[] = trim($data[$k]);
+                $opts[] = trim($data[$k]);
             }
         }
+        $record->options = ! empty($opts) ? array_values($opts) : null;
 
-        if (empty($options) && ! empty($data['options'] ?? null)) {
-            // allow both | and |\| separators — prefer pipe
-            $raw = $data['options'];
-            if (is_string($raw)) {
-                $parts = preg_split('/\|+/', $raw);
-                $options = array_map(fn($v) => trim($v), array_filter($parts, fn($v) => (string)$v !== ''));
-            }
-        }
-
-        $record->options = ! empty($options) ? array_values($options) : null;
-
-        // Answers: may be numbers (positions) or text; support comma or pipe separators
+        // Parse answers (1-based position or text)
         $answersRaw = $data['answers'] ?? null;
         $answers = [];
         if (is_string($answersRaw) && $answersRaw !== '') {
@@ -112,85 +104,40 @@ class QuestionsImporter extends Importer
             $answers = array_map(fn($v) => trim($v), array_filter($parts, fn($v) => $v !== ''));
         }
 
-        // Normalize answers according to type
-        if ($record->type === 'mcq') {
-            if (! empty($answers)) {
-                $first = $answers[0];
-                if (is_numeric($first)) {
-                    // treat numeric answers as 1-based positions -> convert to zero-based
-                    $position = intval($first);
-                    // Validate position is within option bounds
-                    $optionCount = count($record->options ?? []);
-                    if ($position >= 1 && $position <= $optionCount) {
-                        $record->correct = $position - 1;
-                    } else {
-                        // Invalid position, leave as null
-                        $record->correct = null;
-                    }
-                } else {
-                    // match by option text - trim both sides and compare
-                    $idx = null;
-                    $firstTrimmed = trim((string)$first);
-                    foreach (($record->options ?? []) as $ii => $opt) {
-                        if (trim((string)$opt) === $firstTrimmed) { 
-                            $idx = $ii; 
-                            break; 
-                        }
-                    }
-                    $record->correct = $idx ?? null;
+        // Handle MCQ answers
+        if ($record->type === 'mcq' && ! empty($answers)) {
+            $first = $answers[0];
+            if (is_numeric($first)) {
+                // 1-based position -> 0-based
+                $position = intval($first);
+                $optionCount = count($record->options ?? []);
+                if ($position >= 1 && $position <= $optionCount) {
+                    $record->correct = $position - 1;
                 }
-                // Also keep a copy in answers as strings for compatibility
-                $record->answers = [ (string) ($first) ];
-            }
-        } elseif (in_array($record->type, ['multi', 'fill_blank'])) {
-            if (! empty($answers)) {
-                $norm = array_map(function($a) use ($record) {
-                    if (is_numeric($a)) {
-                        return intval($a) - 1; // convert 1-based to 0-based
+            } else {
+                // Match by text
+                $firstTrimmed = trim((string)$first);
+                foreach (($record->options ?? []) as $ii => $opt) {
+                    if (trim((string)$opt) === $firstTrimmed) {
+                        $record->correct = $ii;
+                        break;
                     }
-                    return (string)$a;
-                }, $answers);
-                if ($record->type === 'multi') {
-                    $record->corrects = $norm;
-                } else {
-                    // fill_blank treat answers as strings
-                    $record->answers = array_map('strval', $answers);
                 }
             }
-        } else {
-            // short, numeric, etc. -- store as answers strings
-            if (! empty($answers)) {
-                $record->answers = array_map('strval', $answers);
-            }
         }
 
-        // Taxonomy resolution: accept either id or human-readable name
-        if (! empty($data['grade_id'] ?? null)) {
-            $record->grade_id = intval($data['grade_id']);
-        } elseif (! empty($data['grade'] ?? null)) {
-            $g = Grade::whereRaw('lower(name) = ?', [Str::lower($data['grade'])])->first();
-            $record->grade_id = $g?->id;
+        // Automatically assign tournament taxonomy to imported questions
+        if (!empty($options['level_id'])) {
+            $record->level_id = intval($options['level_id']);
         }
-
-        if (! empty($data['subject_id'] ?? null)) {
-            $record->subject_id = intval($data['subject_id']);
-        } elseif (! empty($data['subject'] ?? null)) {
-            $s = Subject::whereRaw('lower(name) = ?', [Str::lower($data['subject'])])->first();
-            $record->subject_id = $s?->id;
+        if (!empty($options['grade_id'])) {
+            $record->grade_id = intval($options['grade_id']);
         }
-
-        if (! empty($data['topic_id'] ?? null)) {
-            $record->topic_id = intval($data['topic_id']);
-        } elseif (! empty($data['topic'] ?? null)) {
-            $t = Topic::whereRaw('lower(name) = ?', [Str::lower($data['topic'])])->first();
-            $record->topic_id = $t?->id;
+        if (!empty($options['subject_id'])) {
+            $record->subject_id = intval($options['subject_id']);
         }
-
-        if (! empty($data['level_id'] ?? null)) {
-            $record->level_id = intval($data['level_id']);
-        } elseif (! empty($data['level'] ?? null)) {
-            $l = Level::whereRaw('lower(name) = ?', [Str::lower($data['level'])])->first();
-            $record->level_id = $l?->id;
+        if (!empty($options['topic_id'])) {
+            $record->topic_id = intval($options['topic_id']);
         }
 
         $this->record = $record;
@@ -199,5 +146,18 @@ class QuestionsImporter extends Importer
     public static function getCompletedNotificationBody(Import $import): string
     {
         return __(':count rows imported', ['count' => $import->total_rows]);
+    }
+
+    /**
+     * Override save to skip creating import records
+     * We only save Question models to the database
+     */
+    public function save(): static
+    {
+        // Save the question record only, don't create an import record
+        if ($this->record) {
+            $this->record->save();
+        }
+        return $this;
     }
 }

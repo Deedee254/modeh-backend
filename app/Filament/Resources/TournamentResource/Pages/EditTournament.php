@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TournamentResource\Pages;
 
 use App\Filament\Resources\TournamentResource;
+use App\Models\Question;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\EditRecord;
@@ -53,8 +54,16 @@ class EditTournament extends EditRecord
             }
         }
 
-        // Validate questions
-        if (count($this->data['questions']) < 5) {
+        // Validate questions - check if key exists and has at least 5 questions
+        $questions = $this->data['questions'] ?? [];
+        $questionCount = is_array($questions) ? count($questions) : 0;
+        
+        // Also count existing questions if none were added in form
+        if ($questionCount === 0) {
+            $questionCount = $this->record->questions()->count();
+        }
+        
+        if ($questionCount < 5) {
             $this->addError('questions', 'Tournament must have at least 5 questions.');
             $this->halt();
         }
@@ -63,6 +72,45 @@ class EditTournament extends EditRecord
         if ($this->record->status !== 'upcoming') {
             $this->addError('*', 'Cannot edit active or completed tournaments.');
             $this->halt();
+        }
+    }
+
+    protected function afterSave(): void
+    {
+        // Handle imported questions during edit
+        $importedQuestionsData = $this->data['import_questions'] ?? [];
+        
+        // Decode if it's a JSON string
+        if (is_string($importedQuestionsData)) {
+            $importedQuestionsData = json_decode($importedQuestionsData, true) ?? [];
+        }
+        
+        if (!empty($importedQuestionsData)) {
+            // Get current max position
+            $maxPosition = $this->record->questions()->max('position') ?? 0;
+            $position = $maxPosition + 1;
+            
+            foreach ($importedQuestionsData as $qData) {
+                // Create question
+                $question = Question::create([
+                    'type' => $qData['type'] ?? 'mcq',
+                    'body' => $qData['body'] ?? '',
+                    'options' => $qData['options'] ?? [],
+                    'correct' => $qData['correct'] ?? null,
+                    'marks' => $qData['marks'] ?? 1,
+                    'difficulty' => $qData['difficulty'] ?? 2,
+                    'is_banked' => $qData['is_banked'] ?? true,
+                    'is_approved' => $qData['is_approved'] ?? true,
+                    'level_id' => $qData['level_id'] ?? null,
+                    'grade_id' => $qData['grade_id'] ?? null,
+                    'subject_id' => $qData['subject_id'] ?? null,
+                    'topic_id' => $qData['topic_id'] ?? null,
+                ]);
+                
+                // Attach to tournament
+                $this->record->questions()->attach($question->id, ['position' => $position]);
+                $position++;
+            }
         }
     }
 }

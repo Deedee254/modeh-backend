@@ -182,6 +182,7 @@ class TopicController extends Controller
             'subject_id' => 'required|exists:subjects,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'image' => 'nullable|file|image|max:5120'
         ]);
 
         if ($v->fails()) {
@@ -208,6 +209,18 @@ class TopicController extends Controller
             'description' => $request->description ?? null,
             'is_approved' => (bool)$autoApprove,
         ]);
+
+        // Handle image upload if provided
+        if ($request->hasFile('image')) {
+            try {
+                $path = $request->file('image')->store('topics', 'public');
+                $topic->image = $path;
+                $topic->save();
+            } catch (\Exception $e) {
+                // Image upload failed but topic was created, continue without image
+                \Log::warning('Topic image upload failed: ' . $e->getMessage());
+            }
+        }
 
         // If not auto-approved but client requested immediate approval request, set approval_requested_at
         // client can send `request_approval=true` in creation payload to immediately request approval

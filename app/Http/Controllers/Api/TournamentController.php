@@ -23,7 +23,7 @@ class TournamentController extends Controller
     public function __construct(AchievementService $achievementService)
     {
         $this->achievementService = $achievementService;
-        $this->middleware('auth:sanctum')->except(['index', 'show']);
+        $this->middleware('auth:sanctum')->except(['index', 'show', 'tree']);
         $this->middleware('throttle:60,1')->only(['join', 'submitBattle']);
     }
 

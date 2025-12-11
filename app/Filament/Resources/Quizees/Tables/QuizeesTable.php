@@ -25,9 +25,10 @@ class QuizeesTable
                 \Filament\Tables\Columns\TextColumn::make('institution')
                     ->searchable()
                     ->sortable(),
-                \Filament\Tables\Columns\TextColumn::make('grade')
+                \Filament\Tables\Columns\TextColumn::make('grade.display_name')
                     ->label('Grade Level')
-                    ->sortable(),
+                    ->sortable()
+                    ->searchable(),
                 \Filament\Tables\Columns\TextColumn::make('user.social_provider')
                     ->label('Login Method')
                     ->formatStateUsing(fn ($state) => $state ? ucfirst($state) : 'Email')

@@ -8,4 +8,15 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateTopic extends CreateRecord
 {
     protected static string $resource = TopicResource::class;
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        // Set the creating admin user id automatically
+        $data['created_by'] = auth()->id();
+
+        // Set approval requested timestamp automatically
+        $data['approval_requested_at'] = now();
+
+        return $data;
+    }
 }

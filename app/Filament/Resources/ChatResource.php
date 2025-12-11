@@ -13,7 +13,12 @@ use Filament\Tables;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Filament\Tables\Filters\SelectFilter;
-
+use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\IconColumn;
+// DateFilter not available in this Filament version; omit date filter or use a custom filter if needed
+use Illuminate\Support\Str;
 
 use Filament\Support\Enums\IconSize;
 use Filament\Support\Enums\IconName;
@@ -41,9 +46,9 @@ class ChatResource extends Resource
     {
         return [
             'index' => Pages\ListMessages::route('/'),
-            'create' => Pages\CreateMessage::route('/create'),
+            // hide create/edit routes for messages in admin UI to prevent manual creation/editing
             'edit' => Pages\EditMessage::route('/{record}/edit'),
-            'view' => Pages\ViewMessage::route('/{record}'),
+            'view' => Pages\SenderMessages::route('/sender/{record}'),
         ];
     }
     

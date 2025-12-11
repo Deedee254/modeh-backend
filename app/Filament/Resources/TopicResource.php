@@ -48,10 +48,7 @@ class TopicResource extends Resource
                             ->searchable()
                             ->preload(),
 
-                    Forms\Components\TextInput::make('created_by')
-                        ->label('Created By (user id)')
-                        ->numeric()
-                        ->nullable(),
+                    // created_by is set automatically for admins during create - not editable in the form
 
                     Forms\Components\Textarea::make('description')
                         ->rows(4)
@@ -67,9 +64,7 @@ class TopicResource extends Resource
                         ->required()
                         ->default(false),
 
-                    Forms\Components\DateTimePicker::make('approval_requested_at')
-                        ->label('Approval Requested At')
-                        ->nullable(),
+                    // approval_requested_at is set automatically on create, not editable in the form
                 ])
                 ->columns(2)
         ]);

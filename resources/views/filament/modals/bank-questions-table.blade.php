@@ -5,7 +5,15 @@
         if (isset($tournamentId)) $componentProps['tournamentId'] = $tournamentId;
         if (isset($filters)) $componentProps['initialFilters'] = $filters;
     @endphp
-    <livewire:admin.bank-questions-table :wire:key="json_encode($componentProps)" v-bind="$componentProps" />
+    <div id="bank-questions-table-wrapper">
+        <livewire:admin.bank-questions-table :wire:key="json_encode($componentProps)" v-bind="$componentProps" />
+    </div>
+
+    <div class="filament-modal-actions mt-4 flex justify-end gap-2">
+        <button type="button" id="bank-attach-btn" class="fi-btn fi-btn-primary">
+            Attach selected
+        </button>
+    </div>
 
     <script>
         // When Livewire dispatches bank-attached, refresh the Filament relation manager table and close the modal
@@ -38,6 +46,30 @@
 
             // Legacy: dispatch closeModal for other integrations
             window.dispatchEvent(new CustomEvent('closeModal'));
+        });
+
+        // Attach button: call the Livewire component's attachSelected() method
+        document.addEventListener('DOMContentLoaded', function () {
+            const btn = document.getElementById('bank-attach-btn');
+            if (!btn) return;
+
+            btn.addEventListener('click', function () {
+                try {
+                    const wrapper = document.getElementById('bank-questions-table-wrapper');
+                    const wireEl = wrapper.querySelector('[wire\\:id]');
+                    if (!wireEl) {
+                        console.warn('Bank Livewire component not found');
+                        return;
+                    }
+                    const componentId = wireEl.getAttribute('wire:id');
+                    const lw = window.Livewire.find(componentId);
+                    if (lw && typeof lw.call === 'function') {
+                        lw.call('attachSelected');
+                    }
+                } catch (err) {
+                    console.error('Failed to call attachSelected on Livewire component', err);
+                }
+            });
         });
 
         // When selection happens in create-mode, populate the questions multi-select input
