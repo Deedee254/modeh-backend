@@ -551,36 +551,49 @@ class QuizAttemptController extends Controller
         if (!$user)
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
 
-        // Check subscription and daily limits using the service
-        $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
-        
-        if (!$limitCheck['allowed']) {
-            return response()->json([
-                'ok' => false,
-                'code' => 'limit_reached',
-                'message' => 'Daily result reveal limit reached for your plan',
-                'limit' => [
-                    'type' => 'quiz_results',
-                    'value' => $limitCheck['limit'],
-                    'used' => $limitCheck['used'],
-                    'remaining' => $limitCheck['remaining'],
-                ]
-            ], 403);
-        }
-
         if ($attempt->user_id !== $user->id) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
-        // Get active subscription for tracking
-        $activeSub = SubscriptionLimitService::getActiveSubscription($user);
-        $limit = $activeSub ? SubscriptionLimitService::getPackageLimit($activeSub->package, 'quiz_results') : 10;
+        // Get the quiz early to check if it's free
+        $quiz = $attempt->quiz()->with('questions')->first();
+        $isFreeQuiz = !$quiz->is_paid || $quiz->one_off_price == 0;
+        
+        // Only check subscription limits if the quiz is NOT free
+        if (!$isFreeQuiz) {
+            $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
+            
+            if (!$limitCheck['allowed']) {
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'limit_reached',
+                    'message' => 'Daily result reveal limit reached for your plan',
+                    'limit' => [
+                        'type' => 'quiz_results',
+                        'value' => $limitCheck['limit'],
+                        'used' => $limitCheck['used'],
+                        'remaining' => $limitCheck['remaining'],
+                    ]
+                ], 403);
+            }
+        }
+
+        // Get active subscription for tracking (only if not free quiz)
+        $activeSub = !$isFreeQuiz ? SubscriptionLimitService::getActiveSubscription($user) : null;
+        $subDetails = $activeSub ? SubscriptionLimitService::getSubscriptionDetails($user) : null;
+        
+        $limit = $activeSub ? SubscriptionLimitService::getPackageLimit($activeSub->package, 'quiz_results') : null;
+        
+        // Record which subscription was used for this reveal (if not already recorded)
+        if ($activeSub && !$attempt->subscription_id) {
+            $attempt->subscription_id = $activeSub->id;
+            $attempt->subscription_type = $subDetails['subscription_type'] ?? 'personal';
+            $attempt->save();
+        }
         
         // Calculate remaining after this reveal
-        $used = SubscriptionLimitService::countTodayUsage($user->id) + 1;
-        $remaining = $limit ? max(0, $limit - $used) : null;
-
-        $quiz = $attempt->quiz()->with('questions')->first();
+        $used = $activeSub ? (SubscriptionLimitService::countTodayUsage($user->id) + 1) : null;
+        $remaining = $limit && $used ? max(0, $limit - $used) : null;
 
         // Build per-question correctness info (answers stored on attempt)
         $answers = $attempt->answers ?? [];

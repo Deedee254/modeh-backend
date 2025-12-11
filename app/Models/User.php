@@ -26,6 +26,7 @@ use Filament\Panel;
  * @property string|null $social_token
  * @property string|null $social_refresh_token
  * @property string|null $avatar_url
+ * @property string|null $avatar Backwards-compatible alias for `avatar_url`
  * @property string|null $bio
  * @property-read \App\Models\QuizMaster|null $quizMasterProfile
  * @property-read \App\Models\Quizee|null $quizeeProfile

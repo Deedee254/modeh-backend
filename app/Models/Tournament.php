@@ -219,6 +219,11 @@ class Tournament extends Model
         return $this->hasMany(TournamentBattle::class);
     }
 
+    public function qualificationAttempts()
+    {
+        return $this->hasMany(TournamentQualificationAttempt::class);
+    }
+
     /**
      * Create battles for a given round from an array of participant user IDs.
      * If an odd participant remains, they receive a bye and are not paired.
@@ -370,8 +375,55 @@ class Tournament extends Model
             shuffle($participantIds);
         }
 
+        // Enforce configured bracket slot limit. Prefer qualified participants when
+        // qualification attempts exist: pick top unique users ordered by score then duration.
+        $slots = $this->bracket_slots ?? 8;
+        $excluded = [];
+
+        try {
+            $attempts = \App\Models\TournamentQualificationAttempt::where('tournament_id', $this->id)
+                ->whereIn('user_id', $participantIds)
+                ->orderByDesc('score')
+                ->orderBy('duration_seconds')
+                ->get();
+
+            if ($attempts->isNotEmpty()) {
+                $selected = $attempts->groupBy('user_id')->map(function($g) { return $g->first(); })->values();
+                $selected = $selected->take($slots);
+                $selectedIds = $selected->pluck('user_id')->toArray();
+
+                $excluded = array_values(array_filter($participantIds, function($id) use ($selectedIds) {
+                    return !in_array($id, $selectedIds);
+                }));
+
+                $participantIds = $selectedIds;
+                \Log::info('Tournament::generateMatches selected top qualifiers for tournament ' . $this->id . '; selected: ' . implode(',', $selectedIds) . '; excluded: ' . implode(',', $excluded));
+            } else {
+                if (count($participantIds) > $slots) {
+                    $excluded = array_slice($participantIds, $slots);
+                    $participantIds = array_slice($participantIds, 0, $slots);
+                    \Log::info('Tournament::generateMatches trimming participants to ' . $slots . ' slots for tournament ' . $this->id . '; excluded: ' . implode(',', $excluded));
+                }
+            }
+        } catch (\Throwable $e) {
+            if (count($participantIds) > $slots) {
+                $excluded = array_slice($participantIds, $slots);
+                $participantIds = array_slice($participantIds, 0, $slots);
+                \Log::warning('Tournament::generateMatches qualifier selection failed for tournament ' . $this->id . '; falling back to simple trim. Error: ' . $e->getMessage());
+            }
+        }
+
+        // Re-check in case trimming reduced participants to a single entrant
+        if (count($participantIds) < 2) {
+            if (count($participantIds) === 1) {
+                $this->finalizeWithWinner((int) $participantIds[0]);
+                return ['message' => 'Tournament completed with single participant after trimming', 'battles' => []];
+            }
+            throw new \Exception('Need at least 2 participants after trimming');
+        }
+
         // create battles using the Tournament helper
-        $created = $this->createBattlesForRound($participantIds, $round, $scheduledAt);
+    $created = $this->createBattlesForRound($participantIds, $round, $scheduledAt);
 
         // Activate tournament if this is the first round
         if ($round === 1 && $this->status === 'upcoming') {
@@ -382,7 +434,8 @@ class Tournament extends Model
         return [
             'message' => 'Tournament battles generated successfully',
             'created' => count($created),
-            'battles' => $this->battles()->where('round', $round)->with(['player1', 'player2'])->get()
+            'battles' => $this->battles()->where('round', $round)->with(['player1', 'player2'])->get(),
+            'excluded' => $excluded,
         ];
     }
 

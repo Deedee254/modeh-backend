@@ -808,21 +808,26 @@ class BattleController extends Controller
     {
         $user = $request->user();
         
-        // Check subscription and daily limits using the service
-        $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
+        // Check if battle is free
+        $isFreeBattle = !$battle->one_off_price || $battle->one_off_price == 0;
         
-        if (!$limitCheck['allowed']) {
-            return response()->json([
-                'ok' => false,
-                'code' => 'limit_reached',
-                'message' => 'Daily result reveal limit reached for your plan',
-                'limit' => [
-                    'type' => 'quiz_results',
-                    'value' => $limitCheck['limit'],
-                    'used' => $limitCheck['used'],
-                    'remaining' => $limitCheck['remaining'],
-                ]
-            ], 403);
+        // Only check subscription limits if battle is NOT free
+        if (!$isFreeBattle) {
+            $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
+            
+            if (!$limitCheck['allowed']) {
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'limit_reached',
+                    'message' => 'Daily result reveal limit reached for your plan',
+                    'limit' => [
+                        'type' => 'quiz_results',
+                        'value' => $limitCheck['limit'],
+                        'used' => $limitCheck['used'],
+                        'remaining' => $limitCheck['remaining'],
+                    ]
+                ], 403);
+            }
         }
 
         $battle->load('questions');

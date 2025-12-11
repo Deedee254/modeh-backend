@@ -37,123 +37,95 @@ class TournamentResource extends Resource
                         ->maxLength(65535)
                         ->columnSpan('full')
                         ->extraAttributes(['style' => 'min-height: 18rem;']),
+                ])
+                ->columns(2),
 
+            Section::make('Sponsor Information')
+                ->description('Configure sponsor details and branding')
+                ->schema([
                     Forms\Components\Select::make('sponsor_id')
+                        ->label('Sponsor')
                         ->relationship('sponsor', 'name')
                         ->preload()
                         ->searchable(),
 
-                    Forms\Components\TextInput::make('sponsor_banner_url')
-                        ->url()
-                        ->maxLength(255)
+                    Forms\Components\FileUpload::make('sponsor_banner')
+                        ->label('Sponsor Banner')
+                        ->image()
+                        ->disk('public')
+                        ->directory('sponsor-banners')
+                        ->visibility('public')
+                        ->maxSize(5120) // 5MB
                         ->visible(fn ($get): bool => filled($get('sponsor_id'))),
 
                     Forms\Components\Textarea::make('sponsor_message')
+                        ->label('Sponsor Message')
                         ->maxLength(65535)
                         ->visible(fn ($get): bool => filled($get('sponsor_id'))),
-
-                    Grid::make(2)
-                        ->schema([
-                            Forms\Components\DateTimePicker::make('start_date')
-                                ->required(),
-
-                            Forms\Components\DateTimePicker::make('end_date')
-                                ->required(),
-
-                            Forms\Components\TextInput::make('prize_pool')
-                                ->numeric()
-                                ->prefix('$')
-                                ->required(),
-
-                            Forms\Components\TextInput::make('entry_fee')
-                                ->numeric()
-                                ->prefix('$')
-                                ->default(0),
-
-                            Forms\Components\TextInput::make('max_participants')
-                                ->numeric()
-                                ->minValue(2)
-                                ->required(),
-                        ]),
                 ])
-                ->columns(2),
+                ->columns(1),
 
             Section::make()
                 ->schema([
-                    Forms\Components\Select::make('level_id')
-                        ->relationship('level', 'name', fn (Builder $query) => $query->orderBy('order'))
-                        ->required()
-                        ->searchable()
-                        ->preload()
-                        ->live()
-                        ->afterStateUpdated(function ($set) {
-                            $set('grade_id', null);
-                            $set('subject_id', null);
-                            $set('topic_id', null);
-                            $set('questions', []);
-                        }),
+                    // Left column: Taxonomy
+                    Grid::make(1)->schema([
+                        Forms\Components\Select::make('level_id')
+                            ->relationship('level', 'name', fn (Builder $query) => $query->orderBy('order'))
+                            ->required()
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function ($set) {
+                                $set('grade_id', null);
+                                $set('subject_id', null);
+                                $set('topic_id', null);
+                            }),
 
-                    Forms\Components\Select::make('grade_id')
-                        ->relationship('grade', 'display_name', function (Builder $query, $get) {
-                            $levelId = $get('level_id');
-                            if ($levelId) {
-                                $query->where('level_id', $levelId);
-                            }
-                        })
-                        ->required()
-                        ->searchable()
-                        ->preload()
-                        ->live()
-                        ->afterStateUpdated(function ($set) {
-                            $set('subject_id', null);
-                            $set('topic_id', null);
-                            $set('questions', []);
-                        }),
+                        Forms\Components\Select::make('grade_id')
+                            ->relationship('grade', 'display_name', function (Builder $query, $get) {
+                                $levelId = $get('level_id');
+                                if ($levelId) {
+                                    $query->where('level_id', $levelId);
+                                }
+                            })
+                            ->required()
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function ($set) {
+                                $set('subject_id', null);
+                                $set('topic_id', null);
+                            }),
 
-                    Forms\Components\Select::make('subject_id')
-                        ->relationship('subject', 'name', function (Builder $query, $get) {
-                            $gradeId = $get('grade_id');
-                            if ($gradeId) {
-                                $query->where('grade_id', $gradeId);
-                            }
-                        })
-                        ->required()
-                        ->searchable()
-                        ->preload()
-                        ->live()
-                        ->afterStateUpdated(function ($set) {
-                            $set('topic_id', null);
-                            $set('questions', []);
-                        }),
+                        Forms\Components\Select::make('subject_id')
+                            ->relationship('subject', 'name', function (Builder $query, $get) {
+                                $gradeId = $get('grade_id');
+                                if ($gradeId) {
+                                    $query->where('grade_id', $gradeId);
+                                }
+                            })
+                            ->required()
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function ($set) {
+                                $set('topic_id', null);
+                            }),
 
-                    Forms\Components\Select::make('topic_id')
-                        ->relationship('topic', 'name', function (Builder $query, $get) {
-                            $subjectId = $get('subject_id');
-                            if ($subjectId) {
-                                $query->where('subject_id', $subjectId);
-                            }
-                        })
-                        ->searchable()
-                        ->preload()
-                        ->live()
-                        ->afterStateUpdated(fn ($set) => $set('questions', [])),
+                        Forms\Components\Select::make('topic_id')
+                            ->relationship('topic', 'name', function (Builder $query, $get) {
+                                $subjectId = $get('subject_id');
+                                if ($subjectId) {
+                                    $query->where('subject_id', $subjectId);
+                                }
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->live(),
 
-                    Forms\Components\Select::make('questions')
-                        ->multiple()
-                        ->relationship('questions', 'body', function (Builder $query, $get) {
-                            if ($get('grade_id')) $query->where('grade_id', $get('grade_id'));
-                            if ($get('subject_id')) $query->where('subject_id', $get('subject_id'));
-                            if ($get('topic_id')) $query->where('topic_id', $get('topic_id'));
-                            if ($get('level_id')) $query->where('level_id', $get('level_id'));
-                        })
-                        ->searchable()
-                        ->preload()
-                        ->live(),
-
-                    Grid::make(2)->schema([
                         Action::make('browseBank')
-                            ->label('Browse Bank')
-                            ->icon('heroicon-o-circle-stack')
+                            ->label('Add from Bank')
+                            ->icon('heroicon-o-archive-box')
                             ->modalHeading('Browse Question Bank')
                             ->modalWidth('7xl')
                             ->modalContent(function ($get) {
@@ -166,205 +138,42 @@ class TournamentResource extends Resource
                                     ]
                                 ]);
                             })
-                            ->modalSubmitAction(false) // We handle selection via JS events
+                            ->modalSubmitAction(false)
                             ->modalCancelAction(false)
                             ->color('secondary'),
-
-                        Action::make('uploadFile')
-                            ->label('Upload from File')
-                            ->icon('heroicon-o-arrow-up-tray')
-                            ->color('secondary')
-                            ->form([
-                                Forms\Components\FileUpload::make('file')
-                                    ->label('CSV File')
-                                    ->required()
-                                    ->acceptedFileTypes(['text/csv', 'application/vnd.ms-excel'])
-                                    ->disk('local')
-                                    ->directory('temp')
-                                    ->visibility('private')
-                                    ->helperText('Upload a CSV file with columns: type,text,option1,option2,option3,option4,answers,marks,difficulty,explanation,youtube_url,media'),
-                            ])
-                            ->action(function (array $data, $set, $get) {
-                                $uploadedFileName = $data['file'] ?? null;
-                                
-                                if (!$uploadedFileName) {
-                                    \Filament\Notifications\Notification::make()
-                                        ->title('Upload Failed')
-                                        ->body('No file provided.')
-                                        ->danger()
-                                        ->send();
-                                    return;
-                                }
-                                
-                                // File is stored in storage/app/private/temp/ by FileUpload component with visibility('private')
-                                // The uploadedFileName comes as 'temp/filename.csv' so we need to prepend 'private/'
-                                $path = storage_path('app/private') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $uploadedFileName);
-                                
-                                if (!file_exists($path)) {
-                                    Log::error('upload_file: file not found at expected path', ['path' => $path, 'uploaded' => $uploadedFileName]);
-                                    \Filament\Notifications\Notification::make()
-                                        ->title('Upload Failed')
-                                        ->body('Unable to read uploaded file.')
-                                        ->danger()
-                                        ->send();
-                                    return;
-                                }
-
-                                $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-                                try {
-                                    if (in_array($ext, ['csv', 'txt'])) {
-                                        // Quick CSV sanity check before trying PhpSpreadsheet
-                                        $fh = @fopen($path, 'r');
-                                        if (! $fh) {
-                                            Log::error('upload_file: unable to open CSV for reading', ['path' => $path, 'ext' => $ext]);
-                                            \Filament\Notifications\Notification::make()
-                                                ->title('Upload Failed')
-                                                ->body('Unable to open the uploaded CSV file.')
-                                                ->danger()
-                                                ->send();
-                                            return;
-                                        }
-                                        $first = @fgetcsv($fh);
-                                        if ($first === false) {
-                                            $sample = @file_get_contents($path, false, null, 0, 2048);
-                                            Log::error('upload_file: CSV appears empty or malformed', ['path' => $path, 'sample' => substr($sample, 0, 2048)]);
-                                            fclose($fh);
-                                            \Filament\Notifications\Notification::make()
-                                                ->title('Upload Failed')
-                                                ->body('The uploaded CSV appears empty or malformed.')
-                                                ->danger()
-                                                ->send();
-                                            return;
-                                        }
-                                        // rewind and let PhpSpreadsheet parse it for consistency
-                                        rewind($fh);
-                                        fclose($fh);
-                                    }
-
-                                    $spreadsheet = IOFactory::load($path);
-                                    $sheet = $spreadsheet->getActiveSheet();
-                                    $rows = $sheet->toArray(null, true, true, true);
-                                } catch (\Throwable $e) {
-                                    $sample = @file_exists($path) ? @file_get_contents($path, false, null, 0, 4096) : null;
-                                    Log::error('upload_file: failed to parse uploaded file', [
-                                        'path' => $path,
-                                        'ext' => $ext,
-                                        'size' => @filesize($path),
-                                        'error' => $e->getMessage(),
-                                        'trace' => $e->getTraceAsString(),
-                                        'sample' => $sample ? substr($sample, 0, 2048) : null,
-                                    ]);
-                                    \Filament\Notifications\Notification::make()
-                                        ->title('Upload Failed')
-                                        ->body('Unable to parse the uploaded file. Check server logs for details.')
-                                        ->danger()
-                                        ->send();
-                                    return;
-                                }
-
-                                if (empty($rows)) {
-                                    return;
-                                }
-
-                                $levelId = $get('level_id');
-                                $gradeId = $get('grade_id');
-                                $subjectId = $get('subject_id');
-                                $topicId = $get('topic_id');
-
-                                if (!$levelId || !$gradeId || !$subjectId) {
-                                    \Filament\Notifications\Notification::make()
-                                        ->title('Upload Failed')
-                                        ->body('Please select Level, Grade, and Subject before uploading questions.')
-                                        ->danger()
-                                        ->send();
-                                    return;
-                                }
-
-                                $header = array_map('strtolower', array_values(array_shift($rows)));
-                                $expectedHeaders = ['type', 'text', 'option1', 'option2', 'option3', 'option4', 'answers', 'marks', 'difficulty', 'explanation', 'youtube_url', 'media'];
-                                $missingHeaders = array_diff($expectedHeaders, $header);
-                                if (!empty($missingHeaders)) {
-                                    \Filament\Notifications\Notification::make()
-                                        ->title('Upload Failed')
-                                        ->body('CSV must contain all required columns: ' . implode(', ', $expectedHeaders))
-                                        ->danger()
-                                        ->send();
-                                    return;
-                                }
-
-                                $createdQuestions = [];
-                                foreach ($rows as $row) {
-                                    $row = array_combine($header, array_values($row));
-                                    $type = $row['type'];
-                                    $body = $row['text'];
-
-                                    $options = [];
-                                    if (in_array($type, ['mcq', 'multi'])) {
-                                        $optionTexts = array_filter([$row['option1'], $row['option2'], $row['option3'], $row['option4']]);
-                                        $options = array_map(fn($text) => ['text' => $text], $optionTexts);
-                                    }
-
-                                    $answers = array_map('trim', explode(',', $row['answers']));
-                                    $answersArray = [];
-
-                                    if ($type === 'mcq') {
-                                        // For MCQ, store the correct answer text in answers array
-                                        $correctText = $answers[0] ?? '';
-                                        if ($correctText) {
-                                            $answersArray = [$correctText];
-                                        }
-                                    } elseif ($type === 'multi') {
-                                        // For multi-select, store all correct answer texts
-                                        $answersArray = $answers;
-                                    } else {
-                                        // For other types (short, numeric, etc.), store as-is
-                                        $answersArray = $answers;
-                                    }
-
-                                    $question = Question::create([
-                                        'type' => $type,
-                                        'body' => $body,
-                                        'options' => $options,
-                                        'answers' => $answersArray,
-                                        'marks' => (float)$row['marks'],
-                                        'difficulty' => (int)$row['difficulty'],
-                                        'explanation' => $row['explanation'],
-                                        'youtube_url' => $row['youtube_url'],
-                                        'media_path' => $row['media'],
-                                        'level_id' => $levelId,
-                                        'grade_id' => $gradeId,
-                                        'subject_id' => $subjectId,
-                                        'topic_id' => $topicId,
-                                        'is_banked' => true,
-                                        'created_by' => auth()->id(),
-                                    ]);
-
-                                    $createdQuestions[] = $question->id;
-                                }
-
-                                $currentIds = $get('questions') ?? [];
-                                $set('questions', array_unique(array_merge($currentIds, $createdQuestions)));
-
-                                // Clean up the temporary file
-                                try {
-                                    if (file_exists($path)) {
-                                        unlink($path);
-                                    }
-                                } catch (\Throwable $e) {
-                                    Log::warning('upload_file: failed to delete temp file', ['path' => $path, 'error' => $e->getMessage()]);
-                                }
-
-                                \Filament\Notifications\Notification::make()
-                                    ->title('Upload Successful')
-                                    ->body('Created ' . count($createdQuestions) . ' questions.')
-                                    ->success()
-                                    ->send();
-                            }),
                     ]),
+                ]),
 
-                    Forms\Components\Placeholder::make('total_questions')
-                        ->label('Selected Questions')
-                        ->content(fn ($get): string => sprintf('%d questions', count($get('questions') ?? []))),
+            Section::make('Additional Settings')
+                ->schema([
+                    Grid::make(2)
+                        ->schema([
+                            Forms\Components\DateTimePicker::make('start_date')
+                                ->label('Start Date')
+                                ->required(),
+
+                            Forms\Components\DateTimePicker::make('end_date')
+                                ->label('End Date')
+                                ->required(),
+
+                            Forms\Components\TextInput::make('prize_pool')
+                                ->label('Prize Pool (Ksh)')
+                                ->numeric()
+                                ->prefix('Ksh')
+                                ->required(),
+
+                            Forms\Components\TextInput::make('entry_fee')
+                                ->label('Entry Fee (Ksh)')
+                                ->numeric()
+                                ->prefix('Ksh')
+                                ->default(0),
+
+                            Forms\Components\TextInput::make('max_participants')
+                                ->label('Max Participants')
+                                ->numeric()
+                                ->minValue(2)
+                                ->required(),
+                        ]),
 
                     Forms\Components\TagsInput::make('rules')
                         ->placeholder('Add a rule')
@@ -375,6 +184,7 @@ class TournamentResource extends Resource
 
             Section::make('Tournament Configuration')
                 ->description('Configure timing, question counts, and bracket settings')
+                ->columnSpan('full')
                 ->schema([
                     Grid::make(2)->schema([
                         Grid::make(1)->schema([
@@ -402,6 +212,13 @@ class TournamentResource extends Resource
                                 ])
                                 ->default('score_then_duration')
                                 ->helperText('How to rank participants with same scores'),
+
+                            Forms\Components\TextInput::make('qualifier_days')
+                                ->label('Qualifier Duration (Days)')
+                                ->numeric()
+                                ->minValue(1)
+                                ->default(7)
+                                ->helperText('Number of days the qualifier phase runs before battles are generated'),
                         ]),
 
                         Grid::make(1)->schema([
@@ -430,9 +247,17 @@ class TournamentResource extends Resource
                                 ])
                                 ->default(8)
                                 ->helperText('Top N from qualifier will advance to bracket'),
+
+                            Forms\Components\TextInput::make('round_delay_days')
+                                ->label('Days Between Rounds')
+                                ->numeric()
+                                ->minValue(1)
+                                ->default(3)
+                                ->helperText('Number of days between closing one round and generating the next'),
                         ]),
                     ]),
                 ])
+                ->columns(1)
                 ->collapsible(),
         ]);
     }
@@ -443,7 +268,9 @@ class TournamentResource extends Resource
             ->columns([
                 \Filament\Tables\Columns\TextColumn::make('name')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->url(fn (Tournament $record) => static::getUrl('view', ['record' => $record]))
+                    ->openUrlInNewTab(false),
 
                 \Filament\Tables\Columns\TextColumn::make('sponsor.name')
                     ->searchable()
@@ -497,13 +324,9 @@ class TournamentResource extends Resource
                     ->relationship('sponsor', 'name'),
             ])
             ->actions([
-                \Filament\Actions\EditAction::make(),
-                Action::make('generate_matches')
-                    ->action(fn (Tournament $record) => $record->generateMatches())
-                    ->requiresConfirmation()
-                    ->visible(fn (Tournament $record): bool => $record->status === 'upcoming')
-                    ->color('success')
-                    ->icon('heroicon-o-play'),
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make()
+                    ->visible(fn (Tournament $record): bool => $record->status === 'upcoming'),
             ])
             ->bulkActions([
                 \Filament\Actions\DeleteBulkAction::make(),
@@ -524,6 +347,7 @@ class TournamentResource extends Resource
             'index' => Pages\ListTournaments::route('/'),
             'create' => Pages\CreateTournament::route('/create'),
             'leaderboard' => Pages\Leaderboard::route('/{record}/leaderboard'),
+            'qualifier_leaderboard' => Pages\QualifierLeaderboard::route('/{record}/qualifier-leaderboard'),
             'edit' => Pages\EditTournament::route('/{record}/edit'),
             'view' => Pages\ViewTournament::route('/{record}'),
         ];

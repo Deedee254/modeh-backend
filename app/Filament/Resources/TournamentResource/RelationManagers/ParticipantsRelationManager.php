@@ -6,9 +6,9 @@ use App\Models\User;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Actions\Action;
-use Filament\Actions\DeleteAction;
+use Filament\Actions\DetachAction;
 use Illuminate\Support\Facades\Auth;
 
 class ParticipantsRelationManager extends RelationManager
@@ -21,7 +21,7 @@ class ParticipantsRelationManager extends RelationManager
     {
         return $table
             ->columns([
-                IconColumn::make('avatar')->avatar()->label(''),
+                ImageColumn::make('avatar')->circular()->label(''),
                 TextColumn::make('name')->sortable()->searchable(),
                 TextColumn::make('email')->sortable()->searchable(),
                 TextColumn::make('pivot.status')->label('Status')->sortable(),
@@ -69,7 +69,7 @@ class ParticipantsRelationManager extends RelationManager
                     }),
             ])
             ->bulkActions([
-                DeleteAction::make(),
+                DetachAction::make(),
             ]);
     }
 }

@@ -191,8 +191,51 @@ class AdminTournamentController extends Controller
             shuffle($participantIds);
         }
 
+            // Enforce configured bracket slot limit. Prefer qualified participants when
+            // qualification attempts exist: pick top unique users ordered by score then duration.
+            $slots = $tournament->bracket_slots ?? 8;
+            $excluded = [];
+
+            // Look for qualification attempts among current participant IDs
+            try {
+                $attempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+                    ->whereIn('user_id', $participantIds)
+                    ->orderByDesc('score')
+                    ->orderBy('duration_seconds')
+                    ->get();
+
+                if ($attempts->isNotEmpty()) {
+                    // Select top unique users
+                    $selected = $attempts->groupBy('user_id')->map(function($g) { return $g->first(); })->values();
+                    $selected = $selected->take($slots);
+                    $selectedIds = $selected->pluck('user_id')->toArray();
+
+                    // Excluded are those participantIds not in selectedIds (preserve original ordering)
+                    $excluded = array_values(array_filter($participantIds, function($id) use ($selectedIds) {
+                        return !in_array($id, $selectedIds);
+                    }));
+
+                    $participantIds = $selectedIds;
+                    \Log::info('generateMatches: selected top qualifiers for tournament ' . $tournament->id . '; selected: ' . implode(',', $selectedIds) . '; excluded: ' . implode(',', $excluded));
+                } else {
+                    // Fallback: simple trim by taking first N (after shuffle)
+                    if (count($participantIds) > $slots) {
+                        $excluded = array_slice($participantIds, $slots);
+                        $participantIds = array_slice($participantIds, 0, $slots);
+                        \Log::info('generateMatches: trimming participants to ' . $slots . ' slots for tournament ' . $tournament->id . '; excluded: ' . implode(',', $excluded));
+                    }
+                }
+            } catch (\Throwable $e) {
+                // On error, fallback to simple trimming
+                if (count($participantIds) > $slots) {
+                    $excluded = array_slice($participantIds, $slots);
+                    $participantIds = array_slice($participantIds, 0, $slots);
+                    \Log::warning('generateMatches: qualifier selection failed for tournament ' . $tournament->id . '; falling back to simple trim. Error: ' . $e->getMessage());
+                }
+            }
+
         // create battles using the Tournament helper
-        $created = $tournament->createBattlesForRound($participantIds, $round, $scheduledAt);
+    $created = $tournament->createBattlesForRound($participantIds, $round, $scheduledAt);
 
         // Activate tournament if this is the first round
         if ($round === 1 && $this->getTournamentStatus($tournament) === 'upcoming') {
@@ -202,7 +245,8 @@ class AdminTournamentController extends Controller
         return response()->json([
             'message' => 'Tournament battles generated successfully',
             'created' => count($created),
-            'battles' => $tournament->battles()->where('round', $round)->with(['player1', 'player2'])->get()
+            'battles' => $tournament->battles()->where('round', $round)->with(['player1', 'player2'])->get(),
+            'excluded_participants' => $excluded,
         ]);
     }
 

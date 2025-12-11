@@ -10,7 +10,7 @@ class QuizAttempt extends Model
     use HasFactory;
 
     protected $table = 'quiz_attempts';
-    protected $fillable = ['user_id', 'quiz_id', 'answers', 'score', 'points_earned', 'total_time_seconds', 'per_question_time'];
+    protected $fillable = ['user_id', 'quiz_id', 'subscription_id', 'subscription_type', 'answers', 'score', 'points_earned', 'total_time_seconds', 'per_question_time'];
     protected $attributes = [
         'points_earned' => null,
     ];
@@ -33,5 +33,10 @@ class QuizAttempt extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function subscription()
+    {
+        return $this->belongsTo(Subscription::class);
     }
 }

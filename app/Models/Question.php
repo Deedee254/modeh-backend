@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int|null $created_by User ID who created the question
  * @property int|null $quiz_id Quiz ID this question belongs to
  * @property string $body Question text/content
+ * @property string|null $content Alias for `body` (some callers reference `$question->content`)
  * @property string $type Question type (mcq, multi, etc.)
  * @property array $options Available options/choices
  * @property mixed $answers Correct answer(s)

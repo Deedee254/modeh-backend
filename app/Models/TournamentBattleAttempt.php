@@ -4,6 +4,19 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property int $battle_id
+ * @property int $player_id
+ * @property int $question_id
+ * @property string|null $answer
+ * @property float|null $points
+ *
+ * Relations:
+ * @property TournamentBattle|null $battle
+ * @property User|null $player
+ * @property Question|null $question
+ */
 class TournamentBattleAttempt extends Model
 {
     protected $table = 'tournament_battle_attempts';

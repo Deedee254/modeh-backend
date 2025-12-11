@@ -108,4 +108,28 @@ class SubscriptionLimitService
             'remaining' => $remaining
         ];
     }
+    
+    /**
+     * Get active subscription details including type (personal or institution)
+     */
+    public static function getSubscriptionDetails($user)
+    {
+        $activeSub = self::getActiveSubscription($user);
+        
+        if (!$activeSub) {
+            return null;
+        }
+        
+        $type = $activeSub->owner_type === Institution::class ? 'institution' : 'personal';
+        $limit = self::getPackageLimit($activeSub->package, 'quiz_results');
+        $used = self::countTodayUsage($user->id);
+        
+        return [
+            'subscription_id' => $activeSub->id,
+            'subscription_type' => $type,
+            'limit' => $limit,
+            'used' => $used,
+            'remaining' => $limit ? max(0, $limit - $used) : null
+        ];
+    }
 }

@@ -462,14 +462,15 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);
     Route::get('/tournaments/{tournament}/battles', [\App\Http\Controllers\Api\TournamentController::class, 'battles']);
     Route::get('/tournaments/{tournament}/registration-status', [\App\Http\Controllers\Api\TournamentController::class, 'registrationStatus']);
+    Route::get('/tournaments/{tournament}/leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'leaderboard']);
+    Route::get('/tournaments/{tournament}/qualifier-leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'qualifierLeaderboard']);
+    Route::get('/tournaments/{tournament}/qualification-status', [\App\Http\Controllers\Api\TournamentController::class, 'qualificationStatus']);
     Route::post('/tournaments/battles/{battle}/submit', [\App\Http\Controllers\Api\TournamentController::class, 'submitBattle']);
     Route::post('/tournaments/battles/{battle}/forfeit', [\App\Http\Controllers\Api\TournamentController::class, 'forfeitBattle']);
     Route::post('/tournaments/battles/{battle}/draft', [\App\Http\Controllers\Api\TournamentController::class, 'saveDraft']);
     Route::get('/tournaments/battles/{battle}/draft', [\App\Http\Controllers\Api\TournamentController::class, 'loadDraft']);
     Route::post('/tournaments/{tournament}/battles/{battle}/mark', [\App\Http\Controllers\Api\TournamentController::class, 'mark']);
     Route::get('/tournaments/{tournament}/battles/{battle}/result', [\App\Http\Controllers\Api\TournamentController::class, 'result']);
-    Route::get('/tournaments/{tournament}/leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'leaderboard']);
-    Route::get('/tournaments/{tournament}/qualification-status', [\App\Http\Controllers\Api\TournamentController::class, 'qualificationStatus']);
     Route::post('/tournaments/{tournament}/qualify/submit', [\App\Http\Controllers\Api\TournamentController::class, 'qualifySubmit']);
 
     // Admin tournament management (requires admin role)
