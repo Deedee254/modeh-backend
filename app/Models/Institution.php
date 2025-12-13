@@ -5,6 +5,24 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * Institution model
+ * 
+ * @property int $id
+ * @property string $name
+ * @property string $slug
+ * @property int|null $parent_id
+ * @property string|null $email
+ * @property string|null $phone
+ * @property string|null $logo_url
+ * @property string|null $website
+ * @property string|null $address
+ * @property array|null $metadata
+ * @property bool $is_active
+ * @property int|null $created_by
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ */
 class Institution extends Model
 {
     use HasFactory;

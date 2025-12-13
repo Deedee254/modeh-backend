@@ -728,8 +728,8 @@ class BattleController extends Controller
             $battle->save();
 
             // Award points to participants
-            $initUser = \App\Models\User::find($battle->initiator_id);
-            $oppUser = \App\Models\User::find($battle->opponent_id);
+            $initUser = User::find($battle->initiator_id);
+            $oppUser = User::find($battle->opponent_id);
             if ($initUser && method_exists($initUser, 'increment')) {
                 try { $initUser->increment('points', $battle->initiator_points); } catch (\Throwable $_) {}
             }

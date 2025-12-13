@@ -196,4 +196,80 @@ class InteractionController extends Controller
             'likers' => $likers,
         ]);
     }
+
+    /**
+     * Get the quiz masters that the authenticated user is following
+     * Returns paginated list of followed quiz masters with their basic info
+     */
+    public function userFollowing(Request $request)
+    {
+        $user = $request->user();
+        $perPage = $request->input('per_page', 8);
+
+        $followedMasters = DB::table('quiz_master_follows')
+            ->where('user_id', $user->id)
+            ->join('users', 'quiz_master_follows.quiz_master_id', '=', 'users.id')
+            ->select(
+                'users.id',
+                'users.name',
+                'users.email',
+                'users.avatar_url',
+                'users.social_avatar'
+            )
+            ->paginate($perPage);
+
+        return response()->json($followedMasters);
+    }
+
+    /**
+     * Get the quizzes that the authenticated user has liked
+     * Returns paginated list of liked quizzes with their details
+     */
+    public function userLikedQuizzes(Request $request)
+    {
+        $user = $request->user();
+        $perPage = $request->input('per_page', 12);
+
+        $likedQuizzes = DB::table('quiz_likes')
+            ->where('quiz_likes.user_id', $user->id)
+            ->join('quizzes', 'quiz_likes.quiz_id', '=', 'quizzes.id')
+            ->join('users', 'quizzes.created_by', '=', 'users.id')
+            ->select(
+                'quizzes.id',
+                'quizzes.title',
+                'quizzes.description',
+                'quizzes.questions_count',
+                'quizzes.likes_count',
+                'users.name as created_by_name',
+                'quizzes.created_at'
+            )
+            ->paginate($perPage);
+
+        return response()->json($likedQuizzes);
+    }
+
+    /**
+     * Get users who have liked a specific quiz
+     * Returns list of users who liked the quiz with their basic info
+     */
+    public function quizLikers(Request $request, Quiz $quiz)
+    {
+        $perPage = $request->input('per_page', 50);
+
+        $likers = DB::table('quiz_likes')
+            ->where('quiz_likes.quiz_id', $quiz->id)
+            ->join('users', 'quiz_likes.user_id', '=', 'users.id')
+            ->select(
+                'users.id',
+                'users.name',
+                'users.email',
+                'users.avatar_url',
+                'users.social_avatar',
+                'quiz_likes.created_at as liked_at'
+            )
+            ->orderBy('quiz_likes.created_at', 'desc')
+            ->paginate($perPage);
+
+        return response()->json($likers);
+    }
 }

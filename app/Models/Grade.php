@@ -5,6 +5,20 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * Grade model - represents grade levels within a learning level
+ * 
+ * @property int $id
+ * @property string $name
+ * @property string|null $description
+ * @property int $level_id
+ * @property string|null $type
+ * @property string|null $display_name
+ * @property bool $is_active
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ * @property-read \App\Models\Level $level
+ */
 class Grade extends Model
 {
     use HasFactory;

@@ -23,9 +23,10 @@ class TournamentResource extends Resource
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';
     protected static \UnitEnum|string|null $navigationGroup = 'Tournaments';
     protected static ?int $navigationSort = 1;
-    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
+
+    protected static function getBasicInfoSection(): array
     {
-        return $schema->schema([
+        return [
             Section::make()
                 ->schema([
                     Forms\Components\TextInput::make('name')
@@ -39,7 +40,12 @@ class TournamentResource extends Resource
                         ->extraAttributes(['style' => 'min-height: 18rem;']),
                 ])
                 ->columns(2),
+        ];
+    }
 
+    protected static function getSponsorSection(): array
+    {
+        return [
             Section::make('Sponsor Information')
                 ->description('Configure sponsor details and branding')
                 ->schema([
@@ -64,7 +70,12 @@ class TournamentResource extends Resource
                         ->visible(fn ($get): bool => filled($get('sponsor_id'))),
                 ])
                 ->columns(1),
+        ];
+    }
 
+    protected static function getTaxonomySection(): array
+    {
+        return [
             Section::make()
                 ->schema([
                     // Left column: Taxonomy
@@ -203,7 +214,12 @@ class TournamentResource extends Resource
                         ]),
                     ]),
                 ]),
+        ];
+    }
 
+    protected static function getImportPreviewSection(): array
+    {
+        return [
             // Preview of imported questions
             Section::make('Imported Questions Preview')
                 ->description('Review the questions before saving')
@@ -235,7 +251,12 @@ class TournamentResource extends Resource
             Forms\Components\Hidden::make('import_questions')
                 ->default(json_encode([]))
                 ->dehydrated(false),
+        ];
+    }
 
+    protected static function getAdditionalSettingsSection(): array
+    {
+        return [
             Section::make('Additional Settings')
                 ->schema([
                     Grid::make(2)
@@ -273,7 +294,12 @@ class TournamentResource extends Resource
                         ->helperText('Press Enter or Tab to add a rule'),
                 ])
                 ->columns(1),
+        ];
+    }
 
+    protected static function getTournamentConfigSection(): array
+    {
+        return [
             Section::make('Tournament Configuration')
                 ->description('Configure timing, question counts, and bracket settings')
                 ->columnSpan('full')
@@ -351,7 +377,19 @@ class TournamentResource extends Resource
                 ])
                 ->columns(1)
                 ->collapsible(),
-        ]);
+        ];
+    }
+
+    public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
+    {
+        return $schema->schema(array_merge(
+            self::getBasicInfoSection(),
+            self::getSponsorSection(),
+            self::getTaxonomySection(),
+            self::getImportPreviewSection(),
+            self::getAdditionalSettingsSection(),
+            self::getTournamentConfigSection(),
+        ));
     }
 
     public static function table(Table $table): Table

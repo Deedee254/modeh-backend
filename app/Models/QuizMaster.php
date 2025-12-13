@@ -6,6 +6,29 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Institution;
 
+/**
+ * QuizMaster model - represents quiz creator profile
+ * 
+ * @property int $id
+ * @property int $user_id
+ * @property string|null $first_name
+ * @property string|null $last_name
+ * @property string|null $headline
+ * @property array|null $subjects
+ * @property string|null $bio
+ * @property int|null $grade_id
+ * @property int|null $level_id
+ * @property int|null $institution_id
+ * @property string|null $institution
+ * @property bool $institution_verified
+ * @property int|null $verified_institution_id
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ * @property-read \App\Models\User|null $user
+ * @property-read \App\Models\Institution|null $institutionModel
+ * @property-read \App\Models\Level|null $level
+ * @property-read \App\Models\Grade|null $grade
+ */
 class QuizMaster extends Model
 {
     use HasFactory;

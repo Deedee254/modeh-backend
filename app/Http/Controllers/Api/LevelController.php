@@ -11,13 +11,28 @@ class LevelController extends Controller
     // public list of levels with nested grades and subjects (for frontend grouping)
     public function index(Request $request)
     {
-        $levels = Level::with(['grades.subjects'])->orderBy('order')->get();
+        // Eager-load grades and subjects, and include topic/quizzes counts so frontend can rely on canonical fields
+        $levels = Level::with(['grades' => function($q) {
+            $q->withCount('subjects')
+              ->with(['subjects' => function($s) {
+                  $s->where('is_approved', true)
+                    ->withCount('topics')
+                    ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
+              }]);
+        }])->orderBy('order')->get();
         return response()->json(['levels' => $levels]);
     }
 
     public function show(Level $level)
     {
-        $level->load('grades.subjects');
+        $level->load(['grades' => function($q) {
+            $q->withCount('subjects')
+              ->with(['subjects' => function($s) {
+                  $s->where('is_approved', true)
+                    ->withCount('topics')
+                    ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
+              }]);
+        }]);
         return response()->json(['level' => $level]);
     }
 

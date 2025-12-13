@@ -287,6 +287,8 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // Exports (throttled)
     Route::get('/quizzes/{quiz}/export/csv', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportCsv'])->middleware('throttle:10,1');
     Route::get('/quizzes/{quiz}/export/pdf', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportPdf'])->middleware('throttle:5,1');
+    // Get users who have liked a quiz (public endpoint)
+    Route::get('/quizzes/{quiz}/likers', [\App\Http\Controllers\Api\InteractionController::class, 'quizLikers']);
 
     // quizee quiz take endpoints (show quiz without answers, submit answers)
     Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\QuizAttemptController::class, 'submit']);
@@ -440,6 +442,10 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::post('/quiz-masters/{quiz_master}/unfollow', [\App\Http\Controllers\Api\InteractionController::class, 'unfollowQuizMaster']);
     // quiz-master followers (authenticated)
     Route::get('/quiz-master/followers', [\App\Http\Controllers\Api\InteractionController::class, 'quizMasterFollowers']);
+    // User's followed quiz masters (authenticated)
+    Route::get('/user/following', [\App\Http\Controllers\Api\InteractionController::class, 'userFollowing']);
+    // User's liked quizzes (authenticated)
+    Route::get('/user/liked-quizzes', [\App\Http\Controllers\Api\InteractionController::class, 'userLikedQuizzes']);
 
     // Direct Messages
     Route::get('/messages/contacts', [\App\Http\Controllers\Api\MessageController::class, 'contacts']);

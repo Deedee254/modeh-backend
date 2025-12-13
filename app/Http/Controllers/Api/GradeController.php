@@ -18,10 +18,13 @@ class GradeController extends Controller
     {
         \Log::info('Accessing grades index');
         
+        // Eager-load subjects and their topics (with quizzes count) so we can compute accurate quizzes_count per subject and grade
         $query = Grade::query()
             ->withCount('subjects')
             ->with(['subjects' => function($q) {
-                $q->where('is_approved', true)->withCount('topics as quizzes_count');
+                $q->where('is_approved', true)
+                  ->withCount('topics')
+                  ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
             }]);
         $query->with('level');
 
@@ -35,8 +38,18 @@ class GradeController extends Controller
         }
 
         $grades = $query->orderBy('id')->get();
-        // Add total quizzes per grade
+        // Compute per-subject quizzes_count (sum of quizzes across topics) and total quizzes per grade
         $grades->each(function($grade) {
+            $grade->subjects->each(function($sub) {
+                try {
+                    if (!isset($sub->topics_count)) {
+                        $sub->topics_count = collect($sub->topics)->count();
+                    }
+                    $sub->quizzes_count = collect($sub->topics)->sum('quizzes_count');
+                } catch (\Throwable $_) {
+                    $sub->quizzes_count = 0;
+                }
+            });
             $grade->quizzes_count = $grade->subjects->sum('quizzes_count');
         });
         return response()->json(['grades' => $grades]);
@@ -45,8 +58,19 @@ class GradeController extends Controller
     // Show a single grade with subjects and counts
     public function show(Grade $grade)
     {
-        $grade->load(['subjects' => function($q) { $q->where('is_approved', true)->withCount('topics as quizzes_count'); }]);
-    $grade->load('level');
+        $grade->load(['subjects' => function($q) { $q->where('is_approved', true)->withCount('topics')->with(['topics' => function($t) { $t->withCount('quizzes'); }]); }]);
+        $grade->load('level');
+        // Compute per-subject quizzes_count and aggregate
+        $grade->subjects->each(function($sub) {
+            try {
+                if (!isset($sub->topics_count)) {
+                    $sub->topics_count = collect($sub->topics)->count();
+                }
+                $sub->quizzes_count = collect($sub->topics)->sum('quizzes_count');
+            } catch (\Throwable $_) {
+                $sub->quizzes_count = 0;
+            }
+        });
         $grade->quizzes_count = $grade->subjects->sum('quizzes_count');
         return response()->json(['grade' => $grade]);
     }

@@ -20,7 +20,11 @@ class SubjectController extends Controller
     // List subjects with pagination, search and quizzes_count
     public function index(Request $request)
     {
-        $query = Subject::query()->where('is_approved', true)->withCount('topics as quizzes_count');
+        // Load topic counts and quizzes per topic so we can compute accurate quizzes_count
+        $query = Subject::query()
+                ->where('is_approved', true)
+                ->withCount('topics')
+                ->with(['topics' => function ($q) { $q->where('is_approved', true)->withCount('quizzes'); }]);
 
         if ($q = $request->get('q')) {
             $query->where('name', 'like', "%{$q}%");
@@ -44,6 +48,13 @@ class SubjectController extends Controller
 
         // Attach a representative image for each subject when available
         $data->getCollection()->transform(function ($s) {
+                // Compute accurate quizzes_count per subject (sum of quizzes on its topics)
+                $s->topics_count = $s->topics_count ?? (is_array($s->topics) ? count($s->topics) : ($s->topics->count() ?? 0));
+                try {
+                    $s->quizzes_count = $s->topics->sum('quizzes_count');
+                } catch (\Throwable $_) {
+                    $s->quizzes_count = 0;
+                }
             // preserve any original image attribute if present
             $orig = $s->getAttribute('image') ?? null;
             $s->image = null;
@@ -76,6 +87,9 @@ class SubjectController extends Controller
         if (!empty($orig)) {
             try { $subject->image = Storage::url($orig); } catch (\Exception $e) { $subject->image = null; }
         }
+        // Provide explicit counts so clients have a consistent shape
+        $subject->topics_count = collect($subject->topics)->count();
+        $subject->quizzes_count = collect($subject->topics)->sum('quizzes_count');
         return response()->json(['subject' => $subject]);
     }
 

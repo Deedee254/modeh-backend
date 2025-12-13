@@ -13,10 +13,23 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 
+/**
+ * Institution Member Controller
+ * 
+ * Manages institution members, invitations, and member analytics
+ */
 class InstitutionMemberController extends Controller
 {
+    /**
+     * List institution members with optional filtering
+     * 
+     * @param Request $request
+     * @param Institution $institution
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function index(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
         // Only institution managers can list full members
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
@@ -51,16 +64,55 @@ class InstitutionMemberController extends Controller
             });
         }
 
-        // Eager-load the pivot for this institution and profiles
-        $query->with(['institutions' => function ($q) use ($institution) { $q->where('institutions.id', $institution->id); }, 'quizMasterProfile', 'quizeeProfile']);
+        // Eager-load the pivot for this institution and profiles with their level and grade relations
+        $query->with([
+            'institutions' => function ($q) use ($institution) { $q->where('institutions.id', $institution->id); },
+            'quizMasterProfile.level',
+            'quizMasterProfile.grade',
+            'quizeeProfile.level',
+            'quizeeProfile.grade',
+        ]);
 
         $paginator = $query->paginate($perPage, ['*'], 'page', $page);
 
+        /**
+         * Map users to member response format
+         * @var \Illuminate\Support\Collection $members
+         */
         $members = collect($paginator->items())->map(function ($u) use ($institution) {
             // pivot info for this institution is available under institutions relation (filtered)
-            $inst = $u->institutions && count($u->institutions) ? $u->institutions[0] : null;
+            /** @var User $u */
+            /** @var \Illuminate\Database\Eloquent\Collection $instCollection */
+            $instCollection = $u->institutions;
+            $inst = $instCollection->first();
             $pivotRole = $inst && isset($inst->pivot) ? ($inst->pivot->role ?? null) : null;
             $pivotStatus = $inst && isset($inst->pivot) ? ($inst->pivot->status ?? null) : null;
+
+            // Get profile (quizee or quiz-master)
+            $quizeeProfile = null;
+            $quizMasterProfile = null;
+            
+            if ($u->quizeeProfile) {
+                /** @var \App\Models\Quizee $qp */
+                $qp = $u->quizeeProfile;
+                $quizeeProfile = [
+                    'level_id' => $qp->level_id,
+                    'grade_id' => $qp->grade_id,
+                    'level' => $qp->level ? ['id' => $qp->level->id, 'name' => $qp->level->name] : null,
+                    'grade' => $qp->grade ? ['id' => $qp->grade->id, 'name' => $qp->grade->name] : null,
+                ];
+            }
+            
+            if ($u->quizMasterProfile) {
+                /** @var \App\Models\QuizMaster $qmp */
+                $qmp = $u->quizMasterProfile;
+                $quizMasterProfile = [
+                    'level_id' => $qmp->level_id,
+                    'grade_id' => $qmp->grade_id,
+                    'level' => $qmp->level ? ['id' => $qmp->level->id, 'name' => $qmp->level->name] : null,
+                    'grade' => $qmp->grade ? ['id' => $qmp->grade->id, 'name' => $qmp->grade->name] : null,
+                ];
+            }
 
             return [
                 'id' => $u->id,
@@ -68,10 +120,9 @@ class InstitutionMemberController extends Controller
                 'email' => $u->email,
                 'role' => $pivotRole,
                 'status' => $pivotStatus,
-                'profile' => [
-                    'quizee' => $u->quizeeProfile ? ['level_id' => $u->quizeeProfile->level_id ?? null, 'grade_id' => $u->quizeeProfile->grade_id ?? null] : null,
-                    'quiz_master' => $u->quizMasterProfile ? ['level_id' => $u->quizMasterProfile->level_id ?? null, 'grade_id' => $u->quizMasterProfile->grade_id ?? null] : null,
-                ]
+                'avatar' => $u->avatar,
+                'quizee_profile' => $quizeeProfile,
+                'quiz_master_profile' => $quizMasterProfile,
             ];
         });
 
@@ -89,6 +140,7 @@ class InstitutionMemberController extends Controller
 
     public function requests(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
@@ -141,6 +193,7 @@ class InstitutionMemberController extends Controller
 
     public function accept(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
@@ -222,6 +275,7 @@ class InstitutionMemberController extends Controller
 
     public function remove(Request $request, Institution $institution, $userId)
     {
+        /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
@@ -235,6 +289,7 @@ class InstitutionMemberController extends Controller
      */
     public function subscription(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
@@ -273,6 +328,7 @@ class InstitutionMemberController extends Controller
      */
     public function revokeAssignment(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
@@ -314,6 +370,7 @@ class InstitutionMemberController extends Controller
      */
     public function invite(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
@@ -443,6 +500,7 @@ class InstitutionMemberController extends Controller
      */
     public function generateInviteToken(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
@@ -561,6 +619,7 @@ class InstitutionMemberController extends Controller
      */
     public function acceptInvitation(Request $request, Institution $institution, $token)
     {
+        /** @var Institution $institution */
         $user = $request->user();
 
         $invitation = DB::table('institution_user')
@@ -630,6 +689,7 @@ class InstitutionMemberController extends Controller
      */
     public function listInvites(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
@@ -664,6 +724,7 @@ class InstitutionMemberController extends Controller
      */
     public function listAcceptedInvites(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
@@ -705,6 +766,7 @@ class InstitutionMemberController extends Controller
      */
     public function revokeInvite(Request $request, Institution $institution, $token)
     {
+        /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
@@ -736,6 +798,7 @@ class InstitutionMemberController extends Controller
      */
     public function analyticsOverview(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
@@ -815,6 +878,7 @@ class InstitutionMemberController extends Controller
      */
     public function analyticsActivity(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
@@ -849,6 +913,7 @@ class InstitutionMemberController extends Controller
      */
     public function analyticsPerformance(Request $request, Institution $institution)
     {
+        /** @var Institution $institution */
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
@@ -910,6 +975,7 @@ class InstitutionMemberController extends Controller
      */
     public function analyticsMember(Request $request, Institution $institution, $userId)
     {
+        /** @var Institution $institution */
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
