@@ -16,6 +16,8 @@ use Illuminate\Support\HtmlString;
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
+
 class TournamentResource extends Resource
 {
     protected static ?string $model = Tournament::class;
@@ -81,14 +83,10 @@ class TournamentResource extends Resource
                     // Left column: Taxonomy
                     Grid::make(1)->schema([
                         Forms\Components\Select::make('level_id')
-                            ->options(function () {
-                                // Preload all levels
-                                return \App\Models\Level::query()
-                                    ->orderBy('order')
-                                    ->pluck('name', 'id');
-                            })
+                            ->relationship('level', 'name', fn (Builder $query) => $query->orderBy('order'))
                             ->required()
                             ->searchable()
+                            ->preload()
                             ->live()
                             ->afterStateUpdated(function ($set) {
                                 $set('grade_id', null);
@@ -97,58 +95,58 @@ class TournamentResource extends Resource
                             }),
 
                         Forms\Components\Select::make('grade_id')
-                            ->options(function ($get) {
-                                // Preload all grades and filter by level_id
-                                $levelId = $get('level_id');
-                                $query = \App\Models\Grade::query();
-                                
-                                if ($levelId) {
-                                    $query->where('level_id', $levelId);
-                                }
-                                
-                                return $query->pluck('display_name', 'id');
+                            ->label('Grade')
+                            ->options(fn ($get) => \App\Models\Grade::query()
+                                ->when($get('level_id'), fn (Builder $q, $levelId) => $q->where('level_id', $levelId))
+                                ->orderBy('display_name')
+                                ->pluck('display_name', 'id'))
+                            ->getOptionLabelUsing(static function ($component) {
+                                $state = $component->getState();
+                                return \App\Models\Grade::find($state)?->display_name ?? $state;
                             })
+                            ->preload()
                             ->required()
                             ->searchable()
                             ->live()
                             ->afterStateUpdated(function ($set) {
                                 $set('subject_id', null);
                                 $set('topic_id', null);
-                            }),
+                            })
+                            ->disabled(fn ($get) => !$get('level_id')),
 
                         Forms\Components\Select::make('subject_id')
-                            ->options(function ($get) {
-                                // Preload all subjects and filter by grade_id
-                                $gradeId = $get('grade_id');
-                                $query = \App\Models\Subject::query();
-                                
-                                if ($gradeId) {
-                                    $query->where('grade_id', $gradeId);
-                                }
-                                
-                                return $query->pluck('name', 'id');
+                            ->label('Subject')
+                            ->options(fn ($get) => \App\Models\Subject::query()
+                                ->when($get('grade_id'), fn (Builder $q, $gradeId) => $q->where('grade_id', $gradeId))
+                                ->orderBy('name')
+                                ->pluck('name', 'id'))
+                            ->getOptionLabelUsing(static function ($component) {
+                                $state = $component->getState();
+                                return \App\Models\Subject::find($state)?->name ?? $state;
                             })
+                            ->preload()
                             ->required()
                             ->searchable()
                             ->live()
                             ->afterStateUpdated(function ($set) {
                                 $set('topic_id', null);
-                            }),
+                            })
+                            ->disabled(fn ($get) => !$get('grade_id')),
 
                         Forms\Components\Select::make('topic_id')
-                            ->options(function ($get) {
-                                // Preload all topics and filter by subject_id
-                                $subjectId = $get('subject_id');
-                                $query = \App\Models\Topic::query();
-                                
-                                if ($subjectId) {
-                                    $query->where('subject_id', $subjectId);
-                                }
-                                
-                                return $query->pluck('name', 'id');
+                            ->label('Topic')
+                            ->options(fn ($get) => \App\Models\Topic::query()
+                                ->when($get('subject_id'), fn (Builder $q, $subjectId) => $q->where('subject_id', $subjectId))
+                                ->orderBy('name')
+                                ->pluck('name', 'id'))
+                            ->getOptionLabelUsing(static function ($component) {
+                                $state = $component->getState();
+                                return \App\Models\Topic::find($state)?->name ?? $state;
                             })
+                            ->preload()
                             ->searchable()
-                            ->live(),
+                            ->live()
+                            ->disabled(fn ($get) => !$get('subject_id')),
 
                         Grid::make(2)->schema([
                             Action::make('browseBank')
@@ -398,14 +396,14 @@ class TournamentResource extends Resource
 
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
-        return $schema->schema(array_merge(
-            self::getBasicInfoSection(),
-            self::getSponsorSection(),
-            self::getTaxonomySection(),
-            self::getImportPreviewSection(),
-            self::getAdditionalSettingsSection(),
-            self::getTournamentConfigSection(),
-        ));
+        return $schema->schema([
+            ...self::getBasicInfoSection(),
+            ...self::getSponsorSection(),
+            ...self::getTaxonomySection(),
+            ...self::getImportPreviewSection(),
+            ...self::getAdditionalSettingsSection(),
+            ...self::getTournamentConfigSection(),
+        ]);
     }
 
     public static function table(Table $table): Table
@@ -460,11 +458,53 @@ class TournamentResource extends Resource
                         'completed' => 'Completed',
                     ]),
 
-                \Filament\Tables\Filters\SelectFilter::make('grade')
-                    ->relationship('grade', 'name'),
+                \Filament\Tables\Filters\Filter::make('taxonomy')
+                    ->form([
+                        Forms\Components\Select::make('level_id')
+                            ->label('Level')
+                            ->options(\App\Models\Level::orderBy('order')->pluck('name', 'id'))
+                            ->searchable()
+                            ->live()
+                            ->afterStateUpdated(function ($set) {
+                                $set('grade_id', null);
+                                $set('subject_id', null);
+                            }),
 
-                \Filament\Tables\Filters\SelectFilter::make('subject')
-                    ->relationship('subject', 'name'),
+                        Forms\Components\Select::make('grade_id')
+                            ->label('Grade')
+                            ->options(fn ($get): Collection => \App\Models\Grade::query()
+                                ->where('level_id', $get('level_id'))
+                                ->orderBy('display_name')
+                                ->pluck('display_name', 'id'))
+                            ->searchable()
+                            ->live()
+                            ->disabled(fn ($get) => !$get('level_id'))
+                            ->afterStateUpdated(fn ($set) => $set('subject_id', null)),
+
+                        Forms\Components\Select::make('subject_id')
+                            ->label('Subject')
+                            ->options(fn ($get): Collection => \App\Models\Subject::query()
+                                ->where('grade_id', $get('grade_id'))
+                                ->orderBy('name')
+                                ->pluck('name', 'id'))
+                            ->searchable()
+                            ->disabled(fn ($get) => !$get('grade_id')),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['level_id'],
+                                fn (Builder $query, $id) => $query->where('level_id', $id)
+                            )
+                            ->when(
+                                $data['grade_id'],
+                                fn (Builder $query, $id) => $query->where('grade_id', $id)
+                            )
+                            ->when(
+                                $data['subject_id'],
+                                fn (Builder $query, $id) => $query->where('subject_id', $id)
+                            );
+                    }),
 
                 \Filament\Tables\Filters\SelectFilter::make('sponsor')
                     ->relationship('sponsor', 'name'),
