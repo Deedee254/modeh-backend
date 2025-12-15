@@ -6,9 +6,6 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Actions\DetachAction;
-use Filament\Actions\ImportAction;
-use Filament\Actions\Action;
-use App\Imports\QuestionsImporter;
 
 class QuestionsRelationManager extends RelationManager
 {
@@ -32,22 +29,7 @@ class QuestionsRelationManager extends RelationManager
                 TextColumn::make('pivot.position')->label('Position')->sortable(),
             ])
             ->headerActions([
-                ImportAction::make('importQuestions')
-                    ->importer(QuestionsImporter::class)
-                    ->icon('heroicon-o-arrow-up-tray'),
-
-                Action::make('addFromBank')
-                    ->label('Add from Bank')
-                    ->icon('heroicon-o-archive-box')
-                    ->modalHeading('Add Questions from Bank')
-                    ->modalWidth('7xl')
-                    ->modalContent(fn () => view('filament.modals.bank-questions-table', [
-                        'tournamentId' => $this->getOwnerRecord()?->id ?? null,
-                        'targetField' => 'questions',
-                    ]))
-                    ->modalSubmitAction(false)
-                    ->modalCancelAction(false)
-                    ->color('secondary'),
+                // Import and Browse actions are on EditTournament page breadcrumb
             ])
             ->actions([
                 DetachAction::make(),

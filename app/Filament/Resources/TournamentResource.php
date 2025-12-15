@@ -5,6 +5,9 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\TournamentResource\Pages;
 use App\Models\Tournament;
 use App\Models\Question;
+use App\Models\Grade;
+use App\Models\Subject;
+use App\Models\Topic;
 use Filament\Forms;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
@@ -80,6 +83,21 @@ class TournamentResource extends Resource
         return [
             Section::make()
                 ->schema([
+                    // Hidden version fields used to invalidate preloaded relationship caches
+                    Forms\Components\Hidden::make('grade_options_version')
+                        ->default(0)
+                        ->dehydrated(false)
+                        ->live(),
+
+                    Forms\Components\Hidden::make('subject_options_version')
+                        ->default(0)
+                        ->dehydrated(false)
+                        ->live(),
+
+                    Forms\Components\Hidden::make('topic_options_version')
+                        ->default(0)
+                        ->dehydrated(false)
+                        ->live(),
                     // Left column: Taxonomy
                     Grid::make(1)->schema([
                         Forms\Components\Select::make('level_id')
@@ -88,183 +106,101 @@ class TournamentResource extends Resource
                             ->searchable()
                             ->preload()
                             ->live()
-                            ->afterStateUpdated(function ($set) {
+                            ->afterStateUpdated(function ($set, $get) {
                                 $set('grade_id', null);
                                 $set('subject_id', null);
                                 $set('topic_id', null);
+
+                                // Invalidate preloaded caches for downstream selects
+                                $set('grade_options_version', ($get('grade_options_version') ?? 0) + 1);
+                                $set('subject_options_version', ($get('subject_options_version') ?? 0) + 1);
+                                $set('topic_options_version', ($get('topic_options_version') ?? 0) + 1);
                             }),
 
                         Forms\Components\Select::make('grade_id')
                             ->label('Grade')
-                            ->options(fn ($get) => \App\Models\Grade::query()
-                                ->when($get('level_id'), fn (Builder $q, $levelId) => $q->where('level_id', $levelId))
-                                ->orderBy('display_name')
-                                ->pluck('display_name', 'id'))
-                            ->getOptionLabelUsing(static function ($component) {
-                                $state = $component->getState();
-                                return \App\Models\Grade::find($state)?->display_name ?? $state;
+                            ->options(function ($get) {
+                                // read the version so Filament will re-evaluate this closure when it changes
+                                $get('grade_options_version');
+
+                                $levelId = $get('level_id');
+                                if (!$levelId) {
+                                    return [];
+                                }
+
+                                // Load full models so display_name accessor works
+                                $grades = Grade::where('level_id', $levelId)
+                                    ->orderBy('display_name')
+                                    ->get();
+
+                                // Format as id => display_name
+                                return $grades->mapWithKeys(function (Grade $grade) {
+                                    return [$grade->id => $grade->display_name];
+                                })->toArray();
                             })
-                            ->preload()
+                            ->reactive()
+                            ->nullable()
+                            ->placeholder('Select Grade')
                             ->required()
                             ->searchable()
-                            ->live()
-                            ->afterStateUpdated(function ($set) {
+                            ->afterStateUpdated(function ($set, $get) {
                                 $set('subject_id', null);
                                 $set('topic_id', null);
+                                // Invalidate downstream preloads
+                                $set('subject_options_version', ($get('subject_options_version') ?? 0) + 1);
+                                $set('topic_options_version', ($get('topic_options_version') ?? 0) + 1);
                             })
                             ->disabled(fn ($get) => !$get('level_id')),
 
                         Forms\Components\Select::make('subject_id')
                             ->label('Subject')
-                            ->options(fn ($get) => \App\Models\Subject::query()
-                                ->when($get('grade_id'), fn (Builder $q, $gradeId) => $q->where('grade_id', $gradeId))
-                                ->orderBy('name')
-                                ->pluck('name', 'id'))
-                            ->getOptionLabelUsing(static function ($component) {
-                                $state = $component->getState();
-                                return \App\Models\Subject::find($state)?->name ?? $state;
+                            ->options(function ($get) {
+                                $get('subject_options_version');
+
+                                $gradeId = $get('grade_id');
+                                if (!$gradeId) {
+                                    return [];
+                                }
+
+                                return Subject::where('grade_id', $gradeId)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->toArray();
                             })
-                            ->preload()
+                            ->reactive()
+                            ->nullable()
+                            ->placeholder('Select Subject')
                             ->required()
                             ->searchable()
-                            ->live()
-                            ->afterStateUpdated(function ($set) {
+                            ->afterStateUpdated(function ($set, $get) {
                                 $set('topic_id', null);
+                                // Invalidate topic preload
+                                $set('topic_options_version', ($get('topic_options_version') ?? 0) + 1);
                             })
                             ->disabled(fn ($get) => !$get('grade_id')),
 
                         Forms\Components\Select::make('topic_id')
                             ->label('Topic')
-                            ->options(fn ($get) => \App\Models\Topic::query()
-                                ->when($get('subject_id'), fn (Builder $q, $subjectId) => $q->where('subject_id', $subjectId))
-                                ->orderBy('name')
-                                ->pluck('name', 'id'))
-                            ->getOptionLabelUsing(static function ($component) {
-                                $state = $component->getState();
-                                return \App\Models\Topic::find($state)?->name ?? $state;
+                            ->options(function ($get) {
+                                $get('topic_options_version');
+
+                                $subjectId = $get('subject_id');
+                                if (!$subjectId) {
+                                    return [];
+                                }
+
+                                return Topic::where('subject_id', $subjectId)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->toArray();
                             })
-                            ->preload()
+                            ->reactive()
+                            ->nullable()
+                            ->placeholder('Select Topic')
                             ->searchable()
-                            ->live()
                             ->disabled(fn ($get) => !$get('subject_id')),
-
-                        Grid::make(2)->schema([
-                            Action::make('browseBank')
-                                ->label('Add from Bank')
-                                ->icon('heroicon-o-archive-box')
-                                ->modalHeading('Browse Question Bank')
-                                ->modalWidth('7xl')
-                                ->modalContent(function ($get) {
-                                    return view('filament.modals.bank-questions-table', [
-                                        'filters' => [
-                                            'level_id' => $get('level_id'),
-                                            'grade_id' => $get('grade_id'),
-                                            'subject_id' => $get('subject_id'),
-                                            'topic_id' => $get('topic_id'),
-                                        ]
-                                    ]);
-                                })
-                                ->modalSubmitAction(false)
-                                ->modalCancelAction(false)
-                                ->color('secondary'),
-
-                            Action::make('importQuestions')
-                                ->label('Import Questions')
-                                ->icon('heroicon-o-arrow-up-tray')
-                                ->color('secondary')
-                                ->form([
-                                    Forms\Components\FileUpload::make('csv_import')
-                                        ->label('Upload CSV')
-                                        ->acceptedFileTypes(['text/csv', 'text/plain'])
-                                        ->maxSize(10240)
-                                        ->directory('temp/csv-imports')
-                                        ->visibility('private')
-                                        ->required(),
-                                ])
-                                ->modalWidth('md')
-                                ->action(function ($data, $set, $get) {
-                                    if (empty($data['csv_import'])) return;
-                                    
-                                    $filePath = storage_path('app/private/' . $data['csv_import']);
-                                    if (!file_exists($filePath)) return;
-
-                                    // Parse CSV
-                                    $rows = array_map('str_getcsv', file($filePath));
-                                    $headers = array_shift($rows);
-                                    
-                                    $importedQuestions = [];
-                                    foreach ($rows as $row) {
-                                        if (empty(array_filter($row))) continue;
-                                        
-                                        $question = array_combine($headers, $row);
-                                        
-                                        $importedQuestions[] = [
-                                            'type' => $question['type'] ?? 'mcq',
-                                            'body' => $question['text'] ?? '',
-                                            'options' => [
-                                                $question['option1'] ?? '',
-                                                $question['option2'] ?? '',
-                                                $question['option3'] ?? '',
-                                                $question['option4'] ?? '',
-                                            ],
-                                            'correct' => intval($question['answers'] ?? 1) - 1,
-                                            'marks' => floatval($question['marks'] ?? 1),
-                                            'difficulty' => intval($question['difficulty'] ?? 2),
-                                            'is_banked' => true,
-                                            'is_approved' => true,
-                                            'level_id' => $get('level_id'),
-                                            'grade_id' => $get('grade_id'),
-                                            'subject_id' => $get('subject_id'),
-                                            'topic_id' => $get('topic_id'),
-                                        ];
-                                    }
-                                    
-                                    // Store as JSON string in form state
-                                    $set('import_questions', json_encode($importedQuestions));
-                                    
-                                    // Clean up temp file
-                                    @unlink($filePath);
-                                }),
                         ]),
                     ]),
-                ]),
-        ];
-    }
-
-    protected static function getImportPreviewSection(): array
-    {
-        return [
-            // Preview of imported questions
-            Section::make('Imported Questions Preview')
-                ->description('Review the questions before saving')
-                ->schema([
-                    Forms\Components\Placeholder::make('import_preview')
-                        ->label('')
-                        ->content(function ($get) {
-                            $importQuestions = $get('import_questions');
-                            // Decode if it's a JSON string
-                            if (is_string($importQuestions)) {
-                                $importQuestions = json_decode($importQuestions, true) ?? [];
-                            }
-                            return new \Illuminate\Support\HtmlString(
-                                view('filament.forms.imported-questions-preview', ['questions' => $importQuestions])->render()
-                            );
-                        })
-                        ->hidden(function ($get) {
-                            $val = $get('import_questions');
-                            return empty($val) || $val === '[]';
-                        }),
-                ])
-                ->collapsed(false)
-                ->visible(function ($get) {
-                    $val = $get('import_questions');
-                    return !empty($val) && $val !== '[]';
-                }),
-
-            // Hidden field to store imported questions during creation
-            Forms\Components\Hidden::make('import_questions')
-                ->default(json_encode([]))
-                ->dehydrated(false),
         ];
     }
 
@@ -400,7 +336,6 @@ class TournamentResource extends Resource
             ...self::getBasicInfoSection(),
             ...self::getSponsorSection(),
             ...self::getTaxonomySection(),
-            ...self::getImportPreviewSection(),
             ...self::getAdditionalSettingsSection(),
             ...self::getTournamentConfigSection(),
         ]);

@@ -107,22 +107,28 @@ class QuestionsImporter extends Importer
         // Handle MCQ answers
         if ($record->type === 'mcq' && ! empty($answers)) {
             $first = $answers[0];
+            $correctIndex = null;
             if (is_numeric($first)) {
                 // 1-based position -> 0-based
                 $position = intval($first);
                 $optionCount = count($record->options ?? []);
                 if ($position >= 1 && $position <= $optionCount) {
-                    $record->correct = $position - 1;
+                    $correctIndex = $position - 1;
                 }
             } else {
                 // Match by text
                 $firstTrimmed = trim((string)$first);
                 foreach (($record->options ?? []) as $ii => $opt) {
                     if (trim((string)$opt) === $firstTrimmed) {
-                        $record->correct = $ii;
+                        $correctIndex = $ii;
                         break;
                     }
                 }
+            }
+            
+            // Store as array in answers field (as strings to match frontend format)
+            if ($correctIndex !== null) {
+                $record->answers = [(string)$correctIndex];
             }
         }
 

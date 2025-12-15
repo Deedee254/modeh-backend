@@ -37,28 +37,25 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
         $this->tournamentId = $tournamentId;
         $this->targetField = $targetField;
         $this->initialFilters = $initialFilters;
-
-        // Apply initial filters to the table's filter data
-        $this->tableFilters['grade_id']['value'] = $initialFilters['grade_id'] ?? null;
-        $this->tableFilters['level_id']['value'] = $initialFilters['level_id'] ?? null;
-        $this->tableFilters['subject_id']['value'] = $initialFilters['subject_id'] ?? null;
-        $this->tableFilters['topic']['value'] = $initialFilters['topic_id'] ?? null;
     }
 
     protected function getTableQuery(): Builder
     {
         $query = Question::query()->where('is_banked', true);
 
-        if ($this->tournamentId) {
+        // Filter by topic_id from the form (when creating)
+        if (!empty($this->initialFilters['topic_id'])) {
+            $query->where('topic_id', $this->initialFilters['topic_id']);
+        }
+        // Filter by topic_id from the tournament (when editing)
+        elseif ($this->tournamentId) {
             $t = Tournament::find($this->tournamentId);
-            if ($t) {
-                if ($t->grade_id) $query->where('grade_id', $t->grade_id);
-                if ($t->subject_id) $query->where('subject_id', $t->subject_id);
-                if ($t->level_id) $query->where('level_id', $t->level_id);
+            if ($t && $t->topic_id) {
+                $query->where('topic_id', $t->topic_id);
             }
         }
 
-        return $query->orderBy('id', 'desc');
+        return $query;
     }
 
     protected function getTableColumns(): array
@@ -68,7 +65,8 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
             Tables\Columns\TextColumn::make('content')
                 ->label('Question')
                 ->wrap()
-                ->limit(140),
+                ->limit(140)
+                ->sortable(),
 
             // Full body preview column
             Tables\Columns\TextColumn::make('body')
@@ -81,29 +79,32 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
             Tables\Columns\TextColumn::make('subject.name')->label('Subject')->sortable()->searchable(),
             Tables\Columns\TextColumn::make('topic.name')->label('Topic')->sortable()->searchable(),
             Tables\Columns\TextColumn::make('level.name')->label('Level')->sortable()->searchable(),
+
+            Tables\Columns\TextColumn::make('marks')
+                ->label('Marks')
+                ->sortable()
+                ->searchable(),
+
+            Tables\Columns\TextColumn::make('difficulty')
+                ->label('Difficulty')
+                ->sortable()
+                ->searchable(),
+
+            Tables\Columns\TextColumn::make('created_at')
+                ->label('Created')
+                ->dateTime('M d, Y')
+                ->sortable(),
         ];
     }
 
     protected function getTableFilters(): array
     {
         return [
-            Tables\Filters\SelectFilter::make('level_id')
-                ->relationship('level', 'name')
-                ->label('Level'),
-
-            Tables\Filters\SelectFilter::make('grade_id')
-                ->relationship('grade', 'name')
-                ->label('Grade'),
-
-            Tables\Filters\SelectFilter::make('topic')
-                ->relationship('topic', 'name')
-                ->label('Topic'),
-
             Tables\Filters\SelectFilter::make('is_approved')
-                ->label('Approved')
+                ->label('Approval Status')
                 ->options([
-                    1 => 'Yes',
-                    0 => 'No',
+                    1 => 'Approved',
+                    0 => 'Pending',
                 ])
                 ->query(function (Builder $query, $value) {
                     $query->where('is_approved', (int) $value);

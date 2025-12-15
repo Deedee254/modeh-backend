@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\TournamentResource\Pages;
 
 use App\Filament\Resources\TournamentResource;
-use App\Models\Question;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Notifications\Notification;
 
 class CreateTournament extends CreateRecord
 {
@@ -45,38 +45,11 @@ class CreateTournament extends CreateRecord
 
     protected function afterCreate(): void
     {
-        // Get imported questions from form data
-        $importedQuestionsData = $this->data['import_questions'] ?? [];
-        
-        // Decode if it's a JSON string
-        if (is_string($importedQuestionsData)) {
-            $importedQuestionsData = json_decode($importedQuestionsData, true) ?? [];
-        }
-        
-        if (!empty($importedQuestionsData)) {
-            // Create questions and attach to tournament
-            $position = 1;
-            foreach ($importedQuestionsData as $qData) {
-                // Create question
-                $question = Question::create([
-                    'type' => $qData['type'] ?? 'mcq',
-                    'body' => $qData['body'] ?? '',
-                    'options' => $qData['options'] ?? [],
-                    'correct' => $qData['correct'] ?? null,
-                    'marks' => $qData['marks'] ?? 1,
-                    'difficulty' => $qData['difficulty'] ?? 2,
-                    'is_banked' => $qData['is_banked'] ?? true,
-                    'is_approved' => $qData['is_approved'] ?? true,
-                    'level_id' => $qData['level_id'] ?? null,
-                    'grade_id' => $qData['grade_id'] ?? null,
-                    'subject_id' => $qData['subject_id'] ?? null,
-                    'topic_id' => $qData['topic_id'] ?? null,
-                ]);
-                
-                // Attach to tournament
-                $this->record->questions()->attach($question->id, ['position' => $position]);
-                $position++;
-            }
-        }
+        // Show success notification
+        Notification::make()
+            ->success()
+            ->title('Tournament Created')
+            ->body('Tournament ready! You can now add questions from the bank or import a CSV file.')
+            ->send();
     }
 }

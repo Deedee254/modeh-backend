@@ -71,11 +71,25 @@ class TournamentQuestionService
         } else {
             $FH = fopen($path, 'r');
             if (!$FH) return [[], []];
+            
+            // Detect BOM
+            $bom = fread($FH, 3);
+            if ($bom !== "\xEF\xBB\xBF") {
+                rewind($FH);
+            }
+
             $rawHeaders = fgetcsv($FH);
             if ($rawHeaders === false) { fclose($FH); return [[], []]; }
-            $headers = array_map(function ($h) { return strtolower(trim((string)$h)); }, $rawHeaders);
+            
+            $headers = array_map(function ($h) { 
+                $h = mb_convert_encoding($h, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+                return strtolower(trim((string)$h)); 
+            }, $rawHeaders);
+            
             while (($row = fgetcsv($FH)) !== false) {
-                $rows[] = $row;
+                $rows[] = array_map(function($value) {
+                    return mb_convert_encoding($value, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+                }, $row);
             }
             fclose($FH);
         }
