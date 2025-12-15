@@ -81,10 +81,14 @@ class TournamentResource extends Resource
                     // Left column: Taxonomy
                     Grid::make(1)->schema([
                         Forms\Components\Select::make('level_id')
-                            ->relationship('level', 'name', fn (Builder $query) => $query->orderBy('order'))
+                            ->options(function () {
+                                // Preload all levels
+                                return \App\Models\Level::query()
+                                    ->orderBy('order')
+                                    ->pluck('name', 'id');
+                            })
                             ->required()
                             ->searchable()
-                            ->preload()
                             ->live()
                             ->afterStateUpdated(function ($set) {
                                 $set('grade_id', null);
@@ -93,15 +97,19 @@ class TournamentResource extends Resource
                             }),
 
                         Forms\Components\Select::make('grade_id')
-                            ->relationship('grade', 'display_name', function (Builder $query, $get) {
+                            ->options(function ($get) {
+                                // Preload all grades and filter by level_id
                                 $levelId = $get('level_id');
+                                $query = \App\Models\Grade::query();
+                                
                                 if ($levelId) {
                                     $query->where('level_id', $levelId);
                                 }
+                                
+                                return $query->pluck('display_name', 'id');
                             })
                             ->required()
                             ->searchable()
-                            ->preload()
                             ->live()
                             ->afterStateUpdated(function ($set) {
                                 $set('subject_id', null);
@@ -109,29 +117,37 @@ class TournamentResource extends Resource
                             }),
 
                         Forms\Components\Select::make('subject_id')
-                            ->relationship('subject', 'name', function (Builder $query, $get) {
+                            ->options(function ($get) {
+                                // Preload all subjects and filter by grade_id
                                 $gradeId = $get('grade_id');
+                                $query = \App\Models\Subject::query();
+                                
                                 if ($gradeId) {
                                     $query->where('grade_id', $gradeId);
                                 }
+                                
+                                return $query->pluck('name', 'id');
                             })
                             ->required()
                             ->searchable()
-                            ->preload()
                             ->live()
                             ->afterStateUpdated(function ($set) {
                                 $set('topic_id', null);
                             }),
 
                         Forms\Components\Select::make('topic_id')
-                            ->relationship('topic', 'name', function (Builder $query, $get) {
+                            ->options(function ($get) {
+                                // Preload all topics and filter by subject_id
                                 $subjectId = $get('subject_id');
+                                $query = \App\Models\Topic::query();
+                                
                                 if ($subjectId) {
                                     $query->where('subject_id', $subjectId);
                                 }
+                                
+                                return $query->pluck('name', 'id');
                             })
                             ->searchable()
-                            ->preload()
                             ->live(),
 
                         Grid::make(2)->schema([
