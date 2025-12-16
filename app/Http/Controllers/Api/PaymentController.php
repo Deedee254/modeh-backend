@@ -63,10 +63,10 @@ class PaymentController extends Controller
             }
 
             // handle one-off purchase
-            if ($status === 'success') {
-                $purchase->status = 'confirmed';
-                $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], ['completed_at' => now()]);
-                $purchase->save();
+                if ($status === 'success') {
+                    $purchase->status = 'confirmed';
+                    $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], ['completed_at' => now()]);
+                    $purchase->save();
 
                 $amount = $purchase->amount ?? 0;
                 $setting = PaymentSetting::where('gateway', 'mpesa')->first();
@@ -195,7 +195,34 @@ class PaymentController extends Controller
                     }
                 }
 
-                return response()->json(['ok' => true]);
+                    // If this was a tournament entry one-off purchase, mark the participant pivot as paid
+                    try {
+                        if ($purchase->item_type === 'tournament') {
+                            DB::table('tournament_participants')
+                                ->where('tournament_id', $purchase->item_id)
+                                ->where('user_id', $purchase->user_id)
+                                ->where('status', 'pending_payment')
+                                ->update([
+                                    'status' => 'paid',
+                                    'approved_at' => now(), // repurposed as paid_at
+                                    'updated_at' => now(),
+                                ]);
+
+                            // Notify user about successful registration/payment
+                            try {
+                                $user = \App\Models\User::find($purchase->user_id);
+                                if ($user) {
+                                    $user->notify(new \App\Notifications\TournamentRegistrationStatusChanged(\App\Models\Tournament::find($purchase->item_id), 'paid'));
+                                }
+                            } catch (\Throwable $_) {
+                                // swallow notification errors
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                        try { Log::warning('Failed to promote tournament participant after purchase confirmation: '.$e->getMessage()); } catch (\Throwable $_) {}
+                    }
+
+                    return response()->json(['ok' => true]);
             }
 
             $purchase->status = 'cancelled';

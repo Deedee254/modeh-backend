@@ -101,11 +101,35 @@ class TournamentPolicy
      */
     public function join(User $user, Tournament $tournament)
     {
-        if ($tournament->grade_id && $user->quizeeProfile && $user->quizeeProfile->grade_id !== $tournament->grade_id) {
-            return $this->deny('You are not in the correct grade for this tournament.');
+        // access_type controls who may join: public, grade, level
+        $access = $tournament->access_type ?? 'public';
+
+        if ($access === 'public') {
+            return true;
         }
 
-        return true;
+        // Grade-restricted: enforce grade match
+        if ($access === 'grade') {
+            if ($tournament->grade_id) {
+                if (! $user->quizeeProfile || ($user->quizeeProfile->grade_id ?? null) !== $tournament->grade_id) {
+                    return $this->deny('You are not in the correct grade for this tournament.');
+                }
+            }
+            return true;
+        }
+
+        // Level-restricted: enforce level match
+        if ($access === 'level') {
+            if ($tournament->level_id) {
+                if (! $user->quizeeProfile || ($user->quizeeProfile->level_id ?? null) !== $tournament->level_id) {
+                    return $this->deny('You are not in the correct level for this tournament.');
+                }
+            }
+            return true;
+        }
+
+        // Fallback conservative deny
+        return $this->deny('You are not eligible to join this tournament.');
     }
 
     /**

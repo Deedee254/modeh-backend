@@ -13,16 +13,19 @@ use App\Models\TournamentBattle;
 use App\Models\TournamentBattleAttempt;
 use App\Models\TournamentQualificationAttempt;
 use App\Services\AchievementService;
+use App\Services\QuestionMarkingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class TournamentController extends Controller
 {
     protected $achievementService;
+    protected $markingService;
 
-    public function __construct(AchievementService $achievementService)
+    public function __construct(AchievementService $achievementService, QuestionMarkingService $markingService)
     {
         $this->achievementService = $achievementService;
+        $this->markingService = $markingService;
         $this->middleware('auth:sanctum')->except(['index', 'show', 'tree']);
         $this->middleware('throttle:60,1')->only(['join', 'submitBattle']);
     }
@@ -67,13 +70,118 @@ class TournamentController extends Controller
         }
         $tournament->is_participant = $isParticipant;
 
+        // Compute eligibility details for the current user so frontend can
+        // surface whether the user is eligible to join and why if not.
+        $eligibility = [
+            'can_join' => false,
+            'reason' => null,
+        ];
+
+        if ($user) {
+            try {
+                // Use the Gate inspector so we don't throw an exception here but
+                // can read the allow/deny state and optional message from the
+                // policy (e.g. "You are not in the correct grade...").
+                $gate = app(\Illuminate\Contracts\Auth\Access\Gate::class);
+                $inspect = $gate->forUser($user)->inspect('join', $tournament);
+
+                $eligibility['can_join'] = $inspect->allowed();
+                $eligibility['reason'] = $inspect->message() ?? null;
+            } catch (\Throwable $e) {
+                // If inspect isn't available for some reason, fall back to a
+                // conservative response (deny) and capture the exception message
+                // for debugging/UI display.
+                $eligibility['can_join'] = false;
+                $eligibility['reason'] = $e->getMessage();
+            }
+        } else {
+            $eligibility['can_join'] = false;
+            $eligibility['reason'] = 'authentication_required';
+        }
+
+        // Generate a per-response shuffle seed and shuffle questions/options
+        // so clients receive a randomized ordering to discourage sharing.
+        try {
+            $shuffleSeed = bin2hex(random_bytes(6));
+        } catch (\Exception $_) {
+            $shuffleSeed = (string) time();
+        }
+
+        // Shuffle question order deterministically using seed
+        if ($tournament->relationLoaded('questions') && $tournament->questions->isNotEmpty()) {
+            $questions = $tournament->questions->map(function ($q) use ($shuffleSeed) {
+                // Shuffle options for each question using a seed that incorporates question id
+                $opts = [];
+                if (is_array($q->options)) {
+                    $opts = $q->options;
+                } elseif (is_string($q->options)) {
+                    $decoded = json_decode((string) $q->options, true);
+                    if (is_array($decoded)) $opts = $decoded;
+                }
+                if (!empty($opts)) {
+                    $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
+                    $q->options = $shuffled;
+                }
+                return $q;
+            })->toArray();
+
+            // Shuffle questions order
+            $shuffledQuestions = $this->seededShuffle($questions, $shuffleSeed);
+            $tournament->setRelation('questions', collect($shuffledQuestions));
+        }
+
         // Return an explicit JSON shape so callers (frontend) can rely on
-        // `tournament` and `winner` keys being present. We include `winner`
-        // explicitly even if null to make response shape stable.
+        // `tournament`, `winner` and `eligibility` keys being present.
         return response()->json([
             'ok' => true,
             'tournament' => $tournament,
             'winner' => $tournament->winner ?? null,
+            'eligibility' => $eligibility,
+            'shuffle_seed' => $shuffleSeed,
+        ]);
+    }
+
+    /**
+     * Show a single tournament battle with shuffled questions/options and a shuffle seed.
+     */
+    public function showBattle(Request $request, Tournament $tournament, TournamentBattle $battle)
+    {
+        // Ensure battle belongs to tournament
+        if ($battle->tournament_id !== $tournament->id) {
+            return response()->json(['message' => 'Battle not found for this tournament'], 404);
+        }
+
+        $battle->load(['questions']);
+
+        // Generate a per-response shuffle seed
+        try {
+            $shuffleSeed = bin2hex(random_bytes(6));
+        } catch (\Exception $_) {
+            $shuffleSeed = (string) time();
+        }
+
+        // Shuffle options per-question and question order deterministically
+        $questions = $battle->questions->map(function ($q) use ($shuffleSeed) {
+            $opts = [];
+            if (is_array($q->options)) {
+                $opts = $q->options;
+            } elseif (is_string($q->options)) {
+                $decoded = json_decode((string) $q->options, true);
+                if (is_array($decoded)) $opts = $decoded;
+            }
+            if (!empty($opts)) {
+                $q->options = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
+            }
+            return $q;
+        })->toArray();
+
+        $shuffledQuestions = $this->seededShuffle($questions, $shuffleSeed);
+        $battle->setRelation('questions', collect($shuffledQuestions));
+
+        return response()->json([
+            'ok' => true,
+            'battle' => $battle,
+            'shuffle_seed' => $shuffleSeed,
         ]);
     }
 
@@ -118,10 +226,26 @@ class TournamentController extends Controller
     {
         $user = $request->user();
         $this->authorize('join', $tournament);
+        // Determine payment / registration status but allow registration even when unpaid.
+        // New behavior: create a participant record and set status to:
+        // - 'paid' when tournament is free or user has a confirmed payment/subscription
+        // - 'pending_payment' when user hasn't paid yet
+        // This removes the manual approval step and uses payment status as the gating property.
 
-        // If the tournament has an entry fee, require either an active subscription
-        // or a confirmed one-off purchase for this tournament before allowing join.
-        if ($tournament->entry_fee && floatval($tournament->entry_fee) > 0) {
+        // Verify tournament is joinable
+        if ($tournament->status !== 'upcoming' && $tournament->status !== 'active') {
+            return response()->json(['message' => 'Tournament is not open for registration'], 400);
+        }
+
+        // Accept optional payment reference from frontend to immediately verify purchase
+        $paymentRef = $request->input('payment_reference');
+
+        return DB::transaction(function() use ($tournament, $user, $paymentRef) {
+            // Lock the tournament row to ensure no concurrent modifications to participant count
+            $lockedTournament = Tournament::lockForUpdate()->find($tournament->id);
+
+            // Payment checks
+            $fee = $lockedTournament->entry_fee && floatval($lockedTournament->entry_fee) > 0;
             $activeSub = \App\Models\Subscription::where('user_id', $user->id)
                 ->where('status', 'active')
                 ->where(function($q) {
@@ -131,41 +255,35 @@ class TournamentController extends Controller
                 ->orderByDesc('started_at')
                 ->first();
 
-            $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
-                ->where('item_type', 'tournament')
-                ->where('item_id', $tournament->id)
-                ->where('status', 'confirmed')
-                ->exists();
-
-            if (!$activeSub && !$hasOneOff) {
-                return response()->json([
-                    'ok' => false,
-                    'code' => 'payment_required',
-                    'amount' => (float) $tournament->entry_fee,
-                    'item_type' => 'tournament',
-                    'item_id' => $tournament->id,
-                    'message' => 'Tournament entry fee required'
-                ], 402);
+            // If a payment_reference was provided, try to resolve it to a OneOffPurchase and confirm ownership
+            $hasOneOff = false;
+            if ($paymentRef) {
+                $purchase = \App\Models\OneOffPurchase::where(function($q) use ($paymentRef) {
+                    $q->where('id', $paymentRef)->orWhere('gateway_meta->tx', $paymentRef);
+                })->first();
+                if ($purchase && $purchase->user_id === $user->id && $purchase->item_type === 'tournament' && $purchase->item_id == $lockedTournament->id && $purchase->status === 'confirmed') {
+                    $hasOneOff = true;
+                }
             }
-        }
 
-        // Verify tournament is joinable
-        if ($tournament->status !== 'upcoming' && $tournament->status !== 'active') {
-            return response()->json(['message' => 'Tournament is not open for registration'], 400);
-        }
+            if (! $hasOneOff) {
+                $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
+                    ->where('item_type', 'tournament')
+                    ->where('item_id', $lockedTournament->id)
+                    ->where('status', 'confirmed')
+                    ->exists();
+            }
 
-        // ATOMIC: Use transaction to prevent race conditions
-        return DB::transaction(function() use ($tournament, $user) {
-            // Lock the tournament row to ensure no concurrent modifications to participant count
-            $lockedTournament = Tournament::lockForUpdate()->find($tournament->id);
-            
-            // Check if max participants reached (count only approved participants)
-            $approvedCount = DB::table('tournament_participants')
+            // If tournament is marked open_to_subscribers, an active subscription counts as paid access
+            $isPaid = !$fee || $hasOneOff || ($activeSub && (bool) ($lockedTournament->open_to_subscribers ?? false));
+
+            // Only count paid participants for capacity checks. Pending payment registrations do not consume capacity.
+            $paidCount = DB::table('tournament_participants')
                 ->where('tournament_id', $lockedTournament->id)
-                ->where('status', 'approved')
+                ->where('status', 'paid')
                 ->count();
-            
-            if ($lockedTournament->max_participants && $approvedCount >= $lockedTournament->max_participants) {
+
+            if ($lockedTournament->max_participants && $isPaid && $paidCount >= $lockedTournament->max_participants) {
                 return response()->json(['message' => 'Tournament is full'], 400);
             }
 
@@ -175,13 +293,13 @@ class TournamentController extends Controller
                 ->where('user_id', $user->id)
                 ->lockForUpdate()
                 ->first();
-            
+
             if ($existingParticipant) {
-                if ($existingParticipant->status === 'approved') {
+                if ($existingParticipant->status === 'paid') {
                     return response()->json(['message' => 'Already registered for this tournament'], 400);
                 }
-                if ($existingParticipant->status === 'pending') {
-                    return response()->json(['message' => 'Registration pending approval'], 400);
+                if ($existingParticipant->status === 'pending_payment') {
+                    return response()->json(['message' => 'Registration pending payment', 'status' => 'pending_payment'], 202);
                 }
                 if ($existingParticipant->status === 'rejected') {
                     return response()->json(['message' => 'Your registration was rejected'], 403);
@@ -200,22 +318,22 @@ class TournamentController extends Controller
                     })
                     ->where('status', '!=', 'cancelled')
                     ->exists();
-                
+
                 if ($alreadyInRound) {
                     return response()->json(['message' => 'You are already in a battle for this round'], 400);
                 }
             }
 
-            // Determine initial status
-            $status = $lockedTournament->requires_approval ? 'pending' : 'approved';
-            
-            // Insert participant record
+            // Determine initial status based on payment
+            $status = $isPaid ? 'paid' : 'pending_payment';
+
+            // Insert participant record (pending or paid). Set approved_at for paid to preserve existing timestamps.
             DB::table('tournament_participants')->insert([
                 'tournament_id' => $lockedTournament->id,
                 'user_id' => $user->id,
                 'status' => $status,
                 'requested_at' => now(),
-                'approved_at' => $status === 'approved' ? now() : null,
+                'approved_at' => $status === 'paid' ? now() : null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -226,11 +344,18 @@ class TournamentController extends Controller
                 'tournament_id' => $lockedTournament->id
             ]);
 
-            if ($status === 'pending') {
-                return response()->json(['message' => 'Registration pending approval', 'status' => 'pending']);
+            if ($status === 'pending_payment') {
+                return response()->json([
+                    'message' => 'Registration recorded; payment pending',
+                    'status' => 'pending_payment',
+                    'code' => 'pending_payment',
+                    'amount' => (float) $lockedTournament->entry_fee,
+                    'item_type' => 'tournament',
+                    'item_id' => $lockedTournament->id
+                ], 202);
             }
 
-            return response()->json(['message' => 'Successfully joined tournament', 'status' => 'approved']);
+            return response()->json(['message' => 'Successfully joined tournament', 'status' => 'paid']);
         });
     }
 
@@ -248,22 +373,23 @@ class TournamentController extends Controller
 
         // Approve: update pivot
         try {
+            // In the new payment-driven model, admin "approve" acts as a manual mark-as-paid (e.g., cash payment received)
             $tournament->participants()->updateExistingPivot($userId, [
-                'status' => 'approved',
+                'status' => 'paid',
                 'approved_at' => now(),
                 'approved_by' => $request->user()->id
             ]);
 
-            // Notify user
+            // Notify user that their registration has been marked as paid
             $user = \App\Models\User::find($userId);
             if ($user) {
-                $user->notify(new \App\Notifications\TournamentRegistrationStatusChanged($tournament, 'approved'));
+                $user->notify(new \App\Notifications\TournamentRegistrationStatusChanged($tournament, 'paid'));
             }
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to approve registration'], 500);
+            return response()->json(['message' => 'Failed to mark registration as paid'], 500);
         }
 
-        return response()->json(['message' => 'Registration approved']);
+        return response()->json(['message' => 'Registration marked as paid']);
     }
 
     /**
@@ -367,34 +493,27 @@ class TournamentController extends Controller
             $q = $questions->get($qId);
             $marks = $q->marks ?? 1;
 
-            $points = 0;
+            // Normalize correct answers for the marking service
+            $correctAnswers = [];
             if ($q->type === 'mcq') {
-                if (! is_null($q->correct) && (string) $q->correct === (string) $given) {
-                    $points = $marks;
-                } elseif (is_string($given)) {
-                    $idx = $q->findOptionIndexByText($given);
-                    if (! is_null($idx) && (string) $idx === (string) ($q->correct ?? '')) {
-                        $points = $marks;
-                    }
+                if (! is_null($q->correct)) {
+                    $correctAnswers = [(string) $q->correct];
+                } elseif (! empty($q->answers)) {
+                    $correctAnswers = is_array($q->answers) ? $q->answers : [$q->answers];
                 }
             } elseif ($q->type === 'multi') {
-                $givenArr = is_array($given) ? $given : (is_string($given) ? json_decode($given, true) : null);
-                if (is_array($givenArr) && is_array($q->corrects)) {
-                    $corrects = array_map('strval', $q->corrects);
-                    $givenStr = array_map('strval', $givenArr);
-                    sort($corrects); sort($givenStr);
-                    if ($corrects === $givenStr) {
-                        $points = $marks;
-                    }
+                if (is_array($q->corrects)) {
+                    $correctAnswers = $q->corrects;
+                } elseif (is_string($q->corrects)) {
+                    $decoded = json_decode($q->corrects, true);
+                    $correctAnswers = is_array($decoded) ? $decoded : [];
                 }
             } else {
-                if (! empty($q->answers)) {
-                    $expected = $q->answers;
-                    if (is_string($given) && in_array($given, (array) $expected, true)) {
-                        $points = $marks;
-                    }
-                }
+                $correctAnswers = $q->answers ?? [];
             }
+
+            $isCorrect = $this->markingService->isAnswerCorrect($given, $correctAnswers, $q);
+            $points = $isCorrect ? $marks : 0;
 
             $answerToStore = is_array($given) ? json_encode($given) : (string) ($given ?? '');
             $pointsValue = round((float) $points, 2);
@@ -788,36 +907,61 @@ class TournamentController extends Controller
             }
 
             $q = $questions->get($qId);
-            $marks = $q->marks ?? 1;
+            // If the client submitted indices based on a shuffled options
+            // ordering we provided earlier, translate indices back to the
+            // original option values using the provided shuffle_seed.
+            $shuffleSeed = $request->input('shuffle_seed');
+            if ($shuffleSeed && ! empty($q->options)) {
+                $opts = [];
+                if (is_array($q->options)) {
+                    $opts = $q->options;
+                } elseif (is_string($q->options)) {
+                    $decoded = json_decode((string) $q->options, true);
+                    if (is_array($decoded)) $opts = $decoded;
+                }
+                $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
 
-            $points = 0;
-            if ($q->type === 'mcq') {
-                if (! is_null($q->correct) && (string) $q->correct === (string) $given) {
-                    $points = $marks;
-                } elseif (is_string($given)) {
-                    $idx = $q->findOptionIndexByText($given);
-                    if (! is_null($idx) && (string) $idx === (string) ($q->correct ?? '')) {
-                        $points = $marks;
+                if (is_array($given)) {
+                    $mapped = [];
+                    foreach ($given as $g) {
+                        if (is_numeric($g) && isset($shuffled[(int) $g])) {
+                            $opt = $shuffled[(int) $g];
+                            $mapped[] = $opt['id'] ?? $opt['text'] ?? $opt['body'] ?? $opt;
+                        } else {
+                            $mapped[] = $g;
+                        }
                     }
-                }
-            } elseif ($q->type === 'multi') {
-                $givenArr = is_array($given) ? $given : (is_string($given) ? json_decode($given, true) : null);
-                if (is_array($givenArr) && is_array($q->corrects)) {
-                    $corrects = array_map('strval', $q->corrects);
-                    $givenStr = array_map('strval', $givenArr);
-                    sort($corrects); sort($givenStr);
-                    if ($corrects === $givenStr) {
-                        $points = $marks;
-                    }
-                }
-            } else {
-                if (! empty($q->answers)) {
-                    $expected = $q->answers;
-                    if (is_string($given) && in_array($given, (array) $expected, true)) {
-                        $points = $marks;
+                    $given = $mapped;
+                } else {
+                    if (is_numeric($given) && isset($shuffled[(int) $given])) {
+                        $opt = $shuffled[(int) $given];
+                        $given = $opt['id'] ?? $opt['text'] ?? $opt['body'] ?? $opt;
                     }
                 }
             }
+            $marks = $q->marks ?? 1;
+
+            // Resolve a consistent "correct answers" shape for the marking service.
+            $correctAnswers = [];
+            if ($q->type === 'mcq') {
+                if (! is_null($q->correct)) {
+                    $correctAnswers = [(string) $q->correct];
+                } elseif (! empty($q->answers)) {
+                    $correctAnswers = is_array($q->answers) ? $q->answers : [$q->answers];
+                }
+            } elseif ($q->type === 'multi') {
+                if (is_array($q->corrects)) {
+                    $correctAnswers = $q->corrects;
+                } elseif (is_string($q->corrects)) {
+                    $decoded = json_decode($q->corrects, true);
+                    $correctAnswers = is_array($decoded) ? $decoded : [];
+                }
+            } else {
+                $correctAnswers = $q->answers ?? [];
+            }
+
+            $isCorrect = $this->markingService->isAnswerCorrect($given, $correctAnswers, $q);
+            $points = $isCorrect ? $marks : 0;
 
             $answersToStore[] = [
                 'question_id' => $qId,
@@ -1041,7 +1185,7 @@ class TournamentController extends Controller
 
         return response()->json([
             'isRegistered' => true,
-            'status' => $participant->pivot->status ?? 'approved'
+            'status' => $participant->pivot->status ?? 'paid'
         ]);
     }
 
@@ -1065,10 +1209,63 @@ class TournamentController extends Controller
         $data = $request->validate([
             'answers' => 'required|array',
             'answers.*.question_id' => 'required|integer',
-            'answers.*.answer' => 'nullable|string|max:5000',
+            // answer may be an index (int), an array of indices, or a string/value depending on client
+            'answers.*.answer' => 'nullable',
             'current_question_index' => 'nullable|integer|min:0',
-            'time_remaining' => 'nullable|integer|min:0'
+            'time_remaining' => 'nullable|integer|min:0',
+            'shuffle_seed' => 'nullable|string'
         ]);
+
+        $shuffleSeed = $data['shuffle_seed'] ?? null;
+
+        // If answers are provided as option values (not indices) but shuffle_seed is available,
+        // attempt to remap them to indices relative to the shuffled options for storage.
+        $questions = $battle->questions()->get()->keyBy('id');
+        $normalizedAnswers = [];
+        foreach ($data['answers'] as $a) {
+            $qid = intval($a['question_id'] ?? 0);
+            $ans = $a['answer'] ?? null;
+
+            // If shuffle_seed present and answer is not numeric/array-of-numeric, try to map to index
+            if ($shuffleSeed && $questions->has($qid)) {
+                $q = $questions->get($qid);
+                $opts = [];
+                if (is_array($q->options)) {
+                    $opts = $q->options;
+                } elseif (is_string($q->options)) {
+                    $decoded = json_decode((string) $q->options, true);
+                    if (is_array($decoded)) $opts = $decoded;
+                }
+
+                if (!empty($opts)) {
+                    $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
+                    // If answer is array, map each value to index where possible
+                    if (is_array($ans)) {
+                        $mapped = [];
+                        foreach ($ans as $v) {
+                            $found = false;
+                            foreach ($shuffled as $idx => $opt) {
+                                $val = is_array($opt) ? ($opt['id'] ?? $opt['text'] ?? $opt['body'] ?? $opt) : $opt;
+                                if ((string)$val === (string)$v) { $mapped[] = $idx; $found = true; break; }
+                            }
+                            if (! $found) $mapped[] = $v;
+                        }
+                        $ans = $mapped;
+                    } else {
+                        // single value
+                        foreach ($shuffled as $idx => $opt) {
+                            $val = is_array($opt) ? ($opt['id'] ?? $opt['text'] ?? $opt['body'] ?? $opt) : $opt;
+                            if ((string)$val === (string)$ans) { $ans = $idx; break; }
+                        }
+                    }
+                }
+            }
+
+            $normalizedAnswers[] = [
+                'question_id' => $qid,
+                'answer' => $ans,
+            ];
+        }
 
         // Store draft in cache (expires in 24 hours)
         $draftKey = "tournament_battle_draft_{$battle->id}_player_{$user->id}";
@@ -1076,9 +1273,10 @@ class TournamentController extends Controller
         \Cache::put($draftKey, [
             'battle_id' => $battle->id,
             'player_id' => $user->id,
-            'answers' => $data['answers'],
+            'answers' => $normalizedAnswers,
             'current_question_index' => $data['current_question_index'] ?? 0,
             'time_remaining' => $data['time_remaining'] ?? null,
+            'shuffle_seed' => $shuffleSeed,
             'saved_at' => now()->toIso8601String(),
         ], now()->addHours(24));
 
@@ -1111,5 +1309,29 @@ class TournamentController extends Controller
         return response()->json([
             'draft' => $draft
         ], 200);
+    }
+
+    /**
+     * Deterministic shuffle helper using a simple LCG seeded with crc32 of the seed string.
+     * Returns a new array with items shuffled deterministically for the given seed.
+     */
+    protected function seededShuffle(array $items, string $seed): array
+    {
+        $copy = array_values($items);
+        $state = crc32($seed) & 0xFFFFFFFF;
+        $lcg = function() use (&$state) {
+            // 32-bit LCG
+            $state = (1103515245 * $state + 12345) & 0x7fffffff;
+            return $state / 2147483647;
+        };
+        $n = count($copy);
+        for ($i = $n - 1; $i > 0; $i--) {
+            $r = $lcg();
+            $j = (int) floor($r * ($i + 1));
+            $tmp = $copy[$i];
+            $copy[$i] = $copy[$j];
+            $copy[$j] = $tmp;
+        }
+        return $copy;
     }
 }

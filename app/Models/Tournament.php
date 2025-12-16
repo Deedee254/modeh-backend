@@ -37,6 +37,7 @@ use App\Events\Tournament\BattleCompleted;
  * @property array|string $rules
  * @property array|string|null $timeline
  * @property int|null $grade_id
+ * @property string $access_type
  * @property int|null $subject_id
  * @property int|null $topic_id
  * @property int|null $level_id
@@ -86,6 +87,7 @@ class Tournament extends Model
         // Qualifier configuration
         'qualifier_per_question_seconds',
         'qualifier_question_count',
+    'access_type',
         // Battle configuration
         'battle_per_question_seconds',
         'battle_question_count',
@@ -104,6 +106,8 @@ class Tournament extends Model
         'entry_fee' => 'decimal:2',
         'prize_pool' => 'decimal:2',
         'rules' => 'array',
+           'access_type' => 'string',
+           'open_to_subscribers' => 'boolean',
         'requires_premium' => 'boolean',
         'requires_approval' => 'boolean',
         'is_featured' => 'boolean',

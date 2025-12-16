@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\TournamentResource\RelationManagers;
 
 use App\Models\User;
+use App\Models\OneOffPurchase;
+use App\Models\Subscription;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
@@ -19,54 +21,24 @@ class ParticipantsRelationManager extends RelationManager
 
     public function table(Tables\Table $table): Tables\Table
     {
+        $tournament = $this->getOwnerRecord();
+
         return $table
             ->columns([
                 ImageColumn::make('avatar')->circular()->label(''),
                 TextColumn::make('name')->sortable()->searchable(),
                 TextColumn::make('email')->sortable()->searchable(),
-                TextColumn::make('pivot.status')->label('Status')->sortable(),
+                // Show payment status (paid / pending_payment / rejected)
+                TextColumn::make('pivot.status')
+                    ->label('Payment Status')
+                    ->sortable()
+                    ->enum([
+                        'paid' => 'Paid',
+                        'pending_payment' => 'Pending payment',
+                        'rejected' => 'Rejected',
+                    ]),
                 TextColumn::make('pivot.requested_at')->label('Requested')->dateTime()->sortable(),
-                TextColumn::make('pivot.approved_at')->label('Approved')->dateTime()->sortable(),
-            ])
-            ->actions([
-                Action::make('approve')
-                    ->label('Approve')
-                    ->icon('heroicon-o-check')
-                    ->visible(fn (User $record): bool => ($record->pivot->status ?? '') === 'pending')
-                    ->requiresConfirmation()
-                    ->action(function (User $record) {
-                        $tournament = $this->getOwnerRecord();
-                        try {
-                            // Call central controller method so all side-effects run there
-                            app()->call([\App\Http\Controllers\Api\TournamentController::class, 'approveRegistration'], [
-                                'request' => request(),
-                                'tournament' => $tournament,
-                                'userId' => $record->id,
-                            ]);
-                            $this->refresh();
-                        } catch (\Exception $e) {
-                            $this->notify('danger', 'Failed to approve registration');
-                        }
-                    }),
-
-                Action::make('reject')
-                    ->label('Reject')
-                    ->icon('heroicon-o-x')
-                    ->visible(fn (User $record): bool => ($record->pivot->status ?? '') === 'pending')
-                    ->requiresConfirmation()
-                    ->action(function (User $record) {
-                        $tournament = $this->getOwnerRecord();
-                        try {
-                            app()->call([\App\Http\Controllers\Api\TournamentController::class, 'rejectRegistration'], [
-                                'request' => request(),
-                                'tournament' => $tournament,
-                                'userId' => $record->id,
-                            ]);
-                            $this->refresh();
-                        } catch (\Exception $e) {
-                            $this->notify('danger', 'Failed to reject registration');
-                        }
-                    }),
+                TextColumn::make('pivot.approved_at')->label('Paid')->dateTime()->sortable(),
             ])
             ->bulkActions([
                 DetachAction::make(),

@@ -467,6 +467,7 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     // Tournaments
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);
     Route::get('/tournaments/{tournament}/battles', [\App\Http\Controllers\Api\TournamentController::class, 'battles']);
+    Route::get('/tournaments/{tournament}/battles/{battle}', [\App\Http\Controllers\Api\TournamentController::class, 'showBattle']);
     Route::get('/tournaments/{tournament}/registration-status', [\App\Http\Controllers\Api\TournamentController::class, 'registrationStatus']);
     Route::get('/tournaments/{tournament}/leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'leaderboard']);
     Route::get('/tournaments/{tournament}/qualifier-leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'qualifierLeaderboard']);

@@ -231,10 +231,26 @@ class TournamentResource extends Resource
                                 ->prefix('Ksh')
                                 ->default(0),
 
+                            Forms\Components\Toggle::make('open_to_subscribers')
+                                ->label('Open to Subscribers')
+                                ->helperText('Allow users with an active subscription to join without paying the entry fee')
+                                ->default(false),
+
                             Forms\Components\TextInput::make('max_participants')
                                 ->label('Max Participants')
                                 ->numeric()
                                 ->minValue(2)
+                                ->required(),
+
+                            Forms\Components\Select::make('access_type')
+                                ->label('Access Type')
+                                ->options([
+                                    'public' => 'Public — open to all',
+                                    'grade' => 'Grade specific',
+                                    'level' => 'Level specific',
+                                ])
+                                ->default('public')
+                                ->helperText('Control who may join this tournament')
                                 ->required(),
                         ]),
 
@@ -369,9 +385,7 @@ class TournamentResource extends Resource
                         default => 'gray',
                     }),
 
-                \Filament\Tables\Columns\TextColumn::make('prize_pool')
-                    ->money()
-                    ->sortable(),
+                // prize_pool column removed per admin UI update
 
                 \Filament\Tables\Columns\TextColumn::make('participants_count')
                     ->counts('participants')
@@ -381,9 +395,15 @@ class TournamentResource extends Resource
                     ->searchable()
                     ->sortable(),
 
-                \Filament\Tables\Columns\TextColumn::make('subject.name')
+                \Filament\Tables\Columns\TextColumn::make('level.name')
+                    ->label('Level')
                     ->searchable()
                     ->sortable(),
+
+                \Filament\Tables\Columns\TextColumn::make('access_type')
+                    ->label('Access Type')
+                    ->sortable()
+                    ->searchable(),
             ])
             ->filters([
                 \Filament\Tables\Filters\SelectFilter::make('status')
