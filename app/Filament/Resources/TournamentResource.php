@@ -66,13 +66,12 @@ class TournamentResource extends Resource
                         ->disk('public')
                         ->directory('sponsor-banners')
                         ->visibility('public')
-                        ->maxSize(5120) // 5MB
-                        ->visible(fn ($get): bool => filled($get('sponsor_id'))),
+                        ->maxSize(5120), // 5MB
 
-                    Forms\Components\Textarea::make('sponsor_message')
+                    Forms\Components\Textarea::make('sponsor_details.message')
                         ->label('Sponsor Message')
                         ->maxLength(65535)
-                        ->visible(fn ($get): bool => filled($get('sponsor_id'))),
+                        ->helperText('Message or description from the sponsor'),
                 ])
                 ->columns(1),
         ];
@@ -451,7 +450,10 @@ class TournamentResource extends Resource
             ->actions([
                 \Filament\Actions\ViewAction::make(),
                 \Filament\Actions\EditAction::make()
-                    ->visible(fn (Tournament $record): bool => $record->status === 'upcoming'),
+                    ->visible(fn (Tournament $record): bool => 
+                        // Allow edit for admins on any tournament, or anyone on upcoming tournaments
+                        in_array(auth()->user()?->role, ['admin', 'super-admin']) || $record->status === 'upcoming'
+                    ),
             ])
             ->bulkActions([
                 \Filament\Actions\DeleteBulkAction::make(),

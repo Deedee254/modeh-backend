@@ -38,5 +38,20 @@ class QuestionsRelationManager extends RelationManager
                 DetachAction::make(),
             ]);
     }
+
+    public function getHeading(): string
+    {
+        $tournament = $this->getOwnerRecord();
+        $recommendations = $tournament->getQuestionRecommendations();
+        $participantsRec = $tournament->getMaxParticipantsRecommendation();
+        
+        $statusIcon = match($recommendations['status']) {
+            'excellent' => '✅',
+            'good' => 'ℹ️',
+            default => '⚠️'
+        };
+
+        return "Tournament Questions {$statusIcon} ({$recommendations['current']}/{$recommendations['optimum']} | Min: {$recommendations['minimum']} | Participants: {$participantsRec['recommended_min_max_participants']}-{$participantsRec['recommended_max_max_participants']})";
+    }
 }
 

@@ -76,6 +76,7 @@ class Tournament extends Model
         'end_date',
         'status',
         'entry_fee',
+        'open_to_subscribers',
         'prize_pool',
         'max_participants',
         'registration_end_date',
@@ -88,7 +89,6 @@ class Tournament extends Model
         'subject_id',
         'topic_id',
         'created_by',
-        'winner_id',
         'sponsor_id',
         'sponsor_banner',
         'sponsor_details',
@@ -97,13 +97,12 @@ class Tournament extends Model
         // Qualifier configuration
         'qualifier_per_question_seconds',
         'qualifier_question_count',
-    'access_type',
+        'access_type',
         // Battle configuration
         'battle_per_question_seconds',
         'battle_question_count',
         // Tie-breaker and selection
         'qualifier_tie_breaker',
-        'bracket_slots',
         // Day-based scheduling
         'qualifier_days',
         'round_delay_days',
@@ -116,8 +115,9 @@ class Tournament extends Model
         'entry_fee' => 'decimal:2',
         'prize_pool' => 'decimal:2',
         'rules' => 'array',
-           'access_type' => 'string',
-           'open_to_subscribers' => 'boolean',
+        'sponsor_details' => 'array',
+        'access_type' => 'string',
+        'open_to_subscribers' => 'boolean',
         'requires_premium' => 'boolean',
         'requires_approval' => 'boolean',
         'is_featured' => 'boolean',
@@ -312,35 +312,40 @@ class Tournament extends Model
             if ($needsSave) $battle->save();
 
             $created[] = $battle;
-            // Auto-attach questions based on tournament filters limited to battle_question_count
+            // Auto-attach questions from tournament_questions pool
             try {
                 // Only attach if no questions already attached (preserve previously attached payloads)
                 if ($battle->questions()->count() === 0) {
                     $perBattle = $this->battle_question_count ?? 10;
 
-                    $q = Question::query();
-                    if ($this->topic_id && Schema::hasColumn('questions', 'topic_id')) $q->where('topic_id', $this->topic_id);
-                    if ($this->subject_id && Schema::hasColumn('questions', 'subject_id')) $q->where('subject_id', $this->subject_id);
-                    if ($this->grade_id && Schema::hasColumn('questions', 'grade_id')) $q->where('grade_id', $this->grade_id);
-                    if ($this->level_id) {
-                        if (Schema::hasTable('grades') && Schema::hasColumn('grades', 'level_id') && Schema::hasColumn('questions', 'grade_id')) {
-                            $gradeIds = \App\Models\Grade::where('level_id', $this->level_id)->pluck('id')->toArray();
-                            if (!empty($gradeIds)) $q->whereIn('grade_id', $gradeIds);
+                    // Get all questions from tournament_questions table (questions already added to tournament)
+                    $selectedIds = $this->questions()->pluck('id')->toArray();
+
+                    // If pool is smaller than needed, fill with additional questions filtered by topic_id
+                    if (count($selectedIds) < (int)$perBattle && $this->topic_id) {
+                        $needed = (int)$perBattle - count($selectedIds);
+                        $additionalIds = Question::where('topic_id', $this->topic_id)
+                            ->whereNotIn('id', $selectedIds)
+                            ->inRandomOrder()
+                            ->limit($needed)
+                            ->pluck('id')
+                            ->toArray();
+                        $selectedIds = array_merge($selectedIds, $additionalIds);
+                    }
+
+                    if (!empty($selectedIds)) {
+                        // Shuffle the final selection
+                        shuffle($selectedIds);
+                        // Limit to battle_question_count
+                        $selectedIds = array_slice($selectedIds, 0, (int)$perBattle);
+
+                        $attachData = [];
+                        foreach ($selectedIds as $position => $questionId) {
+                            $attachData[$questionId] = ['position' => $position];
                         }
-                    }
-
-                    $questions = $q->inRandomOrder()->limit(max(1, (int)$perBattle))->get();
-
-                    if ($questions->isEmpty()) {
-                        $questions = Question::inRandomOrder()->limit(max(1, (int)$perBattle))->get();
-                    }
-
-                    $attachData = [];
-                    foreach ($questions as $i => $question) {
-                        $attachData[$question->id] = ['position' => $i];
-                    }
-                    if (!empty($attachData)) {
-                        $battle->questions()->attach($attachData);
+                        if (!empty($attachData)) {
+                            $battle->questions()->attach($attachData);
+                        }
                     }
                 }
             } catch (\Throwable $_) {
@@ -503,6 +508,163 @@ class Tournament extends Model
     public function sponsor()
     {
         return $this->belongsTo(Sponsor::class);
+    }
+
+    /**
+     * Calculate recommended and minimum question counts based on tournament size
+     * For single elimination: each round has half the battles of the previous
+     * Round 1: N/2 battles, Round 2: N/4 battles, etc.
+     * 
+     * @return array ['minimum' => int, 'optimum' => int, 'current' => int, 'breakdown' => array]
+     */
+    public function getQuestionRecommendations(): array
+    {
+        $participantCount = $this->participants()->count();
+        $questionPerBattle = $this->battle_question_count ?? 10;
+        
+        if ($participantCount < 2) {
+            return [
+                'minimum' => $questionPerBattle,
+                'optimum' => $questionPerBattle,
+                'current' => $this->questions()->count(),
+                'breakdown' => [],
+                'message' => 'Need at least 2 participants to calculate'
+            ];
+        }
+
+        // Calculate for single elimination tournament
+        $breakdown = [];
+        $totalMinimum = 0;
+        $totalOptimum = 0;
+        $battlesPerRound = $participantCount / 2;
+        $round = 1;
+
+        while ($battlesPerRound >= 1) {
+            $battlesInRound = (int)$battlesPerRound;
+            if ($battlesInRound === 0) break;
+
+            $questionForRound = $battlesInRound * $questionPerBattle;
+            
+            // Minimum: can have some overlap, estimate ~70% unique needed
+            $minimumForRound = (int)ceil($questionForRound * 0.7);
+            
+            // Optimum: all questions unique (no overlap) per round
+            $optimumForRound = $questionForRound;
+
+            $breakdown[] = [
+                'round' => $round,
+                'battles' => $battlesInRound,
+                'questions_per_battle' => $questionPerBattle,
+                'minimum_questions' => $minimumForRound,
+                'optimum_questions' => $optimumForRound,
+            ];
+
+            $totalMinimum += $minimumForRound;
+            $totalOptimum += $optimumForRound;
+            $battlesPerRound = $battlesPerRound / 2;
+            $round++;
+        }
+
+        $currentCount = $this->questions()->count();
+
+        return [
+            'minimum' => $totalMinimum,
+            'optimum' => $totalOptimum,
+            'current' => $currentCount,
+            'participants' => $participantCount,
+            'total_rounds' => count($breakdown),
+            'breakdown' => $breakdown,
+            'status' => $currentCount >= $totalOptimum ? 'excellent' 
+                      : ($currentCount >= $totalMinimum ? 'good' : 'warning'),
+            'message' => $this->getQuestionRecommendationMessage($currentCount, $totalMinimum, $totalOptimum),
+        ];
+    }
+
+    /**
+     * Generate a human-readable message about question coverage
+     */
+    private function getQuestionRecommendationMessage(int $current, int $minimum, int $optimum): string
+    {
+        if ($current >= $optimum) {
+            return "Excellent! Your {$current} questions exceed the optimum ({$optimum} recommended). No overlaps expected.";
+        } elseif ($current >= $minimum) {
+            $overlap = (int)ceil(($optimum - $current) / $optimum * 100);
+            return "Good! Your {$current} questions cover the minimum ({$minimum}). Expect ~{$overlap}% question overlap across rounds.";
+        } else {
+            $shortage = $minimum - $current;
+            return "Warning: You have {$current} questions but need at least {$minimum} (short by {$shortage}). Significant overlap expected.";
+        }
+    }
+
+    /**
+     * Calculate recommended max participants based on question count
+     * Works backwards from questions available to determine tournament size
+     * 
+     * @return array ['recommended_min' => int, 'recommended_max' => int, 'current_questions' => int, 'current_participants' => int]
+     */
+    public function getMaxParticipantsRecommendation(): array
+    {
+        $currentQuestions = $this->questions()->count();
+        $questionPerBattle = $this->battle_question_count ?? 10;
+        $currentParticipants = $this->participants()->count();
+
+        // For single elimination, calculate how many participants can be supported
+        // Working backwards: if we have X questions, what's max tournament size?
+        
+        // Optimum: no overlaps at all
+        // Total questions needed for N participants = sum of (N/2 + N/4 + N/8 + ... + 1) * question_per_battle
+        // This is roughly N * question_per_battle (varies by exact N)
+        
+        $optimalMaxParticipants = max(2, (int)floor($currentQuestions / $questionPerBattle * 0.9));
+        
+        // For minimum (allowing ~30% overlap): more participants can be supported
+        $minimalMaxParticipants = max(2, (int)floor($currentQuestions / $questionPerBattle * 1.3));
+
+        // Find closest power of 2 for bracket sizing (tournaments typically use 2, 4, 8, 16, 32, 64)
+        $optimalBracketSize = $this->closestPowerOfTwo($optimalMaxParticipants);
+        $minimalBracketSize = $this->closestPowerOfTwo($minimalMaxParticipants);
+
+        return [
+            'current_questions' => $currentQuestions,
+            'current_participants' => $currentParticipants,
+            'question_per_battle' => $questionPerBattle,
+            'recommended_min_max_participants' => $optimalBracketSize,  // No/minimal overlap
+            'recommended_max_max_participants' => $minimalBracketSize,  // Can handle with overlap
+            'message' => $this->getParticipantsRecommendationMessage($currentQuestions, $optimalBracketSize, $minimalBracketSize, $currentParticipants),
+        ];
+    }
+
+    /**
+     * Find closest power of 2 for bracket sizing
+     */
+    private function closestPowerOfTwo(int $number): int
+    {
+        $powers = [2, 4, 8, 16, 32, 64, 128, 256, 512];
+        
+        if ($number <= 2) return 2;
+        if ($number >= 512) return 512;
+
+        foreach ($powers as $power) {
+            if ($power >= $number) return $power;
+        }
+
+        return 512;
+    }
+
+    /**
+     * Generate message about participant capacity based on questions
+     */
+    private function getParticipantsRecommendationMessage(int $questions, int $optimal, int $minimal, int $current): string
+    {
+        if ($current > $minimal) {
+            $surplus = $current - $minimal;
+            return "⚠️ Warning: You have {$current} participants but only {$questions} questions. Recommended max: {$minimal} (for ~30% overlap) or {$optimal} (for ~5% overlap).";
+        } elseif ($current > $optimal) {
+            $overlap = (int)ceil(($current / $optimal - 1) * 100);
+            return "⚠️ Caution: You have {$current} participants with {$questions} questions. Expect ~{$overlap}% overlap. Optimal: {$optimal} (no overlap) or up to {$minimal} (acceptable).";
+        } else {
+            return "✅ Perfect! Your {$current} participants work well with {$questions} questions. You could support up to {$minimal} participants with acceptable overlap.";
+        }
     }
 
     /**
