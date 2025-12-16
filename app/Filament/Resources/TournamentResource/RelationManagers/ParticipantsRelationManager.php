@@ -25,7 +25,7 @@ class ParticipantsRelationManager extends RelationManager
 
         return $table
             ->columns([
-                ImageColumn::make('avatar')->circular()->label(''),
+                ImageColumn::make('avatar_url')->circular()->label(''),
                 TextColumn::make('name')->sortable()->searchable(),
                 TextColumn::make('email')->sortable()->searchable(),
                 // Show payment status (paid / pending_payment / rejected)
