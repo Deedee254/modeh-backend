@@ -14,14 +14,24 @@ use App\Events\Tournament\BattleCompleted;
 /**
  * Class Tournament
  *
+ * Tournament Timing:
+ * - start_date: When tournament registration opens (participants join via POST /tournaments/{id}/join)
+ * - qualifier_days: Duration of the qualifier phase (e.g., 7 days). When generateMatches() is called,
+ *   it marks tournament status as 'active' and the qualifier phase begins.
+ * - When qualifier period ends, admins call generateMatches() again for round 1. This creates the first
+ *   bracket battles and transitions to battle phase.
+ * - round_delay_days: Duration of each battle round. After battles in a round complete, the system
+ *   waits round_delay_days before creating battles for the next round.
+ * - end_date: When entire tournament ends (after all battles and winner determined)
+ * - Bracket size (bracket_slots) is auto-calculated based on number of qualifier participants.
+ * - Max participant limit removed: the auto-calculated bracket size determines how many advance to battles.
+ *
  * @property int $id
  * @property string $name
  * @property string $description
  * @property string $status
  * @property float|null $entry_fee
  * @property float|null $prize_pool
- * @property int|null $max_participants
- * @property int|null $min_participants
  * @property \Illuminate\Support\Carbon|null $registration_end_date
  * @property \Illuminate\Support\Carbon|null $start_date
  * @property \Illuminate\Support\Carbon|null $end_date
@@ -349,6 +359,31 @@ class Tournament extends Model
     }
 
     /**
+     * Calculate optimal bracket size based on number of participants.
+     * Valid bracket sizes are powers of 2: 2, 4, 8, 16, 32 (max).
+     * We pick the largest bracket size that doesn't exceed participant count, with 32 as the maximum.
+     *
+     * Logic:
+     * - ≤4 participants → 4-player bracket
+     * - 5-8 participants → 8-player bracket
+     * - 9-16 participants → 16-player bracket
+     * - 17-32 participants → 32-player bracket
+     * - >32 participants → 32-player bracket (capped)
+     *
+     * @param int $participantCount Number of participants (e.g., from qualifier)
+     * @return int Optimal bracket size (2, 4, 8, 16, or 32)
+     */
+    public function calculateOptimalBracketSize(int $participantCount): int
+    {
+        if ($participantCount <= 4) return 4;
+        if ($participantCount <= 8) return 8;
+        if ($participantCount <= 16) return 16;
+        if ($participantCount <= 32) return 32;
+        // More than 32 participants: cap at 32
+        return 32;
+    }
+
+    /**
      * Generate matches for the tournament. Can be called from Filament UI or API.
      * This wraps the createBattlesForRound logic with proper request handling.
      */
@@ -379,9 +414,8 @@ class Tournament extends Model
             shuffle($participantIds);
         }
 
-        // Enforce configured bracket slot limit. Prefer qualified participants when
-        // qualification attempts exist: pick top unique users ordered by score then duration.
-        $slots = $this->bracket_slots ?? 8;
+        // Auto-calculate optimal bracket size based on number of participants if not explicitly set
+        $slots = $this->bracket_slots ?? $this->calculateOptimalBracketSize(count($participantIds));
         $excluded = [];
 
         try {

@@ -447,27 +447,29 @@ class QuizAttemptController extends Controller
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
-        // Subscription or one-off purchase check
-        $activeSub = \App\Models\Subscription::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where(function ($q) {
-                $now = now();
-                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-            })
-            ->orderByDesc('started_at')
-            ->first();
+        // Use centralized service for subscription validation
+        $subValidation = \App\Services\SubscriptionLimitService::validateSubscriptionAccess($user);
+        
+        if (!$subValidation['allowed']) {
+            return response()->json([
+                'ok' => false, 
+                'message' => $subValidation['message'] ?? 'Subscription or one-off purchase required'
+            ], 403);
+        }
 
+        // Check one-off purchase as alternative
         $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'quiz')
             ->where('item_id', $attempt->quiz_id)
             ->where('status', 'confirmed')
             ->exists();
 
-        if (!$activeSub && !$hasOneOff) {
+        if (!$hasOneOff && !$subValidation['subscription']) {
             return response()->json(['ok' => false, 'message' => 'Subscription or one-off purchase required'], 403);
         }
 
         // Enforce package limits if present
+        $activeSub = $subValidation['subscription'];
         if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
             $features = $activeSub->package->features;
             // limit key path: features.limits.quiz_results => integer allowed per day (or null = unlimited)

@@ -585,50 +585,30 @@ class BattleController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // Check if this is a free battle
-        $isFreeBattle = !$battle->one_off_price || $battle->one_off_price == 0;
+        // Use centralized service for subscription validation
+        $subValidation = \App\Services\SubscriptionLimitService::validateSubscriptionAccess($user);
 
-        // Subscription or one-off purchase check
-        $activeSub = \App\Models\Subscription::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where(function($q) {
-                $now = now();
-                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-            })
-            ->orderByDesc('started_at')
-            ->first();
-
-        // Check for institution subscriptions as well
-        $institutionSubs = \App\Models\Subscription::where('user_id', $user->id)
-            ->where('subscription_type', 'institution')
-            ->where('status', 'active')
-            ->where(function($q) {
-                $now = now();
-                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-            })
-            ->get();
-
+        // Check one-off purchase as alternative
         $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'battle')
             ->where('item_id', $battle->getKey())
             ->where('status', 'confirmed')
             ->exists();
 
-        // User needs: subscription (personal or institution) OR one-off purchase (only if not free)
-        $hasValidSubscription = $activeSub || $institutionSubs->count() > 0;
+        // User needs: subscription (personal or institution) OR one-off purchase
+        $hasValidSubscription = $subValidation['allowed'] && $subValidation['subscription'];
         
-        if (!$isFreeBattle && !$hasValidSubscription && !$hasOneOff) {
-            return response()->json(['ok' => false, 'message' => 'Subscription or one-off purchase required'], 403);
+        if (!$hasValidSubscription && !$hasOneOff) {
+            return response()->json([
+                'ok' => false, 
+                'message' => $subValidation['message'] ?? 'Subscription or one-off purchase required'
+            ], 403);
         }
 
-        // Only check limits if battle is NOT free
-        if (!$isFreeBattle) {
-            // Check both personal and institution limits
-            $limitExceeded = false;
-            $limitInfo = null;
-
-            // Check personal subscription limit
-            if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
+        // Only check limits if user has active subscription
+        if ($hasValidSubscription) {
+            $activeSub = $subValidation['subscription'];
+            if ($activeSub->package && is_array($activeSub->package->features)) {
                 $features = $activeSub->package->features;
                 $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
                 if ($limit !== null) {
@@ -639,54 +619,21 @@ class BattleController extends Controller
                         ->where('completed_at', '>=', $today)
                         ->count();
                     if ($used >= intval($limit)) {
-                        $limitExceeded = true;
-                        $limitInfo = [
-                            'type' => 'battle_results',
-                            'value' => intval($limit),
-                            'used' => intval($used),
-                            'remaining' => 0,
-                            'subscription_type' => 'personal'
-                        ];
+                        $remaining = max(0, intval($limit) - intval($used));
+                        return response()->json([
+                            'ok' => false,
+                            'code' => 'limit_reached',
+                            'limit' => [
+                                'type' => 'battle_results',
+                                'value' => intval($limit),
+                                'used' => intval($used),
+                                'remaining' => $remaining,
+                                'subscription_type' => $subValidation['subscription_type']
+                            ],
+                            'message' => 'Daily battle result reveal limit reached for your plan'
+                        ], 403);
                     }
                 }
-            }
-
-            // Check institution subscription limits (if personal limit not exceeded)
-            if (!$limitExceeded && $institutionSubs->count() > 0) {
-                foreach ($institutionSubs as $instSub) {
-                    if ($instSub->package && is_array($instSub->package->features)) {
-                        $features = $instSub->package->features;
-                        $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
-                        if ($limit !== null) {
-                            $today = now()->startOfDay();
-                            $used = Battle::where(function($q) use ($user) {
-                                    $q->where('initiator_id', $user->id)->orWhere('opponent_id', $user->id);
-                                })->whereNotNull('completed_at')
-                                ->where('completed_at', '>=', $today)
-                                ->count();
-                            if ($used >= intval($limit)) {
-                                $limitExceeded = true;
-                                $limitInfo = [
-                                    'type' => 'battle_results',
-                                    'value' => intval($limit),
-                                    'used' => intval($used),
-                                    'remaining' => 0,
-                                    'subscription_type' => 'institution'
-                                ];
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if ($limitExceeded && $limitInfo) {
-                return response()->json([
-                    'ok' => false,
-                    'code' => 'limit_reached',
-                    'limit' => $limitInfo,
-                    'message' => 'Daily battle result reveal limit reached for your plan'
-                ], 403);
             }
         }
 
@@ -912,26 +859,21 @@ class BattleController extends Controller
     {
         $user = $request->user();
         
-        // Check if battle is free
-        $isFreeBattle = !$battle->one_off_price || $battle->one_off_price == 0;
+        // Always check subscription limits for battle results
+        $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
         
-        // Only check subscription limits if battle is NOT free
-        if (!$isFreeBattle) {
-            $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
-            
-            if (!$limitCheck['allowed']) {
-                return response()->json([
-                    'ok' => false,
-                    'code' => 'limit_reached',
-                    'message' => 'Daily result reveal limit reached for your plan',
-                    'limit' => [
-                        'type' => 'quiz_results',
-                        'value' => $limitCheck['limit'],
-                        'used' => $limitCheck['used'],
-                        'remaining' => $limitCheck['remaining'],
-                    ]
-                ], 403);
-            }
+        if (!$limitCheck['allowed']) {
+            return response()->json([
+                'ok' => false,
+                'code' => 'limit_reached',
+                'message' => 'Daily result reveal limit reached for your plan',
+                'limit' => [
+                    'type' => 'quiz_results',
+                    'value' => $limitCheck['limit'],
+                    'used' => $limitCheck['used'],
+                    'remaining' => $limitCheck['remaining'],
+                ]
+            ], 403);
         }
 
         $battle->load('questions');
@@ -1136,16 +1078,12 @@ class BattleController extends Controller
             $admin = \App\Models\User::where('role', 'admin')->orderBy('id')->first();
             $botUserId = $admin ? $admin->id : null;
             $result['opponent_is_bot'] = ($botUserId && $battle->opponent_id && intval($battle->opponent_id) === intval($botUserId));
-            // also set a convenience flag on the battle payload when possible
-            if (is_array($result['battle'])) {
-                $result['battle']['opponent_is_bot'] = $result['opponent_is_bot'];
-                $result['battle']['winner_id'] = $winnerId;
-            } else {
-                try { 
-                    $result['battle']->opponent_is_bot = $result['opponent_is_bot'];
-                    $result['battle']->winner_id = $winnerId;
-                } catch (\Throwable $_) {}
-            }
+            
+            // Set convenience flags on the battle model object
+            try { 
+                $battle->opponent_is_bot = $result['opponent_is_bot'];
+                $battle->winner_id = $winnerId;
+            } catch (\Throwable $_) {}
         } catch (\Throwable $_) {
             // ignore failures here; it's just a convenience flag for the frontend
             $result['opponent_is_bot'] = false;

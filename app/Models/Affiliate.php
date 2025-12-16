@@ -50,4 +50,12 @@ class Affiliate extends Model
     {
         return $this->hasMany(AffiliateLinkClick::class);
     }
+
+    /**
+     * Check if affiliate is active
+     */
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
 }

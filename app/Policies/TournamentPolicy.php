@@ -41,7 +41,7 @@ class TournamentPolicy
      */
     public function create(User $user)
     {
-        return $user->is_admin;
+        return $user->isAdmin();
     }
 
     /**
@@ -53,7 +53,7 @@ class TournamentPolicy
      */
     public function update(User $user, Tournament $tournament)
     {
-        return $user->is_admin;
+        return $user->isAdmin();
     }
 
     /**
@@ -65,7 +65,7 @@ class TournamentPolicy
      */
     public function delete(User $user, Tournament $tournament)
     {
-        return $user->is_admin;
+        return $user->isAdmin();
     }
 
     /**
@@ -77,7 +77,7 @@ class TournamentPolicy
      */
     public function restore(User $user, Tournament $tournament)
     {
-        return $user->is_admin;
+        return $user->isAdmin();
     }
 
     /**
@@ -89,7 +89,7 @@ class TournamentPolicy
      */
     public function forceDelete(User $user, Tournament $tournament)
     {
-        return $user->is_admin;
+        return $user->isAdmin();
     }
 
     /**
@@ -140,7 +140,7 @@ class TournamentPolicy
      */
     public function approveRegistration(User $user)
     {
-        return $user->is_admin;
+        return $user->isAdmin();
     }
 
     /**
@@ -151,6 +151,6 @@ class TournamentPolicy
      */
     public function rejectRegistration(User $user)
     {
-        return $user->is_admin;
+        return $user->isAdmin();
     }
 }

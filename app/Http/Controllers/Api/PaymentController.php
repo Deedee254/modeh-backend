@@ -8,12 +8,15 @@ use App\Models\Subscription;
 use App\Models\PaymentSetting;
 use App\Models\Package;
 use App\Services\MpesaService;
+use App\Services\WalletService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
 class PaymentController extends Controller
 {
+    public function __construct(private WalletService $walletService) {}
+
     // Simulate initiating an Mpesa STK Push
     public function initiateMpesa(Request $request, Subscription $subscription)
     {
@@ -53,7 +56,7 @@ class PaymentController extends Controller
             // ignore logging failures
         }
 
-        // Attempt to find subscription by stored gateway_meta.tx. Use JSON path lookup or JSON contains depending on DB.
+        // Attempt to find subscription by stored gateway_meta.tx
         $sub = Subscription::where('gateway_meta->tx', $txId)->first();
         if (!$sub) {
             // Try one-off purchases
@@ -62,282 +65,68 @@ class PaymentController extends Controller
                 return response()->json(['ok' => false, 'message' => 'subscription or purchase not found'], 404);
             }
 
-            // handle one-off purchase
-                if ($status === 'success') {
-                    $purchase->status = 'confirmed';
-                    $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], ['completed_at' => now()]);
-                    $purchase->save();
+            // Handle one-off purchase
+            return $this->handleOneOffPurchase($purchase, $txId, $status);
+        }
 
-                $amount = $purchase->amount ?? 0;
-                $setting = PaymentSetting::where('gateway', 'mpesa')->first();
-                // platform percentage (e.g. 60 means platform gets 60%)
-                $platformSharePct = 60.0;
-                if ($setting && $setting->revenue_share !== null) $platformSharePct = (float)$setting->revenue_share;
-                // total to give to quiz-masters = amount * (100 - platformPct) / 100
-                $totalQuizMasterShare = round(($amount * (100.0 - $platformSharePct)) / 100.0, 2);
-                $platformShare = round($amount - $totalQuizMasterShare, 2);
+        // Handle subscription payment
+        return $this->handleSubscription($sub, $txId, $status, $request);
+    }
 
-                // Idempotency: do not create duplicate transaction(s) for same tx id
-                $existing = \App\Models\Transaction::where('tx_id', $txId)->first();
-                if (!$existing) {
-                    // If item is a quiz, create a single transaction and credit the quiz master
-                    if ($purchase->item_type === 'quiz') {
-                        $quizMasterId = null;
-                        $quiz = \App\Models\Quiz::find($purchase->item_id);
-                        if ($quiz) $quizMasterId = $quiz->user_id ?? null;
-
-                        \App\Models\Transaction::create([
-                            'tx_id' => $txId,
-                            'user_id' => $purchase->user_id,
-                            'quiz_master_id' => $quizMasterId,
-                            'quiz_id' => $purchase->item_type === 'quiz' ? $purchase->item_id : null,
-                            'amount' => $amount,
-                            'quiz_master_share' => $totalQuizMasterShare,
-                            'platform_share' => $platformShare,
-                            'gateway' => 'mpesa',
-                            'meta' => ['one_off' => true, 'item_type' => $purchase->item_type, 'item_id' => $purchase->item_id],
-                            'status' => 'confirmed',
-                        ]);
-
-                        // Credit quiz-master wallet
-                        if ($quizMasterId) {
-                            $wrWallet = null;
-                            try {
-                                DB::transaction(function () use (&$wrWallet, $quizMasterId, $totalQuizMasterShare) {
-                                    $wallet = \App\Models\Wallet::where('user_id', $quizMasterId)->lockForUpdate()->first();
-                                    if (!$wallet) {
-                                        $wallet = \App\Models\Wallet::create(['user_id' => $quizMasterId, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
-                                    }
-                                    $wallet->pending = bcadd($wallet->pending, $totalQuizMasterShare, 2);
-                                    $wallet->lifetime_earned = bcadd($wallet->lifetime_earned, $totalQuizMasterShare, 2);
-                                    $wallet->save();
-                                    $wrWallet = $wallet;
-                                });
-                            } catch (\Throwable $e) {
-                                try { Log::warning('Wallet credit for one-off failed: '.$e->getMessage()); } catch (\Throwable $_) {}
-                            }
-                        }
-
-                    } elseif ($purchase->item_type === 'battle') {
-                        // For battles, distribute the quiz-master share across question owners used in the battle
-                        $battle = \App\Models\Battle::with('questions')->find($purchase->item_id);
-                        $questionOwners = [];
-                        $totalQuestions = 0;
-                        if ($battle) {
-                            $questions = $battle->questions;
-                            $totalQuestions = $questions->count();
-                            if ($totalQuestions > 0) {
-                                // Compute total amount available to quiz-masters (already computed as $totalQuizMasterShare)
-                                $perQuestion = $totalQuizMasterShare / max(1, $totalQuestions);
-                                // Group per owner
-                                foreach ($questions as $q) {
-                                    $owner = $q->created_by ?? null;
-                                    if (!$owner) continue;
-                                    if (!isset($questionOwners[$owner])) $questionOwners[$owner] = 0;
-                                    // accumulate per-question share per owner
-                                    $questionOwners[$owner] = round($questionOwners[$owner] + $perQuestion, 2);
-                                }
-
-                                // Fix rounding errors by adjusting the first owner entry
-                                $assigned = array_sum($questionOwners);
-                                $diff = round($totalQuizMasterShare - $assigned, 2);
-                                if ($diff !== 0.0 && !empty($questionOwners)) {
-                                    $firstOwner = array_key_first($questionOwners);
-                                    $questionOwners[$firstOwner] = round($questionOwners[$firstOwner] + $diff, 2);
-                                }
-
-                                // Create a transaction entry per owner and credit wallets
-                                foreach ($questionOwners as $ownerId => $ownerShare) {
-                                    \App\Models\Transaction::create([
-                                        'tx_id' => $txId,
-                                        'user_id' => $purchase->user_id,
-                                        'quiz_master_id' => $ownerId,
-                                        'quiz_id' => null,
-                                        'amount' => $amount,
-                                        'quiz_master_share' => $ownerShare,
-                                        'platform_share' => round($platformShare * ($ownerShare / max(0.0001, $totalQuizMasterShare)), 2),
-                                        'gateway' => 'mpesa',
-                                        'meta' => ['one_off' => true, 'item_type' => $purchase->item_type, 'item_id' => $purchase->item_id, 'question_owner_breakdown' => array_keys($questionOwners)],
-                                        'status' => 'confirmed',
-                                    ]);
-
-                                    // credit owner wallet
-                                    try {
-                                        DB::transaction(function () use (&$wrWallet, $ownerId, $ownerShare) {
-                                            $wallet = \App\Models\Wallet::where('user_id', $ownerId)->lockForUpdate()->first();
-                                            if (!$wallet) {
-                                                $wallet = \App\Models\Wallet::create(['user_id' => $ownerId, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
-                                            }
-                                            $wallet->pending = bcadd($wallet->pending, $ownerShare, 2);
-                                            $wallet->lifetime_earned = bcadd($wallet->lifetime_earned, $ownerShare, 2);
-                                            $wallet->save();
-                                        });
-                                    } catch (\Throwable $e) {
-                                        try { Log::warning('Wallet credit for battle one-off failed: '.$e->getMessage()); } catch (\Throwable $_) {}
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        // Unknown item type; create a generic transaction carrying the meta
-                        \App\Models\Transaction::create([
-                            'tx_id' => $txId,
-                            'user_id' => $purchase->user_id,
-                            'quiz_master_id' => null,
-                            'quiz_id' => null,
-                            'amount' => $amount,
-                            'quiz_master_share' => $totalQuizMasterShare,
-                            'platform_share' => $platformShare,
-                            'gateway' => 'mpesa',
-                            'meta' => ['one_off' => true, 'item_type' => $purchase->item_type, 'item_id' => $purchase->item_id],
-                            'status' => 'confirmed',
-                        ]);
-                    }
-                }
-
-                    // If this was a tournament entry one-off purchase, mark the participant pivot as paid
-                    try {
-                        if ($purchase->item_type === 'tournament') {
-                            DB::table('tournament_participants')
-                                ->where('tournament_id', $purchase->item_id)
-                                ->where('user_id', $purchase->user_id)
-                                ->where('status', 'pending_payment')
-                                ->update([
-                                    'status' => 'paid',
-                                    'approved_at' => now(), // repurposed as paid_at
-                                    'updated_at' => now(),
-                                ]);
-
-                            // Notify user about successful registration/payment
-                            try {
-                                $user = \App\Models\User::find($purchase->user_id);
-                                if ($user) {
-                                    $user->notify(new \App\Notifications\TournamentRegistrationStatusChanged(\App\Models\Tournament::find($purchase->item_id), 'paid'));
-                                }
-                            } catch (\Throwable $_) {
-                                // swallow notification errors
-                            }
-                        }
-                    } catch (\Throwable $e) {
-                        try { Log::warning('Failed to promote tournament participant after purchase confirmation: '.$e->getMessage()); } catch (\Throwable $_) {}
-                    }
-
-                    return response()->json(['ok' => true]);
-            }
-
+    /**
+     * Handle one-off purchase completion or cancellation.
+     */
+    private function handleOneOffPurchase(\App\Models\OneOffPurchase $purchase, string $txId, string $status)
+    {
+        if ($status !== 'success') {
             $purchase->status = 'cancelled';
             $purchase->save();
             return response()->json(['ok' => false]);
         }
 
-        if ($status === 'success') {
-            $pkg = $sub->package;
-            $days = $pkg->duration_days ?? 30;
+        // Mark purchase as confirmed
+        $purchase->status = 'confirmed';
+        $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], ['completed_at' => now()]);
+        $purchase->save();
 
-            // mark subscription active
-            $sub->status = 'active';
-            $sub->started_at = now();
-            $sub->ends_at = now()->addDays($days);
-            $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], ['completed_at' => now()]);
-            $sub->save();
+        $amount = $purchase->amount ?? 0;
+        $platformSharePct = $this->getPlatformSharePercentage();
+        $totalQuizMasterShare = round(($amount * (100.0 - $platformSharePct)) / 100.0, 2);
+        $platformShare = round($amount - $totalQuizMasterShare, 2);
 
-            // Create a transaction record for this payment
-            $amount = $pkg->price ?? 0;
-            // find payment setting for gateway to get revenue_share
-            $setting = PaymentSetting::where('gateway', 'mpesa')->first();
-            $platformSharePct = 60.0; // default platform percent
-            if ($setting && $setting->revenue_share !== null) {
-                // stored revenue_share is percent to platform
-                $platformSharePct = (float)$setting->revenue_share;
-            }
-            $quizMasterPercent = 100.0 - $platformSharePct;
-            $quizMasterShare = round(($amount * $quizMasterPercent) / 100.0, 2);
-            $platformShare = round($amount - $quizMasterShare, 2);
-
-            // Attempt to determine quiz-master_id and quiz_id from meta (allowing unlock-by-quiz flow)
-            $meta = $request->input('meta', []);
-            if (empty($meta) && is_array($sub->gateway_meta)) $meta = array_merge($meta, $sub->gateway_meta ?? []);
-            $quizId = $meta['quiz_id'] ?? null;
-            $quizMasterId = $meta['quiz_master_id'] ?? null;
-
-            // If we have a quiz id, try to find its quiz-master
-            if (!$quizMasterId && $quizId) {
-                $quiz = \App\Models\Quiz::find($quizId);
-                if ($quiz) $quizMasterId = $quiz->user_id ?? ($quiz->created_by ?? null);
-            }
-
-            // Idempotency: do not create duplicate transaction for same tx id
-            $existing = \App\Models\Transaction::where('tx_id', $txId)->first();
-            if ($existing) {
-                // If transaction already exists, assume previously processed
-                return response()->json(['ok' => true, 'skipped' => true]);
-            }
-
-            // create transaction
-            $transaction = \App\Models\Transaction::create([
-                'tx_id' => $txId,
-                'user_id' => $sub->user_id,
-                'quiz_master_id' => $quizMasterId,
-                'quiz_id' => $quizId,
-                'amount' => $amount,
-                'quiz_master_share' => $quizMasterShare,
-                'platform_share' => $platformShare,
-                'gateway' => 'mpesa',
-                'meta' => $meta,
-                'status' => 'confirmed',
-            ]);
-
-            // Notify user and broadcast subscription update
-            try {
-                $user = $sub->user;
-                // send database + broadcast notification
-                $user->notify(new \App\Notifications\SubscriptionStatusNotification($sub, 'Subscription activated'));
-                // fire a broadcast event for real-time UI updates
-                event(new \App\Events\SubscriptionUpdated($user->id, $sub, $txId));
-            } catch (\Throwable $e) {
-                try { Log::warning('Subscription notification failed: '.$e->getMessage()); } catch (\Throwable $_) {}
-            }
-
-            // Update quiz-master wallet if quiz-master exists (use transaction + row lock to avoid races)
-            if ($quizMasterId) {
-                $wrWallet = null;
-                try {
-                    DB::transaction(function () use (&$wrWallet, $quizMasterId, $quizMasterShare) {
-                        // lock the wallet row for update to prevent concurrent modifications
-                        $wallet = \App\Models\Wallet::where('user_id', $quizMasterId)->lockForUpdate()->first();
-                        if (!$wallet) {
-                            $wallet = \App\Models\Wallet::create(['user_id' => $quizMasterId, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
-                        }
-
-                        // credit to pending by default; an admin or settlement process will move to available
-                        $wallet->pending = bcadd($wallet->pending, $quizMasterShare, 2);
-                        // lifetime_earned tracks total earned over time
-                        $wallet->lifetime_earned = bcadd($wallet->lifetime_earned, $quizMasterShare, 2);
-                        $wallet->save();
-
-                        $wrWallet = $wallet;
-                    });
-                } catch (\Throwable $e) {
-                    try { Log::warning('Wallet credit transaction failed: '.$e->getMessage()); } catch (\Throwable $_) {}
-                    // continue without failing the whole webhook - transaction recorded and notification already sent
-                }
-
-                // Broadcast wallet update after commit (if we have wallet)
-                if ($wrWallet) {
-                    try {
-                        event(new \App\Events\WalletUpdated($wrWallet->toArray(), $quizMasterId));
-                    } catch (\Throwable $e) {
-                        try { Log::warning('WalletUpdated broadcast failed: '.$e->getMessage()); } catch (\Throwable $_) {}
-                    }
-                }
-            }
-
+        // Prevent duplicate transactions
+        if (\App\Models\Transaction::where('tx_id', $txId)->exists()) {
             return response()->json(['ok' => true]);
         }
 
-        // cancelled or failed
+        // Dispatch based on item type
+        match ($purchase->item_type) {
+            'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+            'battle' => $this->createTransactionForBattle($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+            default => $this->createGenericTransaction($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+        };
+
+        // Update tournament participant if applicable
+        if ($purchase->item_type === 'tournament') {
+            $this->updateTournamentParticipant($purchase);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Handle subscription payment completion or cancellation.
+     */
+    private function handleSubscription(Subscription $sub, string $txId, string $status, Request $request)
+    {
+        if ($status === 'success') {
+            return $this->completeSubscription($sub, $txId, $request);
+        }
+
+        // Subscription cancelled or failed
         $sub->status = 'cancelled';
         $sub->save();
+
         try {
             $user = $sub->user;
             $user->notify(new \App\Notifications\SubscriptionStatusNotification($sub, 'Subscription cancelled'));
@@ -345,6 +134,340 @@ class PaymentController extends Controller
         } catch (\Throwable $e) {
             try { Log::warning('Subscription cancellation notification failed: '.$e->getMessage()); } catch (\Throwable $_) {}
         }
+
         return response()->json(['ok' => false]);
+    }
+
+    /**
+     * Complete subscription activation, create transaction, and credit wallet.
+     */
+    private function completeSubscription(Subscription $sub, string $txId, Request $request)
+    {
+        $pkg = $sub->package;
+        $days = $pkg->duration_days ?? 30;
+
+        // Mark subscription active
+        $sub->status = 'active';
+        $sub->started_at = now();
+        $sub->ends_at = now()->addDays($days);
+        $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], ['completed_at' => now()]);
+        $sub->save();
+
+        $amount = $pkg->price ?? 0;
+        $platformSharePct = $this->getPlatformSharePercentage();
+        $quizMasterPercent = 100.0 - $platformSharePct;
+        $quizMasterShare = round(($amount * $quizMasterPercent) / 100.0, 2);
+        $platformShare = round($amount - $quizMasterShare, 2);
+
+        // Determine quiz-master and quiz IDs from meta
+        $meta = $request->input('meta', []);
+        if (empty($meta) && is_array($sub->gateway_meta)) {
+            $meta = array_merge($meta, $sub->gateway_meta ?? []);
+        }
+        $quizId = $meta['quiz_id'] ?? null;
+        $quizMasterId = $meta['quiz_master_id'] ?? null;
+
+        if (!$quizMasterId && $quizId) {
+            $quiz = \App\Models\Quiz::find($quizId);
+            if ($quiz) {
+                $quizMasterId = $quiz->user_id ?? ($quiz->created_by ?? null);
+            }
+        }
+
+        // Prevent duplicate transactions
+        if (\App\Models\Transaction::where('tx_id', $txId)->exists()) {
+            return response()->json(['ok' => true, 'skipped' => true]);
+        }
+
+        // Create transaction
+        \App\Models\Transaction::create([
+            'tx_id' => $txId,
+            'user_id' => $sub->user_id,
+            'quiz_master_id' => $quizMasterId,
+            'quiz_id' => $quizId,
+            'amount' => $amount,
+            'quiz_master_share' => $quizMasterShare,
+            'platform_share' => $platformShare,
+            'gateway' => 'mpesa',
+            'meta' => $meta,
+            'status' => 'confirmed',
+        ]);
+
+        // Notify and broadcast subscription update
+        try {
+            $user = $sub->user;
+            $user->notify(new \App\Notifications\SubscriptionStatusNotification($sub, 'Subscription activated'));
+            event(new \App\Events\SubscriptionUpdated($user->id, $sub, $txId));
+        } catch (\Throwable $e) {
+            try { Log::warning('Subscription notification failed: '.$e->getMessage()); } catch (\Throwable $_) {}
+        }
+
+        // Credit quiz-master wallet
+        if ($quizMasterId) {
+            $this->creditWallet($quizMasterId, $quizMasterShare);
+        }
+
+        // Handle affiliate commission if user was referred
+        $this->handleAffiliateCommission($sub->user_id, $amount, $txId);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Create transaction for quiz one-off purchase and credit quiz master.
+     */
+    private function createTransactionForQuiz(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $quizMasterShare, float $platformShare)
+    {
+        $quizMasterId = null;
+        $quiz = \App\Models\Quiz::find($purchase->item_id);
+        if ($quiz) {
+            $quizMasterId = $quiz->user_id ?? null;
+        }
+
+        \App\Models\Transaction::create([
+            'tx_id' => $txId,
+            'user_id' => $purchase->user_id,
+            'quiz_master_id' => $quizMasterId,
+            'quiz_id' => $purchase->item_id,
+            'amount' => $amount,
+            'quiz_master_share' => $quizMasterShare,
+            'platform_share' => $platformShare,
+            'gateway' => 'mpesa',
+            'meta' => ['one_off' => true, 'item_type' => 'quiz', 'item_id' => $purchase->item_id],
+            'status' => 'confirmed',
+        ]);
+
+        if ($quizMasterId) {
+            $this->creditWallet($quizMasterId, $quizMasterShare);
+        }
+
+        // Handle affiliate commission if user was referred
+        $this->handleAffiliateCommission($purchase->user_id, $amount, $txId);
+    }
+
+    /**
+     * Create transaction for battle one-off purchase with distributed quiz-master shares.
+     */
+    private function createTransactionForBattle(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $totalQuizMasterShare, float $platformShare)
+    {
+        $battle = \App\Models\Battle::with('questions')->find($purchase->item_id);
+        if (!$battle) {
+            return;
+        }
+
+        $questionOwners = $this->distributeQuizMasterShare($battle, $totalQuizMasterShare);
+        if (empty($questionOwners)) {
+            return;
+        }
+
+        // Create transaction per owner
+        foreach ($questionOwners as $ownerId => $ownerShare) {
+            \App\Models\Transaction::create([
+                'tx_id' => $txId,
+                'user_id' => $purchase->user_id,
+                'quiz_master_id' => $ownerId,
+                'quiz_id' => null,
+                'amount' => $amount,
+                'quiz_master_share' => $ownerShare,
+                'platform_share' => round($platformShare * ($ownerShare / max(0.0001, $totalQuizMasterShare)), 2),
+                'gateway' => 'mpesa',
+                'meta' => ['one_off' => true, 'item_type' => 'battle', 'item_id' => $purchase->item_id, 'question_owner_breakdown' => array_keys($questionOwners)],
+                'status' => 'confirmed',
+            ]);
+
+            $this->creditWallet($ownerId, $ownerShare);
+        }
+
+        // Handle affiliate commission if user was referred
+        $this->handleAffiliateCommission($purchase->user_id, $amount, $txId);
+    }
+
+    /**
+     * Create generic transaction for unknown item types.
+     */
+    private function createGenericTransaction(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $quizMasterShare, float $platformShare)
+    {
+        \App\Models\Transaction::create([
+            'tx_id' => $txId,
+            'user_id' => $purchase->user_id,
+            'quiz_master_id' => null,
+            'quiz_id' => null,
+            'amount' => $amount,
+            'quiz_master_share' => $quizMasterShare,
+            'platform_share' => $platformShare,
+            'gateway' => 'mpesa',
+            'meta' => ['one_off' => true, 'item_type' => $purchase->item_type, 'item_id' => $purchase->item_id],
+            'status' => 'confirmed',
+        ]);
+
+        // Handle affiliate commission if user was referred
+        $this->handleAffiliateCommission($purchase->user_id, $amount, $txId);
+    }
+
+    /**
+     * Distribute quiz-master share across question owners for a battle.
+     * Returns array of [owner_id => share_amount].
+     */
+    private function distributeQuizMasterShare(\App\Models\Battle $battle, float $totalShare): array
+    {
+        $questions = $battle->questions;
+        if ($questions->isEmpty()) {
+            return [];
+        }
+
+        $questionOwners = [];
+        $perQuestion = $totalShare / $questions->count();
+
+        foreach ($questions as $question) {
+            $owner = $question->created_by ?? null;
+            if (!$owner) {
+                continue;
+            }
+
+            if (!isset($questionOwners[$owner])) {
+                $questionOwners[$owner] = 0;
+            }
+            $questionOwners[$owner] = round($questionOwners[$owner] + $perQuestion, 2);
+        }
+
+        // Fix rounding errors
+        if (!empty($questionOwners)) {
+            $assigned = array_sum($questionOwners);
+            $diff = round($totalShare - $assigned, 2);
+            if ($diff !== 0.0) {
+                $firstOwner = array_key_first($questionOwners);
+                $questionOwners[$firstOwner] = round($questionOwners[$firstOwner] + $diff, 2);
+            }
+        }
+
+        return $questionOwners;
+    }
+
+    /**
+     * Credit a user's wallet with the given amount.
+     * Delegates to WalletService for consistency.
+     */
+    private function creditWallet(int $userId, float $amount)
+    {
+        $this->walletService->credit($userId, $amount);
+    }
+
+    /**
+     * Handle affiliate commission for a user purchase.
+     * Checks if user was referred by an affiliate and pays commission.
+     */
+    private function handleAffiliateCommission(int $userId, float $amount, string $txId)
+    {
+        try {
+            // Find active referral for this user
+            $referral = \App\Models\AffiliateReferral::where('user_id', $userId)
+                ->where('status', 'active')
+                ->first();
+
+            if (!$referral) {
+                return;
+            }
+
+            $affiliate = $referral->affiliate;
+            if (!$affiliate || !$affiliate->isActive()) {
+                return;
+            }
+
+            // Calculate commission
+            $commissionAmount = round($amount * ($affiliate->commission_rate / 100.0), 2);
+            if ($commissionAmount <= 0) {
+                return;
+            }
+
+            // Prevent duplicate commission transactions
+            if (\App\Models\Transaction::where('tx_id', 'aff_' . $txId)->exists()) {
+                return;
+            }
+
+            // Create commission transaction
+            \App\Models\Transaction::create([
+                'tx_id' => 'aff_' . $txId,
+                'user_id' => $affiliate->user_id, // Commission goes to affiliate owner
+                'quiz_master_id' => null,
+                'quiz_id' => null,
+                'amount' => $amount,
+                'quiz_master_share' => $commissionAmount,
+                'platform_share' => 0,
+                'gateway' => 'mpesa',
+                'meta' => [
+                    'commission_type' => 'affiliate',
+                    'referred_user_id' => $userId,
+                    'referral_id' => $referral->id,
+                    'affiliate_id' => $affiliate->id,
+                    'commission_rate' => $affiliate->commission_rate,
+                ],
+                'status' => 'confirmed',
+            ]);
+
+            // Credit affiliate wallet
+            $this->creditWallet($affiliate->user_id, $commissionAmount);
+
+            // Update referral earnings
+            $referral->increment('earnings', $commissionAmount);
+
+            // Update affiliate total earnings
+            $affiliate->increment('total_earnings', $commissionAmount);
+
+            Log::info('Affiliate commission processed', [
+                'affiliate_id' => $affiliate->id,
+                'affiliate_user_id' => $affiliate->user_id,
+                'referred_user_id' => $userId,
+                'original_amount' => $amount,
+                'commission_rate' => $affiliate->commission_rate,
+                'commission_amount' => $commissionAmount,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to process affiliate commission', [
+                'user_id' => $userId,
+                'amount' => $amount,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Update tournament participant status after payment confirmation.
+     */
+    private function updateTournamentParticipant(\App\Models\OneOffPurchase $purchase)
+    {
+        try {
+            DB::table('tournament_participants')
+                ->where('tournament_id', $purchase->item_id)
+                ->where('user_id', $purchase->user_id)
+                ->where('status', 'pending_payment')
+                ->update([
+                    'status' => 'paid',
+                    'approved_at' => now(), // repurposed as paid_at
+                    'updated_at' => now(),
+                ]);
+
+            // Notify user
+            $user = \App\Models\User::find($purchase->user_id);
+            if ($user) {
+                $tournament = \App\Models\Tournament::find($purchase->item_id);
+                if ($tournament) {
+                    $user->notify(new \App\Notifications\TournamentRegistrationStatusChanged($tournament, 'paid'));
+                }
+            }
+        } catch (\Throwable $e) {
+            try { Log::warning('Failed to promote tournament participant: ' . $e->getMessage()); } catch (\Throwable $_) {}
+        }
+    }
+
+    /**
+     * Get platform revenue share percentage from payment settings.
+     */
+    private function getPlatformSharePercentage(): float
+    {
+        $setting = PaymentSetting::where('gateway', 'mpesa')->first();
+        if ($setting && $setting->revenue_share !== null) {
+            return (float) $setting->revenue_share;
+        }
+        return 60.0; // default: 60% to platform
     }
 }

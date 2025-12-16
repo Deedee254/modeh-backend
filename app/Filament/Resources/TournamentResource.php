@@ -236,12 +236,6 @@ class TournamentResource extends Resource
                                 ->helperText('Allow users with an active subscription to join without paying the entry fee')
                                 ->default(false),
 
-                            Forms\Components\TextInput::make('max_participants')
-                                ->label('Max Participants')
-                                ->numeric()
-                                ->minValue(2)
-                                ->required(),
-
                             Forms\Components\Select::make('access_type')
                                 ->label('Access Type')
                                 ->options([
@@ -321,16 +315,6 @@ class TournamentResource extends Resource
                                 ->maxValue(100)
                                 ->default(10)
                                 ->helperText('How many questions per battle (1-100)'),
-
-                            Forms\Components\Select::make('bracket_slots')
-                                ->label('Tournament Bracket Size')
-                                ->options([
-                                    2 => '2 Players (1 Battle)',
-                                    4 => '4 Players (2 Semifinals → 1 Final)',
-                                    8 => '8 Players (4 Quarters → 2 Semis → 1 Final)',
-                                ])
-                                ->default(8)
-                                ->helperText('Top N from qualifier will advance to bracket'),
 
                             Forms\Components\TextInput::make('round_delay_days')
                                 ->label('Days Between Rounds')

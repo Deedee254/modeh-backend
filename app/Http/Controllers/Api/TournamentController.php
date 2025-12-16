@@ -277,16 +277,6 @@ class TournamentController extends Controller
             // If tournament is marked open_to_subscribers, an active subscription counts as paid access
             $isPaid = !$fee || $hasOneOff || ($activeSub && (bool) ($lockedTournament->open_to_subscribers ?? false));
 
-            // Only count paid participants for capacity checks. Pending payment registrations do not consume capacity.
-            $paidCount = DB::table('tournament_participants')
-                ->where('tournament_id', $lockedTournament->id)
-                ->where('status', 'paid')
-                ->count();
-
-            if ($lockedTournament->max_participants && $isPaid && $paidCount >= $lockedTournament->max_participants) {
-                return response()->json(['message' => 'Tournament is full'], 400);
-            }
-
             // Check if user already joined (any status)
             $existingParticipant = DB::table('tournament_participants')
                 ->where('tournament_id', $lockedTournament->id)
@@ -863,7 +853,7 @@ class TournamentController extends Controller
         $user = $request->user();
         if (! $user) return response()->json(['message' => 'Unauthorized'], 401);
 
-        // Check tournament window
+        // Check tournament window: qualify is allowed during 'upcoming' status (registration + qualifier phase)
         $now = now();
         if ($tournament->start_date && $now->lt($tournament->start_date)) {
             return response()->json(['message' => 'Qualification has not started'], 400);
@@ -872,10 +862,16 @@ class TournamentController extends Controller
             return response()->json(['message' => 'Qualification is closed'], 400);
         }
 
-        // Ensure user is registered and approved
+        // Allow qualification only during 'upcoming' phase (before first round battles are created)
+        // Once battles are created, tournament transitions to 'active' and qualifier closes
+        if ($tournament->status !== 'upcoming') {
+            return response()->json(['message' => 'Qualification period has closed for this tournament'], 400);
+        }
+
+        // Ensure user is registered and paid
         $participant = $tournament->participants()->where('user_id', $user->id)->first();
-        if (! $participant || ($participant->pivot->status ?? 'approved') !== 'approved') {
-            return response()->json(['message' => 'You must be registered and approved to take this qualifier'], 403);
+        if (! $participant || ($participant->pivot->status ?? 'pending_payment') !== 'paid') {
+            return response()->json(['message' => 'You must be registered and payment must be confirmed to take this qualifier'], 403);
         }
 
         // Single attempt policy: prevent a second attempt
@@ -1113,15 +1109,15 @@ class TournamentController extends Controller
         $user = $request->user();
         if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
 
-        // Check subscription
-        $activeSub = \App\Models\Subscription::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where(function($q) {
-                $now = now();
-                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-            })
-            ->orderByDesc('started_at')
-            ->first();
+        // Use centralized service for subscription validation
+        $subValidation = \App\Services\SubscriptionLimitService::validateSubscriptionAccess($user);
+        
+        if (!$subValidation['allowed']) {
+            return response()->json([
+                'ok' => false, 
+                'message' => $subValidation['message'] ?? 'Subscription or tournament purchase required'
+            ], 403);
+        }
 
         // Check one-off purchase for the tournament (pay once for the whole tournament)
         $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
@@ -1130,11 +1126,13 @@ class TournamentController extends Controller
             ->where('status', 'confirmed')
             ->exists();
 
-        if (!$activeSub && !$hasOneOff) {
+        // Must have either subscription or one-off tournament purchase
+        if (!$subValidation['subscription'] && !$hasOneOff) {
             return response()->json(['ok' => false, 'message' => 'Subscription or tournament purchase required'], 403);
         }
 
-        // Enforce package limits similar to battles if package defines limits
+        // Enforce package limits if subscription is active
+        $activeSub = $subValidation['subscription'];
         if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
             $features = $activeSub->package->features;
             $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
@@ -1146,12 +1144,16 @@ class TournamentController extends Controller
                     ->where('completed_at', '>=', $today)
                     ->count();
                 if ($used >= intval($limit)) {
+                    $remaining = max(0, intval($limit) - intval($used));
                     return response()->json([
                         'ok' => false,
                         'code' => 'limit_reached',
                         'limit' => [
                             'type' => 'battle_results',
-                            'value' => intval($limit)
+                            'value' => intval($limit),
+                            'used' => intval($used),
+                            'remaining' => $remaining,
+                            'subscription_type' => $subValidation['subscription_type']
                         ],
                         'message' => 'Daily result reveal limit reached for your plan'
                     ], 403);
