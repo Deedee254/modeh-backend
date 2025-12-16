@@ -313,14 +313,47 @@ class QuestionController extends Controller
             }
             $parts = array_values(array_map(function ($part) {
                 if (is_array($part)) {
-                    return [
+                    $partData = [
                         'text' => isset($part['text']) ? (string) $part['text'] : '',
                         'marks' => isset($part['marks']) && is_numeric($part['marks']) ? (float) $part['marks'] : 0,
+                        'part_type' => isset($part['part_type']) ? (string) $part['part_type'] : 'text',  // text | mcq | multi
                     ];
+                    
+                    // If part_type is not 'text' and has options, include them
+                    if ($partData['part_type'] !== 'text' && isset($part['options']) && is_array($part['options'])) {
+                        $partData['options'] = array_values(array_map(function ($opt, $idx) use ($part) {
+                            if (is_array($opt)) {
+                                $text = isset($opt['text']) ? (string) $opt['text'] : (isset($opt['value']) ? (string) $opt['value'] : '');
+                            } else {
+                                $text = is_string($opt) ? $opt : '';
+                            }
+                            
+                            // Set is_correct based on answers array if provided
+                            $isCorrect = false;
+                            if (isset($part['answers']) && is_array($part['answers'])) {
+                                $isCorrect = in_array((string) $idx, $part['answers'], true);
+                            }
+                            
+                            return [
+                                'text' => $text,
+                                'is_correct' => $isCorrect,
+                            ];
+                        }, $part['options'], array_keys($part['options'])));
+                        
+                        // Include answers for MCQ/Multi parts
+                        if (isset($part['answers']) && is_array($part['answers'])) {
+                            $partData['answers'] = array_values(array_map(function ($ans) {
+                                return (string) $ans;
+                            }, $part['answers']));
+                        }
+                    }
+                    
+                    return $partData;
                 }
                 return [
                     'text' => is_string($part) ? $part : '',
                     'marks' => 0,
+                    'part_type' => 'text',
                 ];
             }, $parts));
         } elseif (!is_array($parts)) {
@@ -858,16 +891,49 @@ class QuestionController extends Controller
             if (!is_array($partsInput)) {
                 $partsInput = [];
             }
-            $partsNormalized = array_values(array_map(static function ($part) {
+            $partsNormalized = array_values(array_map(static function ($part) use ($answersNormalized) {
                 if (is_array($part)) {
-                    return [
+                    $partData = [
                         'text' => isset($part['text']) ? (string) $part['text'] : '',
                         'marks' => isset($part['marks']) && is_numeric($part['marks']) ? (float) $part['marks'] : 0,
+                        'part_type' => isset($part['part_type']) ? (string) $part['part_type'] : 'text',  // text | mcq | multi
                     ];
+                    
+                    // If part_type is not 'text' and has options, include them
+                    if ($partData['part_type'] !== 'text' && isset($part['options']) && is_array($part['options'])) {
+                        $partData['options'] = array_values(array_map(function ($opt, $idx) use ($part) {
+                            if (is_array($opt)) {
+                                $text = isset($opt['text']) ? (string) $opt['text'] : (isset($opt['value']) ? (string) $opt['value'] : '');
+                            } else {
+                                $text = is_string($opt) ? $opt : '';
+                            }
+                            
+                            // Set is_correct based on answers array if provided
+                            $isCorrect = false;
+                            if (isset($part['answers']) && is_array($part['answers'])) {
+                                $isCorrect = in_array((string) $idx, $part['answers'], true);
+                            }
+                            
+                            return [
+                                'text' => $text,
+                                'is_correct' => $isCorrect,
+                            ];
+                        }, $part['options'], array_keys($part['options'])));
+                        
+                        // Include answers for MCQ/Multi parts
+                        if (isset($part['answers']) && is_array($part['answers'])) {
+                            $partData['answers'] = array_values(array_map(function ($ans) {
+                                return (string) $ans;
+                            }, $part['answers']));
+                        }
+                    }
+                    
+                    return $partData;
                 }
                 return [
                     'text' => is_string($part) ? $part : '',
                     'marks' => 0,
+                    'part_type' => 'text',
                 ];
             }, $partsInput));
         } else {
