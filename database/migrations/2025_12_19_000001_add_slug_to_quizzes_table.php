@@ -19,14 +19,26 @@ return new class extends Migration
             }
         });
 
-        // Backfill existing quizzes with slugs
+        // Backfill existing quizzes with slugs using DB queries to avoid touching model scopes/events
         try {
-            Quiz::whereNull('slug')->orWhere('slug', '')->chunk(100, function ($quizzes) {
+            DB::table('quizzes')->select('id', 'title')->orderBy('id')->chunk(100, function ($quizzes) {
                 foreach ($quizzes as $quiz) {
-                    $slug = SlugService::makeUniqueSlug($quiz->title, Quiz::class, $quiz->id);
-                    // Ensure slug is within 191 characters (MySQL utf8mb4 index limit)
+                    // Use SlugService.generateSlug to produce a base slug (no DB queries)
+                    $baseSlug = \App\Services\SlugService::generateSlug($quiz->title ?? '');
+                    if (empty($baseSlug)) $baseSlug = 'quiz';
+                    $baseSlug = substr($baseSlug, 0, 180);
+
+                    $slug = $baseSlug;
+                    $count = 1;
+
+                    // Ensure uniqueness using DB checks
+                    while (DB::table('quizzes')->where('slug', $slug)->where('id', '!=', $quiz->id)->exists()) {
+                        $slug = $baseSlug . '-' . $count;
+                        $count++;
+                    }
+
                     $slug = substr($slug, 0, 191);
-                    $quiz->update(['slug' => $slug]);
+                    DB::table('quizzes')->where('id', $quiz->id)->update(['slug' => $slug]);
                 }
             });
         } catch (\Exception $e) {
