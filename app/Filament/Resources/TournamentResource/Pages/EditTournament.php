@@ -106,12 +106,12 @@ class EditTournament extends EditRecord
                             $question = array_combine($headers, $row);
                             
                             try {
-                                // Parse options
+                                // Parse options as plain strings
                                 $opts = [];
                                 for ($i = 1; $i <= 4; $i++) {
                                     $optKey = "option{$i}";
                                     if (!empty($question[$optKey] ?? '')) {
-                                        $opts[] = ['text' => trim($question[$optKey])];
+                                        $opts[] = trim($question[$optKey]);
                                     }
                                 }
 
@@ -134,7 +134,8 @@ class EditTournament extends EditRecord
                                         // Try text matching (case-insensitive)
                                         $answerTrimmed = trim($answersRaw);
                                         foreach ($opts as $idx => $opt) {
-                                            if (strtolower(trim($opt['text'])) === strtolower($answerTrimmed)) {
+                                            // $opt is a plain string
+                                            if (strtolower(trim((string)$opt)) === strtolower($answerTrimmed)) {
                                                 $correctIndex = $idx;
                                                 break;
                                             }
@@ -148,7 +149,8 @@ class EditTournament extends EditRecord
                                 $importedQuestions[] = [
                                     'type' => $question['type'] ?? 'mcq',
                                     'body' => $question['text'] ?? '',
-                                    'options' => $opts,
+                                    // Ensure options are plain strings when saved
+                                    'options' => array_values(array_map(fn($o) => is_array($o) && array_key_exists('text', $o) ? trim($o['text']) : (is_object($o) && property_exists($o,'text') ? trim($o->text) : trim((string)$o)), $opts)),
                                     'answers' => $correctIndex !== null ? [(string)$correctIndex] : [],
                                     'marks' => floatval($question['marks'] ?? 1),
                                     'difficulty' => intval($question['difficulty'] ?? 2),

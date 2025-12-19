@@ -87,13 +87,54 @@ class QuestionsImporter extends Importer
         );
 
         // Collect 4 options from option1..option4
+        // Normalize so options are saved as plain strings.
+        // If an incoming option cell contains JSON object like '{"text":"..."}' or
+        // a decoded array/object with a 'text' property, extract it.
         $opts = [];
         for ($i = 1; $i <= 4; $i++) {
             $k = "option{$i}";
-            if (isset($data[$k]) && (string)($data[$k]) !== '') {
-                $opts[] = trim($data[$k]);
+            if (! isset($data[$k]) || (string)($data[$k]) === '') {
+                continue;
+            }
+
+            $raw = $data[$k];
+            $value = null;
+
+            // If looks like JSON, try decode
+            if (is_string($raw) && preg_match('/^\s*[\[{]/', $raw)) {
+                $decoded = json_decode($raw, true);
+                if (json_last_error() === JSON_ERROR_NONE && $decoded !== null) {
+                    // If decoded is an associative array with text key
+                    if (is_array($decoded) && array_key_exists('text', $decoded)) {
+                        $value = $decoded['text'];
+                    }
+                    // If decoded is numeric-indexed array and first element is an array/object with text
+                    elseif (is_array($decoded) && isset($decoded[0]) && is_array($decoded[0]) && array_key_exists('text', $decoded[0])) {
+                        $value = $decoded[0]['text'];
+                    }
+                    // If decoded is a scalar (string) inside JSON
+                    elseif (is_string($decoded)) {
+                        $value = $decoded;
+                    }
+                }
+            }
+
+            // If no JSON or json decode didn't produce a usable text, fall back to raw string
+            if ($value === null) {
+                // Handle if raw is object-like (stdClass) from some upstream
+                if (is_object($raw) && property_exists($raw, 'text')) {
+                    $value = $raw->text;
+                } else {
+                    $value = $raw;
+                }
+            }
+
+            $value = is_string($value) ? trim($value) : (string)$value;
+            if ($value !== '') {
+                $opts[] = $value;
             }
         }
+
         $record->options = ! empty($opts) ? array_values($opts) : null;
 
         // Parse answers (1-based position or text)

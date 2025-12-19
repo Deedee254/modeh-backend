@@ -61,12 +61,27 @@ class Question extends Model
 
         if ($this->type === 'mcq' && isset($this->correct)) {
             $index = $this->correct;
-            return isset($this->options[$index]) ? $this->options[$index]['text'] : null;
+            $opt = $this->options[$index] ?? null;
+            if ($opt === null) return null;
+            // Support both ['text' => '...'] and plain string options
+            if (is_array($opt) && array_key_exists('text', $opt)) {
+                return $opt['text'];
+            }
+            if (is_object($opt) && property_exists($opt, 'text')) {
+                return $opt->text;
+            }
+            return is_string($opt) ? $opt : (string)$opt;
         }
 
         if ($this->type === 'multi' && !empty($this->corrects)) {
             return collect($this->corrects)
-                ->map(fn($index) => $this->options[$index]['text'] ?? null)
+                ->map(function($index) {
+                    $opt = $this->options[$index] ?? null;
+                    if ($opt === null) return null;
+                    if (is_array($opt) && array_key_exists('text', $opt)) return $opt['text'];
+                    if (is_object($opt) && property_exists($opt, 'text')) return $opt->text;
+                    return is_string($opt) ? $opt : (string)$opt;
+                })
                 ->filter()
                 ->values()
                 ->all();
@@ -83,7 +98,11 @@ class Question extends Model
      */
     public function getOptionText($index)
     {
-        return $this->options[$index]['text'] ?? null;
+        $opt = $this->options[$index] ?? null;
+        if ($opt === null) return null;
+        if (is_array($opt) && array_key_exists('text', $opt)) return $opt['text'];
+        if (is_object($opt) && property_exists($opt, 'text')) return $opt->text;
+        return is_string($opt) ? $opt : (string)$opt;
     }
 
     /**
@@ -98,7 +117,14 @@ class Question extends Model
         }
         
         return collect($this->options)
-            ->pluck('text')
+            ->map(function($opt) {
+                if ($opt === null) return null;
+                if (is_array($opt) && array_key_exists('text', $opt)) return $opt['text'];
+                if (is_object($opt) && property_exists($opt, 'text')) return $opt->text;
+                return is_string($opt) ? $opt : (string)$opt;
+            })
+            ->filter()
+            ->values()
             ->all();
     }
 
@@ -115,7 +141,16 @@ class Question extends Model
         }
 
         foreach ($this->options as $index => $option) {
-            if (isset($option['text']) && $option['text'] === $text) {
+            $optText = null;
+            if (is_array($option) && array_key_exists('text', $option)) {
+                $optText = $option['text'];
+            } elseif (is_object($option) && property_exists($option, 'text')) {
+                $optText = $option->text;
+            } elseif (is_string($option)) {
+                $optText = $option;
+            }
+
+            if ($optText !== null && trim((string)$optText) === trim((string)$text)) {
                 return $index;
             }
         }
