@@ -154,13 +154,13 @@ class TopicController extends Controller
     {
         $query = Quiz::where('topic_id', $topic->id)
                     ->where('is_approved', true)
-                    ->with(['topic', 'subject', 'grade', 'author'])
+                    ->with(['topic', 'subject', 'grade', 'level', 'author'])
                     ->withCount(['attempts']);
 
         $perPage = min(100, max(1, (int)$request->get('per_page', 10)));
         $data = $query->paginate($perPage);
 
-        // Attach storage URLs for any cover images
+        // Attach storage URLs for any cover images and slugs
         $data->getCollection()->transform(function ($quiz) {
             if ($quiz->cover_image) {
                 try {
@@ -169,6 +169,13 @@ class TopicController extends Controller
                     $quiz->cover_image = null;
                 }
             }
+            
+            // Add slugs for routing
+            $quiz->grade_slug = $quiz->grade?->slug ?? null;
+            $quiz->level_slug = $quiz->level?->slug ?? null;
+            $quiz->topic_slug = $quiz->topic?->slug ?? null;
+            $quiz->subject_slug = $quiz->topic?->subject?->slug ?? null;
+            
             return $quiz;
         });
 

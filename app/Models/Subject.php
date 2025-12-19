@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int|null $grade_id
  * @property int|null $created_by User ID who created the subject
  * @property string $name
+ * @property string $slug Subject slug for SEO URLs
  * @property string|null $description
  * @property bool $is_approved
  * @property bool $auto_approve
@@ -26,7 +27,7 @@ class Subject extends Model
     use HasFactory;
 
     // Ensure created_by and other attributes can be mass assigned
-    protected $fillable = ['grade_id', 'created_by', 'name', 'description', 'is_approved', 'auto_approve', 'approval_requested_at', 'icon', 'is_active'];
+    protected $fillable = ['grade_id', 'created_by', 'name', 'slug', 'description', 'is_approved', 'auto_approve', 'approval_requested_at', 'icon', 'is_active'];
 
     protected $casts = [
         'is_approved' => 'boolean',
@@ -34,6 +35,23 @@ class Subject extends Model
         'approval_requested_at' => 'datetime',
         'is_active' => 'boolean',
     ];
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->slug) && !empty($model->name)) {
+                $model->slug = \App\Services\SlugService::makeUniqueSlug($model->name, static::class);
+            }
+        });
+
+        static::updating(function ($model) {
+            if ($model->isDirty('name') && !empty($model->name)) {
+                $model->slug = \App\Services\SlugService::makeUniqueSlug($model->name, static::class, $model->id);
+            }
+        });
+    }
 
     public function grade()
     {

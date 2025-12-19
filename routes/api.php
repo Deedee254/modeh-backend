@@ -17,6 +17,10 @@ Route::post('/auth/verify-email', [AuthController::class, 'verifyEmail']);
 // Get a fresh CSRF token (public endpoint for pre-login CSRF preparation)
 Route::get('/csrf-token', [AuthController::class, 'getCsrfToken'])->middleware('web');
 
+// Password reset endpoints (public)
+Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
+Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
+
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.
 Route::post('/login', [AuthController::class, 'login'])->middleware('web');

@@ -119,8 +119,44 @@ class TournamentController extends Controller
                     if (is_array($decoded)) $opts = $decoded;
                 }
                 if (!empty($opts)) {
+                    // Capture correct values before shuffling to remap indices
+                    $correctValues = [];
+                    $isMcq = $q->type === 'mcq';
+                    $isMulti = $q->type === 'multi';
+                    
+                    if ($isMcq && !is_null($q->correct) && isset($opts[$q->correct])) {
+                        $correctValues[] = $opts[$q->correct];
+                    } elseif ($isMulti && !empty($q->corrects)) {
+                        $indices = is_array($q->corrects) ? $q->corrects : json_decode($q->corrects, true);
+                        if (is_array($indices)) {
+                            foreach ($indices as $idx) {
+                                if (isset($opts[$idx])) {
+                                    $correctValues[] = $opts[$idx];
+                                }
+                            }
+                        }
+                    }
+
                     $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
                     $q->options = $shuffled;
+
+                    // Remap correct indices
+                    if ($isMcq && !empty($correctValues)) {
+                        $newIdx = array_search($correctValues[0], $shuffled);
+                        if ($newIdx !== false) {
+                            $q->correct = $newIdx;
+                        }
+                    } elseif ($isMulti && !empty($correctValues)) {
+                        $newIndices = [];
+                        foreach ($correctValues as $val) {
+                            $newIdx = array_search($val, $shuffled);
+                            if ($newIdx !== false) {
+                                $newIndices[] = $newIdx;
+                            }
+                        }
+                        sort($newIndices);
+                        $q->corrects = $newIndices;
+                    }
                 }
                 return $q;
             })->toArray();
@@ -170,7 +206,44 @@ class TournamentController extends Controller
                 if (is_array($decoded)) $opts = $decoded;
             }
             if (!empty($opts)) {
+                // Capture correct values before shuffling to remap indices
+                $correctValues = [];
+                $isMcq = $q->type === 'mcq';
+                $isMulti = $q->type === 'multi';
+                
+                if ($isMcq && !is_null($q->correct) && isset($opts[$q->correct])) {
+                    $correctValues[] = $opts[$q->correct];
+                } elseif ($isMulti && !empty($q->corrects)) {
+                    $indices = is_array($q->corrects) ? $q->corrects : json_decode($q->corrects, true);
+                    if (is_array($indices)) {
+                        foreach ($indices as $idx) {
+                            if (isset($opts[$idx])) {
+                                $correctValues[] = $opts[$idx];
+                            }
+                        }
+                    }
+                }
+
                 $q->options = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
+                $shuffled = $q->options;
+
+                // Remap correct indices
+                if ($isMcq && !empty($correctValues)) {
+                    $newIdx = array_search($correctValues[0], $shuffled);
+                    if ($newIdx !== false) {
+                        $q->correct = $newIdx;
+                    }
+                } elseif ($isMulti && !empty($correctValues)) {
+                    $newIndices = [];
+                    foreach ($correctValues as $val) {
+                        $newIdx = array_search($val, $shuffled);
+                        if ($newIdx !== false) {
+                            $newIndices[] = $newIdx;
+                        }
+                    }
+                    sort($newIndices);
+                    $q->corrects = $newIndices;
+                }
             }
             return $q;
         })->toArray();

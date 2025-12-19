@@ -222,7 +222,7 @@ class AuthController extends Controller
             try {
                 $affiliate = Affiliate::where('referral_code', $referralCode)->first();
                 if ($affiliate) {
-                    \App\Models\AffiliateReferral::create([
+                    AffiliateReferral::create([
                         'affiliate_id' => $affiliate->id,
                         'user_id' => $user->id,
                         'type' => 'signup',
@@ -408,5 +408,95 @@ class AuthController extends Controller
         }
 
         return response()->json(['verified' => true, 'email' => $user->email]);
+    }
+
+    /**
+     * Handle forgot password requests.
+     * POST /api/auth/forgot-password { email }
+     */
+    public function forgotPassword(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'email' => 'required|email|exists:users,email',
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
+
+        $user = User::where('email', $request->email)->first();
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        $token = \Illuminate\Support\Str::random(64);
+        
+        $cacheKey = 'password_reset_token:' . $token;
+        \Illuminate\Support\Facades\Cache::put($cacheKey, [
+            'email' => $user->email,
+            'user_id' => $user->id,
+        ], now()->addHour());
+
+        try {
+            $resetUrl = '/reset-password/' . $token . '?email=' . urlencode($user->email);
+            \Mail::send('emails.password-reset', ['user' => $user, 'resetUrl' => $resetUrl, 'resetToken' => $token], function ($message) use ($user) {
+                $message->to($user->email)
+                    ->subject('Reset Your Password');
+            });
+        } catch (\Exception $e) {
+            Log::error('Failed to send password reset email', ['email' => $user->email, 'error' => $e->getMessage()]);
+            return response()->json(['message' => 'Failed to send reset email. Please try again later.'], 500);
+        }
+
+        return response()->json(['message' => 'Password reset link sent to your email']);
+    }
+
+    /**
+     * Handle password reset.
+     * POST /api/auth/reset-password { token, email, password, password_confirmation }
+     */
+    public function resetPassword(Request $request)
+    {
+        $v = Validator::make($request->all(), [
+            'token' => 'required|string',
+            'email' => 'required|email|exists:users,email',
+            'password' => 'required|min:6|confirmed',
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
+
+        $cacheKey = 'password_reset_token:' . $request->token;
+        $payload = \Illuminate\Support\Facades\Cache::get($cacheKey);
+        
+        if (!$payload || !is_array($payload) || empty($payload['email'])) {
+            return response()->json(['message' => 'Invalid or expired reset token'], 400);
+        }
+
+        if ($payload['email'] !== $request->email) {
+            return response()->json(['message' => 'Token does not match email'], 400);
+        }
+
+        $user = User::where('email', $request->email)->first();
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        $user->password = Hash::make($request->password);
+        $user->save();
+
+        \Illuminate\Support\Facades\Cache::forget($cacheKey);
+
+        try {
+            \Mail::send('emails.password-reset-confirmed', ['user' => $user], function ($message) use ($user) {
+                $message->to($user->email)
+                    ->subject('Your Password Has Been Reset');
+            });
+        } catch (\Exception $e) {
+            Log::warning('Failed to send password reset confirmation email', ['email' => $user->email, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json(['message' => 'Password reset successfully']);
     }
 }

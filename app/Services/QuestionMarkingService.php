@@ -24,6 +24,8 @@ class QuestionMarkingService
                 if (isset($opt['text']) || isset($opt['body'])) {
                     $optionMap[(string)$idx] = $opt['text'] ?? $opt['body'] ?? null;
                 }
+            } else {
+                $optionMap[(string)$idx] = (string)$opt;
             }
         }
         return $optionMap;

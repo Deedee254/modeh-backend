@@ -23,6 +23,23 @@ class Level extends Model
 
     protected $fillable = ['name', 'slug', 'order', 'description'];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->slug) && !empty($model->name)) {
+                $model->slug = \App\Services\SlugService::makeUniqueSlug($model->name, static::class);
+            }
+        });
+
+        static::updating(function ($model) {
+            if ($model->isDirty('name') && !empty($model->name)) {
+                $model->slug = \App\Services\SlugService::makeUniqueSlug($model->name, static::class, $model->id);
+            }
+        });
+    }
+
     public function grades()
     {
         return $this->hasMany(Grade::class);

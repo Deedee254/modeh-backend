@@ -28,7 +28,7 @@ class RecommendationController extends Controller
             $grade = $user->quizeeProfile->grade_id ?? null;
         }
 
-        $query = Quiz::query()->with(['topic', 'topic.subject']);
+        $query = Quiz::query()->with(['topic', 'topic.subject', 'grade', 'level']);
 
         // Only recommend approved & published quizzes
         $query->where('is_approved', true)->where('visibility', 'published');
@@ -42,6 +42,15 @@ class RecommendationController extends Controller
         $query->inRandomOrder();
 
         $data = $query->paginate($perPage);
+
+        // Add slugs to each quiz
+        $data->getCollection()->transform(function ($quiz) {
+            $quiz->grade_slug = $quiz->grade?->slug ?? null;
+            $quiz->level_slug = $quiz->level?->slug ?? null;
+            $quiz->topic_slug = $quiz->topic?->slug ?? null;
+            $quiz->subject_slug = $quiz->topic?->subject?->slug ?? null;
+            return $quiz;
+        });
 
         return response()->json(['quizzes' => $data]);
     }

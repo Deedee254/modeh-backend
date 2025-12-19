@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int|null $grade_id Grade ID for this quiz
  * @property int|null $level_id Level ID for this quiz
  * @property string|null $title Quiz title
+ * @property string $slug Quiz slug for SEO URLs
  * @property string|null $description Quiz description
  * @property string|null $youtube_url YouTube URL for quiz
  * @property string|null $cover_image Cover image path for quiz
@@ -47,7 +48,7 @@ class Quiz extends Model
     use HasFactory;
 
     // Include user_id so tests and factory-created quizzes can set the owning user
-    protected $fillable = ['topic_id', 'subject_id', 'grade_id', 'level_id', 'user_id', 'created_by', 'title', 'description', 'youtube_url', 'cover_image', 'is_paid', 'one_off_price', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'difficulty', 'is_approved', 'is_draft', 'approval_requested_at'];
+    protected $fillable = ['topic_id', 'subject_id', 'grade_id', 'level_id', 'user_id', 'created_by', 'title', 'slug', 'description', 'youtube_url', 'cover_image', 'is_paid', 'one_off_price', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'difficulty', 'is_approved', 'is_draft', 'approval_requested_at'];
 
     protected $casts = [
         'is_paid' => 'boolean',
@@ -60,6 +61,24 @@ class Quiz extends Model
         'scheduled_at' => 'datetime',
         'one_off_price' => 'decimal:2',
     ];
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->slug) && !empty($model->title)) {
+                $model->slug = \App\Services\SlugService::makeUniqueSlug($model->title, static::class);
+            }
+        });
+
+        static::updating(function ($model) {
+            if ($model->isDirty('title') && !empty($model->title)) {
+                $model->slug = \App\Services\SlugService::makeUniqueSlug($model->title, static::class, $model->id);
+            }
+        });
+    }
+
     public function topic()
     {
         return $this->belongsTo(Topic::class);

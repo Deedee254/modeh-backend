@@ -428,20 +428,25 @@ class QuizController extends Controller
 
         // Add grade_name, level_name, topic_name, and subject_name to each quiz
         $data->getCollection()->transform(function ($quiz) {
-            // Grade name
+            // Grade slug and name
+            $quiz->grade_slug = $quiz->grade?->slug ?? null;
             $quiz->grade_name = $quiz->grade?->name ?? null;
 
-            // Level name (handle course_name for tertiary)
+            // Level slug and name (handle course_name for tertiary)
             if ($quiz->level) {
+                $quiz->level_slug = $quiz->level?->slug ?? null;
                 $quiz->level_name = ($quiz->level->name === 'Tertiary') ? ($quiz->level->course_name ?? $quiz->level->name) : $quiz->level->name;
             } else {
+                $quiz->level_slug = null;
                 $quiz->level_name = null;
             }
 
-            // Topic name
+            // Topic slug and name
+            $quiz->topic_slug = $quiz->topic?->slug ?? null;
             $quiz->topic_name = $quiz->topic?->name ?? null;
 
-            // Subject name
+            // Subject slug and name
+            $quiz->subject_slug = $quiz->topic?->subject?->slug ?? null;
             $quiz->subject_name = $quiz->topic?->subject?->name ?? null;
 
             return $quiz;

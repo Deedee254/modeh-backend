@@ -17,14 +17,12 @@ class SocialAuthService
                        ->where('social_provider', $provider)
                        ->first();
 
-            // If we didn't find a social-linked user, try to find an existing
-            // account by email and attach the social fields. This prevents
-            // creating duplicate accounts when a user previously signed up
-            // with the same email.
+            // If we didn't find a social-linked user, only link by email if verified
+            // (prevents account takeover via provider email collision)
             if (!$user) {
                 $email = $socialUser->getEmail();
                 if ($email) {
-                    $user = User::where('email', $email)->first();
+                    $user = User::whereEmail($email)->whereNotNull('email_verified_at')->first();
                 }
             }
 

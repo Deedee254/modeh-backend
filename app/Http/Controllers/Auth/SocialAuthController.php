@@ -23,9 +23,7 @@ class SocialAuthController extends Controller
      */
     public function redirect(Request $request, string $provider)
     {
-        // If a 'next' URL is provided, store it in the session to redirect after login.
         if ($request->has('next')) {
-            // Use a specific session key to avoid conflicts.
             session(['auth_redirect_url' => $request->input('next')]);
         }
 
@@ -41,16 +39,11 @@ class SocialAuthController extends Controller
             $socialUser = Socialite::driver($provider)->user();
             $user = $this->socialAuthService->findOrCreateUser($socialUser, $provider);
 
-            // Log the user into the session with persistent login
             Auth::login($user, true);
-
-            // Regenerate session for security (prevents session fixation attacks)
             $request->session()->regenerate();
 
-            // Load user with onboarding relationship
             $user->load('onboarding');
 
-            // Ensure onboarding record exists for users who need it
             $hasRole = !empty($user->role);
             $needsOnboarding = !$hasRole || !$user->is_profile_completed;
             
@@ -60,7 +53,7 @@ class SocialAuthController extends Controller
                     [
                         'profile_completed' => false,
                         'institution_added' => false,
-                        'role_selected' => !empty($user->role),
+                        'role_selected' => $hasRole,
                         'subject_selected' => false,
                         'grade_selected' => false,
                         'completed_steps' => ['social_auth'],
@@ -70,32 +63,23 @@ class SocialAuthController extends Controller
                 $user->load('onboarding');
             }
 
-            $requiresCompletion = $needsOnboarding;
-            $nextStep = $this->determineNextStep($user);
+            // Store state in session (secure, not in query params)
+            session([
+                'oauth_user_id' => $user->id,
+                'oauth_requires_onboarding' => $needsOnboarding,
+                'oauth_next_step' => $this->determineNextStep($user),
+            ]);
 
-            // If the request expects JSON (API/client), return JSON with user data
             if ($request->wantsJson() || $request->ajax() || str_contains($request->header('accept',''), '/json')) {
                 return response()->json([
                     'user' => $user,
-                    'requires_profile_completion' => $requiresCompletion,
-                    'next_step' => $nextStep,
+                    'requires_profile_completion' => $needsOnboarding,
+                    'next_step' => session('oauth_next_step'),
                 ], 200);
             }
 
-            // Browser OAuth flow: redirect back to frontend
             $frontend = env('FRONTEND_APP_URL', config('app.url') ?? 'http://localhost:3000');
-            $nextUrl = session()->pull('auth_redirect_url', '/auth/callback');
-
-            if (!str_starts_with($nextUrl, '/')) {
-                $nextUrl = '/auth/callback';
-            }
-
-            $query = http_build_query([
-                'requires_profile_completion' => $requiresCompletion ? '1' : '0',
-                'next_step' => $nextStep,
-            ]);
-
-            $redirectUrl = rtrim($frontend, '/') . $nextUrl . '?' . $query;
+            $redirectUrl = rtrim($frontend, '/') . '/auth/callback';
             return redirect()->to($redirectUrl);
 
         } catch (\Exception $e) {
