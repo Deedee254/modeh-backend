@@ -37,6 +37,11 @@ Route::middleware('web')->group(function () {
 Route::get('/quizzes', [\App\Http\Controllers\Api\QuizController::class, 'index']);
 // Public quiz show (safe for anonymous users; attempt payload strips answers)
 Route::get('/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'show']);
+
+// Guest quiz endpoints - for free quizzes only, no authentication required
+Route::get('/quizzes/{quiz}/questions', [\App\Http\Controllers\Api\GuestQuizController::class, 'getQuestions']);
+Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\GuestQuizController::class, 'submit'])->middleware('throttle:30,1');
+
 // Public grades listing for frontend
 Route::get('/grades', [\App\Http\Controllers\Api\GradeController::class, 'index']);
 // Public levels listing (grouping of grades)
