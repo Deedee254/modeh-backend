@@ -418,6 +418,10 @@ class QuizController extends Controller
         if ($gradeId = $request->get('grade_id')) {
             $query->where('grade_id', $gradeId);
         }
+        // filter by paid/free status (frontend can pass is_paid=0 or is_paid=1)
+        if ($request->has('is_paid')) {
+            $query->where('is_paid', $request->boolean('is_paid'));
+        }
         if (!is_null($request->get('approved'))) {
             $query->where('is_approved', (bool) $request->get('approved'));
         }
