@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Quiz;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class GuestQuizController extends Controller
 {
@@ -136,6 +137,60 @@ class GuestQuizController extends Controller
         return response()->json([
             'success' => true,
             'attempt' => $result
+        ]);
+    }
+
+    /**
+     * Mark a single question for a guest (server-side) without exposing all answers.
+     * Accepts: question_id, selected (id or array), guest_identifier (optional)
+     */
+    public function markQuestion(Request $request, Quiz $quiz)
+    {
+        $v = Validator::make($request->all(), [
+            'question_id' => 'required|integer',
+            'selected' => 'nullable',
+            'guest_identifier' => 'nullable|string',
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['error' => 'Invalid input', 'errors' => $v->errors()], 422);
+        }
+
+        $questionId = (int) $request->get('question_id');
+        $selected = $request->get('selected');
+
+        $question = $quiz->questions()->where('id', $questionId)->first();
+        if (!$question) {
+            return response()->json(['error' => 'Question not found'], 404);
+        }
+
+        // Determine correct answers for question
+        if (is_array($question->answers)) {
+            $correctAnswers = $question->answers;
+        } elseif (is_string($question->answers) && $question->answers !== '') {
+            $decoded = json_decode($question->answers, true);
+            $correctAnswers = is_array($decoded) ? $decoded : [];
+        } else {
+            $correctAnswers = [];
+        }
+
+        $optionMap = $this->buildOptionMap($question);
+
+        $isCorrect = false;
+        if (is_array($selected)) {
+            $submitted = $this->normalizeArrayForCompare($selected, $optionMap);
+            $correctNorm = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
+            $isCorrect = ($submitted == $correctNorm);
+        } else {
+            $submitted = $this->normalizeForCompare($selected, $optionMap);
+            $correctNormArr = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
+            $isCorrect = in_array($submitted, $correctNormArr);
+        }
+
+        return response()->json([
+            'correct' => (bool) $isCorrect,
+            'explanation' => $question->explanation ?? null,
+            'correct_answer' => $this->formatAnswer($question->answers),
         ]);
     }
 

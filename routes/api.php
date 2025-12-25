@@ -41,6 +41,8 @@ Route::get('/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizAttemptController::
 // Guest quiz endpoints - for free quizzes only, no authentication required
 Route::get('/quizzes/{quiz}/questions', [\App\Http\Controllers\Api\GuestQuizController::class, 'getQuestions']);
 Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\GuestQuizController::class, 'submit'])->middleware('throttle:30,1');
+// Per-question marking for guest users (allows server-side marking without exposing all answers)
+Route::post('/quizzes/{quiz}/mark', [\App\Http\Controllers\Api\GuestQuizController::class, 'markQuestion'])->middleware('throttle:60,1');
 
 // Public grades listing for frontend
 Route::get('/grades', [\App\Http\Controllers\Api\GradeController::class, 'index']);
