@@ -93,7 +93,7 @@ Route::get('/institutions/{institution}', [\App\Http\Controllers\Api\Institution
 // Public invitation endpoint - allows unauthenticated users to view invitation details
 Route::get('/institutions/invitation/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'getInvitationDetails']);
 
-Route::middleware(['web', 'auth:sanctum'])->group(function () {
+Route::middleware(['auth:sanctum'])->group(function () {
     // Institution creation (authenticated users become institution-manager)
     Route::post('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'store']);
     // Institution update (institution manager only)
