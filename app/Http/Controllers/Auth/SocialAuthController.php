@@ -39,15 +39,20 @@ class SocialAuthController extends Controller
             $socialUser = Socialite::driver($provider)->user();
             $user = $this->socialAuthService->findOrCreateUser($socialUser, $provider);
 
-            Auth::login($user, true);
+            // Ensure we have a fresh session before assigning the user to it.
+            // This is safer for browser-based redirect flows.
             $request->session()->regenerate();
+
+            Auth::login($user, true);
+
+            // Persist the session changes immediately
             $request->session()->save();
 
             $user->load('onboarding');
 
             $hasRole = !empty($user->role);
             $needsOnboarding = !$hasRole || !$user->is_profile_completed;
-            
+
             if ($needsOnboarding && !$user->onboarding) {
                 UserOnboarding::firstOrCreate(
                     ['user_id' => $user->id],
@@ -71,7 +76,7 @@ class SocialAuthController extends Controller
                 'oauth_next_step' => $this->determineNextStep($user),
             ]);
 
-            if ($request->wantsJson() || $request->ajax() || str_contains($request->header('accept',''), '/json')) {
+            if ($request->wantsJson() || $request->ajax() || str_contains($request->header('accept', ''), '/json')) {
                 return response()->json([
                     'user' => $user,
                     'requires_profile_completion' => $needsOnboarding,
@@ -81,10 +86,10 @@ class SocialAuthController extends Controller
 
             $frontend = config('app.frontend_url');
             $redirectUrl = rtrim($frontend, '/') . '/auth/callback';
-            
+
             // Explicitly save session one more time to be absolutely sure
             $request->session()->save();
-            
+
             return redirect()->to($redirectUrl);
 
         } catch (\Exception $e) {

@@ -8,11 +8,17 @@ use App\Filament\Resources\TournamentResource;
 use App\Models\Tournament;
 
 Route::middleware('web')->group(function () {
-    Route::get('/', [AuthWebController::class, 'showLogin'])->name('login');
-    Route::get('/login', [AuthWebController::class, 'showLogin']);
-    Route::post('/login', [AuthWebController::class, 'login']);
-    Route::post('/logout', [AuthWebController::class, 'logout']);
-    Route::get('/invitation/{token}', [App\Http\Controllers\InvitationController::class, 'show'])->name('invitation.show');
+	Route::get('/', [AuthWebController::class, 'showLogin'])->name('login');
+	Route::get('/login', [AuthWebController::class, 'showLogin']);
+	Route::post('/login', [AuthWebController::class, 'login']);
+	Route::post('/logout', [AuthWebController::class, 'logout']);
+	Route::get('/invitation/{token}', [App\Http\Controllers\InvitationController::class, 'show'])->name('invitation.show');
+
+	// Social Authentication Routes (moved from api.php to avoid API middleware interference)
+	Route::prefix('api')->group(function () {
+		Route::get('auth/{provider}/redirect', [App\Http\Controllers\Auth\SocialAuthController::class, 'redirect']);
+		Route::get('auth/{provider}/callback', [App\Http\Controllers\Auth\SocialAuthController::class, 'callback']);
+	});
 });
 
 Route::get('/dashboard', [AuthWebController::class, 'dashboard'])->middleware('auth');
@@ -23,7 +29,7 @@ Route::post('/broadcasting/auth', function (Request $request) {
 	$channel = $request->input('channel_name');
 	$user = $request->user();
 
-	if (! $user) {
+	if (!$user) {
 		return response()->json(['message' => 'Unauthenticated'], 403);
 	}
 
@@ -62,19 +68,19 @@ Route::post('/broadcasting/auth', function (Request $request) {
 // and then redirect the user to the frontend where they can continue (login/register).
 Route::get('/email/verify/{id}/{hash}', function (Request $request, $id, $hash) {
 	// Validate the signed URL (expiration and signature)
-	if (! $request->hasValidSignature()) {
+	if (!$request->hasValidSignature()) {
 		$frontend = env('FRONTEND_URL', config('app.url'));
 		return redirect($frontend . '/email-verified?status=invalid_signature');
 	}
 
 	$user = \App\Models\User::find($id);
-	if (! $user) {
+	if (!$user) {
 		$frontend = env('FRONTEND_URL', config('app.url'));
 		return redirect($frontend . '/email-verified?status=user_not_found');
 	}
 
 	// The verification hash should match the sha1 of the user's email (default Laravel)
-	if (! hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
+	if (!hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
 		$frontend = env('FRONTEND_URL', config('app.url'));
 		return redirect($frontend . '/email-verified?status=invalid_hash');
 	}
@@ -105,7 +111,8 @@ Route::get('/email/verify/{id}/{hash}', function (Request $request, $id, $hash) 
 
 	$frontend = env('FRONTEND_URL', config('app.url'));
 	$url = $frontend . '/email-verified?token=' . $token . '&email=' . urlencode($user->email);
-	if ($ftoken) $url .= '&ftoken=' . $ftoken . '&invite=' . urlencode($inv->invitation_token);
+	if ($ftoken)
+		$url .= '&ftoken=' . $ftoken . '&invite=' . urlencode($inv->invitation_token);
 	return redirect($url);
 })->middleware('signed')->name('verification.verify');
 

@@ -26,11 +26,8 @@ Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->m
 Route::post('/login', [AuthController::class, 'login'])->middleware('web');
 
 // Logout and authenticated routes also need the session middleware.
-// Social authentication routes
 Route::middleware('web')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::get('auth/{provider}/redirect', [SocialAuthController::class, 'redirect']);
-    Route::get('auth/{provider}/callback', [SocialAuthController::class, 'callback']);
 });
 
 // Public read-only endpoints: allow anonymous users to fetch lists used by the frontend
