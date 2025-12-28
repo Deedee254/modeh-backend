@@ -116,7 +116,11 @@ class GuestQuizController extends Controller
         // Calculate score
         $scoringResult = $this->calculateScore($validated['answers'], $questions);
 
-        // Prepare result payload (will be stored in localStorage on frontend)
+        // Prepare minimal result payload for guests (no per-question breakdown)
+        // Use quiz questions count as total so omitted answers are treated as incorrect
+        $totalQuestions = $questions->count();
+        $correctCount = $scoringResult['correct_count'] ?? 0;
+
         $result = [
             'quiz_id' => $quiz->id,
             'quiz_title' => $quiz->title,
@@ -124,14 +128,12 @@ class GuestQuizController extends Controller
             'guest_identifier' => $validated['guest_identifier'],
             'score' => $scoringResult['score'],
             'percentage' => $scoringResult['score'],
-            'correct_count' => $scoringResult['correct_count'],
-            'incorrect_count' => count($validated['answers']) - $scoringResult['correct_count'],
-            'total_questions' => count($validated['answers']),
-            'total_marks' => $scoringResult['total_marks'],
-            'earned_marks' => $scoringResult['earned_marks'],
+            'correct_count' => $correctCount,
+            // Treat unanswered/omitted questions as incorrect by deriving incorrect count
+            'incorrect_count' => max(0, $totalQuestions - $correctCount),
+            'total_questions' => $totalQuestions,
             'time_taken' => $validated['time_taken'] ?? 0,
             'attempted_at' => now()->toIso8601String(),
-            'results' => $this->formatResultsWithExplanations($scoringResult['results'], $questions)
         ];
 
         return response()->json([
