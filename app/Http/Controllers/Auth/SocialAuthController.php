@@ -41,6 +41,7 @@ class SocialAuthController extends Controller
 
             Auth::login($user, true);
             $request->session()->regenerate();
+            $request->session()->save();
 
             $user->load('onboarding');
 
@@ -78,8 +79,12 @@ class SocialAuthController extends Controller
                 ], 200);
             }
 
-            $frontend = env('FRONTEND_APP_URL', config('app.url') ?? 'http://localhost:3000');
+            $frontend = config('app.frontend_url');
             $redirectUrl = rtrim($frontend, '/') . '/auth/callback';
+            
+            // Explicitly save session one more time to be absolutely sure
+            $request->session()->save();
+            
             return redirect()->to($redirectUrl);
 
         } catch (\Exception $e) {

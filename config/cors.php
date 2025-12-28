@@ -10,7 +10,7 @@ return [
     )))),
 
     // Optionally allow all subdomains of modeh.co.ke:
-    'allowed_origins_patterns' => ['/^https:\/\/.*\.modeh\.co\.ke$/'],
+    'allowed_origins_patterns' => ['/^https:\/\/(.*\.)?modeh\.co\.ke$/'],
 
     'allowed_headers' => ['*'],
     'exposed_headers' => [],
