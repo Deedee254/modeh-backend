@@ -10,6 +10,22 @@ use Illuminate\Support\Str;
 
 class AffiliateController extends Controller
 {
+    public function me(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(null, 401);
+
+        $affiliate = $user->affiliate()->first();
+
+        // Return a consistent shape when no affiliate exists so frontends don't get `null`.
+        // Frontend expects at least the referral_code attribute; return it as null if absent.
+        if (!$affiliate) {
+            return response()->json(['referral_code' => null], 200);
+        }
+
+        return response()->json($affiliate);
+    }
+
     public function stats(Request $request)
     {
         $user = $request->user();

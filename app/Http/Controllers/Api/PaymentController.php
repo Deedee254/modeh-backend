@@ -25,12 +25,8 @@ class PaymentController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
-        // Lookup payment settings
-        $setting = PaymentSetting::where('gateway', 'mpesa')->first();
-        $config = $setting ? ($setting->config ?? []) : [];
-
-        // Use MpesaService
-        $service = new MpesaService($config);
+        // Use MpesaService with config from env
+        $service = new MpesaService(config('services.mpesa'));
         $amount = $subscription->package->price ?? 0;
         $phone = $request->phone ?? ($subscription->gateway_meta['phone'] ?? null) ?? ($subscription->user->phone ?? null);
         $res = $service->initiateStkPush($phone, $amount, 'Subscription-'.$subscription->id);

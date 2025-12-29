@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Subject;
 use App\Models\Grade;
 use App\Models\Quiz;
+use App\Http\Resources\SubjectResource;
+use App\Http\Resources\TopicResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 
 class SubjectController extends Controller
 {
@@ -20,77 +23,73 @@ class SubjectController extends Controller
     // List subjects with pagination, search and quizzes_count
     public function index(Request $request)
     {
-        // Load topic counts and quizzes per topic so we can compute accurate quizzes_count
-        $query = Subject::query()
-                ->where('is_approved', true)
-                ->withCount('topics')
-                ->with(['topics' => function ($q) { $q->where('is_approved', true)->withCount('quizzes'); }]);
+        $cacheKey = 'subjects_index_' . md5(serialize($request->all()));
 
-        if ($q = $request->get('q')) {
-            $query->where('name', 'like', "%{$q}%");
-        }
+        $data = Cache::remember($cacheKey, now()->addMinutes(10), function() use ($request) {
+            // Load topic counts and quizzes per topic so we can compute accurate quizzes_count
+            $query = Subject::query()
+                    ->where('is_approved', true)
+                    ->withCount('topics')
+                    ->with(['grade', 'representativeQuiz', 'topics' => function ($q) { 
+                        $q->where('is_approved', true)->withCount('quizzes'); 
+                    }]);
 
-        // Filter by grade_id if provided
-        if ($gradeId = $request->get('grade_id')) {
-            $query->where('grade_id', $gradeId);
-        }
+            if ($q = $request->get('q')) {
+                $query->where('name', 'like', "%{$q}%");
+            }
 
-        // Filter by level_id if provided
-        if ($levelId = $request->get('level_id')) {
-            $query->whereHas('grade', function ($q) use ($levelId) {
-                $q->where('level_id', $levelId);
+            // Filter by grade_id if provided
+            if ($gradeId = $request->get('grade_id')) {
+                $query->where('grade_id', $gradeId);
+            }
+
+            // Filter by level_id if provided
+            if ($levelId = $request->get('level_id')) {
+                $query->whereHas('grade', function ($q) use ($levelId) {
+                    $q->where('level_id', $levelId);
+                });
+            }
+
+            $query->orderBy('name', 'asc');
+            $perPage = max(1, (int)$request->get('per_page', 50));
+            
+            $paginated = $query->paginate($perPage);
+
+            // Compute counts and assign representative images
+            $paginated->getCollection()->each(function ($s) {
+                $s->quizzes_count = $s->topics->sum('quizzes_count');
+                
+                if (empty($s->image) && $s->representativeQuiz) {
+                    $s->quizzes_cover_image = Storage::url($s->representativeQuiz->cover_image);
+                }
             });
-        }
 
-        $query->orderBy('created_at', 'desc');
-        $perPage = max(1, (int)$request->get('per_page', 50)); // More for browsing
-        $data = $query->paginate($perPage);
-
-        // Attach a representative image for each subject when available
-        $data->getCollection()->transform(function ($s) {
-                // Compute accurate quizzes_count per subject (sum of quizzes on its topics)
-                $s->topics_count = $s->topics_count ?? (is_array($s->topics) ? count($s->topics) : ($s->topics->count() ?? 0));
-                try {
-                    $s->quizzes_count = $s->topics->sum('quizzes_count');
-                } catch (\Throwable $_) {
-                    $s->quizzes_count = 0;
-                }
-            // preserve any original image attribute if present
-            $orig = $s->getAttribute('image') ?? null;
-            $s->image = null;
-            if (!empty($orig)) {
-                try { $s->image = Storage::url($orig); } catch (\Exception $e) { $s->image = null; }
-            }
-            // Otherwise, try to find a quiz under this subject that has a cover_image
-            if (empty($s->image)) {
-                $quiz = Quiz::whereHas('topic', function ($q) use ($s) { $q->where('subject_id', $s->id); })
-                    ->whereNotNull('cover_image')
-                    ->orderBy('created_at', 'desc')
-                    ->first();
-                if ($quiz && $quiz->cover_image) {
-                    try { $s->image = Storage::url($quiz->cover_image); } catch (\Exception $e) { $s->image = null; }
-                }
-            }
-            return $s;
+            return $paginated;
         });
 
-        return response()->json(['subjects' => $data]);
+        return SubjectResource::collection($data);
     }
 
     // Show a single subject with topics and representative image
     public function show(Subject $subject)
     {
-        $subject->load(['topics' => function($q) { $q->where('is_approved', true)->withCount('quizzes'); }]);
-        // representative image
-        $orig = $subject->getAttribute('image') ?? null;
-        $subject->image = null;
-        if (!empty($orig)) {
-            try { $subject->image = Storage::url($orig); } catch (\Exception $e) { $subject->image = null; }
-        }
-        // Provide explicit counts so clients have a consistent shape
-        $subject->topics_count = collect($subject->topics)->count();
-        $subject->quizzes_count = collect($subject->topics)->sum('quizzes_count');
-        return response()->json(['subject' => $subject]);
+        $cacheKey = 'subject_show_' . $subject->id;
+
+        $subject = Cache::remember($cacheKey, now()->addMinutes(10), function() use ($subject) {
+            $subject->load(['grade', 'representativeQuiz', 'topics' => function($q) { 
+                $q->where('is_approved', true)->withCount('quizzes'); 
+            }]);
+            
+            $subject->quizzes_count = $subject->topics->sum('quizzes_count');
+
+            if (empty($subject->image) && $subject->representativeQuiz) {
+                $subject->quizzes_cover_image = Storage::url($subject->representativeQuiz->cover_image);
+            }
+            
+            return $subject;
+        });
+
+        return new SubjectResource($subject);
     }
 
     // quiz-master proposes a subject under a grade
@@ -163,39 +162,31 @@ class SubjectController extends Controller
     // Get topics for a specific subject
     public function topics(Request $request, Subject $subject)
     {
-        $query = $subject->topics()
-            ->where('is_approved', true)
-            ->withCount('quizzes');
+        $cacheKey = 'subject_topics_' . $subject->id . '_' . md5(serialize($request->all()));
 
-        if ($request->has('approved')) {
-            $query->where('is_approved', (bool)$request->get('approved'));
-        }
+        return Cache::remember($cacheKey, now()->addMinutes(10), function() use ($request, $subject) {
+            $query = $subject->topics()
+                ->where('is_approved', true)
+                ->withCount('quizzes')
+                ->with(['representativeQuiz']);
 
-        $perPage = min(100, max(1, (int)$request->get('per_page', 10)));
-        $data = $query->paginate($perPage);
-
-        // Attach storage URLs for any images
-        $data->getCollection()->transform(function ($topic) {
-            if ($topic->image) {
-                try {
-                    $topic->image = Storage::url($topic->image);
-                } catch (\Exception $e) {
-                    $topic->image = null;
-                }
+            if ($request->has('approved')) {
+                $query->where('is_approved', (bool)$request->get('approved'));
             }
-            return $topic;
-        });
 
-        return response()->json([
-            'topics' => $data->items(),
-            'meta' => [
-                'current_page' => $data->currentPage(),
-                'from' => $data->firstItem(),
-                'last_page' => $data->lastPage(),
-                'per_page' => $data->perPage(),
-                'to' => $data->lastItem(),
-                'total' => $data->total()
-            ]
-        ]);
+            $perPage = min(100, max(1, (int)$request->get('per_page', 10)));
+            $data = $query->paginate($perPage);
+
+            // Populate quizzes_cover_image for Resource
+            $data->getCollection()->each(function($t) {
+                if (empty($t->image) && $t->representativeQuiz) {
+                    $t->quizzes_cover_image = Storage::url($t->representativeQuiz->cover_image);
+                }
+            });
+
+            return [
+                'topics' => TopicResource::collection($data)->response()->getData(true)
+            ];
+        });
     }
 }

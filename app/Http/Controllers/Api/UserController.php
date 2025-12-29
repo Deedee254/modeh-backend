@@ -6,9 +6,37 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Services\OnboardingService;
+use App\Http\Resources\UserResource;
+use Illuminate\Support\Facades\Cache;
 
 class UserController extends Controller
 {
+    public function me(Request $request)
+    {
+        $user = $request->user();
+        $cacheKey = "user_me_{$user->id}";
+
+        return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($user) {
+            $relations = ['affiliate', 'institutions', 'onboarding'];
+            
+            if ($user->role === 'quiz-master') {
+                $relations[] = 'quizMasterProfile.grade';
+                $relations[] = 'quizMasterProfile.level';
+                $relations[] = 'quizMasterProfile.institution';
+                $relations[] = 'quizMasterProfile.subjectModels';
+            } elseif ($user->role === 'quizee') {
+                $relations[] = 'quizeeProfile.grade';
+                $relations[] = 'quizeeProfile.level';
+                $relations[] = 'quizeeProfile.institution';
+                $relations[] = 'quizeeProfile.subjectModels';
+            }
+
+            $user->loadMissing($relations);
+            
+            return new UserResource($user);
+        });
+    }
+
     public function search(Request $request)
     {
         $q = $request->get('q');
@@ -102,10 +130,13 @@ class UserController extends Controller
 
         $user->save();
 
+        // Clear me cache
+        Cache::forget("user_me_{$user->id}");
+
         // Load relationships for full response
         $user->loadMissing(['quizeeProfile', 'quizMasterProfile', 'affiliate', 'institutions']);
 
-        return response()->json($user);
+        return new UserResource($user);
     }
 
     public function changePassword(Request $request)

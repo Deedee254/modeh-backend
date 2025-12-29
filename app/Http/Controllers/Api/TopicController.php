@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Topic;
 use App\Models\Subject;
+use App\Models\Quiz;
+use App\Http\Resources\TopicResource;
+use App\Http\Resources\QuizResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
-use App\Models\Quiz;
+use Illuminate\Support\Facades\Cache;
 
 class TopicController extends Controller
 {
@@ -18,168 +21,114 @@ class TopicController extends Controller
         $this->middleware('auth:sanctum')->except(['index', 'show', 'quizzes']);
     }
 
-    // quiz-master uploads an image for a topic
-    public function uploadImage(Request $request, Topic $topic)
-    {
-        $user = $request->user();
-        if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
-        if ($topic->created_by !== $user->id && empty($user->is_admin)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        $v = Validator::make($request->all(), [
-            'image' => 'required|file|image|max:5120'
-        ]);
-        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
-
-        $path = $request->file('image')->store('topics', 'public');
-        $topic->image = $path;
-        $topic->save();
-
-        return response()->json(['topic' => $topic]);
-    }
-
     // List topics; optionally filter approved only via ?approved=1
     public function index(Request $request)
     {
         $user = $request->user();
-    // eager-load subject and the subject's grade so frontend can read nested grade info
-    $query = Topic::query()->with(['subject.grade'])->withCount('quizzes');
+        $cacheKey = 'topics_index_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
 
-        if ($q = $request->get('q')) {
-            $query->where('name', 'like', "%{$q}%");
-        }
+        $data = Cache::remember($cacheKey, now()->addMinutes(10), function() use ($request, $user) {
+            $query = Topic::query()->with(['subject.grade', 'representativeQuiz'])->withCount('quizzes');
 
-        if (!is_null($request->get('approved'))) {
-            $query->where('is_approved', (bool)$request->get('approved'));
-        }
-
-        // anonymous users see only approved topics.
-        // Authenticated non-admin users should see approved topics plus any topics they created.
-        if (!$user) {
-            $query->where('is_approved', true);
-        } else {
-            if (empty($user->is_admin) || !$user->is_admin) {
-                $query->where(function ($q) use ($user) {
-                    $q->where('is_approved', true)
-                      ->orWhere('created_by', $user->id);
-                });
+            if ($q = $request->get('q')) {
+                $query->where('name', 'like', "%{$q}%");
             }
-            // admins see all topics (no additional where)
-        }
 
-        // Allow frontend to filter topics by grade_id or level_id via query params.
-        // Example: /api/topics?grade_id=12  or /api/topics?level_id=3
-        if ($gradeId = $request->get('grade_id')) {
-            $query->whereHas('subject', function ($q) use ($gradeId) {
-                $q->where('grade_id', $gradeId);
-            });
-        }
-
-        if ($levelId = $request->get('level_id')) {
-            $query->whereHas('subject', function ($q) use ($levelId) {
-                $q->whereHas('grade', function ($g) use ($levelId) {
-                    $g->where('level_id', $levelId);
-                });
-            });
-        }
-
-        $query->orderBy('created_at', 'desc');
-
-        $transformer = function ($t) {
-            $orig = $t->getAttribute('image') ?? null;
-            $t->image = null;
-            if (!empty($orig)) {
-                try { $t->image = Storage::url($orig); } catch (\Exception $e) { $t->image = null; }
+            if (!is_null($request->get('approved'))) {
+                $query->where('is_approved', (bool)$request->get('approved'));
             }
-            if (empty($t->image)) {
-                $quiz = Quiz::where('topic_id', $t->id)->whereNotNull('cover_image')->orderBy('created_at', 'desc')->first();
-                if ($quiz && $quiz->cover_image) {
-                    try { $t->image = Storage::url($quiz->cover_image); } catch (\Exception $e) { $t->image = null; }
+
+            if (!$user) {
+                $query->where('is_approved', true);
+            } else {
+                if (empty($user->is_admin) || !$user->is_admin) {
+                    $query->where(function ($q) use ($user) {
+                        $q->where('is_approved', true)
+                          ->orWhere('created_by', $user->id);
+                    });
                 }
             }
-            // Attach grade name if subject->grade is available to make it easier for clients
-            try {
-                if (isset($t->subject) && isset($t->subject->grade) && $t->subject->grade) {
-                    $t->grade = $t->subject->grade;
-                    $t->grade_name = $t->subject->grade->name ?? ($t->subject->grade->display_name ?? null);
-                } elseif (isset($t->grade_name) && !$t->grade_name) {
-                    $t->grade_name = $t->grade_name ?? null;
-                }
-            } catch (\Exception $e) {
-                // ignore
+
+            if ($gradeId = $request->get('grade_id')) {
+                $query->whereHas('subject', function ($q) use ($gradeId) {
+                    $q->where('grade_id', $gradeId);
+                });
             }
 
-            return $t;
-        };
+            if ($levelId = $request->get('level_id')) {
+                $query->whereHas('subject', function ($q) use ($levelId) {
+                    $q->whereHas('grade', function ($g) use ($levelId) {
+                        $g->where('level_id', $levelId);
+                    });
+                });
+            }
 
-        // If filtering by level or grade, the frontend expects a full list.
-        if ($request->has('level_id') || $request->has('grade_id')) {
-            $topics = $query->get();
-            $topics->transform($transformer);
-            return response()->json($topics);
-        }
+            $query->orderBy('name', 'asc');
 
-        // Default behavior is to paginate
-        $perPage = max(1, (int)$request->get('per_page', 10));
-        $paginatedTopics = $query->paginate($perPage);
-        $paginatedTopics->getCollection()->transform($transformer);
+            // Prefetch images to avoid N+1
+            $collection = ($request->has('level_id') || $request->has('grade_id')) 
+                ? $query->get() 
+                : $query->paginate(max(1, (int)$request->get('per_page', 20)));
 
-        return response()->json(['topics' => $paginatedTopics]);
+            $items = ($collection instanceof \Illuminate\Pagination\LengthAwarePaginator) 
+                ? $collection->getCollection() 
+                : $collection;
+
+            $items->each(function($t) {
+                if (empty($t->image) && $t->representativeQuiz) {
+                    $t->quizzes_cover_image = Storage::url($t->representativeQuiz->cover_image);
+                }
+            });
+
+            return $collection;
+        });
+
+        return TopicResource::collection($data);
     }
 
     // Show a single topic (public-safe view)
     public function show(Topic $topic)
     {
-    // include subject and its grade for richer client-side rendering
-    $topic->load('subject.grade');
-        // Attach image url if present
-        $orig = $topic->getAttribute('image') ?? null;
-        $topic->image = null;
-        if (!empty($orig)) {
-            try { $topic->image = Storage::url($orig); } catch (\Exception $e) { $topic->image = null; }
-        }
-        // quiz count
-        $topic->quizzes_count = Quiz::where('topic_id', $topic->id)->count();
-        // attach grade name if available
-        if ($topic->subject && $topic->subject->grade) {
-            $topic->grade = $topic->subject->grade;
-            $topic->grade_name = $topic->subject->grade->name ?? ($topic->subject->grade->display_name ?? null);
-        }
-        return response()->json(['topic' => $topic]);
+        $cacheKey = 'topic_show_' . $topic->id;
+
+        $cachedData = Cache::remember($cacheKey, now()->addMinutes(10), function() use ($topic) {
+            $topic->load(['subject.grade', 'representativeQuiz']);
+            $topic->quizzes_count = Quiz::where('topic_id', $topic->id)->count();
+            
+            if (empty($topic->image) && $topic->representativeQuiz) {
+                $topic->quizzes_cover_image = Storage::url($topic->representativeQuiz->cover_image);
+            }
+            return $topic->toArray();
+        });
+
+        return response()->json($cachedData);
     }
 
     // Get quizzes for a specific topic
     public function quizzes(Request $request, Topic $topic)
     {
-        $query = Quiz::where('topic_id', $topic->id)
-                    ->where('is_approved', true)
-                    ->with(['topic', 'subject', 'grade', 'level', 'author'])
-                    ->withCount(['attempts']);
+        $user = $request->user();
+        $cacheKey = 'topic_quizzes_' . $topic->id . '_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
 
-        $perPage = min(100, max(1, (int)$request->get('per_page', 10)));
-        $data = $query->paginate($perPage);
+        return Cache::remember($cacheKey, now()->addMinutes(10), function() use ($request, $topic, $user) {
+            $query = Quiz::where('topic_id', $topic->id)
+                        ->where('is_approved', true)
+                        ->with(['topic', 'subject', 'grade', 'level', 'author'])
+                        ->withCount(['attempts']);
 
-        // Attach storage URLs for any cover images and slugs
-        $data->getCollection()->transform(function ($quiz) {
-            if ($quiz->cover_image) {
-                try {
-                    $quiz->cover_image = Storage::url($quiz->cover_image);
-                } catch (\Exception $e) {
-                    $quiz->cover_image = null;
-                }
+            if ($user) {
+                $query->withExists(['likes as liked' => function($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                }]);
             }
-            
-            // Add slugs for routing
-            $quiz->grade_slug = $quiz->grade?->slug ?? null;
-            $quiz->level_slug = $quiz->level?->slug ?? null;
-            $quiz->topic_slug = $quiz->topic?->slug ?? null;
-            $quiz->subject_slug = $quiz->topic?->subject?->slug ?? null;
-            
-            return $quiz;
-        });
 
-        return response()->json(['quizzes' => $data]);
+            $perPage = min(100, max(1, (int)$request->get('per_page', 10)));
+            $data = $query->paginate($perPage);
+
+            return [
+                'quizzes' => QuizResource::collection($data)->response()->getData(true)
+            ];
+        });
     }
 
     // quiz-master creates a topic under a subject (subject must be approved)

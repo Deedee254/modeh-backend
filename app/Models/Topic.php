@@ -42,4 +42,9 @@ class Topic extends Model
     {
         return $this->hasMany(Quiz::class);
     }
+
+    public function representativeQuiz()
+    {
+        return $this->hasOne(Quiz::class)->whereNotNull('cover_image')->latestOfMany();
+    }
 }

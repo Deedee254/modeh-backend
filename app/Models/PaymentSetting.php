@@ -9,10 +9,5 @@ class PaymentSetting extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['gateway','config','revenue_share'];
-
-    protected $casts = [
-        'config' => 'array',
-        'revenue_share' => 'decimal:2',
-    ];
+    protected $fillable = ['gateway', 'revenue_share'];
 }

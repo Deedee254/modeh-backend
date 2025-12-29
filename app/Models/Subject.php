@@ -63,6 +63,11 @@ class Subject extends Model
         return $this->hasMany(Topic::class);
     }
 
+    public function representativeQuiz()
+    {
+        return $this->hasOne(Quiz::class)->whereNotNull('cover_image')->latestOfMany();
+    }
+
     /**
      * Owner / creator relationship helper
      *

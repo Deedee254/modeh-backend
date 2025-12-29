@@ -52,7 +52,8 @@ class InteractionController extends Controller
             }
         }
 
-        return response()->json(['liked' => true]);
+        $quiz->refresh();
+        return response()->json(['liked' => true, 'likes_count' => $quiz->likes_count]);
     }
 
     public function unlikeQuiz(Request $request, Quiz $quiz)
@@ -66,7 +67,8 @@ class InteractionController extends Controller
             }
         });
 
-        return response()->json(['liked' => false]);
+        $quiz->refresh();
+        return response()->json(['liked' => false, 'likes_count' => $quiz->likes_count]);
     }
 
     public function followQuizMaster(Request $request, QuizMaster $quizMaster)

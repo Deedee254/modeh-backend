@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use App\Models\Package;
 use App\Models\Subscription;
 use Illuminate\Support\Facades\Auth;
-use App\Models\PaymentSetting;
 use App\Services\MpesaService;
 use Illuminate\Support\Facades\Log;
 
@@ -137,8 +136,7 @@ class PackageController extends Controller
             }
 
             try {
-                $setting = PaymentSetting::where('gateway', 'mpesa')->first();
-                $config = $setting ? ($setting->config ?? []) : [];
+                $config = config('services.mpesa');
                 $requiredKeys = ['consumer_key', 'consumer_secret', 'shortcode', 'passkey'];
                 $missing = [];
                 foreach ($requiredKeys as $k) {

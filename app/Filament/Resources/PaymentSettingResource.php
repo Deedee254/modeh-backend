@@ -11,11 +11,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Select;
 use Filament\Tables\Columns\TextColumn;
-use BackedEnum;
-use UnitEnum;
 
 class PaymentSettingResource extends Resource
 {
@@ -26,16 +22,15 @@ class PaymentSettingResource extends Resource
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
-            TextInput::make('gateway')->required(),
-            Select::make('config.environment')->options(['sandbox' => 'Sandbox', 'live' => 'Live'])->required()->default('sandbox'),
-            TextInput::make('config.consumer_key')->label('Consumer Key'),
-            TextInput::make('config.consumer_secret')->label('Consumer Secret'),
-            TextInput::make('config.shortcode')->label('Shortcode'),
-            TextInput::make('config.passkey')->label('Passkey'),
-            TextInput::make('config.callback_url')->label('Callback URL'),
-            Textarea::make('config.raw')->label('Raw JSON (optional)')->hint('Optional raw JSON config, overrides structured fields')->rows(4),
-            \Filament\Forms\Components\Toggle::make('config.simulate')->label('Simulate (sandbox only)')->helperText('When enabled, STK pushes are simulated for local development.'),
-            TextInput::make('revenue_share')->numeric()->default(0)->suffix('%'),
+            TextInput::make('gateway')
+                ->disabled()
+                ->dehydrated()
+                ->helperText('Gateway is read-only. Configure via environment variables.'),
+            TextInput::make('revenue_share')
+                ->numeric()
+                ->default(0)
+                ->suffix('%')
+                ->helperText('Platform revenue share percentage'),
         ]);
     }
 

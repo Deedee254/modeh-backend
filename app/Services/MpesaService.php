@@ -78,7 +78,7 @@ class MpesaService
         return $p;
     }
 
-    public function initiateStkPush(string $phone, float $amount, string $accountRef = null): array
+    public function initiateStkPush(string $phone, float $amount, ?string $accountRef = null): array
     {
         // If simulation flag set in config, return a fake successful response (useful for local dev)
         if (!empty($this->config['simulate'])) {

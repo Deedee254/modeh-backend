@@ -4,6 +4,15 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Auth\SocialAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Models\Quiz;
+
+// Custom route model binding for Quiz: resolve by slug if not numeric, else by ID
+Route::bind('quiz', function ($value) {
+    if (is_numeric($value)) {
+        return Quiz::findOrFail($value);
+    }
+    return Quiz::where('slug', $value)->firstOrFail();
+});
 
 Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->middleware('throttle:5,1');
 Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster'])->middleware('throttle:5,1');
@@ -85,7 +94,7 @@ Route::get('/badges', [\App\Http\Controllers\Api\BadgeController::class, 'index'
 Route::get('/daily-challenges/leaderboard', [\App\Http\Controllers\Api\DailyChallengeController::class, 'leaderboard']);
 
 // Public institutions endpoints
-Route::get('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'index'] ?? function () { return response()->json([], 200); });
+Route::get('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'index']);
 Route::get('/institutions/{institution}', [\App\Http\Controllers\Api\InstitutionController::class, 'show']);
 // Public invitation endpoint - allows unauthenticated users to view invitation details
 Route::get('/institutions/invitation/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'getInvitationDetails']);
@@ -124,146 +133,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/institutions/{institution}/analytics/performance', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsPerformance']);
     Route::get('/institutions/{institution}/analytics/member/{user}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsMember']);
 
-    Route::get('/me', function (Request $request) {
-        $user = $request->user();
-        // Load common relations and profile relationship based on role
-        $relations = ['affiliate', 'institutions'];
-        if ($user->role === 'quiz-master') {
-            $relations[] = 'quizMasterProfile.grade';
-            $relations[] = 'quizMasterProfile.level';
-            $relations[] = 'quizMasterProfile.institution';
-        } elseif ($user->role === 'quizee') {
-            $relations[] = 'quizeeProfile.grade';
-            $relations[] = 'quizeeProfile.level';
-            $relations[] = 'quizeeProfile.institution';
-        }
+    Route::get('/me', [\App\Http\Controllers\Api\UserController::class, 'me']);
 
-        $user->loadMissing($relations);
-
-        // Ensure profile accessors (like subjectModels) are included when serializing
-        if ($user->role === 'quizee' && $user->quizeeProfile) {
-            $user->quizeeProfile->append(['subjectModels']);
-        } elseif ($user->role === 'quiz-master' && $user->quizMasterProfile) {
-            $user->quizMasterProfile->append('subjectModels');
-        }
-
-        // Compute missing profile fields so frontend can guide completion.
-        $missing = [];
-        // role
-        if (empty($user->role)) $missing[] = 'role';
-
-        // institution: consider explicit pivot membership or profile institution text
-        $hasInstitution = false;
-        try {
-            if ($user->institutions && count($user->institutions)) $hasInstitution = true;
-            if (!$hasInstitution) {
-                if ($user->role === 'quizee' && optional($user->quizeeProfile)->institution) $hasInstitution = true;
-                if ($user->role === 'quiz-master' && optional($user->quizMasterProfile)->institution) $hasInstitution = true;
-            }
-        } catch (\Throwable $_) {}
-        if (! $hasInstitution) $missing[] = 'institution';
-
-        // role-specific optional checks
-        if ($user->role === 'quizee') {
-            if (! optional($user->quizeeProfile)->grade_id) $missing[] = 'grade';
-        }
-        if ($user->role === 'quiz-master') {
-            // subjects stored as array/json on quizMasterProfile
-            $subjects = optional($user->quizMasterProfile)->subjects ?? null;
-            if (! $subjects || (is_array($subjects) && count($subjects) === 0)) $missing[] = 'subjects';
-        }
-
-        // If there are no missing fields but user.is_profile_completed is false, mark it complete
-        if (empty($missing) && !$user->is_profile_completed) {
-            try {
-                $user->is_profile_completed = true;
-                $user->save();
-            } catch (\Throwable $_) {}
-        }
-
-        // Return the user along with missing fields and onboarding/completed steps so frontend can display guidance
-        $payload = $user->toArray();
-        
-        // Make sure nested profile relationships (grade, level) are properly serialized
-        if ($user->role === 'quizee' && isset($payload['quizee_profile'])) {
-            // Ensure grade and level are included in the profile array
-            if ($user->quizeeProfile && $user->quizeeProfile->relationLoaded('grade') && $user->quizeeProfile->grade) {
-                $payload['quizee_profile']['grade'] = $user->quizeeProfile->grade->toArray();
-            }
-            if ($user->quizeeProfile && $user->quizeeProfile->relationLoaded('level') && $user->quizeeProfile->level) {
-                $payload['quizee_profile']['level'] = $user->quizeeProfile->level->toArray();
-            }
-            // Ensure subjectModels are included
-            if (!isset($payload['quizee_profile']['subject_models']) && $user->quizeeProfile->relationLoaded('subjectModels')) {
-                $payload['quizee_profile']['subject_models'] = $user->quizeeProfile->subjectModels->toArray();
-            }
-        }
-        
-        if ($user->role === 'quiz-master' && isset($payload['quiz_master_profile'])) {
-            // Ensure grade and level are included in the profile array
-            if ($user->quizMasterProfile && $user->quizMasterProfile->relationLoaded('grade') && $user->quizMasterProfile->grade) {
-                $payload['quiz_master_profile']['grade'] = $user->quizMasterProfile->grade->toArray();
-            }
-            if ($user->quizMasterProfile && $user->quizMasterProfile->relationLoaded('level') && $user->quizMasterProfile->level) {
-                $payload['quiz_master_profile']['level'] = $user->quizMasterProfile->level->toArray();
-            }
-            // Ensure subjectModels are included
-            if (!isset($payload['quiz_master_profile']['subject_models']) && $user->quizMasterProfile->relationLoaded('subjectModels')) {
-                $payload['quiz_master_profile']['subject_models'] = $user->quizMasterProfile->subjectModels->toArray();
-            }
-        }
-        
-        $payload['missing_profile_fields'] = $missing;
-
-        // Human-friendly messages for missing fields
-        $messages = [];
-        $map = [
-            'role' => 'Account role (quizee or quiz-master) is missing',
-            'institution' => 'Please select or confirm your institution/school',
-            'grade' => 'Please select your grade',
-            'subjects' => 'Please select at least one subject specialization',
-        ];
-        foreach ($missing as $k) {
-            $messages[$k] = $map[$k] ?? 'Please complete: ' . $k;
-        }
-        $payload['missing_profile_messages'] = $messages;
-
-        // Attach onboarding steps if available
-        try {
-            $onboarding = null;
-            if (class_exists(\App\Models\UserOnboarding::class)) {
-                $onboarding = \App\Models\UserOnboarding::where('user_id', $user->id)->first();
-            }
-            if ($onboarding) {
-                $payload['onboarding'] = [
-                    'profile_completed' => (bool)($onboarding->profile_completed ?? false),
-                    'completed_steps' => $onboarding->completed_steps ?? [],
-                    'institution_added' => (bool)($onboarding->institution_added ?? false),
-                    'role_selected' => (bool)($onboarding->role_selected ?? false),
-                    'grade_selected' => (bool)($onboarding->grade_selected ?? false),
-                    'subject_selected' => (bool)($onboarding->subject_selected ?? false),
-                ];
-            } else {
-                $payload['onboarding'] = null;
-            }
-        } catch (\Throwable $_) {
-            $payload['onboarding'] = null;
-        }
-
-        return response()->json($payload);
-    });
 
     // Return only the authenticated user's affiliate record (smaller payload)
-    Route::get('/affiliates/me', function (Request $request) {
-        $user = $request->user();
-        if (!$user) return response()->json(null, 401);
-        // load relation if not loaded
-        $affiliate = $user->affiliate()->first();
-        // Return a consistent shape when no affiliate exists so frontends don't get `null`.
-        // Frontend expects at least the referral_code attribute; return it as null if absent.
-        if (!$affiliate) return response()->json(['referral_code' => null], 200);
-        return response()->json($affiliate);
-    });
+    Route::get('/affiliates/me', [\App\Http\Controllers\Api\AffiliateController::class, 'me']);
     
     // Affiliate routes
     Route::prefix('affiliates')->group(function () {

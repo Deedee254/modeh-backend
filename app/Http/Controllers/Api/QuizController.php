@@ -10,8 +10,10 @@ use App\Models\Subject;
 use App\Models\Grade;
 use App\Models\SiteSetting;
 use App\Models\Question;
+use App\Http\Resources\QuizResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
@@ -389,6 +391,13 @@ class QuizController extends Controller
             ->with(['topic.subject', 'grade', 'level'])
             ->withCount(['questions', 'attempts']);
 
+        if ($user) {
+            $query->with('userLastAttempt')
+                  ->withExists(['likes as liked' => function($q) use ($user) {
+                      $q->where('user_id', $user->id);
+                  }]);
+        }
+
         // search
         if ($q = $request->get('q')) {
             $query->where('title', 'like', "%{$q}%");
@@ -408,6 +417,10 @@ class QuizController extends Controller
         if ($topic = $request->get('topic_id')) {
             $query->where('topic_id', $topic);
         }
+        // filter by subject_id explicitly
+        if ($subjectId = $request->get('subject_id')) {
+            $query->where('subject_id', $subjectId);
+        }
         // filter by level (via the quiz's grade's level_id)
         if ($levelId = $request->get('level_id')) {
             $query->whereHas('grade', function ($q) use ($levelId) {
@@ -426,37 +439,39 @@ class QuizController extends Controller
             $query->where('is_approved', (bool) $request->get('approved'));
         }
 
-        $query->orderBy('created_at', 'desc');
+        // sorting
+        $sort = $request->get('sort', 'newest');
+        switch ($sort) {
+            case 'popular':
+            case 'attempted':
+                $query->orderBy('attempts_count', 'desc');
+                break;
+            case 'most_liked':
+                $query->orderBy('likes_count', 'desc');
+                break;
+            case 'shortest':
+                $query->orderBy('timer_seconds', 'asc');
+                break;
+            case 'difficulty':
+                $query->orderBy('difficulty', 'desc');
+                break;
+            case 'featured':
+                $query->where('is_approved', true)->orderBy('created_at', 'desc'); // placeholders for featured
+                break;
+            default:
+                $query->orderBy('created_at', 'desc');
+                break;
+        }
+
         $perPage = max(1, (int) $request->get('per_page', 10));
-        $data = $query->paginate($perPage);
 
-        // Add grade_name, level_name, topic_name, and subject_name to each quiz
-        $data->getCollection()->transform(function ($quiz) {
-            // Grade slug and name
-            $quiz->grade_slug = $quiz->grade?->slug ?? null;
-            $quiz->grade_name = $quiz->grade?->name ?? null;
-
-            // Level slug and name (handle course_name for tertiary)
-            if ($quiz->level) {
-                $quiz->level_slug = $quiz->level?->slug ?? null;
-                $quiz->level_name = ($quiz->level->name === 'Tertiary') ? ($quiz->level->course_name ?? $quiz->level->name) : $quiz->level->name;
-            } else {
-                $quiz->level_slug = null;
-                $quiz->level_name = null;
-            }
-
-            // Topic slug and name
-            $quiz->topic_slug = $quiz->topic?->slug ?? null;
-            $quiz->topic_name = $quiz->topic?->name ?? null;
-
-            // Subject slug and name
-            $quiz->subject_slug = $quiz->topic?->subject?->slug ?? null;
-            $quiz->subject_name = $quiz->topic?->subject?->name ?? null;
-
-            return $quiz;
+        $cacheKey = 'quizzes_index_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
+        
+        $data = Cache::remember($cacheKey, now()->addMinutes(5), function() use ($query, $perPage) {
+            return $query->paginate($perPage);
         });
 
-        return response()->json(['quizzes' => $data]);
+        return QuizResource::collection($data);
     }
 
     private function normalizeBooleanInputs(Request $request, array $keys): void

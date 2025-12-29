@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\OneOffPurchase;
-use App\Models\PaymentSetting;
 use App\Services\MpesaService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -37,8 +36,7 @@ class OneOffPurchaseController extends Controller
         ]);
 
         // initiate mpesa push via MpesaService
-        $setting = PaymentSetting::where('gateway', 'mpesa')->first();
-        $config = $setting ? ($setting->config ?? []) : [];
+        $config = config('services.mpesa');
         $service = new MpesaService($config);
         $phone = $data['phone'] ?? ($user->phone ?? null);
         $res = $service->initiateStkPush($phone, (float)$purchase->amount, 'OneOff-'.$purchase->id);

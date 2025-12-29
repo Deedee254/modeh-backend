@@ -4,36 +4,48 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Level;
+use App\Http\Resources\LevelResource;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class LevelController extends Controller
 {
     // public list of levels with nested grades and subjects (for frontend grouping)
     public function index(Request $request)
     {
-        // Eager-load grades and subjects, and include topic/quizzes counts so frontend can rely on canonical fields
-        $levels = Level::with(['grades' => function($q) {
-            $q->withCount('subjects')
-              ->with(['subjects' => function($s) {
-                  $s->where('is_approved', true)
-                    ->withCount('topics')
-                    ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
-              }]);
-        }])->orderBy('order')->get();
-        return response()->json(['levels' => $levels]);
+        $cacheKey = 'levels_index_' . md5(serialize($request->all()));
+
+        $levels = Cache::remember($cacheKey, now()->addMinutes(10), function() {
+            return Level::with(['grades' => function($q) {
+                $q->withCount('subjects')
+                  ->with(['subjects' => function($s) {
+                      $s->where('is_approved', true)
+                        ->withCount('topics')
+                        ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
+                  }]);
+            }])->orderBy('order')->get();
+        });
+
+        return LevelResource::collection($levels);
     }
 
     public function show(Level $level)
     {
-        $level->load(['grades' => function($q) {
-            $q->withCount('subjects')
-              ->with(['subjects' => function($s) {
-                  $s->where('is_approved', true)
-                    ->withCount('topics')
-                    ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
-              }]);
-        }]);
-        return response()->json(['level' => $level]);
+        $cacheKey = 'level_show_' . $level->id;
+
+        $level = Cache::remember($cacheKey, now()->addMinutes(10), function() use ($level) {
+            $level->load(['grades' => function($q) {
+                $q->withCount('subjects')
+                  ->with(['subjects' => function($s) {
+                      $s->where('is_approved', true)
+                        ->withCount('topics')
+                        ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
+                  }]);
+            }]);
+            return $level;
+        });
+
+        return new LevelResource($level);
     }
 
     // create (requires auth/admin; keep simple and rely on middleware in routes)

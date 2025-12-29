@@ -4,7 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Grade;
+use App\Http\Resources\GradeResource;
+use App\Http\Resources\TopicResource;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 
 class GradeController extends Controller
 {
@@ -16,80 +20,93 @@ class GradeController extends Controller
     // Return list of grades with subjects count (and optional search)
     public function index(Request $request)
     {
-        \Log::info('Accessing grades index');
-        
-        // Eager-load subjects and their topics (with quizzes count) so we can compute accurate quizzes_count per subject and grade
-        $query = Grade::query()
-            ->withCount('subjects')
-            ->with(['subjects' => function($q) {
-                $q->where('is_approved', true)
-                  ->withCount('topics')
-                  ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
-            }]);
-        $query->with('level');
+        $cacheKey = 'grades_index_' . md5(serialize($request->all()));
 
-        if ($q = $request->get('q')) {
-            $query->where('name', 'like', "%{$q}%");
-        }
+        $data = Cache::remember($cacheKey, now()->addMinutes(10), function() use ($request) {
+            // Eager-load subjects and their topics (with quizzes count) so we can compute accurate quizzes_count per subject and grade
+            $query = Grade::query()
+                ->withCount('subjects')
+                ->with(['level', 'subjects' => function($q) {
+                    $q->where('is_approved', true)
+                      ->withCount('topics')
+                      ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
+                }]);
 
-        // Filter by level_id if provided (for cascading filters)
-        if ($levelId = $request->get('level_id')) {
-            $query->where('level_id', $levelId);
-        }
+            if ($q = $request->get('q')) {
+                $query->where('name', 'like', "%{$q}%");
+            }
 
-        $grades = $query->orderBy('id')->get();
-        // Compute per-subject quizzes_count (sum of quizzes across topics) and total quizzes per grade
-        $grades->each(function($grade) {
-            $grade->subjects->each(function($sub) {
-                try {
-                    if (!isset($sub->topics_count)) {
-                        $sub->topics_count = collect($sub->topics)->count();
-                    }
-                    $sub->quizzes_count = collect($sub->topics)->sum('quizzes_count');
-                } catch (\Throwable $_) {
-                    $sub->quizzes_count = 0;
-                }
+            // Filter by level_id if provided (for cascading filters)
+            if ($levelId = $request->get('level_id')) {
+                $query->where('level_id', $levelId);
+            }
+
+            $grades = $query->orderBy('id')->get();
+            
+            // Compute counts to avoid N+1 in Resource
+            $grades->each(function($grade) {
+                $grade->subjects->each(function($sub) {
+                    $sub->quizzes_count = $sub->topics->sum('quizzes_count');
+                });
+                $grade->quizzes_count = $grade->subjects->sum('quizzes_count');
             });
-            $grade->quizzes_count = $grade->subjects->sum('quizzes_count');
+
+            return $grades;
         });
-        return response()->json(['grades' => $grades]);
+
+        return GradeResource::collection($data);
     }
 
     // Show a single grade with subjects and counts
     public function show(Grade $grade)
     {
-        $grade->load(['subjects' => function($q) { $q->where('is_approved', true)->withCount('topics')->with(['topics' => function($t) { $t->withCount('quizzes'); }]); }]);
-        $grade->load('level');
-        // Compute per-subject quizzes_count and aggregate
-        $grade->subjects->each(function($sub) {
-            try {
-                if (!isset($sub->topics_count)) {
-                    $sub->topics_count = collect($sub->topics)->count();
-                }
-                $sub->quizzes_count = collect($sub->topics)->sum('quizzes_count');
-            } catch (\Throwable $_) {
-                $sub->quizzes_count = 0;
-            }
+        $cacheKey = 'grade_show_' . $grade->id;
+
+        $grade = Cache::remember($cacheKey, now()->addMinutes(10), function() use ($grade) {
+            $grade->load(['level', 'subjects' => function($q) { 
+                $q->where('is_approved', true)
+                  ->withCount('topics')
+                  ->with(['topics' => function($t) { $t->withCount('quizzes'); }]); 
+            }]);
+            
+            $grade->subjects->each(function($sub) {
+                $sub->quizzes_count = $sub->topics->sum('quizzes_count');
+            });
+            $grade->quizzes_count = $grade->subjects->sum('quizzes_count');
+            
+            return $grade;
         });
-        $grade->quizzes_count = $grade->subjects->sum('quizzes_count');
-        return response()->json(['grade' => $grade]);
+
+        return new GradeResource($grade);
     }
 
     // Get topics for a specific grade (through its subjects)
     public function topics(Grade $grade)
     {
-        $topics = $grade->subjects()
-            ->where('is_approved', true)
-            ->with(['topics' => function($q) {
-                $q->withCount('quizzes');
-            }])
-            ->get()
-            ->pluck('topics')
-            ->flatten()
-            ->sortBy('name')
-            ->values();
+        $cacheKey = 'grade_topics_' . $grade->id;
 
-        return response()->json(['topics' => $topics]);
+        return Cache::remember($cacheKey, now()->addMinutes(10), function() use ($grade) {
+            $topics = $grade->subjects()
+                ->where('is_approved', true)
+                ->with(['topics' => function($q) {
+                    $q->withCount('quizzes')
+                      ->with('representativeQuiz');
+                }])
+                ->get()
+                ->pluck('topics')
+                ->flatten()
+                ->each(function($t) {
+                    if (empty($t->image) && $t->representativeQuiz) {
+                        $t->quizzes_cover_image = Storage::url($t->representativeQuiz->cover_image);
+                    }
+                })
+                ->sortBy('name')
+                ->values();
+
+            return [
+                'topics' => TopicResource::collection($topics)
+            ];
+        });
     }
 
     // Create a grade (requires authenticated user - routes should protect this)

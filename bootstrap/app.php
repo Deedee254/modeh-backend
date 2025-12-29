@@ -14,6 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
         $middleware->trustProxies(at: '*');
+        $middleware->validateCsrfTokens(except: [
+            'api/quizzes/*/submit',
+            'api/quizzes/*/mark',
+            'api/quiz-attempts/*/mark',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

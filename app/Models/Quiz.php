@@ -123,6 +123,18 @@ class Quiz extends Model
         return $this->hasMany(\App\Models\QuizAttempt::class, 'quiz_id');
     }
 
+    public function likes()
+    {
+        return $this->belongsToMany(User::class, 'quiz_likes');
+    }
+
+    public function userLastAttempt()
+    {
+        return $this->hasOne(\App\Models\QuizAttempt::class, 'quiz_id')
+            ->where('user_id', auth()->id())
+            ->latestOfMany();
+    }
+
     public function recalcDifficulty()
     {
         $avg = $this->questions()->avg('difficulty') ?: 0;
