@@ -29,6 +29,7 @@ class SocialAuthSettingForm
                             ->label('Client Secret')
                             ->required()
                             ->password()
+                            ->revealable()
                             ->maxLength(255),
                             
                         \Filament\Forms\Components\TextInput::make('redirect_url')
