@@ -26,12 +26,14 @@ class UserController extends Controller
                 $relations[] = 'quizMasterProfile.grade';
                 $relations[] = 'quizMasterProfile.level';
                 $relations[] = 'quizMasterProfile.institution';
-                $relations[] = 'quizMasterProfile.subjectModels';
+                // NOTE: `subjectModels` is an accessor (not an Eloquent relation) on the profile model
+                // and cannot be eager-loaded via ->with()/loadMissing(). Access the attribute directly
+                // after loading the profile (it will be available when the model is serialized).
             } elseif ($user->role === 'quizee') {
                 $relations[] = 'quizeeProfile.grade';
                 $relations[] = 'quizeeProfile.level';
                 $relations[] = 'quizeeProfile.institution';
-                $relations[] = 'quizeeProfile.subjectModels';
+                // See note above regarding subjectModels accessor.
             }
 
             $user->loadMissing($relations);

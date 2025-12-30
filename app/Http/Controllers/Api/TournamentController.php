@@ -706,18 +706,27 @@ class TournamentController extends Controller
 
         if ($isQualifierPhase) {
             // Return qualifier leaderboard from qualification attempts (sorted by score desc, then duration asc for tie-breaking)
+            // Eager-load user to avoid N+1 queries. A qualification attempt may
+            // reference a user that has been deleted, so guard accesses with
+            // fallbacks to attempt columns where appropriate.
             $attempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+                ->with('user:id,name,avatar,avatar_url')
                 ->orderByDesc('score')
                 ->orderBy('duration_seconds')
                 ->get();
 
             $leaderboard = $attempts->map(function ($attempt) {
                 $user = $attempt->user;
+                $userId = $user->id ?? $attempt->user_id;
+                $name = $user->name ?? null;
+                $avatarUrl = $user->avatar_url ?? null;
+                $avatar = $user->avatar ?? null;
+
                 return [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'avatar_url' => $user->avatar_url ?? null,
-                    'avatar' => $user->avatar ?? null,
+                    'id' => $userId,
+                    'name' => $name,
+                    'avatar_url' => $avatarUrl,
+                    'avatar' => $avatar,
                     'points' => $attempt->score,
                     'duration_seconds' => $attempt->duration_seconds,
                     'completed_at' => $attempt->created_at,
@@ -766,12 +775,13 @@ class TournamentController extends Controller
 
         return response()->json([
             'data' => $attempts->map(function ($attempt) {
+                $user = $attempt->user;
                 return [
                     'id' => $attempt->id,
                     'user_id' => $attempt->user_id,
-                    'user_name' => $attempt->user->name,
-                    'user_email' => $attempt->user->email,
-                    'user_avatar' => $attempt->user->avatar ?? $attempt->user->avatar_url,
+                    'user_name' => $user->name ?? null,
+                    'user_email' => $user->email ?? null,
+                    'user_avatar' => $user->avatar ?? $user->avatar_url ?? null,
                     'score' => $attempt->score,
                     'duration_seconds' => $attempt->duration_seconds,
                     'status' => $attempt->status ?? 'completed',

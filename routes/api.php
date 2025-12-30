@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Auth\SocialAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Models\Quiz;
@@ -29,6 +28,9 @@ Route::get('/csrf-token', [AuthController::class, 'getCsrfToken'])->middleware('
 // Password reset endpoints (public)
 Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
+
+// Social sync endpoint for Nuxt-Auth
+Route::post('/auth/social-sync', [AuthController::class, 'socialSync'])->middleware('web');
 
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.

@@ -244,6 +244,61 @@ class AuthController extends Controller
         ], 201);
     }
 
+    /**
+     * Sync social login from Nuxt-Auth.
+     * POST /api/auth/social-sync
+     */
+    public function socialSync(Request $request, \App\Services\SocialAuthService $socialAuthService)
+    {
+        $v = Validator::make($request->all(), [
+            'provider' => 'required|string',
+            'id' => 'required|string',
+            'email' => 'required|email',
+            'name' => 'nullable|string',
+            'image' => 'nullable|string',
+            'token' => 'nullable|string',
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
+
+        // Create a mock object that mimics Socialite user interface for compatibility
+        $socialUser = new class($request->all()) {
+            private $data;
+            public function __construct($data) { $this->data = $data; }
+            public function getId() { return $this->data['id']; }
+            public function getName() { return $this->data['name'] ?? explode('@', $this->data['email'])[0]; }
+            public function getEmail() { return $this->data['email']; }
+            public function getAvatar() { return $this->data['image'] ?? null; }
+            public $token;
+            public $refreshToken = null;
+            public $expiresIn = null;
+        };
+        $socialUser->token = $request->input('token');
+
+        $user = $socialAuthService->findOrCreateUser($socialUser, $request->input('provider'));
+
+        if (!$user) {
+            return response()->json(['message' => 'Failed to sync social user'], 500);
+        }
+
+        // Log the user in to establish the session
+        Auth::login($user, true);
+        $request->session()->regenerate();
+
+        $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
+
+        // Create a personal access token for the session
+        $token = $user->createToken('nuxt-auth')->plainTextToken;
+
+        return response()->json([
+            'user' => $user,
+            'token' => $token,
+            'requires_onboarding' => empty($user->role) || !$user->is_profile_completed
+        ]);
+    }
+
     public function login(Request $request)
     {
         $v = Validator::make($request->all(), [
@@ -274,9 +329,16 @@ class AuthController extends Controller
 
         // Load user data
         $user = Auth::user();
-        $user->loadMissing(['affiliate', 'institutions']);
+        $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 
-        return response()->json(['role' => $user->getAttribute('role'), 'user' => $user]);
+        // Create a personal access token for the session
+        $token = $user->createToken('nuxt-auth')->plainTextToken;
+
+        return response()->json([
+            'role' => $user->getAttribute('role'),
+            'user' => $user,
+            'token' => $token
+        ]);
     }
 
     public function logout(Request $request)

@@ -7,18 +7,12 @@ use Illuminate\Support\Facades\Broadcast;
 use App\Filament\Resources\TournamentResource;
 use App\Models\Tournament;
 
-use App\Http\Controllers\Auth\SocialLoginController;
-
 Route::middleware('web')->group(function () {
 	Route::get('/', [AuthWebController::class, 'showLogin'])->name('login');
 	Route::get('/login', [AuthWebController::class, 'showLogin']);
 	Route::post('/login', [AuthWebController::class, 'login']);
 	Route::post('/logout', [AuthWebController::class, 'logout']);
 	Route::get('/invitation/{token}', [App\Http\Controllers\InvitationController::class, 'show'])->name('invitation.show');
-
-	// Social Authentication Routes
-	Route::get('auth/{provider}/redirect', [SocialLoginController::class, 'redirectToProvider'])->name('social.redirect');
-	Route::get('auth/{provider}/callback', [SocialLoginController::class, 'handleProviderCallback'])->name('social.callback');
 });
 
 Route::get('/dashboard', [AuthWebController::class, 'dashboard'])->middleware('auth');

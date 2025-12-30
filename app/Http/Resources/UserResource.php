@@ -39,9 +39,13 @@ class UserResource extends JsonResource
             'avatar' => $this->avatar_url,
             'bio' => $this->bio,
             'is_profile_completed' => (bool)$this->is_profile_completed,
+            'isProfileCompleted' => (bool)$this->is_profile_completed,
             'email_verified_at' => $this->email_verified_at,
+            'emailVerifiedAt' => $this->email_verified_at,
             'affiliate_code' => $this->affiliate_code,
+            'affiliateCode' => $this->affiliate_code,
             'created_at' => $this->created_at,
+            'createdAt' => $this->created_at,
         ];
 
         if ($this->relationLoaded('affiliate')) {
