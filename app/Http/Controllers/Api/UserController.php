@@ -19,7 +19,7 @@ class UserController extends Controller
         }
         $cacheKey = "user_me_{$user->id}";
 
-        return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($user) {
+        $userData = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($user) {
             $relations = ['affiliate', 'institutions', 'onboarding'];
 
             if ($user->role === 'quiz-master') {
@@ -37,9 +37,10 @@ class UserController extends Controller
             }
 
             $user->loadMissing($relations);
-
-            return new UserResource($user);
+            return $user;
         });
+
+        return UserResource::make($userData);
     }
 
     public function search(Request $request)
@@ -145,7 +146,7 @@ class UserController extends Controller
         // Load relationships for full response
         $user->loadMissing(['quizeeProfile', 'quizMasterProfile', 'affiliate', 'institutions']);
 
-        return new UserResource($user);
+        return UserResource::make($user);
     }
 
     public function changePassword(Request $request)
