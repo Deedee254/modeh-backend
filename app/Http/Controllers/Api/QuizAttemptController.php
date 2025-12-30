@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Quiz;
 use App\Models\Question;
+use App\Models\Topic;
+use App\Models\Subject;
 use App\Models\QuizAttempt;
 use App\Models\DailyUsageTracking;
 use App\Services\AchievementService;
@@ -234,9 +236,19 @@ class QuizAttemptController extends Controller
         // expose taxonomy objects in the public payload (level may be nested under grade)
         $level = $quiz->level ?? ($quiz->grade && $quiz->grade->level ? $quiz->grade->level : null);
 
+        // Determine if liked by user
+        $liked = false;
+        if ($user) {
+            $liked = DB::table('quiz_likes')
+                ->where('user_id', $user->id)
+                ->where('quiz_id', $quiz->id)
+                ->exists();
+        }
+
         return response()->json([
             'quiz' => [
                 'id' => $quiz->id,
+                'slug' => $quiz->slug,
                 'title' => $quiz->title,
                 'description' => $quiz->description,
                 'timer_seconds' => $quiz->timer_seconds,
@@ -254,18 +266,29 @@ class QuizAttemptController extends Controller
                 'marks' => $totalMarks, // Ensure specific total marks are included
                 'is_paid' => (bool) $quiz->is_paid,
                 'price' => $quiz->one_off_price,
+                // liked status
+                'liked' => $liked,
                 // Creator info
                 'created_by' => $quiz->author ? [
                     'id' => $quiz->author->id,
                     'name' => $quiz->author->name,
                     'avatar' => $quiz->author->avatar_url ?? $quiz->author->social_avatar ?? null,
+                    'slug' => $quiz->author->slug,
                 ] : null,
                 'likes_count' => $quiz->likes_count ?? 0,
                 'topic' => $quiz->topic ?? null,
+                'topic_name' => $quiz->topic?->name,
+                'topic_slug' => $quiz->topic?->slug,
                 'subject' => $quiz->subject ?? null,
+                'subject_name' => $quiz->subject?->name ?? $quiz->topic?->subject?->name,
+                'subject_slug' => $quiz->subject?->slug ?? $quiz->topic?->subject?->slug,
                 'grade' => $quiz->grade ?? null,
+                'grade_name' => $quiz->grade?->name,
+                'grade_slug' => $quiz->grade?->slug,
                 'level_id' => $quiz->level_id ?? ($level ? ($level->id ?? null) : null),
                 'level' => $level ?? null,
+                'level_name' => $level ? ($level->name === 'Tertiary' ? ($level->course_name ?? $level->name) : $level->name) : null,
+                'level_slug' => $level?->slug,
             ]
         ]);
     }
@@ -448,11 +471,11 @@ class QuizAttemptController extends Controller
         }
 
         // Use centralized service for subscription validation
-        $subValidation = \App\Services\SubscriptionLimitService::validateSubscriptionAccess($user);
-        
+        $subValidation = SubscriptionLimitService::validateSubscriptionAccess($user);
+
         if (!$subValidation['allowed']) {
             return response()->json([
-                'ok' => false, 
+                'ok' => false,
                 'message' => $subValidation['message'] ?? 'Subscription or one-off purchase required'
             ], 403);
         }
@@ -560,11 +583,11 @@ class QuizAttemptController extends Controller
         // Get the quiz early to check if it's free
         $quiz = $attempt->quiz()->with('questions')->first();
         $isFreeQuiz = !$quiz->is_paid || $quiz->one_off_price == 0;
-        
+
         // Only check subscription limits if the quiz is NOT free
         if (!$isFreeQuiz) {
             $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
-            
+
             if (!$limitCheck['allowed']) {
                 return response()->json([
                     'ok' => false,
@@ -583,16 +606,16 @@ class QuizAttemptController extends Controller
         // Get active subscription for tracking (only if not free quiz)
         $activeSub = !$isFreeQuiz ? SubscriptionLimitService::getActiveSubscription($user) : null;
         $subDetails = $activeSub ? SubscriptionLimitService::getSubscriptionDetails($user) : null;
-        
+
         $limit = $activeSub ? SubscriptionLimitService::getPackageLimit($activeSub->package, 'quiz_results') : null;
-        
+
         // Record which subscription was used for this reveal (if not already recorded)
         if ($activeSub && !$attempt->subscription_id) {
             $attempt->subscription_id = $activeSub->id;
             $attempt->subscription_type = $subDetails['subscription_type'] ?? 'personal';
             $attempt->save();
         }
-        
+
         // Calculate remaining after this reveal
         $used = $activeSub ? (SubscriptionLimitService::countTodayUsage($user->id) + 1) : null;
         $remaining = $limit && $used ? max(0, $limit - $used) : null;

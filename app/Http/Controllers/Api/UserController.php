@@ -14,11 +14,14 @@ class UserController extends Controller
     public function me(Request $request)
     {
         $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
         $cacheKey = "user_me_{$user->id}";
 
         return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($user) {
             $relations = ['affiliate', 'institutions', 'onboarding'];
-            
+
             if ($user->role === 'quiz-master') {
                 $relations[] = 'quizMasterProfile.grade';
                 $relations[] = 'quizMasterProfile.level';
@@ -32,7 +35,7 @@ class UserController extends Controller
             }
 
             $user->loadMissing($relations);
-            
+
             return new UserResource($user);
         });
     }
@@ -40,7 +43,8 @@ class UserController extends Controller
     public function search(Request $request)
     {
         $q = $request->get('q');
-        if (!$q) return response()->json(['users' => []]);
+        if (!$q)
+            return response()->json(['users' => []]);
 
         $users = User::where('email', 'like', "%{$q}%")
             ->orWhere('name', 'like', "%{$q}%")
@@ -53,10 +57,12 @@ class UserController extends Controller
     public function findByEmail(Request $request)
     {
         $email = $request->get('email');
-        if (!$email) return response()->json(['message' => 'email required'], 400);
+        if (!$email)
+            return response()->json(['message' => 'email required'], 400);
 
         $user = User::where('email', $email)->first(['id', 'name', 'email', 'avatar_url']);
-        if (!$user) return response()->json(['message' => 'not found'], 404);
+        if (!$user)
+            return response()->json(['message' => 'not found'], 404);
         return response()->json(['user' => $user]);
     }
 
@@ -66,14 +72,15 @@ class UserController extends Controller
     public function badges(Request $request)
     {
         $user = $request->user();
-        if (!$user) return response()->json(['ok' => false], 401);
+        if (!$user)
+            return response()->json(['ok' => false], 401);
 
         // If user has badges relation, return paginated list
         if (!method_exists($user, 'badges')) {
             return response()->json(['ok' => true, 'badges' => []]);
         }
 
-        $perPage = max(1, (int)$request->get('per_page', 6));
+        $perPage = max(1, (int) $request->get('per_page', 6));
         $q = $user->badges()->latest('user_badges.created_at');
         $data = $q->paginate($perPage);
 

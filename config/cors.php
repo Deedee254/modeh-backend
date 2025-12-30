@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'paths' => ['api/*', 'login', 'logout', 'sanctum/csrf-cookie'],
+    'paths' => ['api/*', 'login', 'logout', 'sanctum/csrf-cookie', 'broadcasting/*'],
     'allowed_methods' => ['*'],
 
     // Load from .env, fallback to production + local dev URLs

@@ -12,7 +12,8 @@ class BroadcastServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        Broadcast::routes();
+        // Don't register default broadcasting routes - we handle it in api.php
+        // Broadcast::routes();
 
         // Load the channel authorization routes
         require base_path('routes/channels.php');

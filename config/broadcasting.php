@@ -13,11 +13,7 @@ return [
             'app_id' => env('PUSHER_APP_ID'),
             'options' => [
                 'cluster' => env('PUSHER_APP_CLUSTER'),
-                'useTLS' => env('PUSHER_SCHEME', 'http') === 'https',
-                'host' => env('PUSHER_HOST', '127.0.0.1'),
-                'port' => env('PUSHER_PORT', 6001),
-                'scheme' => env('PUSHER_SCHEME', 'ws'),
-                'encrypted' => env('PUSHER_SCHEME', 'ws') === 'https',
+                'useTLS' => true,
             ],
         ],
 

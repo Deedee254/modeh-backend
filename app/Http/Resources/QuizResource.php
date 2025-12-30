@@ -35,7 +35,14 @@ class QuizResource extends JsonResource
             'title' => $this->title,
             'description' => $this->description,
             'youtube_url' => $this->youtube_url,
+            'video_url' => $this->video_url,
             'cover_image' => $this->cover_image,
+            'created_by' => [
+                'id' => $this->author?->id,
+                'name' => $this->author?->name,
+                'avatar' => $this->author?->avatar_url ?? $this->author?->social_avatar ?? null,
+                'slug' => $this->author?->slug,
+            ],
             'is_paid' => $this->is_paid,
             'one_off_price' => $this->one_off_price,
             'timer_seconds' => $this->timer_seconds,
@@ -50,7 +57,7 @@ class QuizResource extends JsonResource
             'is_approved' => $this->is_approved,
             'is_draft' => $this->is_draft,
             'likes_count' => $this->likes_count ?? 0,
-            'liked' => $this->when(auth('sanctum')->check(), function() {
+            'liked' => $this->when(auth('sanctum')->check(), function () {
                 // If we've already eager-loaded this with withExists('likes as liked') or similar,
                 // it might be available as an attribute.
                 if (isset($this->liked)) {

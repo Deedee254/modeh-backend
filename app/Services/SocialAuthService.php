@@ -20,12 +20,29 @@ class SocialAuthService
                     ->where('social_provider', $provider)
                     ->first();
 
-                // If we didn't find a social-linked user, only link by email if verified
-                // (prevents account takeover via provider email collision)
+                // If we didn't find a social-linked user, try to link by email
+                // For existing users with verified emails, link the social account
+                // For existing users with unverified emails, we still link to prevent duplicate accounts
+                // The social provider's email verification serves as verification
                 if (!$user) {
                     $email = $socialUser->getEmail();
                     if ($email) {
+                        // First try to find user with verified email
                         $user = User::whereEmail($email)->whereNotNull('email_verified_at')->first();
+                        
+                        // If no verified user found, check for unverified user
+                        // Link to prevent duplicate accounts - social provider email is considered verified
+                        if (!$user) {
+                            $existingUser = User::whereEmail($email)->first();
+                            if ($existingUser) {
+                                // Link social account to existing user and mark email as verified
+                                // since the social provider has verified the email
+                                $existingUser->update([
+                                    'email_verified_at' => $existingUser->email_verified_at ?? now(),
+                                ]);
+                                $user = $existingUser;
+                            }
+                        }
                     }
                 }
 

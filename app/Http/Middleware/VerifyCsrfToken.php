@@ -20,12 +20,6 @@ class VerifyCsrfToken extends BaseVerifier
      * @var array<int, string>
      */
     protected $except = [
-        // Session-authenticated endpoints that don't need CSRF tokens
-        // /api/me is called after OAuth callback when user has session but CSRF token may not be ready
-        'api/me',
-        
-        // Guest quiz submission and per-question marking (public endpoints)
-        'api/quizzes/*/submit',
-        'api/quizzes/*/mark',
+        //
     ];
 }

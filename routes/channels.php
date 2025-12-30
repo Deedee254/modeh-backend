@@ -1,6 +1,6 @@
 <?php
 
-use Illuminate\Broadcasting\Broadcast;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
@@ -24,4 +24,14 @@ Broadcast::channel('group.{groupId}', function ($user, $groupId) {
         Log::warning('Group channel auth error: ' . $e->getMessage());
         return false;
     }
+});
+
+/**
+ * Private channel for quizzes. Allow both authenticated users and guests to subscribe to quiz updates.
+ * Quiz events (like likes) are public information, so guests should be able to see them.
+ */
+Broadcast::channel('quiz.{quizId}', function ($user, $quizId) {
+    // Allow anyone (authenticated or guest) to listen to quiz events (likes, updates, etc.)
+    // Quiz events are public information
+    return true;
 });

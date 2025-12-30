@@ -12,30 +12,32 @@ class SocialAuthSettingForm
         return $schema
             ->components([
                 Section::make('Provider Configuration')
+                    ->description('Settings are loaded from environment variables (.env file). Edit the .env file and run `php artisan config:clear` to update.')
                     ->schema([
                         \Filament\Forms\Components\Select::make('provider')
                             ->label('OAuth Provider')
                             ->options(\App\Models\SocialAuthSetting::getProviderOptions())
                             ->required()
-                            ->disabled(fn ($record) => $record !== null)
-                            ->unique(ignoreRecord: true),
+                            ->disabled(fn ($record) => $record !== null),
                             
                         \Filament\Forms\Components\TextInput::make('client_id')
-                            ->label('Client ID')
-                            ->required()
-                            ->maxLength(255),
+                            ->label('Client ID (from .env: GOOGLE_CLIENT_ID)')
+                            ->default(fn () => config('services.google.client_id'))
+                            ->disabled()
+                            ->dehydrated(false),
                             
                         \Filament\Forms\Components\TextInput::make('client_secret')
-                            ->label('Client Secret')
-                            ->required()
+                            ->label('Client Secret (from .env: GOOGLE_CLIENT_SECRET)')
+                            ->default(fn () => config('services.google.client_secret'))
                             ->password()
                             ->revealable()
-                            ->maxLength(255),
+                            ->disabled()
+                            ->dehydrated(false),
                             
                         \Filament\Forms\Components\TextInput::make('redirect_url')
                             ->label('Redirect URL')
-                            ->default(fn () => config('app.url') . '/api/auth/{provider}/callback')
-                            ->helperText('The {provider} placeholder will be replaced with the actual provider name')
+                            ->default(fn ($record) => $record?->redirect_url ?? config('app.url') . '/auth/google/callback')
+                            ->helperText('Configured in database per provider')
                             ->required()
                             ->maxLength(255),
                             
@@ -48,3 +50,4 @@ class SocialAuthSettingForm
             ]);
     }
 }
+

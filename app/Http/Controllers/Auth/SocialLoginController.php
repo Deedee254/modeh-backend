@@ -41,21 +41,29 @@ class SocialLoginController extends Controller
         try {
             $socialUser = Socialite::driver($provider)->user();
         } catch (\Exception $e) {
-            return redirect('/login')->with('error', 'An error occurred while trying to log you in.');
+            \Log::error('Social login callback error', ['provider' => $provider, 'error' => $e->getMessage()]);
+            $frontend = config('app.frontend_url');
+            return redirect(rtrim($frontend, '/') . '/login?error=oauth_failed');
         }
 
         $user = $this->socialAuthService->findOrCreateUser($socialUser, $provider);
 
         if (!$user) {
-            return redirect('/login')->with('error', 'An error occurred while trying to log you in.');
+            \Log::error('Social login: failed to find or create user', ['provider' => $provider, 'email' => $socialUser->getEmail()]);
+            $frontend = config('app.frontend_url');
+            return redirect(rtrim($frontend, '/') . '/login?error=user_creation_failed');
         }
 
-        $this->sessionService->createSession($user);
+        // Create session and ensure it's saved
+        $this->sessionService->createSession($user, true);
+        request()->session()->regenerate();
+        request()->session()->save();
 
-        if (!$user->is_profile_completed) {
-            return redirect()->route('onboarding.profile');
-        }
+        // Always redirect to frontend callback page
+        // The frontend will handle routing based on user state (onboarding, dashboard, etc.)
+        $frontend = config('app.frontend_url');
+        $redirectUrl = rtrim($frontend, '/') . '/auth/callback';
 
-        return redirect()->intended('/dashboard');
+        return redirect()->to($redirectUrl);
     }
 }

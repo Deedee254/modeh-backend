@@ -31,6 +31,42 @@ class PaymentSettingResource extends Resource
                 ->default(0)
                 ->suffix('%')
                 ->helperText('Platform revenue share percentage'),
+            
+            // M-Pesa Configuration (read-only from environment)
+            TextInput::make('mpesa_environment')
+                ->label('M-Pesa Environment')
+                ->default(fn () => config('services.mpesa.environment') ?? 'Not configured')
+                ->disabled()
+                ->dehydrated(false)
+                ->helperText('From MPESA_ENVIRONMENT in .env'),
+            
+            TextInput::make('mpesa_consumer_key')
+                ->label('M-Pesa Consumer Key')
+                ->default(fn () => config('services.mpesa.consumer_key') ? substr(config('services.mpesa.consumer_key'), 0, 10) . '...' : 'Not configured')
+                ->disabled()
+                ->dehydrated(false)
+                ->helperText('From MPESA_CONSUMER_KEY in .env (masked for security)'),
+            
+            TextInput::make('mpesa_consumer_secret')
+                ->label('M-Pesa Consumer Secret')
+                ->default(fn () => config('services.mpesa.consumer_secret') ? '••••••••••' : 'Not configured')
+                ->disabled()
+                ->dehydrated(false)
+                ->helperText('From MPESA_CONSUMER_SECRET in .env (hidden for security)'),
+            
+            TextInput::make('mpesa_shortcode')
+                ->label('M-Pesa Shortcode')
+                ->default(fn () => config('services.mpesa.shortcode') ?? 'Not configured')
+                ->disabled()
+                ->dehydrated(false)
+                ->helperText('From MPESA_SHORTCODE in .env'),
+            
+            TextInput::make('mpesa_callback_url')
+                ->label('M-Pesa Callback URL')
+                ->default(fn () => config('services.mpesa.callback_url') ?? 'Not configured')
+                ->disabled()
+                ->dehydrated(false)
+                ->helperText('From MPESA_CALLBACK_URL in .env'),
         ]);
     }
 

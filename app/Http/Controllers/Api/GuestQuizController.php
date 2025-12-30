@@ -78,8 +78,8 @@ class GuestQuizController extends Controller
                 'use_per_question_timer' => (bool) $quiz->use_per_question_timer,
                 'shuffle_questions' => (bool) $quiz->shuffle_questions,
                 'shuffle_answers' => (bool) $quiz->shuffle_answers,
+                'questions' => $questions,
             ],
-            'questions' => $questions
         ]);
     }
 

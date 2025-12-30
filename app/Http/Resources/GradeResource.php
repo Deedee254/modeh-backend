@@ -62,5 +62,3 @@ class GradeResource extends JsonResource
         });
     }
 }
-
-```

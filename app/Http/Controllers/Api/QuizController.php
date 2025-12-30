@@ -30,6 +30,44 @@ class QuizController extends Controller
         $this->achievementService = app(AchievementService::class);
     }
 
+    /**
+     * Safely cache data with fallback if caching fails (e.g., due to size limits)
+     */
+    private function safeCacheRemember(string $key, $ttl, callable $callback)
+    {
+        try {
+            // Try to get from cache first
+            $cached = Cache::get($key);
+            if ($cached !== null) {
+                return $cached;
+            }
+
+            // Generate the data
+            $data = $callback();
+
+            // Try to store in cache, but don't fail if it's too large
+            try {
+                Cache::put($key, $data, $ttl);
+            } catch (\Exception $e) {
+                // Log the error but continue without caching
+                \Log::warning('Failed to cache data', [
+                    'key' => $key,
+                    'error' => $e->getMessage(),
+                    'error_type' => get_class($e)
+                ]);
+            }
+
+            return $data;
+        } catch (\Exception $e) {
+            // If cache retrieval fails, just execute the callback
+            \Log::warning('Cache operation failed, falling back to direct query', [
+                'key' => $key,
+                'error' => $e->getMessage()
+            ]);
+            return $callback();
+        }
+    }
+
     // Update existing quiz (used by quiz-master UI to save settings and publish)
     public function update(Request $request, Quiz $quiz)
     {
@@ -385,17 +423,25 @@ class QuizController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+        // OPTIMIZED: Strategy B - Selective fields, Strategy A - Counts only
         // Eager-load topic->subject, grade, and level so frontend can access data directly
         // and include a questions_count and attempts_count for each quiz using withCount
         $query = Quiz::query()
-            ->with(['topic.subject', 'grade', 'level'])
+            ->with([
+                'topic:id,name,slug,subject_id',
+                'topic.subject:id,name,slug,grade_id',
+                'grade:id,name,slug,level_id',
+                'level:id,name,slug'
+            ])
             ->withCount(['questions', 'attempts']);
 
         if ($user) {
             $query->with('userLastAttempt')
-                  ->withExists(['likes as liked' => function($q) use ($user) {
-                      $q->where('user_id', $user->id);
-                  }]);
+                ->withExists([
+                    'likes as liked' => function ($q) use ($user) {
+                        $q->where('user_id', $user->id);
+                    }
+                ]);
         }
 
         // search
@@ -403,13 +449,27 @@ class QuizController extends Controller
             $query->where('title', 'like', "%{$q}%");
         }
 
+        // Filter by slug explicitly
+        if ($slug = $request->get('slug')) {
+            $query->where('slug', $slug);
+        }
+
         // If the request is anonymous, show only approved & published quizzes
         if (!$user) {
             $query->where('is_approved', true)->where('visibility', 'published');
         } else {
-            // only my quizzes unless admin
-            if (!$user->is_admin) {
+            // only my quizzes unless admin OR specifically searching for everyone's quizzes
+            // Fix: allow users to see ALL approved/published quizzes by default if no 'mine' filter is present
+            if (!$user->is_admin && $request->boolean('mine')) {
                 $query->where('created_by', $user->id);
+            } else if (!$user->is_admin) {
+                // By default for non-admins, show their own OR any approved/published ones
+                $query->where(function ($q) use ($user) {
+                    $q->where('created_by', $user->id)
+                        ->orWhere(function ($sq) {
+                            $sq->where('is_approved', true)->where('visibility', 'published');
+                        });
+                });
             }
         }
 
@@ -463,11 +523,12 @@ class QuizController extends Controller
                 break;
         }
 
-        $perPage = max(1, (int) $request->get('per_page', 10));
+        // Strategy C: Limit pagination to prevent huge caches
+        $perPage = min(50, max(1, (int) $request->get('per_page', 10)));
 
         $cacheKey = 'quizzes_index_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
-        
-        $data = Cache::remember($cacheKey, now()->addMinutes(5), function() use ($query, $perPage) {
+
+        $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(5), function () use ($query, $perPage) {
             return $query->paginate($perPage);
         });
 

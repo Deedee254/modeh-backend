@@ -57,7 +57,8 @@ class MpesaService
             if (!empty($body['access_token'])) {
                 $this->token = $body['access_token'];
                 // token typically valid for 3600s
-                $this->tokenExpiresAt = now()->addSeconds($body['expires_in'] ?? 3500);
+                $expiresIn = (int)($body['expires_in'] ?? 3500);
+                $this->tokenExpiresAt = now()->addSeconds($expiresIn);
                 return $this->token;
             }
         } catch (\Exception $e) {

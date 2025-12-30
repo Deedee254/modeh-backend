@@ -10,36 +10,93 @@ use Illuminate\Support\Facades\Cache;
 
 class LevelController extends Controller
 {
+    /**
+     * Safely cache data with fallback if caching fails (e.g., due to size limits)
+     */
+    private function safeCacheRemember(string $key, $ttl, callable $callback)
+    {
+        try {
+            // Try to get from cache first
+            $cached = Cache::get($key);
+            if ($cached !== null) {
+                return $cached;
+            }
+
+            // Generate the data
+            $data = $callback();
+
+            // Try to store in cache, but don't fail if it's too large
+            try {
+                Cache::put($key, $data, $ttl);
+            } catch (\Exception $e) {
+                // Log the error but continue without caching
+                \Log::warning('Failed to cache data', [
+                    'key' => $key,
+                    'error' => $e->getMessage(),
+                    'error_type' => get_class($e)
+                ]);
+            }
+
+            return $data;
+        } catch (\Exception $e) {
+            // If cache retrieval fails, just execute the callback
+            \Log::warning('Cache operation failed, falling back to direct query', [
+                'key' => $key,
+                'error' => $e->getMessage()
+            ]);
+            return $callback();
+        }
+    }
+
     // public list of levels with nested grades and subjects (for frontend grouping)
+    // OPTIMIZED: Strategy B - Selective fields, Strategy A - Counts only
     public function index(Request $request)
     {
         $cacheKey = 'levels_index_' . md5(serialize($request->all()));
 
-        $levels = Cache::remember($cacheKey, now()->addMinutes(10), function() {
-            return Level::with(['grades' => function($q) {
-                $q->withCount('subjects')
-                  ->with(['subjects' => function($s) {
-                      $s->where('is_approved', true)
-                        ->withCount('topics')
-                        ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
-                  }]);
-            }])->orderBy('order')->get();
+        $levels = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function() {
+            // Strategy B: Select only essential fields
+            return Level::select('id', 'name', 'slug', 'order', 'description')
+                ->with(['grades' => function($q) {
+                    $q->select('id', 'name', 'slug', 'level_id', 'description', 'type', 'display_name')
+                      ->withCount('subjects')
+                      ->with(['subjects' => function($s) {
+                          // Strategy B: Only essential subject fields
+                          $s->select('id', 'name', 'slug', 'grade_id', 'description', 'is_approved')
+                            ->where('is_approved', true)
+                            ->withCount('topics')
+                            ->with(['topics' => function($t) { 
+                                // Strategy A: Only counts, minimal topic data
+                                $t->select('id', 'name', 'slug', 'subject_id')
+                                  ->withCount('quizzes'); 
+                            }]);
+                      }]);
+                }])
+                ->orderBy('order')
+                ->get();
         });
 
         return LevelResource::collection($levels);
     }
 
+    // OPTIMIZED: Strategy D - Individual item cache, Strategy B - Selective fields
     public function show(Level $level)
     {
         $cacheKey = 'level_show_' . $level->id;
 
-        $level = Cache::remember($cacheKey, now()->addMinutes(10), function() use ($level) {
+        $level = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function() use ($level) {
+            // Strategy B: Load only essential fields
             $level->load(['grades' => function($q) {
-                $q->withCount('subjects')
+                $q->select('id', 'name', 'slug', 'level_id', 'description', 'type', 'display_name')
+                  ->withCount('subjects')
                   ->with(['subjects' => function($s) {
-                      $s->where('is_approved', true)
+                      $s->select('id', 'name', 'slug', 'grade_id', 'description', 'is_approved')
+                        ->where('is_approved', true)
                         ->withCount('topics')
-                        ->with(['topics' => function($t) { $t->withCount('quizzes'); }]);
+                        ->with(['topics' => function($t) { 
+                            $t->select('id', 'name', 'slug', 'subject_id')
+                              ->withCount('quizzes'); 
+                        }]);
                   }]);
             }]);
             return $level;

@@ -45,10 +45,12 @@ Route::get('/quizzes', [\App\Http\Controllers\Api\QuizController::class, 'index'
 Route::get('/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'show']);
 
 // Guest quiz endpoints - for free quizzes only, no authentication required
-Route::get('/quizzes/{quiz}/questions', [\App\Http\Controllers\Api\GuestQuizController::class, 'getQuestions']);
-Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\GuestQuizController::class, 'submit'])->middleware('throttle:30,1');
-// Per-question marking for guest users (allows server-side marking without exposing all answers)
-Route::post('/quizzes/{quiz}/mark', [\App\Http\Controllers\Api\GuestQuizController::class, 'markQuestion'])->middleware('throttle:60,1');
+Route::prefix('guest')->group(function () {
+    Route::get('/quizzes/{quiz}/questions', [\App\Http\Controllers\Api\GuestQuizController::class, 'getQuestions']);
+    Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\GuestQuizController::class, 'submit'])->middleware('throttle:30,1');
+    // Per-question marking for guest users (allows server-side marking without exposing all answers)
+    Route::post('/quizzes/{quiz}/mark', [\App\Http\Controllers\Api\GuestQuizController::class, 'markQuestion'])->middleware('throttle:60,1');
+});
 
 // Public grades listing for frontend
 Route::get('/grades', [\App\Http\Controllers\Api\GradeController::class, 'index']);
@@ -111,12 +113,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/institutions/{institution}/members/invites', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'listInvites']);
     Route::post('/institutions/{institution}/members/accept', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'accept']);
     Route::delete('/institutions/{institution}/members/{user}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'remove']);
-    
+
     // Institution approval workflows (institution manager only)
     Route::get('/institutions/{institution}/approvals/pending', [\App\Http\Controllers\Api\InstitutionApprovalController::class, 'pending']);
     Route::post('/institution-approvals/{approvalRequest}/approve', [\App\Http\Controllers\Api\InstitutionApprovalController::class, 'approve']);
     Route::post('/institution-approvals/{approvalRequest}/reject', [\App\Http\Controllers\Api\InstitutionApprovalController::class, 'reject']);
-    
+
     // Subscription & assignment endpoints for institutions
     Route::get('/institutions/{institution}/subscription', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'subscription']);
     Route::post('/institutions/{institution}/assignment/revoke', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'revokeAssignment']);
@@ -138,7 +140,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Return only the authenticated user's affiliate record (smaller payload)
     Route::get('/affiliates/me', [\App\Http\Controllers\Api\AffiliateController::class, 'me']);
-    
+
     // Affiliate routes
     Route::prefix('affiliates')->group(function () {
         Route::get('/stats', [\App\Http\Controllers\Api\AffiliateController::class, 'stats']);
@@ -152,7 +154,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::patch('/me', [\App\Http\Controllers\Api\UserController::class, 'update']);
     Route::patch('/profile/quiz-master', [\App\Http\Controllers\Api\ProfileController::class, 'updateQuizMasterProfile']);
     Route::patch('/profile/quizee', [\App\Http\Controllers\Api\ProfileController::class, 'updateQuizeeProfile']);
-    
+
     // Password change
     Route::post('/me/password', [\App\Http\Controllers\Api\UserController::class, 'changePassword']);
     Route::post('/me/theme', [\App\Http\Controllers\Api\UserController::class, 'setTheme']);
@@ -186,7 +188,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/quiz-attempts', [\App\Http\Controllers\Api\QuizAttemptController::class, 'index']);
     // Aggregated quiz stats for dashboard
     Route::get('/user/quiz-stats', [\App\Http\Controllers\Api\QuizAttemptController::class, 'getUserStats']);
-    
+
     // Daily Challenge endpoints
     Route::get('/daily-challenges/today', [\App\Http\Controllers\Api\DailyChallengeController::class, 'today']);
     Route::get('/user/daily-challenges', [\App\Http\Controllers\Api\DailyChallengeController::class, 'userHistory']);
@@ -234,7 +236,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Approval requests (quiz-master -> admin)
     Route::post('/{resource}/{id}/request-approval', [\App\Http\Controllers\Api\ApprovalRequestController::class, 'store']);
-    
+
     // Notifications
     Route::get('/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
     Route::post('/notifications/{id}/mark-read', [\App\Http\Controllers\Api\NotificationController::class, 'markRead']);
@@ -249,20 +251,20 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/users/find-by-email', [\App\Http\Controllers\Api\UserController::class, 'findByEmail']);
     // User badges (recent)
     Route::get('/user/badges', [\App\Http\Controllers\Api\UserController::class, 'badges']);
-    
+
     // User achievements progress
     Route::get('/achievements/progress', [\App\Http\Controllers\Api\AchievementController::class, 'progress']);
-    
+
     // User stats (including level)
     Route::get('/user/stats', [\App\Http\Controllers\Api\UserStatsController::class, 'stats']);
 
     // Onboarding endpoints (mark steps and finalize)
     Route::post('/onboarding/step', [\App\Http\Controllers\Api\OnboardingController::class, 'completeStep']);
     Route::post('/onboarding/finalize', [\App\Http\Controllers\Api\OnboardingController::class, 'finalize']);
-    
+
     // Recommendations (personalized to user/grade)
     // Note: route moved to public area to allow anonymous grade-based recommendations.
-    
+
     // Chat
     Route::get('/chat/threads', [\App\Http\Controllers\Api\ChatController::class, 'threads']);
     Route::get('/chat/messages', [\App\Http\Controllers\Api\ChatController::class, 'messages']);
@@ -290,7 +292,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Admin: assign or upgrade a user's subscription to a chosen package (idempotent)
         Route::post('/admin/subscriptions/assign/{user}', [\App\Http\Controllers\Api\AdminSubscriptionController::class, 'assign']);
     });
-    
+
     // Wallet (quiz-master)
     Route::get('/wallet', [\App\Http\Controllers\Api\WalletController::class, 'mine']);
     Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'transactions']);
@@ -298,10 +300,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/wallet/withdrawals', [\App\Http\Controllers\Api\WalletController::class, 'myWithdrawals']);
     // Admin: settle pending funds into available for a quiz-master
     Route::post('/wallet/settle/{quizMasterId}', [\App\Http\Controllers\Api\WalletController::class, 'settlePending']);
-    
+
     // quizee rewards endpoint (points, vouchers, next threshold)
     Route::get('/rewards/my', [\App\Http\Controllers\Api\WalletController::class, 'rewardsMy']);
-    
+
     // Packages & subscriptions
     // packages index is public (defined above)
     Route::post('/packages/{package}/subscribe', [\App\Http\Controllers\Api\PackageController::class, 'subscribe']);
@@ -316,7 +318,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/one-off-purchases/{purchase}', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'show']);
     Route::get('/subscriptions/mine', [\App\Http\Controllers\Api\SubscriptionController::class, 'mine']);
 
-    
+
     // Interactions
     Route::post('/quizzes/{quiz}/like', [\App\Http\Controllers\Api\InteractionController::class, 'likeQuiz']);
     Route::post('/quizzes/{quiz}/unlike', [\App\Http\Controllers\Api\InteractionController::class, 'unlikeQuiz']);
@@ -363,14 +365,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/tournaments/{tournament}/qualify/submit', [\App\Http\Controllers\Api\TournamentController::class, 'qualifySubmit']);
 
     // Admin tournament management (requires admin role)
-    Route::middleware(['can:viewFilament'])->group(function() {
+    Route::middleware(['can:viewFilament'])->group(function () {
         Route::post('/admin/tournaments', [\App\Http\Controllers\Api\AdminTournamentController::class, 'store']);
         Route::put('/admin/tournaments/{tournament}', [\App\Http\Controllers\Api\AdminTournamentController::class, 'update']);
-    Route::post('/admin/tournaments/{tournament}/questions', [\App\Http\Controllers\Api\AdminTournamentController::class, 'attachQuestions']);
-    Route::post('/admin/tournaments/{tournament}/battles/{battle}/attach-questions', [\App\Http\Controllers\Api\AdminTournamentController::class, 'attachQuestionsToBattle']);
-    Route::post('/admin/tournaments/{tournament}/generate-matches', [\App\Http\Controllers\Api\AdminTournamentController::class, 'generateMatches']);
-    Route::post('/admin/tournaments/{tournament}/advance-round', [\App\Http\Controllers\Api\AdminTournamentController::class, 'advanceRound']);
-    Route::post('/admin/tournaments/{tournament}/finalize-qualification', [\App\Http\Controllers\Api\AdminTournamentController::class, 'finalizeQualification']);
+        Route::post('/admin/tournaments/{tournament}/questions', [\App\Http\Controllers\Api\AdminTournamentController::class, 'attachQuestions']);
+        Route::post('/admin/tournaments/{tournament}/battles/{battle}/attach-questions', [\App\Http\Controllers\Api\AdminTournamentController::class, 'attachQuestionsToBattle']);
+        Route::post('/admin/tournaments/{tournament}/generate-matches', [\App\Http\Controllers\Api\AdminTournamentController::class, 'generateMatches']);
+        Route::post('/admin/tournaments/{tournament}/advance-round', [\App\Http\Controllers\Api\AdminTournamentController::class, 'advanceRound']);
+        Route::post('/admin/tournaments/{tournament}/finalize-qualification', [\App\Http\Controllers\Api\AdminTournamentController::class, 'finalizeQualification']);
         Route::delete('/admin/tournaments/{tournament}', [\App\Http\Controllers\Api\AdminTournamentController::class, 'destroy']);
         // Admin approve/reject tournament registrations
         Route::post('/admin/tournaments/{tournament}/registrations/{user}/approve', [\App\Http\Controllers\Api\TournamentController::class, 'approveRegistration']);
@@ -395,4 +397,64 @@ Route::post('/payments/mpesa/callback', [\App\Http\Controllers\Api\PaymentContro
 // Echo server heartbeat (POST)
 Route::post('/echo/heartbeat', [\App\Http\Controllers\Api\EchoHeartbeatController::class, 'heartbeat']);
 
-// Broadcasting auth is handled in web routes for test compatibility.
+// Echo/WebSocket Testing Endpoints (for development)
+Route::prefix('echo-test')->group(function () {
+    Route::get('/status', [\App\Http\Controllers\EchoTestController::class, 'getStatus']);
+    Route::post('/send', [\App\Http\Controllers\EchoTestController::class, 'sendTestMessage']);
+});
+
+// Broadcasting auth endpoint - moved to API routes for consistency with other API endpoints
+Route::post('/broadcasting/auth', function (Request $request) {
+    $channel = $request->input('channel_name');
+    $user = $request->user();
+
+    // Strip Private/Presence prefixes if present (e.g., 'private-user.1', 'presence-user.1')
+    $channel = preg_replace('/^(private|presence)-/', '', $channel);
+
+    // Allow public channels (no prefix) - they don't require authentication
+    if (!$request->input('channel_name')) {
+        return response()->json([], 403);
+    }
+
+    $isPublic = !str_starts_with($request->input('channel_name'), 'private-') &&
+        !str_starts_with($request->input('channel_name'), 'presence-');
+    if ($isPublic) {
+        return response()->json([], 200);
+    }
+
+    // Allow quiz channels for both authenticated users and guests
+    // Quiz events (like likes) are public information
+    if (str_starts_with($channel, 'quiz.')) {
+        return response()->json([], 200);
+    }
+
+    // For user and group channels, require authentication
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 403);
+    }
+
+    if (str_starts_with($channel, 'user.')) {
+        $parts = explode('.', $channel);
+        $id = $parts[1] ?? null;
+        if ((int) $user->id === (int) $id) {
+            return response()->json([], 200);
+        }
+        return response()->json([], 403);
+    }
+
+    if (str_starts_with($channel, 'group.')) {
+        $parts = explode('.', $channel);
+        $groupId = $parts[1] ?? null;
+        try {
+            $isMember = \App\Models\Group::where('id', $groupId)->whereHas('members', function ($q) use ($user) {
+                $q->where('users.id', $user->id);
+            })->exists();
+            return response()->json([], $isMember ? 200 : 403);
+        } catch (\Throwable $e) {
+            return response()->json([], 403);
+        }
+    }
+
+    // Default deny
+    return response()->json([], 403);
+})->middleware('web'); // Need web middleware for session-based auth
