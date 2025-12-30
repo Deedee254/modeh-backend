@@ -11,7 +11,7 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware): void {
+        ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
         $middleware->trustProxies(at: '*');
         $middleware->validateCsrfTokens(except: [
@@ -22,7 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/quiz-attempts/*/mark',
             'api/register/*',
             'api/auth/*',
-            'api/login',
+            // 'api/login' removed so login participates in normal CSRF validation.
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
