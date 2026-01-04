@@ -2,10 +2,16 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthWebController;
+use App\Http\Controllers\Api\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
 use App\Filament\Resources\TournamentResource;
 use App\Models\Tournament;
+
+// Sanctum CSRF cookie endpoint - required for frontend SPA CSRF initialization
+// Use the web middleware to ensure session and cookies are properly handled.
+// The HandleCors middleware is applied globally and handles CORS headers.
+Route::middleware(['web'])->get('/sanctum/csrf-cookie', [AuthController::class, 'getCsrfToken']);
 
 Route::middleware('web')->group(function () {
 	Route::get('/', [AuthWebController::class, 'showLogin'])->name('login');

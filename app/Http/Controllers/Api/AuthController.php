@@ -292,7 +292,14 @@ class AuthController extends Controller
         // Create a personal access token for the session
         $token = $user->createToken('nuxt-auth')->plainTextToken;
 
+        // Return user data in Nuxt-Auth compatible format
         return response()->json([
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->getAttribute('role'),
+            'avatar' => $user->getAttribute('avatar'),
+            'image' => $user->getAttribute('avatar'),
             'user' => $user,
             'token' => $token,
             'requires_onboarding' => empty($user->role) || !$user->is_profile_completed
@@ -324,6 +331,7 @@ class AuthController extends Controller
 
         // Attempt to authenticate with persistent login (remember = true)
         if (! Auth::attempt($credentials, true)) {
+            Log::warning('Login attempt failed', ['email' => $credentials['email'], 'ip' => $request->ip()]);
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
@@ -334,8 +342,17 @@ class AuthController extends Controller
         // Create a personal access token for the session
         $token = $user->createToken('nuxt-auth')->plainTextToken;
 
+        Log::info('User logged in', ['user_id' => $user->id, 'email' => $user->email, 'role' => $user->role]);
+
+        // Return user data in format expected by Nuxt-Auth
+        // The NuxtAuthHandler's authorize callback expects: { id, name, email, role, image, ... }
         return response()->json([
-            'role' => $user->getAttribute('role'),
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->getAttribute('role') ?? 'user',
+            'avatar' => $user->getAttribute('avatar'),
+            'image' => $user->getAttribute('avatar'),
             'user' => $user,
             'token' => $token
         ]);
@@ -354,14 +371,68 @@ class AuthController extends Controller
     }
 
     /**
-     * Get a fresh CSRF token. Call this after logout to prepare for the next login.
-     * GET /api/csrf-token
+     * Get a fresh CSRF token. Call this before login to prepare session.
+     * GET /api/csrf-token or GET /sanctum/csrf-cookie or GET /api/sanctum/csrf-cookie
+     * 
+     * This endpoint:
+     * 1. Initializes session if needed
+     * 2. Generates/retrieves CSRF token
+     * 3. Sets XSRF-TOKEN cookie explicitly
+     * 4. Returns proper CORS headers for credentials
+     * 5. Returns token in JSON body
+     * 
+     * Frontend Usage:
+     * - Called by useApi.ensureCsrf() before any authenticated requests
+     * - Expects credentials: 'include' in fetch to capture cookies
+     * - Polls document.cookie for XSRF-TOKEN appearance (2s timeout)
+     * 
+     * Common Issues:
+     * - 404: Route not configured in routes/api.php (must add /sanctum/csrf-cookie)
+     * - CORS error: HandleCors middleware not applied to this route
+     * - Cookie not set: Check SESSION_SECURE_COOKIE, SESSION_SAME_SITE env vars
      */
     public function getCsrfToken(Request $request)
     {
-        return response()->json([
-            'token' => $request->session()->token()
+        // Ensure session is started (if not already by middleware)
+        $request->session()->start();
+        
+        // Get or create CSRF token for this session
+        $token = $request->session()->token();
+        
+        // Log for debugging - helps identify CORS or routing issues
+        \Log::debug('CSRF token endpoint called', [
+            'token_prefix' => substr($token, 0, 10),
+            'session_id' => $request->session()->getId(),
+            'host' => $request->getHost(),
+            'origin' => $request->header('Origin'),
+            'method' => $request->getMethod(),
+            'path' => $request->getPathInfo(),
         ]);
+        
+        // Create response with token in body for debugging
+        $response = response()->json([
+            'token' => $token,
+            'session_id' => $request->session()->getId()
+        ])->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+         ->header('Pragma', 'no-cache')
+         ->header('Expires', '0')
+         // Ensure credentials are allowed (set by HandleCors, but explicit for clarity)
+         ->header('Access-Control-Allow-Credentials', 'true');
+        
+        // Explicitly set XSRF-TOKEN cookie so it's available to frontend JavaScript
+        // Use Laravel's cookie() helper which respects config/session.php settings
+        // For localhost dev, an empty domain means host-only (works with both localhost and 127.0.0.1)
+        $cookie = cookie(
+            'XSRF-TOKEN',        // cookie name (unencrypted - frontend needs to read it)
+            $token,              // cookie value
+            (int)(env('SESSION_LIFETIME', 525600) / 60), // convert minutes to hours
+            '/',                 // path - root so all routes can access
+            '',                  // domain - empty = host-only, works with current origin
+            (bool) env('SESSION_SECURE_COOKIE', false),  // secure flag - use env setting
+            false                // httpOnly - MUST be false so JavaScript can read it for CSRF headers
+        );
+        
+        return $response->cookie($cookie);
     }
 
     /**

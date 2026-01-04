@@ -22,7 +22,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/quiz-attempts/*/mark',
             'api/register/*',
             'api/auth/*',
-            // 'api/login' removed so login participates in normal CSRF validation.
+            'api/login',  // Nuxt-Auth credentials provider doesn't send CSRF tokens
+            'api/broadcasting/auth',  // Uses Bearer token auth, doesn't send CSRF
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

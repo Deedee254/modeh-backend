@@ -22,7 +22,12 @@ Route::get('/auth/verify-status', [AuthController::class, 'verifyStatus']);
 // Endpoint used by the frontend to trigger verification after landing from email link
 Route::post('/auth/verify-email', [AuthController::class, 'verifyEmail']);
 
-// Get a fresh CSRF token (public endpoint for pre-login CSRF preparation)
+// CSRF token endpoint - required for frontend SPA to initialize CSRF before login
+// This must be accessible from the frontend origin (localhost:3000 in dev)
+// The 'web' middleware provides session support, and CORS is handled by global HandleCors middleware
+Route::get('/sanctum/csrf-cookie', [AuthController::class, 'getCsrfToken'])->middleware('web');
+
+// Legacy endpoint - kept for backwards compatibility but deprecated
 Route::get('/csrf-token', [AuthController::class, 'getCsrfToken'])->middleware('web');
 
 // Password reset endpoints (public)
@@ -90,6 +95,11 @@ Route::get('/recommendations/quizzes', [\App\Http\Controllers\Api\Recommendation
 Route::get('/tournaments', [\App\Http\Controllers\Api\TournamentController::class, 'index']);
 Route::get('/tournaments/{tournament}', [\App\Http\Controllers\Api\TournamentController::class, 'show']);
 Route::get('/tournaments/{tournament}/tree', [\App\Http\Controllers\Api\TournamentController::class, 'tree']);
+Route::get('/tournaments/{tournament}/leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'leaderboard']);
+Route::get('/tournaments/{tournament}/qualifier-leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'qualifierLeaderboard']);
+// Tournament user-specific data (may return different results based on auth status)
+Route::get('/tournaments/{tournament}/registration-status', [\App\Http\Controllers\Api\TournamentController::class, 'registrationStatus']);
+Route::get('/tournaments/{tournament}/qualification-status', [\App\Http\Controllers\Api\TournamentController::class, 'qualificationStatus']);
 // Global public leaderboard (supports pagination, sorting and search)
 Route::get('/leaderboard', [\App\Http\Controllers\Api\LeaderboardController::class, 'index']);
 // Public badges endpoint
@@ -354,10 +364,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);
     Route::get('/tournaments/{tournament}/battles', [\App\Http\Controllers\Api\TournamentController::class, 'battles']);
     Route::get('/tournaments/{tournament}/battles/{battle}', [\App\Http\Controllers\Api\TournamentController::class, 'showBattle']);
-    Route::get('/tournaments/{tournament}/registration-status', [\App\Http\Controllers\Api\TournamentController::class, 'registrationStatus']);
-    Route::get('/tournaments/{tournament}/leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'leaderboard']);
-    Route::get('/tournaments/{tournament}/qualifier-leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'qualifierLeaderboard']);
-    Route::get('/tournaments/{tournament}/qualification-status', [\App\Http\Controllers\Api\TournamentController::class, 'qualificationStatus']);
     Route::post('/tournaments/battles/{battle}/submit', [\App\Http\Controllers\Api\TournamentController::class, 'submitBattle']);
     Route::post('/tournaments/battles/{battle}/forfeit', [\App\Http\Controllers\Api\TournamentController::class, 'forfeitBattle']);
     Route::post('/tournaments/battles/{battle}/draft', [\App\Http\Controllers\Api\TournamentController::class, 'saveDraft']);
