@@ -20,16 +20,30 @@ class AuthController extends Controller
 {
     public function registerquizee(Request $request)
     {
+        // Check if user already exists (for OAuth + same email case)
+        $existingUser = User::where('email', $request->email)->first();
+        if ($existingUser) {
+            return response()->json([
+                'message' => 'User already exists',
+                'user' => $existingUser,
+                'isNewUser' => false,
+                'token' => $existingUser->createToken('auth')->plainTextToken
+            ], 409);
+        }
+
+        // OAuth users don't need password, email/password users do
+        $isOAuth = !empty($request->input('social_id'));
+        
         $v = Validator::make($request->all(), [
             'name' => 'required|string',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|min:6',
+            'password' => $isOAuth ? 'nullable' : 'required|min:6',
             'institution' => 'nullable|string',
             'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\\s\\.]?[0-9]{3}[-\\s\\.]?[0-9]{4,6}$/'],
             'bio' => 'nullable|string|max:500',
-            'level_id' => 'required|exists:levels,id',
-            'grade_id' => 'required|exists:grades,id',
-            'subjects' => 'required|array|min:1',
+            'level_id' => 'nullable|exists:levels,id',
+            'grade_id' => 'nullable|exists:grades,id',
+            'subjects' => 'nullable|array',
             'subjects.*' => 'exists:subjects,id',
             'parentEmail' => ['nullable', 'email']
         ]);
@@ -42,9 +56,11 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => $request->password ? Hash::make($request->password) : Hash::make(\Illuminate\Support\Str::random(40)),
             'role' => 'quizee',
             'phone' => $request->phone,
+            'social_id' => $request->input('social_id'),
+            'social_provider' => $request->input('social_provider'),
         ]);
 
         // Create quizee profile with institution, bio, and required taxonomy
@@ -114,14 +130,28 @@ class AuthController extends Controller
 
     public function registerQuizMaster(Request $request)
     {
+        // Check if user already exists (for OAuth + same email case)
+        $existingUser = User::where('email', $request->email)->first();
+        if ($existingUser) {
+            return response()->json([
+                'message' => 'User already exists',
+                'user' => $existingUser,
+                'isNewUser' => false,
+                'token' => $existingUser->createToken('auth')->plainTextToken
+            ], 409);
+        }
+
+        // OAuth users don't need password, email/password users do
+        $isOAuth = !empty($request->input('social_id'));
+        
         $v = Validator::make($request->all(), [
             'name' => 'required|string',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|min:6',
+            'password' => $isOAuth ? 'nullable' : 'required|min:6',
             'institution' => 'nullable|string',
-            'level_id' => 'required|exists:levels,id',
+            'level_id' => 'nullable|exists:levels,id',
             'grade_id' => 'nullable|exists:grades,id',
-            'subjects' => 'required|array|min:1',
+            'subjects' => 'nullable|array',
             'subjects.*' => 'exists:subjects,id',
             'bio' => 'nullable|string|max:500',
             'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/']
@@ -135,9 +165,11 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => $request->password ? Hash::make($request->password) : Hash::make(\Illuminate\Support\Str::random(40)),
             'role' => 'quiz-master',
             'phone' => $request->phone,
+            'social_id' => $request->input('social_id'),
+            'social_provider' => $request->input('social_provider'),
         ]);
 
         // Create quiz master profile with institution, bio, and required taxonomy
@@ -183,10 +215,24 @@ class AuthController extends Controller
 
     public function registerInstitutionManager(Request $request)
     {
+        // Check if user already exists (for OAuth + same email case)
+        $existingUser = User::where('email', $request->email)->first();
+        if ($existingUser) {
+            return response()->json([
+                'message' => 'User already exists',
+                'user' => $existingUser,
+                'isNewUser' => false,
+                'token' => $existingUser->createToken('auth')->plainTextToken
+            ], 409);
+        }
+
+        // OAuth users don't need password, email/password users do
+        $isOAuth = !empty($request->input('social_id'));
+        
         $v = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|min:6',
+            'password' => $isOAuth ? 'nullable' : 'required|min:6',
             'institution_id' => 'nullable|exists:institutions,id',
             'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/']
         ]);
@@ -198,9 +244,11 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => $request->password ? Hash::make($request->password) : Hash::make(\Illuminate\Support\Str::random(40)),
             'role' => 'institution-manager',
             'phone' => $request->phone,
+            'social_id' => $request->input('social_id'),
+            'social_provider' => $request->input('social_provider'),
         ]);
 
         // If institution_id provided, attach user to institution with manager role
@@ -247,6 +295,8 @@ class AuthController extends Controller
     /**
      * Sync social login from Nuxt-Auth.
      * POST /api/auth/social-sync
+     * 
+     * Returns: isNewUser flag to indicate if user just registered or existing
      */
     public function socialSync(Request $request, \App\Services\SocialAuthService $socialAuthService)
     {
@@ -262,6 +312,9 @@ class AuthController extends Controller
         if ($v->fails()) {
             return response()->json(['errors' => $v->errors()], 422);
         }
+
+        // Check if user already exists by email (simplifies new user detection)
+        $isNewUser = !User::where('email', $request->email)->exists();
 
         // Create a mock object that mimics Socialite user interface for compatibility
         $socialUser = new class($request->all()) {
@@ -292,7 +345,7 @@ class AuthController extends Controller
         // Create a personal access token for the session
         $token = $user->createToken('nuxt-auth')->plainTextToken;
 
-        // Return user data in Nuxt-Auth compatible format
+        // Return user data in Nuxt-Auth compatible format with isNewUser flag
         return response()->json([
             'id' => $user->id,
             'name' => $user->name,
@@ -302,6 +355,7 @@ class AuthController extends Controller
             'image' => $user->getAttribute('avatar'),
             'user' => $user,
             'token' => $token,
+            'isNewUser' => $isNewUser,  // ← Simplifies redirect logic
             'requires_onboarding' => empty($user->role) || !$user->is_profile_completed
         ]);
     }

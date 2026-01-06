@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/register/*',
             'api/auth/*',
             'api/login',  // Nuxt-Auth credentials provider doesn't send CSRF tokens
+            'api/onboarding/*',  // Onboarding steps don't require CSRF (authenticated users only, no credentials sent)
             'api/broadcasting/auth',  // Uses Bearer token auth, doesn't send CSRF
         ]);
     })
