@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use App\Events\QuizLiked;
 use App\Events\QuizMasterFollowed;
+use App\Notifications\QuizLikedNotification;
 
 class InteractionController extends Controller
 {
@@ -43,8 +44,13 @@ class InteractionController extends Controller
         if ($shouldBroadcastLike) {
             try {
                 Event::dispatch(new QuizLiked($quiz, $user));
+
+                // Send notification to quiz owner if different from liker
+                if ($quiz->user_id !== $user->id) {
+                    $quiz->author->notify(new QuizLikedNotification($quiz, $user));
+                }
             } catch (\Throwable $e) {
-                \Log::error('Failed to broadcast QuizLiked event', [
+                \Log::error('Failed to broadcast QuizLiked event or send notification', [
                     'quiz_id' => $quiz->id,
                     'user_id' => $user->id,
                     'error' => $e->getMessage(),

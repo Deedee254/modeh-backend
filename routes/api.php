@@ -16,6 +16,7 @@ Route::bind('quiz', function ($value) {
 Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->middleware('throttle:5,1');
 Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster'])->middleware('throttle:5,1');
 Route::post('/register/institution-manager', [AuthController::class, 'registerInstitutionManager'])->middleware('throttle:5,1');
+Route::post('/register/parent', [\App\Http\Controllers\Api\ParentController::class, 'register'])->middleware('throttle:5,1');
 
 // Public helper for frontend to confirm verification status of an email address
 Route::get('/auth/verify-status', [AuthController::class, 'verifyStatus']);
@@ -171,6 +172,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/me/password', [\App\Http\Controllers\Api\UserController::class, 'changePassword']);
     Route::post('/me/theme', [\App\Http\Controllers\Api\UserController::class, 'setTheme']);
     Route::get('/me/theme', [\App\Http\Controllers\Api\UserController::class, 'getTheme']);
+
+    // Parent endpoints
+    Route::prefix('parent')->group(function () {
+        Route::get('/dashboard', [\App\Http\Controllers\Api\ParentController::class, 'dashboard']);
+        Route::get('/quizees', [\App\Http\Controllers\Api\ParentController::class, 'getQuizees']);
+        Route::post('/invite-quizee', [\App\Http\Controllers\Api\ParentController::class, 'inviteQuizee']);
+        Route::get('/quizee/{quizeeId}/analytics', [\App\Http\Controllers\Api\ParentController::class, 'getQuizeeAnalytics']);
+        Route::delete('/quizee/{quizeeId}', [\App\Http\Controllers\Api\ParentController::class, 'removeQuizee']);
+        Route::post('/quizee/{quizeeId}/subscription', [\App\Http\Controllers\Api\ParentController::class, 'manageSubscription']);
+        Route::get('/subscriptions', [\App\Http\Controllers\Api\ParentController::class, 'getSubscriptions']);
+    });
 
     // quiz-master Quiz endpoints
     Route::post('/quizzes', [\App\Http\Controllers\Api\QuizController::class, 'store']);
@@ -414,6 +426,7 @@ Route::prefix('echo-test')->group(function () {
 // Broadcasting auth endpoint - moved to API routes for consistency with other API endpoints
 Route::post('/broadcasting/auth', function (Request $request) {
     $channel = $request->input('channel_name');
+    $socketId = $request->input('socket_id');
     $user = $request->user();
 
     // Strip Private/Presence prefixes if present (e.g., 'private-user.1', 'presence-user.1')
@@ -421,48 +434,35 @@ Route::post('/broadcasting/auth', function (Request $request) {
 
     // Allow public channels (no prefix) - they don't require authentication
     if (!$request->input('channel_name')) {
-        return response()->json([], 403);
+        return response()->json(['error' => 'No channel name provided'], 403);
     }
 
     $isPublic = !str_starts_with($request->input('channel_name'), 'private-') &&
         !str_starts_with($request->input('channel_name'), 'presence-');
     if ($isPublic) {
-        return response()->json([], 200);
+        return response()->json(['auth' => ''], 200);
     }
 
-    // Allow quiz channels for both authenticated users and guests
-    // Quiz events (like likes) are public information
+    // For quiz channels, allow anyone (authenticated or guest) since quiz events are public information
+    // But still generate proper auth signature for private channels
     if (str_starts_with($channel, 'quiz.')) {
-        return response()->json([], 200);
+        // Quiz channels are defined as private but allow anyone to subscribe
+        // Generate auth signature for the private channel
+        return \Illuminate\Support\Facades\Broadcast::auth($request);
     }
 
     // For user and group channels, require authentication
     if (!$user) {
-        return response()->json(['message' => 'Unauthenticated'], 403);
+        return response()->json(['error' => 'Unauthenticated'], 403);
     }
 
-    if (str_starts_with($channel, 'user.')) {
-        $parts = explode('.', $channel);
-        $id = $parts[1] ?? null;
-        if ((int) $user->id === (int) $id) {
-            return response()->json([], 200);
-        }
-        return response()->json([], 403);
-    }
-
-    if (str_starts_with($channel, 'group.')) {
-        $parts = explode('.', $channel);
-        $groupId = $parts[1] ?? null;
-        try {
-            $isMember = \App\Models\Group::where('id', $groupId)->whereHas('members', function ($q) use ($user) {
-                $q->where('users.id', $user->id);
-            })->exists();
-            return response()->json([], $isMember ? 200 : 403);
-        } catch (\Throwable $e) {
-            return response()->json([], 403);
-        }
+    // Generate the auth signature for private/presence channels
+    if (str_starts_with($request->input('channel_name'), 'private-')) {
+        return \Illuminate\Support\Facades\Broadcast::auth($request);
+    } elseif (str_starts_with($request->input('channel_name'), 'presence-')) {
+        return \Illuminate\Support\Facades\Broadcast::auth($request);
     }
 
     // Default deny
-    return response()->json([], 403);
+    return response()->json(['error' => 'Unauthorized'], 403);
 })->middleware('web'); // Need web middleware for session-based auth

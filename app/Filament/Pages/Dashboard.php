@@ -52,7 +52,7 @@ class Dashboard extends BaseDashboard
             \App\Filament\Widgets\QuizzesTrend::class,
             \App\Filament\Widgets\TopSubjectsPie::class,
             // additional widgets requested
-            \App\Filament\Widgets\TopStudentsTable::class,
+            \App\Filament\Widgets\TopQuizeesTable::class,
             \App\Filament\Widgets\TopQuizMastersTable::class,
             \App\Filament\Widgets\RegistrationsQuizzesScoresChart::class,
             \App\Filament\Widgets\LatestQuizzesTaken::class,

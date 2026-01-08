@@ -11,6 +11,7 @@ use App\Models\Quiz;
 use App\Models\Question;
 use Illuminate\Support\Facades\Hash;
 use Faker\Factory as Faker;
+use App\Services\SlugService;
 
 class QuizQuestionSeeder extends Seeder
 {
@@ -96,6 +97,7 @@ class QuizQuestionSeeder extends Seeder
                 'description' => "Seeded quiz for {$topic->name} ({$subject->name})",
                 'is_approved' => true,
                 'difficulty' => rand(1, 4),
+                'slug' => SlugService::makeUniqueSlug($title, Quiz::class),
             ]
         );
     }

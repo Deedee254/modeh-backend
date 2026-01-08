@@ -198,6 +198,7 @@ class SubjectSeeder extends Seeder
                     'updated_at' => $row['updated_at'],
                     'created_at' => $row['created_at'],
                     'icon' => null,
+                    'slug' => \Illuminate\Support\Str::slug($row['name']),
                 ]
             );
         }

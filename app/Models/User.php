@@ -11,6 +11,7 @@ use App\Models\QuizMaster;
 use App\Models\Affiliate;
 use App\Models\Quizee;
 use App\Models\Institution;
+use App\Models\Parent as ParentModel;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 
@@ -147,6 +148,11 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         return $this->quizeeProfile();
     }
 
+    public function parentProfile()
+    {
+        return $this->hasOne(ParentModel::class);
+    }
+
     /**
      * Relation to the Affiliate record (if any) for this user.
      */
@@ -213,5 +219,13 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     public function onboarding()
     {
         return $this->hasOne(UserOnboarding::class);
+    }
+
+    /**
+     * Relationship to the user's notification preferences.
+     */
+    public function notificationPreference()
+    {
+        return $this->hasOne(NotificationPreference::class);
     }
 }

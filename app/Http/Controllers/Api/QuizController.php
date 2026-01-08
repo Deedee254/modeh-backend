@@ -14,6 +14,7 @@ use App\Http\Resources\QuizResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
@@ -50,7 +51,7 @@ class QuizController extends Controller
                 Cache::put($key, $data, $ttl);
             } catch (\Exception $e) {
                 // Log the error but continue without caching
-                \Log::warning('Failed to cache data', [
+                Log::warning('Failed to cache data', [
                     'key' => $key,
                     'error' => $e->getMessage(),
                     'error_type' => get_class($e)
@@ -60,7 +61,7 @@ class QuizController extends Controller
             return $data;
         } catch (\Exception $e) {
             // If cache retrieval fails, just execute the callback
-            \Log::warning('Cache operation failed, falling back to direct query', [
+            Log::warning('Cache operation failed, falling back to direct query', [
                 'key' => $key,
                 'error' => $e->getMessage()
             ]);
@@ -528,9 +529,11 @@ class QuizController extends Controller
 
         $cacheKey = 'quizzes_index_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
 
-        $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(5), function () use ($query, $perPage) {
-            return $query->paginate($perPage);
-        });
+        // Temporarily disable cache for debugging
+        // $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(5), function () use ($query, $perPage) {
+        //     return $query->paginate($perPage);
+        // });
+        $data = $query->paginate($perPage);
 
         return QuizResource::collection($data);
     }

@@ -129,4 +129,11 @@ class Quizee extends Model
     {
         return $this->belongsToMany(DailyChallenge::class, 'user_daily_challenges')->withPivot('completed_at')->withTimestamps();
     }
+
+    public function parents()
+    {
+        return $this->belongsToMany(Parent::class, 'parent_student')
+            ->withPivot('student_invitation_id', 'package_assignment', 'connected_at')
+            ->withTimestamps();
+    }
 }

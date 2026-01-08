@@ -733,6 +733,7 @@ class TopicSeeder extends Seeder
                             'created_at' => now(),
                             'updated_at' => now(),
                             'image' => null,
+                            'slug' => \Illuminate\Support\Str::slug($topicName),
                         ]
                     );
                 }

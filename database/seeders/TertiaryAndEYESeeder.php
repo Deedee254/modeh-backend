@@ -89,6 +89,7 @@ class TertiaryAndEYESeeder extends Seeder
                     'approval_requested_at' => now(),
                     'updated_at' => now(),
                     'created_at' => now(),
+                    'slug' => \Illuminate\Support\Str::slug($sub),
                 ]);
             }
         }

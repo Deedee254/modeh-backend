@@ -7,7 +7,7 @@ use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Filament\Tables\Columns\TextColumn;
 use App\Models\User;
 
-class TopStudentsTable extends TableWidget
+class TopQuizeesTable extends TableWidget
 {
     protected static ?int $sort = 12;
 
@@ -46,7 +46,7 @@ class TopStudentsTable extends TableWidget
     protected function getTableColumns(): array
     {
         return [
-            TextColumn::make('name')->label('Student')->searchable()->sortable(),
+            TextColumn::make('name')->label('Quizee')->searchable()->sortable(),
             TextColumn::make('quiz_attempts_count')->label('Attempts')->sortable(),
             TextColumn::make('quiz_attempts_avg_score')->label('Avg Score')->formatStateUsing(fn($state) => $state ? number_format($state,2) : '0.00')->sortable(),
         ];

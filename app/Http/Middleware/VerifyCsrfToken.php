@@ -20,6 +20,8 @@ class VerifyCsrfToken extends BaseVerifier
      * @var array<int, string>
      */
     protected $except = [
-        //
+        'api/login',
+        'api/auth/social-sync',
+        'admin/login',
     ];
 }
