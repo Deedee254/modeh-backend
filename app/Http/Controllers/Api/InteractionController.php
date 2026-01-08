@@ -9,6 +9,7 @@ use App\Models\QuizMaster;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use App\Events\QuizLiked;
 use App\Events\QuizMasterFollowed;
 use App\Notifications\QuizLikedNotification;
@@ -50,7 +51,7 @@ class InteractionController extends Controller
                     $quiz->author->notify(new QuizLikedNotification($quiz, $user));
                 }
             } catch (\Throwable $e) {
-                \Log::error('Failed to broadcast QuizLiked event or send notification', [
+                Log::error('Failed to broadcast QuizLiked event or send notification', [
                     'quiz_id' => $quiz->id,
                     'user_id' => $user->id,
                     'error' => $e->getMessage(),
@@ -110,7 +111,7 @@ class InteractionController extends Controller
             } catch (\Throwable $e) {
                 // Don't let broadcast failures break the follow operation.
                 // Log for later inspection.
-                \Log::error('Failed to broadcast QuizMasterFollowed event', [
+                Log::error('Failed to broadcast QuizMasterFollowed event', [
                     'quiz_master_id' => $quizMaster->id,
                     'user_id' => $user->id,
                     'error' => $e->getMessage(),
