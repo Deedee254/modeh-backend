@@ -29,9 +29,15 @@ class LevelResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $name = $this->name;
+        $lowerName = strtolower($name);
+        if (str_contains($lowerName, 'tertiary') || str_contains($lowerName, 'higher education') || str_contains($lowerName, 'university')) {
+             $name = $this->course_name ?? $name;
+        }
+
         return [
             'id' => $this->id,
-            'name' => ($this->name === 'Tertiary') ? ($this->course_name ?? $this->name) : $this->name,
+            'name' => $name,
             'slug' => $this->slug,
             'order' => $this->order,
             'description' => $this->description,

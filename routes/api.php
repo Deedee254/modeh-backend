@@ -425,44 +425,48 @@ Route::prefix('echo-test')->group(function () {
 
 // Broadcasting auth endpoint - moved to API routes for consistency with other API endpoints
 Route::post('/broadcasting/auth', function (Request $request) {
-    $channel = $request->input('channel_name');
-    $socketId = $request->input('socket_id');
-    $user = $request->user();
+    try {
+        $channel = $request->input('channel_name');
+        $socketId = $request->input('socket_id');
+        $user = $request->user();
 
-    // Strip Private/Presence prefixes if present (e.g., 'private-user.1', 'presence-user.1')
-    $channel = preg_replace('/^(private|presence)-/', '', $channel);
+        // Validate required inputs
+        if (!$channel || !$socketId) {
+            return response()->json(['error' => 'Missing required parameters'], 400);
+        }
 
-    // Allow public channels (no prefix) - they don't require authentication
-    if (!$request->input('channel_name')) {
-        return response()->json(['error' => 'No channel name provided'], 403);
+        // Check if this is a public channel (no private/presence prefix)
+        $isPublic = !str_starts_with($channel, 'private-') &&
+            !str_starts_with($channel, 'presence-');
+        
+        if ($isPublic) {
+            // Public channels don't require authentication
+            return response()->json(['auth' => ''], 200);
+        }
+
+        // For private/presence channels, require authentication
+        if (!$user) {
+            return response()->json(['error' => 'Unauthenticated'], 403);
+        }
+
+        // Generate auth signature manually using Pusher's HMAC method
+        // This avoids needing the Pusher PHP class
+        $pusherKey = config('broadcasting.connections.pusher.key');
+        $pusherSecret = config('broadcasting.connections.pusher.secret');
+        
+        if (!$pusherKey || !$pusherSecret) {
+            return response()->json(['error' => 'Broadcasting not configured'], 500);
+        }
+
+        // Build auth string: "key:signature"
+        $authString = $pusherKey . ':' . $socketId . ':' . $channel;
+        $signature = hash_hmac('sha256', $authString, $pusherSecret);
+        
+        return response()->json([
+            'auth' => $pusherKey . ':' . $signature
+        ], 200);
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('Broadcasting auth error:', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+        return response()->json(['error' => 'Broadcasting auth failed', 'message' => $e->getMessage()], 500);
     }
-
-    $isPublic = !str_starts_with($request->input('channel_name'), 'private-') &&
-        !str_starts_with($request->input('channel_name'), 'presence-');
-    if ($isPublic) {
-        return response()->json(['auth' => ''], 200);
-    }
-
-    // For quiz channels, allow anyone (authenticated or guest) since quiz events are public information
-    // But still generate proper auth signature for private channels
-    if (str_starts_with($channel, 'quiz.')) {
-        // Quiz channels are defined as private but allow anyone to subscribe
-        // Generate auth signature for the private channel
-        return \Illuminate\Support\Facades\Broadcast::auth($request);
-    }
-
-    // For user and group channels, require authentication
-    if (!$user) {
-        return response()->json(['error' => 'Unauthenticated'], 403);
-    }
-
-    // Generate the auth signature for private/presence channels
-    if (str_starts_with($request->input('channel_name'), 'private-')) {
-        return \Illuminate\Support\Facades\Broadcast::auth($request);
-    } elseif (str_starts_with($request->input('channel_name'), 'presence-')) {
-        return \Illuminate\Support\Facades\Broadcast::auth($request);
-    }
-
-    // Default deny
-    return response()->json(['error' => 'Unauthorized'], 403);
-})->middleware('web'); // Need web middleware for session-based auth
+})->middleware(['auth:sanctum']); // Authenticate via Sanctum (CORS is handled globally)

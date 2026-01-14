@@ -170,12 +170,13 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     }
 
     /**
-     * Backwards-compatible avatar alias.
+     * Backwards-compatible avatar alias with fallback to social avatar.
+     * Returns custom avatar if set, otherwise falls back to social provider avatar (e.g., Google).
      * Some frontend clients expect `avatar` while the canonical column is `avatar_url`.
      */
     public function getAvatarAttribute()
     {
-        return $this->avatar_url;
+        return $this->avatar_url ?? $this->social_avatar;
     }
 
     public function quizzes()

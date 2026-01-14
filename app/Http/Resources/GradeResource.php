@@ -35,12 +35,29 @@ class GradeResource extends JsonResource
             'slug' => $this->slug,
             'display_name' => $this->display_name ?? $this->name,
             'description' => $this->description,
+            'type' => $this->type,
             'level_id' => $this->level_id,
-            'level_name' => $this->level ? (($this->level->name === 'Tertiary') ? ($this->level->course_name ?? $this->level->name) : $this->level->name) : null,
+            'level_name' => $this->getLevelName(),
             'subjects_count' => $this->subjects_count,
             'quizzes_count' => $this->getQuizzesCount(),
             'subjects' => SubjectResource::collection($this->whenLoaded('subjects')),
         ];
+    }
+
+    /**
+     * Get the formatted level name.
+     */
+    protected function getLevelName(): ?string
+    {
+        if (!$this->level) return null;
+        
+        $name = $this->level->name;
+        $lowerName = strtolower($name);
+        if (str_contains($lowerName, 'tertiary') || str_contains($lowerName, 'higher education') || str_contains($lowerName, 'university')) {
+             return $this->level->course_name ?? $name;
+        }
+        
+        return $name;
     }
 
     /**
