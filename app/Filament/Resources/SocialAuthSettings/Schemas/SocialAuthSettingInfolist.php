@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\SocialAuthSettings\Schemas;
 
 use Filament\Schemas\Schema;
-use Filament\Infolists\Components\Section;
+use Filament\Schemas\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 
 class SocialAuthSettingInfolist
