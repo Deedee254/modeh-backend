@@ -49,6 +49,7 @@ class OnboardingService
                     break;
                 case 'role_quizee':
                 case 'role_quiz-master':
+                case 'role_parent':
                     if (! $skipped) {
                         // Role selection step: update user's role and optional password
                         $onboarding->role_selected = true;
@@ -56,7 +57,13 @@ class OnboardingService
                             $user->role = $data['role'];
                         } else {
                             // Fallback based on step name
-                            $user->role = $step === 'role_quiz-master' ? 'quiz-master' : 'quizee';
+                            if ($step === 'role_quiz-master') {
+                                $user->role = 'quiz-master';
+                            } elseif ($step === 'role_parent') {
+                                $user->role = 'parent';
+                            } else {
+                                $user->role = 'quizee';
+                            }
                         }
 
                         // If a password is provided, set it (User model casts 'password' => 'hashed')
@@ -65,6 +72,13 @@ class OnboardingService
                         }
 
                         $user->save();
+
+                        // For parent role we consider onboarding minimal; mark profile complete so parent can continue to dashboard
+                        if ($user->role === 'parent') {
+                            $onboarding->profile_completed = true;
+                            $user->is_profile_completed = true;
+                            $user->save();
+                        }
                     }
                     break;
                 case 'grade':
@@ -158,7 +172,7 @@ class OnboardingService
     {
         // Check if institution already exists by name or slug
         $existingInstitution = Institution::where('name', $institutionText)
-            ->orWhere('slug', \Str::slug($institutionText))
+            ->orWhere('slug', Str::slug($institutionText))
             ->first();
 
         if ($existingInstitution) {

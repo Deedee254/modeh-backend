@@ -137,7 +137,13 @@ class PackageController extends Controller
 
             try {
                 $config = config('services.mpesa');
-                $requiredKeys = ['consumer_key', 'consumer_secret', 'shortcode', 'passkey'];
+                // In sandbox/simulate mode the passkey is not always required by the dev environment,
+                // so only require it for non-sandbox (production) configurations.
+                $requiredKeys = ['consumer_key', 'consumer_secret', 'shortcode'];
+                $isSandbox = !empty($config['simulate']) || (isset($config['environment']) && $config['environment'] === 'sandbox');
+                if (!$isSandbox) {
+                    $requiredKeys[] = 'passkey';
+                }
                 $missing = [];
                 foreach ($requiredKeys as $k) {
                     if (empty($config[$k])) $missing[] = $k;

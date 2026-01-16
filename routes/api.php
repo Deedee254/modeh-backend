@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Models\Quiz;
+use App\Models\Subject;
 
 // Custom route model binding for Quiz: resolve by slug if not numeric, else by ID
 Route::bind('quiz', function ($value) {
@@ -11,6 +12,14 @@ Route::bind('quiz', function ($value) {
         return Quiz::findOrFail($value);
     }
     return Quiz::where('slug', $value)->firstOrFail();
+});
+
+// Allow subjects to be resolved by slug or id (frontend may pass slug)
+Route::bind('subject', function ($value) {
+    if (is_numeric($value)) {
+        return Subject::findOrFail($value);
+    }
+    return Subject::where('slug', $value)->firstOrFail();
 });
 
 Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->middleware('throttle:5,1');
