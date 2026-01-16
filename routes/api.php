@@ -45,7 +45,10 @@ Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])-
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
 
 // Social sync endpoint for Nuxt-Auth
-Route::post('/auth/social-sync', [AuthController::class, 'socialSync'])->middleware('web');
+// Accept unauthenticated POSTs so OAuth callbacks from the server can
+// exchange provider payloads for a personal access token. Do not require
+// the session/CSRF middleware for this endpoint.
+Route::post('/auth/social-sync', [AuthController::class, 'socialSync'])->middleware('throttle:10,1');
 
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.

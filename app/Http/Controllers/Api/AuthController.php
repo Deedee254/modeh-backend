@@ -336,13 +336,12 @@ class AuthController extends Controller
             return response()->json(['message' => 'Failed to sync social user'], 500);
         }
 
-        // Log the user in to establish the session
-        Auth::login($user, true);
-        $request->session()->regenerate();
-
+        // For server-to-server social sync we avoid relying on the HTTP
+        // session (no CSRF or cookies). Create a personal access token and
+        // return it — the frontend will use it for authenticated API calls.
         $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 
-        // Create a personal access token for the session
+        // Create a personal access token for the user (stateless)
         $token = $user->createToken('nuxt-auth')->plainTextToken;
 
         // Return user data in Nuxt-Auth compatible format with isNewUser flag
