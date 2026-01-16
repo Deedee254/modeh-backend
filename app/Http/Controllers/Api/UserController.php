@@ -8,6 +8,9 @@ use App\Models\User;
 use App\Services\OnboardingService;
 use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
@@ -17,6 +20,15 @@ class UserController extends Controller
         if (!$user) {
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
+
+        // Sync backend session for stateful requests (e.g. from the Nuxt frontend).
+        // If the user is authenticated via Bearer token but the session is empty,
+        // we establish the session so stateful features like Laravel Echo or
+        // session-based preferences work correctly.
+        if ($request->hasSession() && !Auth::guard('web')->check()) {
+            Auth::guard('web')->login($user);
+        }
+
         $cacheKey = "user_me_{$user->id}";
 
         $userData = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($user) {
@@ -108,7 +120,7 @@ class UserController extends Controller
             'institution' => 'sometimes|nullable|string',
         ];
 
-        $validator = \Validator::make($data, $rules);
+        $validator = Validator::make($data, $rules);
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
@@ -160,12 +172,12 @@ class UserController extends Controller
             'password' => 'required|string|min:6|confirmed',
         ];
 
-        $validator = \Validator::make($data, $rules);
+        $validator = Validator::make($data, $rules);
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        if (!\Hash::check($data['current_password'], $user->password)) {
+        if (!Hash::check($data['current_password'], $user->password)) {
             return response()->json(['message' => 'Current password is incorrect'], 403);
         }
 
@@ -187,7 +199,7 @@ class UserController extends Controller
             'theme' => 'required|string',
         ];
 
-        $validator = \Validator::make($data, $rules);
+        $validator = Validator::make($data, $rules);
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }

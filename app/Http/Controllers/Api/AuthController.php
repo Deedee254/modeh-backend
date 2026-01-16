@@ -10,11 +10,17 @@ use App\Models\User;
 use App\Models\Institution;
 use App\Models\Affiliate;
 use App\Models\AffiliateReferral;
+use App\Models\Package;
+use App\Models\Subscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -27,7 +33,7 @@ class AuthController extends Controller
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => $existingUser->createToken('auth')->plainTextToken
+                'token' => User::find($existingUser->id)->createToken('auth')->plainTextToken
             ], 409);
         }
 
@@ -56,7 +62,7 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => $request->password ? Hash::make($request->password) : Hash::make(\Illuminate\Support\Str::random(40)),
+            'password' => $request->password ? Hash::make($request->password) : Hash::make(Str::random(40)),
             'role' => 'quizee',
             'phone' => $request->phone,
             'social_id' => $request->input('social_id'),
@@ -75,11 +81,11 @@ class AuthController extends Controller
 
         // Assign default package subscription to quizee (idempotent)
         try {
-            $defaultPackage = \App\Models\Package::where('is_default', true)->first();
+            $defaultPackage = Package::where('is_default', true)->first();
             if ($defaultPackage) {
-                $existingSub = \App\Models\Subscription::where('user_id', $user->id)->orderByDesc('created_at')->first();
+                $existingSub = Subscription::where('user_id', $user->id)->orderByDesc('created_at')->first();
                 if (!($existingSub && $existingSub->status === 'active' && (is_null($existingSub->ends_at) || $existingSub->ends_at->gt(now())))) {
-                    \App\Models\Subscription::updateOrCreate([
+                    Subscription::updateOrCreate([
                         'user_id' => $user->id,
                     ], [
                         'package_id' => $defaultPackage->id,
@@ -137,7 +143,7 @@ class AuthController extends Controller
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => $existingUser->createToken('auth')->plainTextToken
+                'token' => User::find($existingUser->id)->createToken('auth')->plainTextToken
             ], 409);
         }
 
@@ -165,7 +171,7 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => $request->password ? Hash::make($request->password) : Hash::make(\Illuminate\Support\Str::random(40)),
+            'password' => $request->password ? Hash::make($request->password) : Hash::make(Str::random(40)),
             'role' => 'quiz-master',
             'phone' => $request->phone,
             'social_id' => $request->input('social_id'),
@@ -222,7 +228,7 @@ class AuthController extends Controller
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => $existingUser->createToken('auth')->plainTextToken
+                'token' => User::find($existingUser->id)->createToken('auth')->plainTextToken
             ], 409);
         }
 
@@ -244,7 +250,7 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => $request->password ? Hash::make($request->password) : Hash::make(\Illuminate\Support\Str::random(40)),
+            'password' => $request->password ? Hash::make($request->password) : Hash::make(Str::random(40)),
             'role' => 'institution-manager',
             'phone' => $request->phone,
             'social_id' => $request->input('social_id'),
@@ -339,6 +345,7 @@ class AuthController extends Controller
         // For server-to-server social sync we avoid relying on the HTTP
         // session (no CSRF or cookies). Create a personal access token and
         // return it — the frontend will use it for authenticated API calls.
+        $user = User::find($user->id);
         $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 
         // Create a personal access token for the user (stateless)
@@ -388,8 +395,8 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-        // Load user data
-        $user = Auth::user();
+        // Load user data explicitly to ensure it's the correct User model with HasApiTokens trait
+        $user = User::find(Auth::id());
         $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 
         // Create a personal access token for the session
@@ -453,7 +460,7 @@ class AuthController extends Controller
         $token = $request->session()->token();
         
         // Log for debugging - helps identify CORS or routing issues
-        \Log::debug('CSRF token endpoint called', [
+        Log::debug('CSRF token endpoint called', [
             'token_prefix' => substr($token, 0, 10),
             'session_id' => $request->session()->getId(),
             'host' => $request->getHost(),
@@ -524,7 +531,7 @@ class AuthController extends Controller
         }
 
         $cacheKey = 'email_verification_token:' . $token;
-        $payload = \Illuminate\Support\Facades\Cache::pull($cacheKey);
+        $payload = Cache::pull($cacheKey);
         if (! $payload || ! is_array($payload) || empty($payload['id']) || empty($payload['hash'])) {
             return response()->json(['error' => 'token_not_found_or_expired'], 410);
         }
@@ -547,7 +554,7 @@ class AuthController extends Controller
         // so the frontend can save it for post-login processing.
         if ($ftoken && is_string($ftoken)) {
             $cacheKey2 = 'invite_frontend_token:' . $ftoken;
-            $map = \Illuminate\Support\Facades\Cache::pull($cacheKey2);
+            $map = Cache::pull($cacheKey2);
             if ($map && is_array($map) && !empty($map['invitation_token'])) {
                 $inviteToken = $map['invitation_token'];
                 $institutionId = $map['institution_id'] ?? null;
@@ -555,12 +562,12 @@ class AuthController extends Controller
                 $authUser = $request->user();
                 if ($authUser) {
                     try {
-                        $invitation = \Illuminate\Support\Facades\DB::table('institution_user')
+                        $invitation = DB::table('institution_user')
                             ->where('invitation_token', $inviteToken)
                             ->where('institution_id', $institutionId)
                             ->first();
                         if ($invitation) {
-                            \Illuminate\Support\Facades\DB::table('institution_user')
+                            DB::table('institution_user')
                                 ->where('id', $invitation->id)
                                 ->update([
                                     'user_id' => $authUser->id,
@@ -572,7 +579,7 @@ class AuthController extends Controller
                                 ]);
                             // Attempt to assign subscription seat if applicable
                             try {
-                                $institution = \App\Models\Institution::find($institutionId);
+                                $institution = Institution::find($institutionId);
                                 if ($institution) {
                                     $activeSub = $institution->activeSubscription();
                                     if ($activeSub && $activeSub->package) {
@@ -615,17 +622,17 @@ class AuthController extends Controller
             return response()->json(['message' => 'User not found'], 404);
         }
 
-        $token = \Illuminate\Support\Str::random(64);
+        $token = Str::random(64);
         
         $cacheKey = 'password_reset_token:' . $token;
-        \Illuminate\Support\Facades\Cache::put($cacheKey, [
+        Cache::put($cacheKey, [
             'email' => $user->email,
             'user_id' => $user->id,
         ], now()->addHour());
 
         try {
             $resetUrl = '/reset-password/' . $token . '?email=' . urlencode($user->email);
-            \Mail::send('emails.password-reset', ['user' => $user, 'resetUrl' => $resetUrl, 'resetToken' => $token], function ($message) use ($user) {
+            Mail::send('emails.password-reset', ['user' => $user, 'resetUrl' => $resetUrl, 'resetToken' => $token], function ($message) use ($user) {
                 $message->to($user->email)
                     ->subject('Reset Your Password');
             });
@@ -654,7 +661,7 @@ class AuthController extends Controller
         }
 
         $cacheKey = 'password_reset_token:' . $request->token;
-        $payload = \Illuminate\Support\Facades\Cache::get($cacheKey);
+        $payload = Cache::get($cacheKey);
         
         if (!$payload || !is_array($payload) || empty($payload['email'])) {
             return response()->json(['message' => 'Invalid or expired reset token'], 400);
@@ -672,10 +679,10 @@ class AuthController extends Controller
         $user->password = Hash::make($request->password);
         $user->save();
 
-        \Illuminate\Support\Facades\Cache::forget($cacheKey);
+        Cache::forget($cacheKey);
 
         try {
-            \Mail::send('emails.password-reset-confirmed', ['user' => $user], function ($message) use ($user) {
+            Mail::send('emails.password-reset-confirmed', ['user' => $user], function ($message) use ($user) {
                 $message->to($user->email)
                     ->subject('Your Password Has Been Reset');
             });

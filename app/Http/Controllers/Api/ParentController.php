@@ -56,7 +56,7 @@ class ParentController extends Controller
                 'is_active' => true,
             ]);
 
-            $token = $user->createToken('auth')->plainTextToken;
+            $token = User::find($user->id)->createToken('auth')->plainTextToken;
 
             return response()->json([
                 'message' => 'Parent registered successfully',
