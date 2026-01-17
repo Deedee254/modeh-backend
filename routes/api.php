@@ -461,22 +461,48 @@ Route::post('/broadcasting/auth', function (Request $request) {
             return response()->json(['error' => 'Unauthenticated'], 403);
         }
 
-        // Generate auth signature manually using Pusher's HMAC method
-        // This avoids needing the Pusher PHP class
+        // Generate auth signature correctly using Pusher's HMAC method.
+        // For private channels: signature = HMAC_SHA256(secret, "{socket_id}:{channel_name}")
+        // For presence channels: signature = HMAC_SHA256(secret, "{socket_id}:{channel_name}:{channel_data}")
         $pusherKey = config('broadcasting.connections.pusher.key');
         $pusherSecret = config('broadcasting.connections.pusher.secret');
-        
+
         if (!$pusherKey || !$pusherSecret) {
             return response()->json(['error' => 'Broadcasting not configured'], 500);
         }
 
-        // Build auth string: "key:signature"
-        $authString = $pusherKey . ':' . $socketId . ':' . $channel;
-        $signature = hash_hmac('sha256', $authString, $pusherSecret);
-        
-        return response()->json([
-            'auth' => $pusherKey . ':' . $signature
-        ], 200);
+        $isPresence = str_starts_with($channel, 'presence-');
+
+        // Build channel_data for presence channels using the authenticated user
+        $channelData = null;
+        if ($isPresence) {
+            $userInfo = [
+                'name' => $user->name ?? $user->email ?? '',
+                'avatar' => $user->avatar_url ?? $user->avatar ?? null,
+            ];
+            $channelData = json_encode([
+                'user_id' => (string) $user->id,
+                'user_info' => $userInfo,
+            ]);
+        }
+
+        // Build the signing payload
+        $signingPayload = $socketId . ':' . $channel;
+        if ($isPresence && $channelData !== null) {
+            $signingPayload .= ':' . $channelData;
+        }
+
+        $signature = hash_hmac('sha256', $signingPayload, $pusherSecret);
+
+        $response = [
+            'auth' => $pusherKey . ':' . $signature,
+        ];
+
+        if ($isPresence && $channelData !== null) {
+            $response['channel_data'] = $channelData;
+        }
+
+        return response()->json($response, 200);
     } catch (\Exception $e) {
         \Illuminate\Support\Facades\Log::error('Broadcasting auth error:', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
         return response()->json(['error' => 'Broadcasting auth failed', 'message' => $e->getMessage()], 500);
