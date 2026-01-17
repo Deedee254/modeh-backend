@@ -480,16 +480,36 @@ Route::post('/broadcasting/auth', function (Request $request) {
                 'name' => $user->name ?? $user->email ?? '',
                 'avatar' => $user->avatar_url ?? $user->avatar ?? null,
             ];
-            $channelData = json_encode([
+
+            // Ensure json_encode always returns a string; if encoding fails
+            // fallback to a safe minimal object so the client receives
+            // `channel_data` and can validate the signature correctly.
+            $encoded = json_encode([
                 'user_id' => (string) $user->id,
                 'user_info' => $userInfo,
             ]);
+
+            if ($encoded === false) {
+                // Fallback to an empty user_info object if encoding fails
+                $channelData = json_encode([
+                    'user_id' => (string) $user->id,
+                    'user_info' => (object)[],
+                ]);
+                if ($channelData === false) {
+                    // As a last resort, provide an empty JSON object string
+                    $channelData = json_encode((object)[]);
+                }
+            } else {
+                $channelData = $encoded;
+            }
         }
 
         // Build the signing payload
         $signingPayload = $socketId . ':' . $channel;
-        if ($isPresence && $channelData !== null) {
-            $signingPayload .= ':' . $channelData;
+        if ($isPresence) {
+            // Append channel_data for presence channels; it will always be
+            // a string after the logic above (fallback ensures this).
+            $signingPayload .= ':' . ($channelData ?? json_encode((object)[]));
         }
 
         $signature = hash_hmac('sha256', $signingPayload, $pusherSecret);
@@ -498,8 +518,10 @@ Route::post('/broadcasting/auth', function (Request $request) {
             'auth' => $pusherKey . ':' . $signature,
         ];
 
-        if ($isPresence && $channelData !== null) {
-            $response['channel_data'] = $channelData;
+        // Always include channel_data in the response for presence channels
+        // (the client expects this field and will fail if it's absent).
+        if ($isPresence) {
+            $response['channel_data'] = $channelData ?? json_encode((object)[]);
         }
 
         return response()->json($response, 200);
