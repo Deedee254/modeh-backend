@@ -11,7 +11,7 @@ use App\Models\QuizMaster;
 use App\Models\Affiliate;
 use App\Models\Quizee;
 use App\Models\Institution;
-use App\Models\Parent as ParentModel;
+use App\Models\ParentUser;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 
@@ -150,7 +150,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     public function parentProfile()
     {
-        return $this->hasOne(ParentModel::class);
+        return $this->hasOne(ParentUser::class);
     }
 
     /**

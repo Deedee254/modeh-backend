@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Models\Parent as ParentModel;
+use App\Models\ParentUser;
 use App\Models\QuizeeInvitation;
 use App\Models\Quizee;
 use App\Models\Subscription;
@@ -49,7 +49,7 @@ class ParentController extends Controller
                 'is_profile_completed' => true,
             ]);
 
-            $parentProfile = ParentModel::create([
+            $parentProfile = ParentUser::create([
                 'user_id' => $user->id,
                 'occupation' => $request->occupation,
                 'phone' => $request->phone,
@@ -77,7 +77,7 @@ class ParentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $parent = ParentModel::where('user_id', $user->id)->first();
+        $parent = ParentUser::where('user_id', $user->id)->first();
         if (!$parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
@@ -103,7 +103,7 @@ class ParentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $parent = ParentModel::where('user_id', $user->id)->first();
+        $parent = ParentUser::where('user_id', $user->id)->first();
         if (!$parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
@@ -156,7 +156,7 @@ class ParentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $parent = ParentModel::where('user_id', $user->id)->first();
+        $parent = ParentUser::where('user_id', $user->id)->first();
         if (!$parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
@@ -189,7 +189,7 @@ class ParentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $parent = ParentModel::where('user_id', $user->id)->first();
+        $parent = ParentUser::where('user_id', $user->id)->first();
         if (!$parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
@@ -230,7 +230,7 @@ class ParentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $parent = ParentModel::where('user_id', $user->id)->first();
+        $parent = ParentUser::where('user_id', $user->id)->first();
         if (!$parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
@@ -256,7 +256,7 @@ class ParentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $parent = ParentModel::where('user_id', $user->id)->first();
+        $parent = ParentUser::where('user_id', $user->id)->first();
         if (!$parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
@@ -281,7 +281,7 @@ class ParentController extends Controller
 
             $subscription = Subscription::create([
                 'user_id' => $quizeeUser->id,
-                'owner_type' => 'App\Models\Parent',
+                'owner_type' => 'App\Models\ParentUser',
                 'owner_id' => $parent->id,
                 'package_id' => $package->id,
                 'status' => 'pending',
@@ -307,12 +307,12 @@ class ParentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $parent = ParentModel::where('user_id', $user->id)->first();
+        $parent = ParentUser::where('user_id', $user->id)->first();
         if (!$parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
 
-        $subscriptions = Subscription::where('owner_type', 'App\Models\Parent')
+        $subscriptions = Subscription::where('owner_type', 'App\Models\ParentUser')
             ->where('owner_id', $parent->id)
             ->with('package')
             ->get();
