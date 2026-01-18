@@ -7,6 +7,7 @@ use App\Models\Question;
 use App\Models\Quiz;
 use App\Services\MediaMetadataService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
@@ -230,7 +231,7 @@ class QuestionController extends Controller
         if ($v->fails()) {
             // Log validation failure for easier debugging in dev/staging
             try {
-                \Log::error('Question store validation failed', [
+                Log::error('Question store validation failed', [
                     'request' => $request->all(),
                     'errors' => $v->errors()->toArray(),
                 ]);
@@ -477,7 +478,7 @@ class QuestionController extends Controller
         // merge quiz id into request then call store logic
         $request->merge(['quiz_id' => $quiz->id]);
         try {
-            \Log::info('QuestionController@storeForQuiz incoming', [
+            Log::info('QuestionController@storeForQuiz incoming', [
                 'quiz_id' => $quiz->id,
                 'keys' => array_keys($request->all()),
             ]);
@@ -492,7 +493,7 @@ class QuestionController extends Controller
             return $this->store($request);
         } catch (\Throwable $e) {
             try {
-                \Log::error('QuestionController@storeForQuiz failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+                Log::error('QuestionController@storeForQuiz failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             } catch (\Throwable $_) {
             }
             return response()->json(['message' => 'Failed to store question for quiz'], 500);
@@ -530,7 +531,7 @@ class QuestionController extends Controller
 
         if ($validator->fails()) {
             try {
-                \Log::error('Bulk questions validation failed', [
+                Log::error('Bulk questions validation failed', [
                     'request' => $request->all(),
                     'errors' => $validator->errors()->toArray(),
                 ]);
@@ -574,7 +575,7 @@ class QuestionController extends Controller
         $saved = [];
         $incomingIds = [];
         try {
-            \Log::info('QuestionController@bulkUpdateForQuiz incoming', [
+            Log::info('QuestionController@bulkUpdateForQuiz incoming', [
                 'quiz_id' => $quiz->id,
                 'incoming_count' => is_array($items) ? count($items) : null,
                 'media_keys' => is_array($mediaFiles) ? array_keys($mediaFiles) : [],
@@ -711,7 +712,7 @@ class QuestionController extends Controller
                     }
                 } catch (\Throwable $e) {
                     try {
-                        \Log::error('QuestionController@bulkUpdateForQuiz file storage failed', ['quiz_id' => $quiz->id, 'index' => $idx, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+                        Log::error('QuestionController@bulkUpdateForQuiz file storage failed', ['quiz_id' => $quiz->id, 'index' => $idx, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
                     } catch (\Throwable $_) {
                     }
                 }
@@ -776,7 +777,7 @@ class QuestionController extends Controller
             $quiz->recalcDifficulty();
         } catch (\Throwable $e) {
             try {
-                \Log::error('QuestionController@bulkUpdateForQuiz recalcDifficulty failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage()]);
+                Log::error('QuestionController@bulkUpdateForQuiz recalcDifficulty failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage()]);
             } catch (\Throwable $_) {
             }
         }
@@ -1059,7 +1060,7 @@ class QuestionController extends Controller
             return response()->json(['message' => 'Deleted'], 200);
         } catch (\Throwable $e) {
             try {
-                \Log::error('QuestionController@destroy failed', ['question_id' => $question->id ?? null, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+                Log::error('QuestionController@destroy failed', ['question_id' => $question->id ?? null, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             } catch (\Throwable $_) {
             }
             return response()->json(['message' => 'Failed to delete'], 500);

@@ -86,7 +86,7 @@ class QuizController extends Controller
         $v = $this->validateUpdateRequest($request);
         if ($v->fails()) {
             try {
-                \Log::error('QuizController@update validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]);
+                Log::error('QuizController@update validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]);
             } catch (\Throwable $_) {
             }
             return response()->json(['errors' => $v->errors()], 422);
@@ -132,7 +132,7 @@ class QuizController extends Controller
         $this->normalizeBooleanInputs($request, ['is_paid', 'use_per_question_timer', 'shuffle_questions', 'shuffle_answers', 'is_draft']);
 
         // Log incoming payload for debugging (don't include file streams)
-        \Log::info('QuizController@update incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
+        Log::info('QuizController@update incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
     }
 
     private function validateUpdateRequest(Request $request): \Illuminate\Contracts\Validation\Validator
@@ -273,7 +273,7 @@ class QuizController extends Controller
         }
 
         try {
-            \Log::info('QuizController@update received questions payload', [
+            Log::info('QuizController@update received questions payload', [
                 'quiz_id' => $quiz->id,
                 'questions_count' => is_array($request->questions) ? count($request->questions) : null,
                 'files' => array_keys($request->files->all()),
@@ -288,7 +288,7 @@ class QuizController extends Controller
                 $this->createQuestionForUpdate($quiz, $user, $q, $index, $mediaFiles, $topic);
             } catch (\Throwable $e) {
                 try {
-                    \Log::error('QuizController@update question failed', [
+                    Log::error('QuizController@update question failed', [
                         'quiz_id' => $quiz->id,
                         'index' => $index,
                         'error' => $e->getMessage(),
@@ -386,7 +386,7 @@ class QuizController extends Controller
 
         $createdQuestion = Question::create($questionData);
         try {
-            \Log::info('QuizController@update question created', [
+            Log::info('QuizController@update question created', [
                 'quiz_id' => $quiz->id,
                 'question_id' => $createdQuestion->id ?? null,
                 'created_grade_id' => $createdQuestion->grade_id,
@@ -408,7 +408,7 @@ class QuizController extends Controller
         // Trigger achievement checks for updating a quiz (in case level changed)
         try {
             if ($this->achievementService) {
-                $this->achievementService->checkAchievements(auth()->id(), [
+                $this->achievementService->checkAchievements(Auth::id(), [
                     'type' => 'quiz_updated',
                     'quiz_id' => $quiz->id,
                     'level_id' => $quiz->level_id,
@@ -477,20 +477,39 @@ class QuizController extends Controller
         // filter by topic or approved (explicit query overrides defaults)
         if ($topic = $request->get('topic_id')) {
             $query->where('topic_id', $topic);
+        } else if ($topicSlug = $request->get('topic')) {
+            $query->whereHas('topic', function ($q) use ($topicSlug) {
+                $q->where('slug', $topicSlug);
+            });
         }
+
         // filter by subject_id explicitly
         if ($subjectId = $request->get('subject_id')) {
             $query->where('subject_id', $subjectId);
+        } else if ($subjectSlug = $request->get('subject')) {
+            $query->whereHas('subject', function ($q) use ($subjectSlug) {
+                $q->where('slug', $subjectSlug);
+            });
         }
+
         // filter by level (via the quiz's grade's level_id)
         if ($levelId = $request->get('level_id')) {
             $query->whereHas('grade', function ($q) use ($levelId) {
                 $q->where('level_id', $levelId);
             });
+        } else if ($levelSlug = $request->get('level')) {
+            $query->whereHas('level', function ($q) use ($levelSlug) {
+                $q->where('slug', $levelSlug);
+            });
         }
+
         // filter by grade_id explicitly
         if ($gradeId = $request->get('grade_id')) {
             $query->where('grade_id', $gradeId);
+        } else if ($gradeSlug = $request->get('grade')) {
+            $query->whereHas('grade', function ($q) use ($gradeSlug) {
+                $q->where('slug', $gradeSlug);
+            });
         }
         // filter by paid/free status (frontend can pass is_paid=0 or is_paid=1)
         if ($request->has('is_paid')) {
@@ -613,18 +632,18 @@ class QuizController extends Controller
         $this->normalizeBooleanInputs($request, ['is_paid', 'use_per_question_timer', 'shuffle_questions', 'shuffle_answers', 'is_draft']);
 
         // Log incoming payload for debugging (don't include file streams)
-        \Log::info('QuizController@store incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
+        Log::info('QuizController@store incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
 
         // Temporary: attempt to dump full request payload for debugging. Wrapped in try/catch
         // because uploaded file objects may not be serializable in logs.
         try {
-            \Log::debug('QuizController@store full request dump', [
+            Log::debug('QuizController@store full request dump', [
                 'all' => $request->all(),
                 'files' => array_keys($request->files->all()),
             ]);
         } catch (\Throwable $e) {
             try {
-                \Log::error('QuizController@store dump failed', ['error' => $e->getMessage()]);
+                Log::error('QuizController@store dump failed', ['error' => $e->getMessage()]);
             } catch (\Throwable $_) {
             }
         }
@@ -653,7 +672,7 @@ class QuizController extends Controller
 
         if ($v->fails()) {
             try {
-                \Log::error('QuizController@store validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]);
+                Log::error('QuizController@store validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]);
             } catch (\Throwable $_) {
             }
             return response()->json(['errors' => $v->errors()], 422);
@@ -851,7 +870,7 @@ class QuizController extends Controller
 
                 $createdQuestion = Question::create($questionData);
                 try {
-                    \Log::info('QuizController@store question created', [
+                    Log::info('QuizController@store question created', [
                         'quiz_id' => $quiz->id,
                         'question_id' => $createdQuestion->id ?? null,
                         'created_grade_id' => $createdQuestion->grade_id,
@@ -863,7 +882,7 @@ class QuizController extends Controller
                 }
             } catch (\Throwable $e) {
                 try {
-                    \Log::error('QuizController@store question failed', [
+                    Log::error('QuizController@store question failed', [
                         'quiz_id' => $quiz->id,
                         'index' => $index,
                         'error' => $e->getMessage(),

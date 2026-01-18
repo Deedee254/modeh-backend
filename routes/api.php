@@ -22,6 +22,27 @@ Route::bind('subject', function ($value) {
     return Subject::where('slug', $value)->firstOrFail();
 });
 
+Route::bind('topic', function ($value) {
+    if (is_numeric($value)) {
+        return \App\Models\Topic::findOrFail($value);
+    }
+    return \App\Models\Topic::where('slug', $value)->firstOrFail();
+});
+
+Route::bind('level', function ($value) {
+    if (is_numeric($value)) {
+        return \App\Models\Level::findOrFail($value);
+    }
+    return \App\Models\Level::where('slug', $value)->firstOrFail();
+});
+
+Route::bind('grade', function ($value) {
+    if (is_numeric($value)) {
+        return \App\Models\Grade::findOrFail($value);
+    }
+    return \App\Models\Grade::where('slug', $value)->firstOrFail();
+});
+
 Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->middleware('throttle:5,1');
 Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster'])->middleware('throttle:5,1');
 Route::post('/register/institution-manager', [AuthController::class, 'registerInstitutionManager'])->middleware('throttle:5,1');

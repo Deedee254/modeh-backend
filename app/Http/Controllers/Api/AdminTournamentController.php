@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Tournament;
 use App\Models\Question;
 use App\Models\TournamentBattle;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Gate;
@@ -216,13 +217,13 @@ class AdminTournamentController extends Controller
                     }));
 
                     $participantIds = $selectedIds;
-                    \Log::info('generateMatches: selected top qualifiers for tournament ' . $tournament->id . '; selected: ' . implode(',', $selectedIds) . '; excluded: ' . implode(',', $excluded));
+                    Log::info('generateMatches: selected top qualifiers for tournament ' . $tournament->id . '; selected: ' . implode(',', $selectedIds) . '; excluded: ' . implode(',', $excluded));
                 } else {
                     // Fallback: simple trim by taking first N (after shuffle)
                     if (count($participantIds) > $slots) {
                         $excluded = array_slice($participantIds, $slots);
                         $participantIds = array_slice($participantIds, 0, $slots);
-                        \Log::info('generateMatches: trimming participants to ' . $slots . ' slots for tournament ' . $tournament->id . '; excluded: ' . implode(',', $excluded));
+                        Log::info('generateMatches: trimming participants to ' . $slots . ' slots for tournament ' . $tournament->id . '; excluded: ' . implode(',', $excluded));
                     }
                 }
             } catch (\Throwable $e) {
@@ -230,7 +231,7 @@ class AdminTournamentController extends Controller
                 if (count($participantIds) > $slots) {
                     $excluded = array_slice($participantIds, $slots);
                     $participantIds = array_slice($participantIds, 0, $slots);
-                    \Log::warning('generateMatches: qualifier selection failed for tournament ' . $tournament->id . '; falling back to simple trim. Error: ' . $e->getMessage());
+                    Log::warning('generateMatches: qualifier selection failed for tournament ' . $tournament->id . '; falling back to simple trim. Error: ' . $e->getMessage());
                 }
             }
 
@@ -444,7 +445,7 @@ class AdminTournamentController extends Controller
         try {
             $result = $tournament->closeRoundAndAdvance($currentRound, true);
         } catch (\Throwable $e) {
-            \Log::error('Failed to advance round (admin): ' . $e->getMessage());
+            Log::error('Failed to advance round (admin): ' . $e->getMessage());
             return response()->json(['ok' => false, 'message' => 'Failed to advance round: ' . $e->getMessage()], 500);
         }
 
