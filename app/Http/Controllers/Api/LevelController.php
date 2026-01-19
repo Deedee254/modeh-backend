@@ -61,7 +61,7 @@ class LevelController extends Controller
                     $q->select('id', 'name', 'slug', 'level_id', 'description', 'type', 'display_name')
                       ->withCount('subjects')
                       ->with(['subjects' => function($s) {
-                          // Strategy B: Only essential subject fields
+                          // Strategy B: Only essential subject fields with quiz counts
                           $s->select('id', 'name', 'slug', 'grade_id', 'description', 'is_approved')
                             ->where('is_approved', true)
                             ->withCount('topics')

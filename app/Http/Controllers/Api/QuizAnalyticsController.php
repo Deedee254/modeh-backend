@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class QuizAnalyticsController extends Controller
 {

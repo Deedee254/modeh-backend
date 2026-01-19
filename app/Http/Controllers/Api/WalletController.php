@@ -67,7 +67,9 @@ class WalletController extends Controller
 
         // Broadcast new withdrawal request to quiz-master (and admins if needed) after commit
         try {
-            event(new \App\Events\WithdrawalRequestUpdated($wr->toArray(), $user->id));
+            if ($wr) {
+                event(new \App\Events\WithdrawalRequestUpdated($wr->toArray(), $user->id));
+            }
         } catch (\Throwable $e) {
             // ignore broadcast errors
         }
@@ -126,32 +128,11 @@ class WalletController extends Controller
 
         // broadcast wallet update
         try {
-            event(new \App\Events\WalletUpdated($wallet->toArray(), $quizMasterId));
-        } catch (\Throwable $_) {}
+            if ($wallet) {
+                event(new \App\Events\WalletUpdated($wallet->toArray(), $quizMasterId));
+            }
+        } catch (\Throwable $_) { }
 
         return response()->json(['ok' => true, 'wallet' => $wallet]);
-    }
-
-    /**
-     * Return rewards summary for the authenticated quizee
-     * { points, vouchers, nextThreshold, package (optional) }
-     */
-    public function rewardsMy()
-    {
-        $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false], 401);
-
-        // Basic rewards summary using available fields
-        $points = $user->points ?? 0;
-        // find any vouchers if Voucher model exists (best-effort)
-        $vouchers = [];
-        if (class_exists('\App\\Models\\Voucher') && method_exists($user, 'vouchers')) {
-            try { $vouchers = $user->vouchers()->where('redeemed', false)->get(); } catch (\Throwable $_) { $vouchers = []; }
-        }
-
-        // Next threshold heuristic: next multiple of 500
-        $nextThreshold = (ceil(($points + 1) / 500) * 500);
-
-        return response()->json(['ok' => true, 'points' => $points, 'vouchers' => $vouchers, 'nextThreshold' => $nextThreshold]);
     }
 }

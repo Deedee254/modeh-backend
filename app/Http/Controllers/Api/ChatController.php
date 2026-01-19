@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Models\Message;
 use App\Models\User;
 use App\Events\MessageSent;
@@ -286,12 +287,12 @@ class ChatController extends Controller
     private function updateMetrics(int $count = 1): void
     {
         try {
-            \DB::table('chat_metrics')->where('key', 'messages_total')->increment('value', $count, ['last_updated_at' => now()]);
+            DB::table('chat_metrics')->where('key', 'messages_total')->increment('value', $count, ['last_updated_at' => now()]);
             
             $bucket = now()->format('YmdHi');
             \App\Models\ChatMetricBucket::updateOrCreate(
                 ['metric_key' => 'messages_per_minute', 'bucket' => $bucket],
-                ['value' => \DB::raw('COALESCE(value,0) + ' . $count), 'last_updated_at' => now()]
+                ['value' => DB::raw('COALESCE(value,0) + ' . $count), 'last_updated_at' => now()]
             );
 
             ChatMetric::updateOrCreate(['key' => 'last_message_at'], ['value' => now()->getTimestamp(), 'last_updated_at' => now()]);

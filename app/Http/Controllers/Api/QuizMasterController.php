@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Subject;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class QuizMasterController extends Controller
 {
@@ -30,13 +31,34 @@ class QuizMasterController extends Controller
             }
         });
 
-        $quizMasters = $query->with(['quizMasterProfile.grade'])->paginate(12);
+        // If slug is provided, filter by slug - extract ID from slug pattern (e.g., "quiz-master-one" -> find by name/pattern)
+        if ($request->has('slug') && $request->slug) {
+            // The slug format is typically something like "quiz-master-one"
+            // We'll search by user name containing parts of the slug
+            $slugParts = explode('-', $request->slug);
+            // Filter users whose name matches the slug pattern
+            $query->whereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%{$request->slug}%"])
+                  ->orWhereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%".implode("%", $slugParts)."%"]);
+            
+            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes.topic'])->get();
+        } else {
+            $quizMasters = $query->with(['quizMasterProfile.grade'])->paginate(12);
+        }
 
         // Get current user for following checks
         $currentUserId = $request->user()?->id;
 
+        // Check if results are paginated or collection
+        $isPaginated = $quizMasters instanceof \Illuminate\Pagination\AbstractPaginator;
+        
         // Transform the collection for the frontend.
-        $quizMasters->getCollection()->transform(function ($user) use ($currentUserId) {
+        if ($isPaginated) {
+            $collection = $quizMasters->getCollection();
+        } else {
+            $collection = $quizMasters;
+        }
+        
+        $collection->transform(function ($user) use ($currentUserId) {
             $profile = $user->quizMasterProfile;
             $subjects = Subject::whereIn('id', $profile->subjects ?? [])->get()
                 ->map(function ($subject) {
@@ -51,8 +73,14 @@ class QuizMasterController extends Controller
                 'name' => $user->name,
                 // Prefer explicit uploaded avatar_url then fall back to social_avatar
                 'avatar' => $user->avatar_url ?? $user->social_avatar,
+                'avatar_url' => $user->avatar_url ?? $user->social_avatar,
                 'headline' => $profile->headline ?: 'An experienced quiz master',
+                'bio' => $profile->bio ?? '',
                 'institution' => $profile->institution ?: '',
+                'level' => $profile->level ? [
+                    'id' => $profile->level->id,
+                    'name' => $profile->level->name,
+                ] : null,
                 'grade' => $profile->grade ? [
                     'id' => $profile->grade->id,
                     'name' => $profile->grade->name,
@@ -60,9 +88,26 @@ class QuizMasterController extends Controller
                 'subjects' => $subjects,
             ];
 
+            // Include quizzes if they were eagerly loaded
+            if ($user->relationLoaded('quizzes')) {
+                $data['quizzes'] = $user->quizzes->map(function ($quiz) {
+                    return [
+                        'id' => $quiz->id,
+                        'slug' => $quiz->slug,
+                        'title' => $quiz->title,
+                        'topic_name' => $quiz->topic->name ?? null,
+                    ];
+                });
+            }
+
+            // Include followers count
+            $data['followers_count'] = DB::table('quiz_master_follows')
+                ->where('quiz_master_id', $user->id)
+                ->count();
+
             // Add is_following for authenticated users
             if ($currentUserId) {
-                $data['is_following'] = \DB::table('quiz_master_follows')
+                $data['is_following'] = DB::table('quiz_master_follows')
                     ->where('quiz_master_id', $user->id)
                     ->where('user_id', $currentUserId)
                     ->exists();
@@ -71,7 +116,13 @@ class QuizMasterController extends Controller
             return $data;
         });
 
-        return response()->json($quizMasters);
+        // If it's a paginated collection, reconstruct it; otherwise return wrapped result
+        if ($isPaginated) {
+            $quizMasters->setCollection($collection);
+            return response()->json($quizMasters);
+        } else {
+            return response()->json(['data' => $collection->values()]);
+        }
     }
 
     /**
@@ -118,7 +169,7 @@ class QuizMasterController extends Controller
 
         // Add is_following for authenticated users
         if ($request->user()) {
-            $data['is_following'] = \DB::table('quiz_master_follows')
+            $data['is_following'] = DB::table('quiz_master_follows')
                 ->where('quiz_master_id', $user->id)
                 ->where('user_id', $request->user()->id)
                 ->exists();

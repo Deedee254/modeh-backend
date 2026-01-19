@@ -41,7 +41,36 @@ class LevelResource extends JsonResource
             'slug' => $this->slug,
             'order' => $this->order,
             'description' => $this->description,
+            'quizzes_count' => $this->getQuizzesCount(),
             'grades' => GradeResource::collection($this->whenLoaded('grades')),
         ];
+    }
+
+    /**
+     * Get the total count of quizzes across all grades in this level.
+     * Calculates from nested grades if loaded, otherwise returns 0.
+     *
+     * @return int
+     */
+    protected function getQuizzesCount(): int
+    {
+        if (isset($this->quizzes_count)) {
+            return (int) $this->quizzes_count;
+        }
+
+        // If grades are loaded, calculate from them
+        if ($this->relationLoaded('grades')) {
+            return (int) $this->grades->reduce(function ($carry, $grade) {
+                $gradeCount = $grade->quizzes_count ?? 0;
+                if ($grade->relationLoaded('subjects')) {
+                    $gradeCount = $grade->subjects->reduce(function ($subjectCarry, $subject) {
+                        return $subjectCarry + ($subject->quizzes_count ?? 0);
+                    }, 0);
+                }
+                return $carry + $gradeCount;
+            }, 0);
+        }
+
+        return 0;
     }
 }
