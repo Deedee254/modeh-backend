@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use App\Services\OnboardingService;
 
 class OnboardingController extends Controller
@@ -27,7 +28,7 @@ class OnboardingController extends Controller
             'data' => 'sometimes|array',
         ];
 
-        $validator = \Validator::make($data, $rules);
+        $validator = Validator::make($data, $rules);
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }

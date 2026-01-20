@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionAssignment;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 
@@ -121,8 +122,7 @@ class InstitutionMemberController extends Controller
                 'role' => $pivotRole,
                 'status' => $pivotStatus,
                 'avatar' => $u->avatar,
-                'quizee_profile' => $quizeeProfile,
-                'quiz_master_profile' => $quizMasterProfile,
+                'profile' => $quizeeProfile ?: $quizMasterProfile,
             ];
         });
 
@@ -466,7 +466,7 @@ class InstitutionMemberController extends Controller
             Cache::put($cacheKey, ['invitation_token' => $token, 'institution_id' => $institution->id], now()->addMinutes($ttlMinutes));
 
             // Send invitation email (passes ftoken so email contains frontend link)
-            \Mail::to($data['email'])->send(
+            Mail::to($data['email'])->send(
                 new \App\Mail\InstitutionInvitationEmail(
                     $institution,
                     $data['email'],
@@ -477,7 +477,7 @@ class InstitutionMemberController extends Controller
                 )
             );
         } catch (\Throwable $e) {
-            \Log::error('Failed to send institution invitation email', [
+            Log::error('Failed to send institution invitation email', [
                 'email' => $data['email'],
                 'institution_id' => $institution->id,
                 'error' => $e->getMessage()

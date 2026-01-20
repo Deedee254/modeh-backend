@@ -31,6 +31,7 @@ class UserResource extends JsonResource
     public function toArray(Request $request): array
     {
         $payload = [
+            // Core user fields (clean, no duplicates)
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
@@ -38,39 +39,35 @@ class UserResource extends JsonResource
             'phone' => $this->phone,
             'avatar' => $this->avatar_url,
             'bio' => $this->bio,
-            'is_profile_completed' => (bool)$this->is_profile_completed,
-            'isProfileCompleted' => (bool)$this->is_profile_completed,
             'email_verified_at' => $this->email_verified_at,
-            'emailVerifiedAt' => $this->email_verified_at,
             'affiliate_code' => $this->affiliate_code,
-            'affiliateCode' => $this->affiliate_code,
+            'is_profile_completed' => (bool)$this->is_profile_completed,
             'created_at' => $this->created_at,
-            'createdAt' => $this->created_at,
         ];
 
-        if ($this->relationLoaded('affiliate')) {
-            $payload['affiliate'] = $this->affiliate;
+        // Add profile data - unified field for both Quizee and QuizMaster
+        if ($this->relationLoaded('quizeeProfile') && $this->quizeeProfile) {
+            $payload['profile'] = $this->quizeeProfile;
+        } elseif ($this->relationLoaded('quizMasterProfile') && $this->quizMasterProfile) {
+            $payload['profile'] = $this->quizMasterProfile;
         }
 
+        // Add institutions if loaded
         if ($this->relationLoaded('institutions')) {
             $payload['institutions'] = $this->institutions;
         }
 
-        if ($this->role === 'quizee' && $this->relationLoaded('quizeeProfile')) {
-            $payload['quizee_profile'] = $this->quizeeProfile;
+        // Add affiliate if loaded
+        if ($this->relationLoaded('affiliate')) {
+            $payload['affiliate'] = $this->affiliate;
         }
 
-        if ($this->role === 'quiz-master' && $this->relationLoaded('quizMasterProfile')) {
-            $payload['quiz_master_profile'] = $this->quizMasterProfile;
-        }
-
-        // Add computed helper fields for frontend
-        $payload['missing_profile_fields'] = $this->getMissingProfileFields();
-        $payload['missing_profile_messages'] = $this->getMissingProfileMessages($payload['missing_profile_fields']);
-
-        if ($this->relationLoaded('onboarding')) {
-            $payload['onboarding'] = $this->onboarding;
-        }
+        // Add profile completion status
+        $payload['profile_status'] = [
+            'is_completed' => (bool)$this->is_profile_completed,
+            'missing_fields' => $this->getMissingProfileFields(),
+            'missing_messages' => $this->getMissingProfileMessages($this->getMissingProfileFields()),
+        ];
 
         return $payload;
     }

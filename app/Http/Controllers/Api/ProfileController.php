@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Subject;
+use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\Validator;
 
 class ProfileController extends Controller
@@ -17,9 +18,12 @@ class ProfileController extends Controller
     {
         $user = $request->user();
         
-        if ($user->role !== 'quiz-master' || !$user->quizMasterProfile) {
+        if ($user->role !== 'quiz-master') {
             return response()->json(['message' => 'Not authorized'], 403);
         }
+
+        // Get or create profile
+        $profile = $user->quizMasterProfile ?: $user->quizMasterProfile()->create([]);
 
         $validator = Validator::make($request->all(), [
             'institution' => 'nullable|string',
@@ -35,8 +39,6 @@ class ProfileController extends Controller
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
-
-        $profile = $user->quizMasterProfile;
         
         // Only update fields that were actually provided in the request
         $updateData = [];
@@ -92,9 +94,12 @@ class ProfileController extends Controller
     {
         $user = $request->user();
         
-        if ($user->role !== 'quizee' || !$user->quizeeProfile) {
+        if ($user->role !== 'quizee') {
             return response()->json(['message' => 'Not authorized'], 403);
         }
+
+        // Get or create profile
+        $profile = $user->quizeeProfile ?: $user->quizeeProfile()->create([]);
 
         $validator = Validator::make($request->all(), [
             'institution' => 'nullable|string',
@@ -111,8 +116,6 @@ class ProfileController extends Controller
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
-
-        $profile = $user->quizeeProfile;
         
         // Only update fields that were actually provided in the request
         $updateData = [];
@@ -156,19 +159,12 @@ class ProfileController extends Controller
             }
         }
 
-        // Return updated user with relationships, convert 'profile' to 'bio' in response
+        // Return updated user with relationships using UserResource for clean response
         $user->load(['quizeeProfile.grade', 'quizeeProfile.level', 'quizeeProfile.institution']);
-        $payload = $user->toArray();
-        
-        // Convert 'profile' field to 'bio' in the response for API consistency
-        if (isset($payload['quizee_profile']) && isset($payload['quizee_profile']['profile'])) {
-            $payload['quizee_profile']['bio'] = $payload['quizee_profile']['profile'];
-            unset($payload['quizee_profile']['profile']);
-        }
         
         return response()->json([
             'message' => 'Profile updated',
-            'user' => $payload,
+            'user' => UserResource::make($user),
         ]);
     }
 }

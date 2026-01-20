@@ -73,6 +73,13 @@ class OnboardingService
 
                         $user->save();
 
+                        // Create the corresponding profile for the selected role
+                        if ($user->role === 'quiz-master' && !$user->quizMasterProfile) {
+                            $user->quizMasterProfile()->create([]);
+                        } elseif ($user->role === 'quizee' && !$user->quizeeProfile) {
+                            $user->quizeeProfile()->create([]);
+                        }
+
                         // For parent role we consider onboarding minimal; mark profile complete so parent can continue to dashboard
                         if ($user->role === 'parent') {
                             $onboarding->profile_completed = true;
@@ -93,9 +100,11 @@ class OnboardingService
 
                             // If role is known, update the corresponding profile; otherwise update both profiles
                             if ($user->role === 'quiz-master') {
-                                $user->quizMasterProfile->update($update);
+                                $profile = $user->quizMasterProfile ?? $user->quizMasterProfile()->create([]);
+                                $profile->update($update);
                             } elseif ($user->role === 'quizee') {
-                                $user->quizeeProfile->update($update);
+                                $profile = $user->quizeeProfile ?? $user->quizeeProfile()->create([]);
+                                $profile->update($update);
                             } else {
                                 // create profiles if missing and update both so the data is retained regardless of later role selection
                                 $quizee = $user->quizeeProfile ?? $user->quizeeProfile()->create([]);
@@ -112,9 +121,11 @@ class OnboardingService
                         if (!empty($data['subjects'])) {
                             // If role known, update corresponding profile; otherwise preserve subjects on both profiles
                             if ($user->role === 'quiz-master') {
-                                $user->quizMasterProfile->update(['subjects' => $data['subjects']]);
+                                $profile = $user->quizMasterProfile ?? $user->quizMasterProfile()->create([]);
+                                $profile->update(['subjects' => $data['subjects']]);
                             } elseif ($user->role === 'quizee') {
-                                $user->quizeeProfile->update(['subjects' => $data['subjects']]);
+                                $profile = $user->quizeeProfile ?? $user->quizeeProfile()->create([]);
+                                $profile->update(['subjects' => $data['subjects']]);
                             } else {
                                 $quizee = $user->quizeeProfile ?? $user->quizeeProfile()->create([]);
                                 $quizMaster = $user->quizMasterProfile ?? $user->quizMasterProfile()->create([]);

@@ -121,6 +121,10 @@ class GuestQuizController extends Controller
         $totalQuestions = $questions->count();
         $correctCount = $scoringResult['correct_count'] ?? 0;
 
+        // Generate a unique attempt ID for client-side result storage/reference
+        // Format: guest_{quiz_id}_{guest_identifier_hash}_{timestamp}
+        $attemptId = 'guest_' . $quiz->id . '_' . substr(hash('sha256', $validated['guest_identifier']), 0, 8) . '_' . time();
+
         $result = [
             'quiz_id' => $quiz->id,
             'quiz_title' => $quiz->title,
@@ -138,6 +142,7 @@ class GuestQuizController extends Controller
 
         return response()->json([
             'success' => true,
+            'attempt_id' => $attemptId,
             'attempt' => $result
         ]);
     }
