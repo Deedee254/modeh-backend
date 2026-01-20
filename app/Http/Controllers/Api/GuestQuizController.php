@@ -102,13 +102,23 @@ class GuestQuizController extends Controller
         }
 
         // Validate submission
-        $validated = $request->validate([
-            'answers' => 'required|array',
-            'answers.*.question_id' => 'required|integer',
-            'answers.*.selected' => 'nullable',
-            'time_taken' => 'nullable|integer',
-            'guest_identifier' => 'required|string',
-        ]);
+        try {
+            $validated = $request->validate([
+                'answers' => 'required|array',
+                'answers.*.question_id' => 'required|integer|min:1',
+                'answers.*.selected' => 'nullable',
+                'time_taken' => 'nullable|integer|min:0',
+                'guest_identifier' => 'required|string',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Log validation errors for debugging
+            Log::warning('Guest quiz submission validation failed', [
+                'quiz_id' => $quiz->id,
+                'errors' => $e->errors(),
+                'payload_sample' => $request->get('answers') ? array_slice($request->get('answers'), 0, 1) : null
+            ]);
+            throw $e;
+        }
 
         // Load questions
         $questions = $quiz->questions()->get();

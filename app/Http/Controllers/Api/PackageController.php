@@ -165,7 +165,16 @@ class PackageController extends Controller
 
                 $service = new MpesaService($config);
                 $amount = $package->price ?? 0;
+                
+                Log::info('[Payment] Initiating MPESA STK push', [
+                    'user_id' => $user->id,
+                    'package_id' => $package->id,
+                    'phone' => $phone,
+                    'amount' => $amount,
+                ]);
+                
                 $res = $service->initiateStkPush($phone, $amount, 'Subscription-temp');
+                
                 if ($res['ok']) {
                     // Create subscription now that initiation succeeded
                     $sub = Subscription::create([
@@ -177,6 +186,14 @@ class PackageController extends Controller
                         'gateway' => 'mpesa',
                         'gateway_meta' => ['phone' => $phone, 'tx' => $res['tx'], 'initiated_at' => now()],
                     ]);
+                    
+                    Log::info('[Payment] STK push initiated successfully', [
+                        'subscription_id' => $sub->id,
+                        'user_id' => $user->id,
+                        'tx' => $res['tx'],
+                        'phone' => $phone,
+                    ]);
+                    
                     return response()->json([
                         'ok' => true,
                         'subscription' => $sub,
@@ -190,6 +207,14 @@ class PackageController extends Controller
                         ]
                     ]);
                 }
+
+                Log::error('[Payment] STK push failed', [
+                    'user_id' => $user->id,
+                    'package_id' => $package->id,
+                    'phone' => $phone,
+                    'error' => $res['message'] ?? 'unknown error',
+                    'response' => $res,
+                ]);
 
                 return response()->json([
                     'ok' => false,

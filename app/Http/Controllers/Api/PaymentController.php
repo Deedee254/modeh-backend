@@ -46,11 +46,12 @@ class PaymentController extends Controller
         $status = $request->input('status', 'success');
 
         // Log the incoming webhook for auditing (avoid logging sensitive PII)
-        try {
-            Log::info('Mpesa callback received', ['tx' => $txId, 'status' => $status]);
-        } catch (\Throwable $e) {
-            // ignore logging failures
-        }
+        Log::info('[Payment] MPESA callback received', [
+            'tx' => $txId,
+            'status' => $status,
+            'request_ip' => $request->ip(),
+            'timestamp' => now(),
+        ]);
 
         // Attempt to find subscription by stored gateway_meta.tx
         $sub = Subscription::where('gateway_meta->tx', $txId)->first();
@@ -58,12 +59,29 @@ class PaymentController extends Controller
             // Try one-off purchases
             $purchase = \App\Models\OneOffPurchase::where('gateway_meta->tx', $txId)->first();
             if (!$purchase) {
+                Log::warning('[Payment] Callback TX not found in subscriptions or purchases', [
+                    'tx' => $txId,
+                    'status' => $status,
+                ]);
                 return response()->json(['ok' => false, 'message' => 'subscription or purchase not found'], 404);
             }
+
+            Log::info('[Payment] One-off purchase callback matched', [
+                'purchase_id' => $purchase->id,
+                'tx' => $txId,
+                'status' => $status,
+            ]);
 
             // Handle one-off purchase
             return $this->handleOneOffPurchase($purchase, $txId, $status);
         }
+
+        Log::info('[Payment] Subscription callback matched', [
+            'subscription_id' => $sub->id,
+            'user_id' => $sub->user_id,
+            'tx' => $txId,
+            'status' => $status,
+        ]);
 
         // Handle subscription payment
         return $this->handleSubscription($sub, $txId, $status, $request);
@@ -116,19 +134,44 @@ class PaymentController extends Controller
     private function handleSubscription(Subscription $sub, string $txId, string $status, Request $request)
     {
         if ($status === 'success') {
+            Log::info('[Payment] Subscription payment successful, completing subscription', [
+                'subscription_id' => $sub->id,
+                'user_id' => $sub->user_id,
+                'tx' => $txId,
+            ]);
             return $this->completeSubscription($sub, $txId, $request);
         }
 
         // Subscription cancelled or failed
+        Log::warning('[Payment] Subscription payment failed/cancelled', [
+            'subscription_id' => $sub->id,
+            'user_id' => $sub->user_id,
+            'tx' => $txId,
+            'status' => $status,
+        ]);
+
         $sub->status = 'cancelled';
+        $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], [
+            'failed_at' => now(),
+            'failure_status' => $status,
+        ]);
         $sub->save();
 
         try {
             $user = $sub->user;
             $user->notify(new \App\Notifications\SubscriptionStatusNotification($sub, 'Subscription cancelled'));
             event(new \App\Events\SubscriptionUpdated($user->id, $sub, $txId));
+            
+            Log::info('[Payment] Subscription cancellation notification sent', [
+                'subscription_id' => $sub->id,
+                'user_id' => $user->id,
+            ]);
         } catch (\Throwable $e) {
-            try { Log::warning('Subscription cancellation notification failed: '.$e->getMessage()); } catch (\Throwable $_) {}
+            Log::error('[Payment] Subscription cancellation notification failed', [
+                'subscription_id' => $sub->id,
+                'user_id' => $sub->user_id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         return response()->json(['ok' => false]);
@@ -141,6 +184,14 @@ class PaymentController extends Controller
     {
         $pkg = $sub->package;
         $days = $pkg->duration_days ?? 30;
+
+        Log::info('[Payment] Completing subscription activation', [
+            'subscription_id' => $sub->id,
+            'user_id' => $sub->user_id,
+            'package_id' => $pkg->id,
+            'tx' => $txId,
+            'duration_days' => $days,
+        ]);
 
         // Mark subscription active
         $sub->status = 'active';
@@ -172,11 +223,15 @@ class PaymentController extends Controller
 
         // Prevent duplicate transactions
         if (\App\Models\Transaction::where('tx_id', $txId)->exists()) {
+            Log::warning('[Payment] Duplicate transaction attempt prevented', [
+                'subscription_id' => $sub->id,
+                'tx' => $txId,
+            ]);
             return response()->json(['ok' => true, 'skipped' => true]);
         }
 
         // Create transaction
-        \App\Models\Transaction::create([
+        $transaction = \App\Models\Transaction::create([
             'tx_id' => $txId,
             'user_id' => $sub->user_id,
             'quiz_master_id' => $quizMasterId,
@@ -189,22 +244,58 @@ class PaymentController extends Controller
             'status' => 'confirmed',
         ]);
 
+        Log::info('[Payment] Transaction created', [
+            'transaction_id' => $transaction->id,
+            'tx' => $txId,
+            'amount' => $amount,
+            'quiz_master_share' => $quizMasterShare,
+            'platform_share' => $platformShare,
+        ]);
+
         // Notify and broadcast subscription update
         try {
             $user = $sub->user;
             $user->notify(new \App\Notifications\SubscriptionStatusNotification($sub, 'Subscription activated'));
             event(new \App\Events\SubscriptionUpdated($user->id, $sub, $txId));
+            
+            Log::info('[Payment] Subscription activation notification sent', [
+                'subscription_id' => $sub->id,
+                'user_id' => $user->id,
+            ]);
         } catch (\Throwable $e) {
-            try { Log::warning('Subscription notification failed: '.$e->getMessage()); } catch (\Throwable $_) {}
+            Log::error('[Payment] Subscription activation notification failed', [
+                'subscription_id' => $sub->id,
+                'user_id' => $sub->user_id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         // Credit quiz-master wallet
         if ($quizMasterId) {
-            $this->creditWallet($quizMasterId, $quizMasterShare);
+            try {
+                $this->creditWallet($quizMasterId, $quizMasterShare);
+                Log::info('[Payment] Quiz master wallet credited', [
+                    'quiz_master_id' => $quizMasterId,
+                    'amount' => $quizMasterShare,
+                    'tx' => $txId,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('[Payment] Quiz master wallet credit failed', [
+                    'quiz_master_id' => $quizMasterId,
+                    'amount' => $quizMasterShare,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         // Handle affiliate commission if user was referred
         $this->handleAffiliateCommission($sub->user_id, $amount, $txId);
+
+        Log::info('[Payment] Subscription activation completed successfully', [
+            'subscription_id' => $sub->id,
+            'user_id' => $sub->user_id,
+            'tx' => $txId,
+        ]);
 
         return response()->json(['ok' => true]);
     }

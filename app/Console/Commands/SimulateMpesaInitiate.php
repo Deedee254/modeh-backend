@@ -34,10 +34,23 @@ class SimulateMpesaInitiate extends Command
             'gateway_meta' => ['phone' => $phone ?? $user->phone ?? null],
         ]);
 
-    // Prefer sandbox settings for simulation when available
-    $setting = PaymentSetting::where('gateway', 'mpesa_sandbox')->first() ?: PaymentSetting::where('gateway', 'mpesa')->first();
+    // Load config from .env file (primary), fallback to DB only if .env is empty
+    $envConfig = config('services.mpesa');
+    $hasEnvConfig = !empty($envConfig['consumer_key']) && !empty($envConfig['consumer_secret']);
+    
+    if (!$hasEnvConfig) {
+        // If .env config is incomplete, try DB as fallback
+        $setting = PaymentSetting::where('gateway', 'mpesa_sandbox')->first() ?: PaymentSetting::where('gateway', 'mpesa')->first();
         $config = $setting ? ($setting->config ?? []) : [];
-        $service = new MpesaService($config);
+    } else {
+        // Use .env config (preferred)
+        $config = $envConfig;
+    }
+        
+    // Ensure simulate flag is enabled for command execution
+    $config['simulate'] = env('MPESA_SIMULATE', $config['simulate'] ?? true);
+    
+    $service = new MpesaService($config);
         $amount = (float) ($package->price ?? 0);
 
         // Determine a fallback phone: explicit arg > subscription meta > user.phone > payment setting test phone > env > placeholder
