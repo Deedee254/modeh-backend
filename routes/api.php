@@ -43,10 +43,12 @@ Route::bind('grade', function ($value) {
     return \App\Models\Grade::where('slug', $value)->firstOrFail();
 });
 
-Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->middleware('throttle:5,1');
-Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster'])->middleware('throttle:5,1');
-Route::post('/register/institution-manager', [AuthController::class, 'registerInstitutionManager'])->middleware('throttle:5,1');
-Route::post('/register/parent', [\App\Http\Controllers\Api\ParentController::class, 'register'])->middleware('throttle:5,1');
+// Registration routes must use 'web' middleware to establish session cookies for authentication
+// This ensures Auth::login() and session state are available during registration
+Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->middleware('web', 'throttle:5,1');
+Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster'])->middleware('web', 'throttle:5,1');
+Route::post('/register/institution-manager', [AuthController::class, 'registerInstitutionManager'])->middleware('web', 'throttle:5,1');
+Route::post('/register/parent', [\App\Http\Controllers\Api\ParentController::class, 'register'])->middleware('web', 'throttle:5,1');
 
 // Public helper for frontend to confirm verification status of an email address
 Route::get('/auth/verify-status', [AuthController::class, 'verifyStatus']);

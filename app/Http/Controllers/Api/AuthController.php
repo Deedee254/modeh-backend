@@ -124,14 +124,38 @@ class AuthController extends Controller
             }
         }
 
-    // Send email verification notification
-    $user->sendEmailVerificationNotification();
+        // Send email verification notification
+        $user->sendEmailVerificationNotification();
 
-    // Ensure frontend receives profile relations so clients that don't immediately
-    // refresh auth state still have access to the created profile fields.
-    $user->loadMissing(['quizeeProfile.grade', 'quizeeProfile.level', 'institutions']);
+        // CRITICAL: Establish session to auto-login the user after registration
+        // This requires the 'web' middleware on the registration route
+        // Regenerate session to prevent session fixation attacks
+        $request->session()->regenerate();
+        
+        // Authenticate the user (establishes session)
+        Auth::login($user, remember: false);
 
-    return response()->json(['user' => $user, 'quizee' => $quizee, 'message' => 'Registration successful. Please verify your email.'], 201);
+        // Create a personal access token for API access (same as login endpoint)
+        $token = $user->createToken('nuxt-auth')->plainTextToken;
+
+        // Load relations for richer response
+        $user->loadMissing(['quizeeProfile.grade', 'quizeeProfile.level', 'institutions', 'affiliate', 'onboarding']);
+
+        Log::info('User registered and auto-logged in', ['user_id' => $user->id, 'email' => $user->email, 'role' => $user->role]);
+
+        // Return response in the same format as login endpoint so Nuxt-Auth can process it
+        return response()->json([
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->getAttribute('role') ?? 'user',
+            'avatar' => $user->getAttribute('avatar'),
+            'image' => $user->getAttribute('avatar'),
+            'user' => $user,
+            'quizee' => $quizee,
+            'message' => 'Registration successful. You are now logged in.',
+            'token' => $token
+        ], 201);
     }
 
     public function registerQuizMaster(Request $request)
@@ -210,13 +234,38 @@ class AuthController extends Controller
             }
         }
 
-    // Send email verification notification
-    $user->sendEmailVerificationNotification();
+        // Send email verification notification
+        $user->sendEmailVerificationNotification();
 
-    // Load profile relations for a richer response (phone, subjects, grade)
-    $user->loadMissing(['quizMasterProfile.grade', 'quizMasterProfile.level', 'institutions']);
+        // CRITICAL: Establish session to auto-login the user after registration
+        // This requires the 'web' middleware on the registration route
+        // Regenerate session to prevent session fixation attacks
+        $request->session()->regenerate();
+        
+        // Authenticate the user (establishes session)
+        Auth::login($user, remember: false);
 
-    return response()->json(['user' => $user, 'quizMaster' => $quizMaster, 'message' => 'Registration successful. Please verify your email.'], 201);
+        // Create a personal access token for API access (same as login endpoint)
+        $token = $user->createToken('nuxt-auth')->plainTextToken;
+
+        // Load relations for richer response
+        $user->loadMissing(['quizMasterProfile.grade', 'quizMasterProfile.level', 'institutions', 'affiliate', 'onboarding']);
+
+        Log::info('Quiz Master registered and auto-logged in', ['user_id' => $user->id, 'email' => $user->email, 'role' => $user->role]);
+
+        // Return response in the same format as login endpoint so Nuxt-Auth can process it
+        return response()->json([
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->getAttribute('role') ?? 'user',
+            'avatar' => $user->getAttribute('avatar'),
+            'image' => $user->getAttribute('avatar'),
+            'user' => $user,
+            'quizMaster' => $quizMaster,
+            'message' => 'Registration successful. You are now logged in.',
+            'token' => $token
+        ], 201);
     }
 
     public function registerInstitutionManager(Request $request)
@@ -289,12 +338,33 @@ class AuthController extends Controller
             }
         }
 
-        // Load institutions relation so frontend receives the attached institution (if any)
-        $user->loadMissing(['institutions']);
+        // CRITICAL: Establish session to auto-login the user after registration
+        // This requires the 'web' middleware on the registration route
+        // Regenerate session to prevent session fixation attacks
+        $request->session()->regenerate();
+        
+        // Authenticate the user (establishes session)
+        Auth::login($user, remember: false);
 
+        // Create a personal access token for API access (same as login endpoint)
+        $token = $user->createToken('nuxt-auth')->plainTextToken;
+
+        // Load relations for richer response
+        $user->loadMissing(['institutions', 'affiliate', 'onboarding']);
+
+        Log::info('Institution Manager registered and auto-logged in', ['user_id' => $user->id, 'email' => $user->email, 'role' => $user->role]);
+
+        // Return response in the same format as login endpoint so Nuxt-Auth can process it
         return response()->json([
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->getAttribute('role') ?? 'user',
+            'avatar' => $user->getAttribute('avatar'),
+            'image' => $user->getAttribute('avatar'),
             'user' => $user,
-            'message' => 'Institution Manager registration successful. Complete your profile to continue.'
+            'message' => 'Registration successful. You are now logged in.',
+            'token' => $token
         ], 201);
     }
 

@@ -548,11 +548,9 @@ class QuizController extends Controller
 
         $cacheKey = 'quizzes_index_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
 
-        // Temporarily disable cache for debugging
-        // $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(5), function () use ($query, $perPage) {
-        //     return $query->paginate($perPage);
-        // });
-        $data = $query->paginate($perPage);
+        $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(5), function () use ($query, $perPage) {
+            return $query->paginate($perPage);
+        });
 
         return QuizResource::collection($data);
     }
@@ -634,19 +632,6 @@ class QuizController extends Controller
         // Log incoming payload for debugging (don't include file streams)
         Log::info('QuizController@store incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
 
-        // Temporary: attempt to dump full request payload for debugging. Wrapped in try/catch
-        // because uploaded file objects may not be serializable in logs.
-        try {
-            Log::debug('QuizController@store full request dump', [
-                'all' => $request->all(),
-                'files' => array_keys($request->files->all()),
-            ]);
-        } catch (\Throwable $e) {
-            try {
-                Log::error('QuizController@store dump failed', ['error' => $e->getMessage()]);
-            } catch (\Throwable $_) {
-            }
-        }
         $v = Validator::make($request->all(), [
             'topic_id' => 'required|exists:topics,id',
             'subject_id' => 'required|exists:subjects,id',

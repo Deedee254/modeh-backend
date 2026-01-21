@@ -53,7 +53,7 @@ class QuizMaster extends Model
     ];
 
     protected $appends = [
-        'subjectModels',  // Include subject models when converting to array
+        // No appends - API returns only the IDs and basic fields
     ];
 
     /**

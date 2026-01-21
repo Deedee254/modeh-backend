@@ -85,6 +85,29 @@ class WalletController extends Controller
         return response()->json(['ok' => true, 'withdrawals' => $list]);
     }
 
+    public function rewardsMy()
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['ok' => false], 401);
+        
+        // Get user's wallet
+        $wallet = Wallet::firstOrCreate(
+            ['user_id' => $user->id],
+            ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+        );
+        
+        // Get transactions (rewards earned)
+        $transactions = Transaction::where('quiz-master_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return response()->json([
+            'ok' => true,
+            'wallet' => $wallet,
+            'transactions' => $transactions
+        ]);
+    }
+
     // Admin: settle pending funds into available for a specific quiz-master
     public function settlePending(Request $request, $quizMasterId)
     {
