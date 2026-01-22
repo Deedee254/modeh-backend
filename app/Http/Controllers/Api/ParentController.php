@@ -56,13 +56,34 @@ class ParentController extends Controller
                 'is_active' => true,
             ]);
 
-            $token = User::find($user->id)->createToken('auth')->plainTextToken;
+            // CRITICAL: Establish session to auto-login the user after registration
+            // This requires the 'web' middleware on the registration route
+            // Regenerate session to prevent session fixation attacks
+            $request->session()->regenerate();
+            
+            // Authenticate the user (establishes session)
+            Auth::login($user, remember: false);
 
+            // Create a personal access token for API access (same as login endpoint)
+            $token = $user->createToken('nuxt-auth')->plainTextToken;
+
+            // Load relations for richer response
+            $user->loadMissing(['institutions', 'affiliate', 'onboarding']);
+
+            Log::info('Parent registered and auto-logged in', ['user_id' => $user->id, 'email' => $user->email, 'role' => $user->role]);
+
+            // Return response in the same format as login endpoint so Nuxt-Auth can process it
             return response()->json([
-                'message' => 'Parent registered successfully',
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->getAttribute('role') ?? 'user',
+                'avatar' => $user->getAttribute('avatar'),
+                'image' => $user->getAttribute('avatar'),
                 'user' => $user,
                 'parent' => $parentProfile,
-                'token' => $token,
+                'message' => 'Registration successful. You are now logged in.',
+                'token' => $token
             ], 201);
         } catch (\Exception $e) {
             Log::error('Parent registration failed', ['error' => $e->getMessage()]);
