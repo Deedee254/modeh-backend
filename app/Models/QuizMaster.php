@@ -53,7 +53,9 @@ class QuizMaster extends Model
     ];
 
     protected $appends = [
-        // No appends - API returns only the IDs and basic fields
+        // Expose subjectModels accessor so frontend gets full Subject objects
+        // and can rely on a single `profile` payload shape.
+        'subjectModels',
     ];
 
     /**

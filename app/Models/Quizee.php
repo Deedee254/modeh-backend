@@ -63,6 +63,9 @@ class Quizee extends Model
 
     protected $appends = [
         'bio',  // Alias profile column as bio in API responses for consistency with QuizMaster
+        // Expose subjectModels accessor in serialized API responses so frontend
+        // receives full Subject objects without needing client-side fallbacks.
+        'subjectModels',
     ];
 
     public function user()
