@@ -21,6 +21,12 @@ class UserController extends Controller
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
+        // GHOST SESSION FIX: Log user ID in response headers for frontend validation
+        // This allows the frontend to detect if the JWT user_id differs from API response user_id
+        $response = response();
+        $response->header('X-User-ID', (string)$user->id);
+        $response->header('X-User-Email', $user->email);
+        
         // Sync backend session for stateful requests (e.g. from the Nuxt frontend).
         // If the user is authenticated via Bearer token but the session is empty,
         // we establish the session so stateful features like Laravel Echo or
@@ -52,7 +58,7 @@ class UserController extends Controller
             return $user;
         });
 
-        return UserResource::make($userData);
+        return $response->json(UserResource::make($userData));
     }
 
     public function search(Request $request)
