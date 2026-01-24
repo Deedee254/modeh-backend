@@ -76,7 +76,12 @@ class LevelController extends Controller
                 ->get();
         });
 
-        return LevelResource::collection($levels);
+        // Return wrapped response for consistency with frontend expectations
+        return response()->json([
+            'data' => $levels->map(fn($level) => new LevelResource($level)),
+            'total' => count($levels),
+            'count' => count($levels)
+        ]);
     }
 
     // OPTIMIZED: Strategy D - Individual item cache, Strategy B - Selective fields

@@ -58,9 +58,8 @@ class UserController extends Controller
 
         // Build response with headers for frontend validation
         // X-User-ID and X-User-Email allow frontend to detect JWT user_id mismatches
-        return response()
-            ->json(UserResource::make($userData))
-            ->header('X-User-ID', (string)$user->id)
+        $response = response()->json(UserResource::make($userData));
+        return $response->header('X-User-ID', (string)$user->id)
             ->header('X-User-Email', $user->email);
     }
 
