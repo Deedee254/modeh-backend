@@ -21,12 +21,6 @@ class UserController extends Controller
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        // GHOST SESSION FIX: Log user ID in response headers for frontend validation
-        // This allows the frontend to detect if the JWT user_id differs from API response user_id
-        $response = response();
-        $response->header('X-User-ID', (string)$user->id);
-        $response->header('X-User-Email', $user->email);
-        
         // Sync backend session for stateful requests (e.g. from the Nuxt frontend).
         // If the user is authenticated via Bearer token but the session is empty,
         // we establish the session so stateful features like Laravel Echo or
@@ -37,7 +31,11 @@ class UserController extends Controller
 
         $cacheKey = "user_me_{$user->id}";
 
-        $userData = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($user) {
+        // Add cache busting if user has been modified recently (avoid stale cache after updates)
+        $userUpdatedAt = $user->updated_at ? $user->updated_at->timestamp : time();
+        $cacheMinutes = max(1, 5 - ((time() - $userUpdatedAt) / 60));
+
+        $userData = Cache::remember($cacheKey, now()->addMinutes($cacheMinutes), function () use ($user) {
             $relations = ['affiliate', 'institutions', 'onboarding'];
 
             if ($user->role === 'quiz-master') {
@@ -58,7 +56,12 @@ class UserController extends Controller
             return $user;
         });
 
-        return $response->json(UserResource::make($userData));
+        // Build response with headers for frontend validation
+        // X-User-ID and X-User-Email allow frontend to detect JWT user_id mismatches
+        return response()
+            ->json(UserResource::make($userData))
+            ->header('X-User-ID', (string)$user->id)
+            ->header('X-User-Email', $user->email);
     }
 
     public function search(Request $request)
@@ -158,8 +161,11 @@ class UserController extends Controller
 
         $user->save();
 
-        // Clear me cache
+        // Clear me cache to ensure fresh data is returned on next /me request
         Cache::forget("user_me_{$user->id}");
+
+        // Refresh the user model from database to reflect all changes
+        $user = $user->fresh();
 
         // Load relationships for full response
         $user->loadMissing(['quizeeProfile', 'quizMasterProfile', 'affiliate', 'institutions']);

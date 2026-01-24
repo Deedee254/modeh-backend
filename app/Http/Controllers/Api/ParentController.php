@@ -22,8 +22,13 @@ class ParentController extends Controller
     {
         $existingUser = User::where('email', $request->email)->first();
         if ($existingUser) {
+            // Revoke old tokens and create a fresh one for the login attempt
+            $existingUser->tokens()->delete();
             return response()->json([
                 'message' => 'User already exists',
+                'user' => $existingUser,
+                'isNewUser' => false,
+                'token' => $existingUser->createToken('auth')->plainTextToken
             ], 409);
         }
 

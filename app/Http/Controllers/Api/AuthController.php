@@ -29,11 +29,13 @@ class AuthController extends Controller
         // Check if user already exists (for OAuth + same email case)
         $existingUser = User::where('email', $request->email)->first();
         if ($existingUser) {
+            // Revoke old tokens and create a fresh one for the login attempt
+            $existingUser->tokens()->delete();
             return response()->json([
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => User::find($existingUser->id)->createToken('auth')->plainTextToken
+                'token' => $existingUser->createToken('auth')->plainTextToken
             ], 409);
         }
 
@@ -163,11 +165,13 @@ class AuthController extends Controller
         // Check if user already exists (for OAuth + same email case)
         $existingUser = User::where('email', $request->email)->first();
         if ($existingUser) {
+            // Revoke old tokens and create a fresh one for the login attempt
+            $existingUser->tokens()->delete();
             return response()->json([
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => User::find($existingUser->id)->createToken('auth')->plainTextToken
+                'token' => $existingUser->createToken('auth')->plainTextToken
             ], 409);
         }
 
@@ -273,11 +277,13 @@ class AuthController extends Controller
         // Check if user already exists (for OAuth + same email case)
         $existingUser = User::where('email', $request->email)->first();
         if ($existingUser) {
+            // Revoke old tokens and create a fresh one for the login attempt
+            $existingUser->tokens()->delete();
             return response()->json([
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => User::find($existingUser->id)->createToken('auth')->plainTextToken
+                'token' => $existingUser->createToken('auth')->plainTextToken
             ], 409);
         }
 
@@ -416,6 +422,10 @@ class AuthController extends Controller
         // session (no CSRF or cookies). Create a personal access token and
         // return it — the frontend will use it for authenticated API calls.
         $user = User::find($user->id);
+        
+        // Revoke all old tokens to prevent token accumulation
+        $user->tokens()->delete();
+        
         $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 
         // Create a personal access token for the user (stateless)
@@ -467,6 +477,10 @@ class AuthController extends Controller
 
         // Load user data explicitly to ensure it's the correct User model with HasApiTokens trait
         $user = User::find(Auth::id());
+        
+        // Revoke all old tokens to prevent token accumulation and potential leaks
+        $user->tokens()->delete();
+        
         $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 
         // Create a personal access token for the session
@@ -490,6 +504,12 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        // Revoke the current API token to prevent its reuse
+        $user = $request->user();
+        if ($user) {
+            $user->currentAccessToken()?->delete();
+        }
+        
         // Fully clear authentication
         Auth::guard('web')->logout();
         $request->session()->invalidate();
@@ -749,7 +769,11 @@ class AuthController extends Controller
         $user->password = Hash::make($request->password);
         $user->save();
 
+        // CRITICAL: Invalidate the reset token immediately after use to prevent reuse attacks
         Cache::forget($cacheKey);
+        
+        // Also revoke all existing tokens to force re-login with new password
+        $user->tokens()->delete();
 
         try {
             Mail::send('emails.password-reset-confirmed', ['user' => $user], function ($message) use ($user) {
