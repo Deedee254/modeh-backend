@@ -483,23 +483,41 @@ class QuizController extends Controller
             });
         }
 
-        // filter by subject_id explicitly
+        // filter by subject_id explicitly - check both direct subject_id and topic's subject
         if ($subjectId = $request->get('subject_id')) {
-            $query->where('subject_id', $subjectId);
+            $query->where(function ($q) use ($subjectId) {
+                $q->where('subject_id', $subjectId)
+                  ->orWhereHas('topic.subject', function ($sq) use ($subjectId) {
+                      $sq->where('id', $subjectId);
+                  });
+            });
         } else if ($subjectSlug = $request->get('subject')) {
-            $query->whereHas('subject', function ($q) use ($subjectSlug) {
-                $q->where('slug', $subjectSlug);
+            $query->where(function ($q) use ($subjectSlug) {
+                $q->whereHas('subject', function ($sq) use ($subjectSlug) {
+                    $sq->where('slug', $subjectSlug);
+                })
+                  ->orWhereHas('topic.subject', function ($sq) use ($subjectSlug) {
+                      $sq->where('slug', $subjectSlug);
+                  });
             });
         }
 
-        // filter by level (via the quiz's grade's level_id)
+        // filter by level (via the quiz's grade's level_id) - check both direct and through grade
         if ($levelId = $request->get('level_id')) {
-            $query->whereHas('grade', function ($q) use ($levelId) {
-                $q->where('level_id', $levelId);
+            $query->where(function ($q) use ($levelId) {
+                $q->where('level_id', $levelId)
+                  ->orWhereHas('grade.level', function ($sq) use ($levelId) {
+                      $sq->where('id', $levelId);
+                  });
             });
         } else if ($levelSlug = $request->get('level')) {
-            $query->whereHas('level', function ($q) use ($levelSlug) {
-                $q->where('slug', $levelSlug);
+            $query->where(function ($q) use ($levelSlug) {
+                $q->whereHas('level', function ($sq) use ($levelSlug) {
+                    $sq->where('slug', $levelSlug);
+                })
+                  ->orWhereHas('grade.level', function ($sq) use ($levelSlug) {
+                      $sq->where('slug', $levelSlug);
+                  });
             });
         }
 
