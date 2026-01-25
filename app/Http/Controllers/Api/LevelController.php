@@ -7,6 +7,8 @@ use App\Models\Level;
 use App\Http\Resources\LevelResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class LevelController extends Controller
 {
@@ -28,9 +30,9 @@ class LevelController extends Controller
             // Try to store in cache, but don't fail if it's too large
             try {
                 Cache::put($key, $data, $ttl);
-            } catch (\Exception $e) {
+                } catch (\Exception $e) {
                 // Log the error but continue without caching
-                \Log::warning('Failed to cache data', [
+                Log::warning('Failed to cache data', [
                     'key' => $key,
                     'error' => $e->getMessage(),
                     'error_type' => get_class($e)
@@ -40,7 +42,7 @@ class LevelController extends Controller
             return $data;
         } catch (\Exception $e) {
             // If cache retrieval fails, just execute the callback
-            \Log::warning('Cache operation failed, falling back to direct query', [
+            Log::warning('Cache operation failed, falling back to direct query', [
                 'key' => $key,
                 'error' => $e->getMessage()
             ]);
@@ -161,7 +163,7 @@ class LevelController extends Controller
 
         $data = $request->only(['name', 'slug', 'order', 'description']);
         if (empty($data['slug'])) {
-            $data['slug'] = \Str::slug($data['name']);
+            $data['slug'] = Str::slug($data['name']);
         }
         $level = Level::create($data);
         return response()->json(['level' => $level], 201);

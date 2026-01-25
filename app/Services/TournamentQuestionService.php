@@ -12,6 +12,15 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class TournamentQuestionService
 {
+    /**
+     * Attach questions to a tournament battle from an uploaded CSV/XLSX file.
+     *
+     * @param Tournament $tournament
+     * @param TournamentBattle $battle
+     * @param UploadedFile $file
+     * @return array{attached:int,questions:\Illuminate\Database\Eloquent\Collection}
+     * @throws \Throwable
+     */
     public function attachQuestionsFromCsv(Tournament $tournament, TournamentBattle $battle, UploadedFile $file)
     {
         try {
@@ -105,6 +114,13 @@ class TournamentQuestionService
         return $idKeyIndexes;
     }
 
+    /**
+     * Build attach data array from existing question ids parsed from the file.
+     *
+     * @param array<int,array> $rows
+     * @param int[] $idKeyIndexes
+     * @return array<int,array{position:int}>
+     */
     private function getAttachDataFromIds(array $rows, array $idKeyIndexes): array
     {
         $idIdx = $idKeyIndexes[0];
@@ -128,9 +144,18 @@ class TournamentQuestionService
         return $attachData;
     }
 
+    /**
+     * Create Question models from parsed CSV rows and return attach data.
+     *
+     * @param array<int,array> $rows
+     * @param string[] $headers
+     * @param Tournament $tournament
+     * @return array<int,array{position:int}>
+     */
     private function createQuestionsFromRows(array $rows, array $headers, Tournament $tournament): array
     {
         $canonical = array_map(function ($h) { return preg_replace('/[^a-z0-9_]/', '_', $h); }, $headers);
+        /** @var \App\Models\Question[] $created */
         $created = [];
         $userId = auth()->id();
 
@@ -194,6 +219,7 @@ class TournamentQuestionService
         }
 
         $attachData = [];
+        /** @var \App\Models\Question $q */
         foreach ($created as $i => $q) {
             $attachData[$q->id] = ['position' => $i];
         }
