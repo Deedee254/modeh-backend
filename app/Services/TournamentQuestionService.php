@@ -54,7 +54,7 @@ class TournamentQuestionService
         }
     }
 
-    private function parseCsv(string $path, string $ext): array
+    public function parseCsv(string $path, string $ext): array
     {
         $headers = [];
         $rows = [];

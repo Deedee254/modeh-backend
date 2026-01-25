@@ -75,4 +75,12 @@ class Grade extends Model
     {
         return $this->belongsTo(Level::class);
     }
+
+    /**
+     * Quizzes that target this grade (via quizzes.grade_id)
+     */
+    public function quizzes()
+    {
+        return $this->hasMany(\App\Models\Quiz::class, 'grade_id');
+    }
 }

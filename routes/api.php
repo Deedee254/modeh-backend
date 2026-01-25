@@ -274,6 +274,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::patch('/levels/{level}', [\App\Http\Controllers\Api\LevelController::class, 'update']);
     Route::delete('/levels/{level}', [\App\Http\Controllers\Api\LevelController::class, 'destroy']);
 
+    // Question import (parse CSV/Excel files)
+    Route::post('/questions/import/parse', [\App\Http\Controllers\Api\QuestionImportController::class, 'parse']);
+
     // Question bank
     Route::get('/questions', [\App\Http\Controllers\Api\QuestionController::class, 'index']);
     // Public question bank endpoint (global bank queries)

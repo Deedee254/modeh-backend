@@ -53,20 +53,31 @@ class LevelController extends Controller
     public function index(Request $request)
     {
         $cacheKey = 'levels_index_' . md5(serialize($request->all()));
+        $compact = $request->boolean('compact');
 
-        $levels = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function() {
-            // Strategy B: Select only essential fields
+        $levels = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function() use ($compact) {
+            if ($compact) {
+                // Compact payload: only top-level level fields and light grade metadata
+                return Level::select('id', 'name', 'slug', 'order', 'description')
+                    ->with(['grades' => function($q) {
+                        $q->select('id', 'name', 'slug', 'level_id')
+                          ->withCount('subjects')
+                          ->withCount('quizzes');
+                    }])
+                    ->orderBy('order')
+                    ->get();
+            }
+
+            // Default: more detailed but still selective fields
             return Level::select('id', 'name', 'slug', 'order', 'description')
                 ->with(['grades' => function($q) {
                     $q->select('id', 'name', 'slug', 'level_id', 'description', 'type', 'display_name')
                       ->withCount('subjects')
                       ->with(['subjects' => function($s) {
-                          // Strategy B: Only essential subject fields with quiz counts
                           $s->select('id', 'name', 'slug', 'grade_id', 'description', 'is_approved')
                             ->where('is_approved', true)
                             ->withCount('topics')
                             ->with(['topics' => function($t) { 
-                                // Strategy A: Only counts, minimal topic data
                                 $t->select('id', 'name', 'slug', 'subject_id')
                                   ->withCount('quizzes'); 
                             }]);
@@ -75,6 +86,33 @@ class LevelController extends Controller
                 ->orderBy('order')
                 ->get();
         });
+
+        if ($compact) {
+            $out = $levels->map(function($level) {
+                return [
+                    'id' => $level->id,
+                    'name' => $level->name,
+                    'slug' => $level->slug,
+                    'order' => $level->order,
+                    'description' => $level->description,
+                    'grades' => collect($level->grades)->map(function($g) {
+                        return [
+                            'id' => $g->id,
+                            'name' => $g->name,
+                            'slug' => $g->slug,
+                            'subjects_count' => $g->subjects_count ?? 0,
+                            'quizzes_count' => $g->quizzes_count ?? 0,
+                        ];
+                    })->values(),
+                ];
+            })->values();
+
+            return response()->json([
+                'data' => $out,
+                'total' => $out->count(),
+                'count' => $out->count(),
+            ]);
+        }
 
         // Return wrapped response for consistency with frontend expectations
         return response()->json([
