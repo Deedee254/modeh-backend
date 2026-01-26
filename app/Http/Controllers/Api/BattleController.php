@@ -585,8 +585,14 @@ class BattleController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        // Extract subscription preference context from request if present
+        $context = [
+            'subscription_type' => $request->input('subscription_type'),
+            'institution_id' => $request->input('institution_id'),
+        ];
+
         // Use centralized service for subscription validation
-        $subValidation = \App\Services\SubscriptionLimitService::validateSubscriptionAccess($user);
+        $subValidation = \App\Services\SubscriptionLimitService::validateSubscriptionAccess($user, $context);
 
         // Check one-off purchase as alternative
         $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
@@ -607,33 +613,25 @@ class BattleController extends Controller
 
         // Only check limits if user has active subscription
         if ($hasValidSubscription) {
-            $activeSub = $subValidation['subscription'];
-            if ($activeSub->package && is_array($activeSub->package->features)) {
-                $features = $activeSub->package->features;
-                $limit = $features['limits']['battle_results'] ?? $features['limits']['results'] ?? null;
-                if ($limit !== null) {
-                    $today = now()->startOfDay();
-                    $used = Battle::where(function($q) use ($user) {
-                            $q->where('initiator_id', $user->id)->orWhere('opponent_id', $user->id);
-                        })->whereNotNull('completed_at')
-                        ->where('completed_at', '>=', $today)
-                        ->count();
-                    if ($used >= intval($limit)) {
-                        $remaining = max(0, intval($limit) - intval($used));
-                        return response()->json([
-                            'ok' => false,
-                            'code' => 'limit_reached',
-                            'limit' => [
-                                'type' => 'battle_results',
-                                'value' => intval($limit),
-                                'used' => intval($used),
-                                'remaining' => $remaining,
-                                'subscription_type' => $subValidation['subscription_type']
-                            ],
-                            'message' => 'Daily battle result reveal limit reached for your plan'
-                        ], 403);
-                    }
-                }
+            $context = [
+                'subscription_type' => $request->input('subscription_type'),
+                'institution_id' => $request->input('institution_id'),
+            ];
+            $limitCheck = \App\Services\SubscriptionLimitService::checkDailyLimit($user, 'battle_results', $context);
+            
+            if (!$limitCheck['allowed']) {
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'limit_reached',
+                    'limit' => [
+                        'type' => 'battle_results',
+                        'value' => $limitCheck['limit'],
+                        'used' => $limitCheck['used'],
+                        'remaining' => $limitCheck['remaining'],
+                        'subscription_type' => $subValidation['subscription_type']
+                    ],
+                    'message' => 'Daily battle result reveal limit reached for your plan'
+                ], 403);
             }
         }
 
@@ -672,6 +670,13 @@ class BattleController extends Controller
             
             $battle->status = 'completed';
             $battle->completed_at = now();
+
+            // Record which subscription was used for this reveal
+            if ($hasValidSubscription && $subValidation['subscription']) {
+                $battle->subscription_id = $subValidation['subscription']->id;
+                $battle->subscription_type = $subValidation['subscription_type'] ?? 'personal';
+            }
+
             $battle->save();
 
             // Award points to participants
@@ -859,8 +864,14 @@ class BattleController extends Controller
     {
         $user = $request->user();
         
+        // Extract subscription preference context from request if present
+        $context = [
+            'subscription_type' => $request->input('subscription_type'),
+            'institution_id' => $request->input('institution_id'),
+        ];
+
         // Always check subscription limits for battle results
-        $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
+        $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'battle_results', $context);
         
         if (!$limitCheck['allowed']) {
             return response()->json([
@@ -868,7 +879,7 @@ class BattleController extends Controller
                 'code' => 'limit_reached',
                 'message' => 'Daily result reveal limit reached for your plan',
                 'limit' => [
-                    'type' => 'quiz_results',
+                    'type' => 'battle_results',
                     'value' => $limitCheck['limit'],
                     'used' => $limitCheck['used'],
                     'remaining' => $limitCheck['remaining'],
@@ -1094,9 +1105,9 @@ class BattleController extends Controller
             'result' => $result,
             'awarded_achievements' => $awarded,
             'usage' => [
-                'limit' => $limit,
-                'used' => $used,
-                'remaining' => $remaining,
+                'limit' => $limitCheck['limit'],
+                'used' => $limitCheck['used'] + 1,
+                'remaining' => max(0, ($limitCheck['remaining'] ?? 1) - 1),
                 'type' => 'reveals'
             ]
         ]);

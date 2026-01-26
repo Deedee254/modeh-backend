@@ -470,8 +470,14 @@ class QuizAttemptController extends Controller
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
+        // Extract subscription preference context from request if present
+        $context = [
+            'subscription_type' => $request->input('subscription_type'),
+            'institution_id' => $request->input('institution_id'),
+        ];
+
         // Use centralized service for subscription validation
-        $subValidation = SubscriptionLimitService::validateSubscriptionAccess($user);
+        $subValidation = SubscriptionLimitService::validateSubscriptionAccess($user, $context);
 
         if (!$subValidation['allowed']) {
             return response()->json([
@@ -498,12 +504,8 @@ class QuizAttemptController extends Controller
             // limit key path: features.limits.quiz_results => integer allowed per day (or null = unlimited)
             $limit = $features['limits']['quiz_results'] ?? $features['limits']['results'] ?? null;
             if ($limit !== null) {
-                // compute todays usage for this user (marked attempts revealed)
-                $today = now()->startOfDay();
-                $used = QuizAttempt::where('user_id', $request->user()->id)
-                    ->whereNotNull('score')
-                    ->where('created_at', '>=', $today)
-                    ->count();
+                // compute todays usage for this subscription
+                $used = SubscriptionLimitService::countTodayUsage($user->id, $activeSub->id);
                 if ($used >= intval($limit)) {
                     $remaining = max(0, intval($limit) - intval($used));
                     return response()->json([
@@ -586,7 +588,11 @@ class QuizAttemptController extends Controller
 
         // Only check subscription limits if the quiz is NOT free
         if (!$isFreeQuiz) {
-            $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results');
+            $context = [
+                'subscription_type' => $request->input('subscription_type'),
+                'institution_id' => $request->input('institution_id'),
+            ];
+            $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results', $context);
 
             if (!$limitCheck['allowed']) {
                 return response()->json([
@@ -604,8 +610,12 @@ class QuizAttemptController extends Controller
         }
 
         // Get active subscription for tracking (only if not free quiz)
-        $activeSub = !$isFreeQuiz ? SubscriptionLimitService::getActiveSubscription($user) : null;
-        $subDetails = $activeSub ? SubscriptionLimitService::getSubscriptionDetails($user) : null;
+        $context = [
+            'subscription_type' => $request->input('subscription_type'),
+            'institution_id' => $request->input('institution_id'),
+        ];
+        $activeSub = !$isFreeQuiz ? SubscriptionLimitService::getActiveSubscription($user, $context) : null;
+        $subDetails = $activeSub ? SubscriptionLimitService::getSubscriptionDetails($user, $context) : null;
 
         $limit = $activeSub ? SubscriptionLimitService::getPackageLimit($activeSub->package, 'quiz_results') : null;
 
@@ -617,7 +627,7 @@ class QuizAttemptController extends Controller
         }
 
         // Calculate remaining after this reveal
-        $used = $activeSub ? (SubscriptionLimitService::countTodayUsage($user->id) + 1) : null;
+        $used = $activeSub ? (SubscriptionLimitService::countTodayUsage($user->id, $activeSub->id) + 1) : null;
         $remaining = $limit && $used ? max(0, $limit - $used) : null;
 
         // Build per-question correctness info (answers stored on attempt)

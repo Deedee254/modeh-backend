@@ -49,6 +49,8 @@ class Battle extends Model
         'completed_at',
         'name',
         'one_off_price',
+        'subscription_id',
+        'subscription_type',
         'settings',
     ];
 
@@ -71,6 +73,11 @@ class Battle extends Model
     public function winner()
     {
         return $this->belongsTo(Quizee::class, 'winner_id');
+    }
+
+    public function subscription()
+    {
+        return $this->belongsTo(Subscription::class);
     }
 
     public function questions()
