@@ -3,7 +3,9 @@
 namespace App\Filament\Resources\InstitutionResource\Pages;
 
 use App\Models\Institution;
+use App\Models\User;
 use Filament\Resources\Pages\Page;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 
 class InvitationAcceptance extends Page
@@ -45,7 +47,7 @@ class InvitationAcceptance extends Page
 
     public function acceptInvitation(): void
     {
-        if (!$this->token || !auth()->check()) {
+        if (!$this->token || !Auth::check()) {
             $this->error = 'You must be logged in to accept an invitation.';
             return;
         }
@@ -53,7 +55,9 @@ class InvitationAcceptance extends Page
         try {
             $this->isProcessing = true;
 
-            $response = Http::withToken(auth()->user()->currentAccessToken()->plainTextToken)
+            /** @var User $user */
+            $user = Auth::user();
+            $response = Http::withToken($user->currentAccessToken()->plainTextToken)
                 ->post(route('api.invitation.accept', [$this->invitationData['institution']['id'], $this->token]));
 
             if ($response->successful()) {

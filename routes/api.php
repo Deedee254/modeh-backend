@@ -149,6 +149,13 @@ Route::get('/institutions/{institution}', [\App\Http\Controllers\Api\Institution
 // Public invitation endpoint - allows unauthenticated users to view invitation details
 Route::get('/institutions/invitation/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'getInvitationDetails']);
 
+// New invitation endpoints for SPA flows (frontend-facing)
+Route::get('/invitations/{token}', [\App\Http\Controllers\Api\InvitationController::class, 'show']);
+Route::post('/invitations/register', [\App\Http\Controllers\Api\InvitationController::class, 'register']);
+Route::post('/invitations/claim', [\App\Http\Controllers\Api\InvitationController::class, 'claim'])->middleware('auth:sanctum');
+// Accept tokens via query param for frontend landing pages
+Route::get('/invitations/validate', [\App\Http\Controllers\Api\InvitationController::class, 'validateToken']);
+
 Route::middleware(['auth:sanctum'])->group(function () {
     // Institution creation (authenticated users become institution-manager)
     Route::post('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'store']);

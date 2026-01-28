@@ -32,6 +32,8 @@ class ProfileController extends Controller
             'level_id' => 'nullable|exists:levels,id',
             'subjects' => 'nullable|array',
             'subjects.*' => 'exists:subjects,id',
+            'first_name' => 'nullable|string',
+            'last_name' => 'nullable|string',
             'headline' => 'nullable|string',
             'bio' => 'nullable|string',
         ]);
@@ -56,6 +58,12 @@ class ProfileController extends Controller
         }
         if ($request->has('subjects')) {
             $updateData['subjects'] = $request->input('subjects');
+        }
+        if ($request->has('first_name')) {
+            $updateData['first_name'] = $request->input('first_name');
+        }
+        if ($request->has('last_name')) {
+            $updateData['last_name'] = $request->input('last_name');
         }
         if ($request->has('headline')) {
             $updateData['headline'] = $request->input('headline');

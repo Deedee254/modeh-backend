@@ -6,6 +6,7 @@ use App\Models\Question;
 use App\Models\Tournament;
 use App\Models\TournamentBattle;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -157,7 +158,7 @@ class TournamentQuestionService
         $canonical = array_map(function ($h) { return preg_replace('/[^a-z0-9_]/', '_', $h); }, $headers);
         /** @var \App\Models\Question[] $created */
         $created = [];
-        $userId = auth()->id();
+        $userId = Auth::id();
 
         foreach ($rows as $rIdx => $row) {
             $rowData = [];

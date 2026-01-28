@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\HtmlString;
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Collection;
 
@@ -452,7 +453,7 @@ class TournamentResource extends Resource
                 \Filament\Actions\EditAction::make()
                     ->visible(fn (Tournament $record): bool => 
                         // Allow edit for admins on any tournament, or anyone on upcoming tournaments
-                        in_array(auth()->user()?->role, ['admin', 'super-admin']) || $record->status === 'upcoming'
+                        in_array(Auth::user()?->role, ['admin', 'super-admin']) || $record->status === 'upcoming'
                     ),
             ])
             ->bulkActions([

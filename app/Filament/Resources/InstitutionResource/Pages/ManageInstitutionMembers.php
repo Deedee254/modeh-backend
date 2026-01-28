@@ -7,6 +7,7 @@ use App\Models\Institution;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Resources\Pages\Page;
+use Illuminate\Support\Facades\Auth;
 
 class ManageInstitutionMembers extends Page
 {
@@ -28,7 +29,7 @@ class ManageInstitutionMembers extends Page
     public function loadMembers(): void
     {
         try {
-            $token = auth()->user()->currentAccessToken()->plainTextToken;
+            $token = $this->getCurrentUserToken();
             $response = \Illuminate\Support\Facades\Http::withToken($token)
                 ->get(route('api.institution-members.index', $this->record));
 
@@ -54,7 +55,7 @@ class ManageInstitutionMembers extends Page
             Actions\Action::make('invite')
                 ->label('Invite Member')
                 ->icon('heroicon-o-envelope')
-                ->form([
+                ->schema([
                     Forms\Components\TextInput::make('email')
                         ->email()
                         ->required()
@@ -76,7 +77,7 @@ class ManageInstitutionMembers extends Page
     public function inviteMember(array $data): void
     {
         try {
-            $token = auth()->user()->currentAccessToken()->plainTextToken;
+            $token = $this->getCurrentUserToken();
             $response = \Illuminate\Support\Facades\Http::withToken($token)
                 ->post(route('api.institution-members.invite', $this->record), $data);
 
@@ -106,7 +107,7 @@ class ManageInstitutionMembers extends Page
     public function removeMember(int $userId): void
     {
         try {
-            $token = auth()->user()->currentAccessToken()->plainTextToken;
+            $token = $this->getCurrentUserToken();
             $response = \Illuminate\Support\Facades\Http::withToken($token)
                 ->delete(route('api.institution-members.remove', [$this->record, $userId]));
 
@@ -130,6 +131,27 @@ class ManageInstitutionMembers extends Page
                 ->danger()
                 ->send();
         }
+    }
+
+    /**
+     * Retrieve the current authenticated user's plain text API token.
+     *
+     * @return string
+     *
+     * @throws \Exception When the user isn't authenticated or token is missing.
+     */
+    private function getCurrentUserToken(): string
+    {
+        /** @var \App\Models\User|null $user */
+        $user = Auth::user();
+        if (! $user) {
+            throw new \Exception('User not authenticated.');
+        }
+        $token = $user->currentAccessToken();
+        if (! $token) {
+            throw new \Exception('No current access token available.');
+        }
+        return $token->plainTextToken;
     }
 
     public function getHeading(): string

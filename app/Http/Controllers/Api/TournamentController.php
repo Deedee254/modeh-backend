@@ -15,7 +15,10 @@ use App\Models\TournamentQualificationAttempt;
 use App\Services\AchievementService;
 use App\Services\QuestionMarkingService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class TournamentController extends Controller
 {
@@ -60,7 +63,7 @@ class TournamentController extends Controller
     // so frontend callers (qualifier) receive the configured question set without
     // needing an extra request.
     $tournament->load(['subject', 'topic', 'grade', 'level', 'participants', 'questions', 'battles.questions', 'winner', 'sponsor']);
-        $user = auth()->user();
+        $user = Auth::user();
 
         // Add participation info for current user (guard when no authenticated user)
         if ($user) {
@@ -655,7 +658,7 @@ class TournamentController extends Controller
                     }
                 } catch (\Exception $e) {
                     // Log error and re-throw to fail the transaction
-                    \Log::error('Failed to update tournament leaderboard', [
+                    Log::error('Failed to update tournament leaderboard', [
                         'tournament_id' => $tournament->id ?? null,
                         'battle_id' => $battle->id,
                         'error' => $e->getMessage()
@@ -688,7 +691,7 @@ class TournamentController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            \Log::info('Auto-round-check failed (non-critical): ' . $e->getMessage());
+            Log::info('Auto-round-check failed (non-critical): ' . $e->getMessage());
         }
 
         return response()->json([
@@ -1355,7 +1358,7 @@ class TournamentController extends Controller
         // Store draft in cache (expires in 24 hours)
         $draftKey = "tournament_battle_draft_{$battle->id}_player_{$user->id}";
         
-        \Cache::put($draftKey, [
+        Cache::put($draftKey, [
             'battle_id' => $battle->id,
             'player_id' => $user->id,
             'answers' => $normalizedAnswers,
@@ -1385,7 +1388,7 @@ class TournamentController extends Controller
 
         // Retrieve draft from cache
         $draftKey = "tournament_battle_draft_{$battle->id}_player_{$user->id}";
-        $draft = \Cache::get($draftKey);
+        $draft = Cache::get($draftKey);
 
         if (!$draft) {
             return response()->json(['draft' => null], 200);

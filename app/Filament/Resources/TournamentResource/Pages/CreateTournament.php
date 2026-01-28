@@ -6,6 +6,7 @@ use App\Filament\Resources\TournamentResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class CreateTournament extends CreateRecord
@@ -22,7 +23,7 @@ class CreateTournament extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $data['status'] = 'upcoming';
-        $data['created_by'] = auth()->id();
+        $data['created_by'] = Auth::id();
 
         // Handle sponsor_details JSON structure
         if (isset($data['sponsor_details']) && is_array($data['sponsor_details'])) {
@@ -38,7 +39,7 @@ class CreateTournament extends CreateRecord
         }
 
         Log::info('Tournament creation form data prepared', [
-            'user_id' => auth()->id(),
+            'user_id' => Auth::id(),
             'tournament_name' => $data['name'] ?? null,
             'status' => $data['status'],
             'start_date' => $data['start_date'] ?? null,
@@ -102,7 +103,7 @@ class CreateTournament extends CreateRecord
             $errorList = implode("\n", array_values($errors));
             
             Log::warning('Tournament creation validation failed: missing required fields', [
-                'user_id' => auth()->id(),
+                'user_id' => Auth::id(),
                 'tournament_name' => $this->data['name'] ?? null,
                 'missing_fields' => array_keys($errors),
                 'errors' => $errors,
@@ -138,7 +139,7 @@ class CreateTournament extends CreateRecord
             $now = now();
 
             Log::debug('Tournament creation validation', [
-                'user_id' => auth()->id(),
+                'user_id' => Auth::id(),
                 'tournament_name' => $this->data['name'] ?? null,
                 'start_date' => $startDate->toDateTimeString(),
                 'end_date' => $endDate->toDateTimeString(),
@@ -149,7 +150,7 @@ class CreateTournament extends CreateRecord
                 $errorMsg = "Start date must be in the future. Current date is {$now->format('M d, Y H:i')}. Please choose a date after {$now->addDay()->format('M d, Y')}";
                 
                 Log::warning('Tournament creation validation failed: start date in past', [
-                    'user_id' => auth()->id(),
+                    'user_id' => Auth::id(),
                     'tournament_name' => $this->data['name'] ?? null,
                     'start_date' => $startDate->toDateTimeString(),
                     'now' => $now->toDateTimeString(),
@@ -170,7 +171,7 @@ class CreateTournament extends CreateRecord
                 $errorMsg = "End date must be after start date. Start date: {$startDate->format('M d, Y H:i')}, End date: {$endDate->format('M d, Y H:i')}";
                 
                 Log::warning('Tournament creation validation failed: end date before start date', [
-                    'user_id' => auth()->id(),
+                    'user_id' => Auth::id(),
                     'tournament_name' => $this->data['name'] ?? null,
                     'start_date' => $startDate->toDateTimeString(),
                     'end_date' => $endDate->toDateTimeString(),
@@ -190,7 +191,7 @@ class CreateTournament extends CreateRecord
             $errorMsg = 'Invalid date format. Please use the date picker to select valid dates.';
             
             Log::error('Tournament creation validation error', [
-                'user_id' => auth()->id(),
+                'user_id' => Auth::id(),
                 'tournament_name' => $this->data['name'] ?? null,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
@@ -212,7 +213,7 @@ class CreateTournament extends CreateRecord
     {
         // Log successful tournament creation
         Log::info('Tournament successfully created', [
-            'user_id' => auth()->id(),
+            'user_id' => Auth::id(),
             'tournament_id' => $this->record->id,
             'tournament_name' => $this->record->name,
             'status' => $this->record->status,

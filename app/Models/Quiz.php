@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * @property int $id
@@ -131,7 +132,7 @@ class Quiz extends Model
     public function userLastAttempt()
     {
         return $this->hasOne(\App\Models\QuizAttempt::class, 'quiz_id')
-            ->where('user_id', auth()->id())
+            ->where('user_id', Auth::id())
             ->latestOfMany();
     }
 

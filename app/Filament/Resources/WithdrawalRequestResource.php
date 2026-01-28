@@ -10,6 +10,7 @@ use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Actions\Action;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class WithdrawalRequestResource extends Resource
@@ -37,13 +38,13 @@ class WithdrawalRequestResource extends Resource
             TextColumn::make('method'),
             TextColumn::make('status'),
             TextColumn::make('created_at')->date(),
-        ])->actions([
+        ])->recordActions([
             Action::make('approve')
                 ->label('Approve')
                 ->requiresConfirmation()
                 ->color('primary')
                 ->action(function (WithdrawalRequest $record, array $data = []) {
-                    $user = auth()->user();
+                    $user = Auth::user();
                     DB::transaction(function () use ($record, $user) {
                         $record->status = 'approved';
                         $record->processed_by_admin_id = $user->id ?? null;
@@ -78,7 +79,7 @@ class WithdrawalRequestResource extends Resource
                 ->requiresConfirmation()
                 ->color('success')
                 ->action(function (WithdrawalRequest $record, array $data = []) {
-                    $user = auth()->user();
+                    $user = Auth::user();
                     DB::transaction(function () use ($record, $user) {
                         $record->status = 'paid';
                         $record->paid_at = now();

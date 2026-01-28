@@ -287,7 +287,7 @@ class BattleController extends Controller
         // Fail fast if filters don't match any questions
         if ($questions->isEmpty()) {
             Log::warning('No questions found for battle attachment', [
-                'initiator_id' => auth()->id() ?? 'unknown',
+                'initiator_id' => Auth::id() ?? 'unknown',
                 'filters' => compact('grade', 'subject', 'topic', 'difficulty', 'level'),
                 'perPage' => $perPage,
             ]);
@@ -1057,7 +1057,7 @@ class BattleController extends Controller
                 'battle_id' => $battle->id
             ]);
         } catch (\Throwable $e) {
-            try { \Log::warning('Failed to check achievements in result: '.$e->getMessage()); } catch (\Throwable $_) {}
+            try { Log::warning('Failed to check achievements in result: '.$e->getMessage()); } catch (\Throwable $_) {}
         }
 
         // Calculate total points earned (from correct answers * marks)

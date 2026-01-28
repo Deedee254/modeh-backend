@@ -8,6 +8,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class EditTournament extends EditRecord
@@ -250,21 +251,21 @@ class EditTournament extends EditRecord
                     $tournamentName = $this->record->name;
                     $tournamentId = $this->record->id;
                     $tournamentStatus = $this->record->status;
-                    $userId = auth()->id();
+                    $userId = Auth::id();
 
                     Log::warning('Tournament deletion attempted', [
                         'user_id' => $userId,
-                        'user_role' => auth()->user()?->role,
+                        'user_role' => Auth::user()?->role,
                         'tournament_id' => $tournamentId,
                         'tournament_name' => $tournamentName,
                         'tournament_status' => $tournamentStatus,
                     ]);
 
                     // Check if user is admin (full power)
-                    if (auth()->user() && in_array(auth()->user()->role, ['admin', 'super-admin'])) {
+                    if (Auth::user() && in_array(Auth::user()->role, ['admin', 'super-admin'])) {
                         Log::info('Tournament deleted by admin', [
                             'user_id' => $userId,
-                            'user_role' => auth()->user()?->role,
+                            'user_role' => Auth::user()?->role,
                             'tournament_id' => $tournamentId,
                             'tournament_name' => $tournamentName,
                             'tournament_status' => $tournamentStatus,
@@ -287,7 +288,7 @@ class EditTournament extends EditRecord
 
                     Log::warning('Tournament deletion blocked: insufficient permissions', [
                         'user_id' => $userId,
-                        'user_role' => auth()->user()?->role,
+                        'user_role' => Auth::user()?->role,
                         'tournament_id' => $tournamentId,
                         'tournament_name' => $tournamentName,
                     ]);
@@ -351,7 +352,7 @@ class EditTournament extends EditRecord
         $this->validateQuestionCount();
 
         Log::debug('Tournament edit - validation started', [
-            'user_id' => auth()->id(),
+            'user_id' => Auth::id(),
             'tournament_id' => $this->record->id,
             'tournament_name' => $this->record->name,
             'current_status' => $this->record->status,
@@ -362,10 +363,10 @@ class EditTournament extends EditRecord
     private function validateTournamentEditable(): void
     {
         // Allow admin to edit any tournament at any time (full power)
-        if (auth()->user() && in_array(auth()->user()->role, ['admin', 'super-admin'])) {
+        if (Auth::user() && in_array(Auth::user()->role, ['admin', 'super-admin'])) {
             Log::info('Admin editing tournament - bypassing status check', [
-                'user_id' => auth()->id(),
-                'user_role' => auth()->user()?->role,
+                'user_id' => Auth::id(),
+                'user_role' => Auth::user()?->role,
                 'tournament_id' => $this->record->id,
                 'tournament_name' => $this->record->name,
                 'tournament_status' => $this->record->status,
@@ -378,8 +379,8 @@ class EditTournament extends EditRecord
             $statusErrorMsg = "Cannot edit tournaments that are not in 'upcoming' status. This tournament is currently '{$this->record->status}'. Only upcoming tournaments can be edited. Contact an admin if you need to edit an active/completed tournament.";
             
             Log::warning('Tournament edit validation failed: tournament not in editable state', [
-                'user_id' => auth()->id(),
-                'user_role' => auth()->user()?->role,
+                'user_id' => Auth::id(),
+                'user_role' => Auth::user()?->role,
                 'tournament_id' => $this->record->id,
                 'tournament_name' => $this->record->name,
                 'status' => $this->record->status,
@@ -410,7 +411,7 @@ class EditTournament extends EditRecord
             $now = now();
 
             Log::debug('Tournament edit - date validation', [
-                'user_id' => auth()->id(),
+                'user_id' => Auth::id(),
                 'tournament_id' => $this->record->id,
                 'old_start_date' => $this->record->getOriginal('start_date'),
                 'new_start_date' => $startDate->toDateTimeString(),
@@ -422,7 +423,7 @@ class EditTournament extends EditRecord
                 $errorMsg = "Start date must be in the future. Current date is {$now->format('M d, Y H:i')}. Please choose a date after {$now->clone()->addDay()->format('M d, Y')}";
                 
                 Log::warning('Tournament edit validation failed: start date in past', [
-                    'user_id' => auth()->id(),
+                    'user_id' => Auth::id(),
                     'tournament_id' => $this->record->id,
                     'tournament_name' => $this->record->name,
                     'start_date' => $startDate->toDateTimeString(),
@@ -443,7 +444,7 @@ class EditTournament extends EditRecord
                 $endErrorMsg = "End date must be after start date. Start date: {$startDate->format('M d, Y H:i')}, End date: {$endDate->format('M d, Y H:i')}";
                 
                 Log::warning('Tournament edit validation failed: end date before start date', [
-                    'user_id' => auth()->id(),
+                    'user_id' => Auth::id(),
                     'tournament_id' => $this->record->id,
                     'tournament_name' => $this->record->name,
                     'start_date' => $startDate->toDateTimeString(),
@@ -464,7 +465,7 @@ class EditTournament extends EditRecord
             $errorMsg = 'Invalid date format. Please use the date picker to select valid dates.';
             
             Log::error('Tournament edit - date validation error', [
-                'user_id' => auth()->id(),
+                'user_id' => Auth::id(),
                 'tournament_id' => $this->record->id,
                 'error' => $e->getMessage(),
                 'error_message' => $errorMsg,
@@ -494,7 +495,7 @@ class EditTournament extends EditRecord
         }
 
         Log::debug('Tournament edit - question count validation', [
-            'user_id' => auth()->id(),
+            'user_id' => Auth::id(),
             'tournament_id' => $this->record->id,
             'question_count' => $questionCount,
         ]);
@@ -503,7 +504,7 @@ class EditTournament extends EditRecord
             $questionsErrorMsg = "Tournament must have at least 5 questions. Currently has {$questionCount} question(s). Please add " . (5 - $questionCount) . " more question(s).";
             
             Log::warning('Tournament edit validation failed: insufficient questions', [
-                'user_id' => auth()->id(),
+                'user_id' => Auth::id(),
                 'tournament_id' => $this->record->id,
                 'tournament_name' => $this->record->name,
                 'question_count' => $questionCount,
@@ -526,7 +527,7 @@ class EditTournament extends EditRecord
             $statusErrorMsg = "Cannot edit tournaments that are not in 'upcoming' status. This tournament is currently '{$this->record->status}'. Only upcoming tournaments can be edited.";
             
             Log::warning('Tournament edit validation failed: tournament not in editable state', [
-                'user_id' => auth()->id(),
+                'user_id' => Auth::id(),
                 'tournament_id' => $this->record->id,
                 'tournament_name' => $this->record->name,
                 'status' => $this->record->status,
@@ -556,7 +557,7 @@ class EditTournament extends EditRecord
         }
 
         Log::info('Tournament successfully updated', [
-            'user_id' => auth()->id(),
+            'user_id' => Auth::id(),
             'tournament_id' => $this->record->id,
             'tournament_name' => $this->record->name,
             'status' => $this->record->status,
@@ -574,7 +575,7 @@ class EditTournament extends EditRecord
         
         if (!empty($importedQuestionsData)) {
             Log::debug('Tournament edit - importing questions', [
-                'user_id' => auth()->id(),
+                'user_id' => Auth::id(),
                 'tournament_id' => $this->record->id,
                 'questions_count' => count($importedQuestionsData),
             ]);
@@ -608,7 +609,7 @@ class EditTournament extends EditRecord
                     $importedCount++;
                 } catch (\Exception $e) {
                     Log::error('Tournament edit - failed to import question', [
-                        'user_id' => auth()->id(),
+                        'user_id' => Auth::id(),
                         'tournament_id' => $this->record->id,
                         'error' => $e->getMessage(),
                         'question_data' => $qData,
@@ -617,7 +618,7 @@ class EditTournament extends EditRecord
             }
 
             Log::info('Tournament edit - questions imported', [
-                'user_id' => auth()->id(),
+                'user_id' => Auth::id(),
                 'tournament_id' => $this->record->id,
                 'imported_count' => $importedCount,
             ]);

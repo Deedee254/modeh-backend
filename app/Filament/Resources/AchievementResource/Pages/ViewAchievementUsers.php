@@ -8,6 +8,10 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Filament\Tables;
+use Filament\Forms;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
+use App\Models\Achievement;
 use Illuminate\Database\Eloquent\Builder;
 
 class ViewAchievementUsers extends Page implements HasTable
@@ -44,7 +48,7 @@ class ViewAchievementUsers extends Page implements HasTable
             ])
             ->filters([
                 Tables\Filters\Filter::make('awarded_at')
-                    ->form([
+                    ->schema([
                         Forms\Components\DatePicker::make('awarded_from')
                             ->label('Awarded From'),
                         Forms\Components\DatePicker::make('awarded_until')
@@ -62,8 +66,8 @@ class ViewAchievementUsers extends Page implements HasTable
                             );
                     }),
             ])
-            ->actions([
-                Tables\Actions\Action::make('revoke')
+            ->recordActions([
+                Action::make('revoke')
                     ->label('Revoke')
                     ->icon('heroicon-o-x-mark')
                     ->requiresConfirmation()
@@ -75,8 +79,8 @@ class ViewAchievementUsers extends Page implements HasTable
                         $record->decrement('points', $this->getRecord()->points);
                     }),
             ])
-            ->bulkActions([
-                Tables\Actions\BulkAction::make('revoke')
+            ->toolbarActions([
+                BulkAction::make('revoke')
                     ->label('Revoke Selected')
                     ->icon('heroicon-o-x-mark')
                     ->requiresConfirmation()
