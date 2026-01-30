@@ -5,7 +5,31 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-
+/**
+ * Package Model
+ * 
+ * Represents subscription packages available for purchase
+ * 
+ * @property int $id
+ * @property string $title
+ * @property string $description
+ * @property string $short_description
+ * @property string $slug
+ * @property float $price
+ * @property string $currency
+ * @property array $features
+ * @property bool $is_active
+ * @property int $duration_days
+ * @property int $seats
+ * @property string $cover_image
+ * @property bool $is_default
+ * @property string $audience
+ * @property string $name (appended)
+ * @property string $price_display (appended)
+ * @property string $more_link (appended)
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ */
 class Package extends Model
 {
     use HasFactory;

@@ -9,13 +9,18 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * @property int $id
- * @property string $status
+ * @property int $user_id
+ * @property string $owner_type
+ * @property int $owner_id
+ * @property int|null $package_id
+ * @property string $status (pending|active|cancelled|expired)
+ * @property string $gateway (mpesa|stripe|free|etc)
+ * @property array $gateway_meta
  * @property \DateTimeInterface|null $started_at
  * @property \DateTimeInterface|null $ends_at
- * @property int|null $package_id
- * @property int $user_id
  * @property \DateTimeInterface $created_at
  * @property \DateTimeInterface $updated_at
+ * @property \DateTimeInterface|null $renews_at
  * @property-read \App\Models\User $user
  * @property-read \App\Models\Package|null $package
  */
@@ -70,6 +75,14 @@ class Subscription extends Model
     public function assignments()
     {
         return $this->hasMany(\App\Models\SubscriptionAssignment::class);
+    }
+
+    /**
+     * Invoices related to this subscription
+     */
+    public function invoices()
+    {
+        return $this->morphMany(\App\Models\Invoice::class, 'invoiceable');
     }
 
     /**

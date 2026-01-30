@@ -376,6 +376,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Packages & subscriptions
     // packages index is public (defined above)
     Route::post('/packages/{package}/subscribe', [\App\Http\Controllers\Api\PackageController::class, 'subscribe']);
+    Route::post('/subscriptions/{subscription}/renew', [\App\Http\Controllers\Api\PackageController::class, 'renew']);
     Route::post('/subscriptions', [\App\Http\Controllers\Api\SubscriptionApiController::class, 'store']);
     // legacy alias used by some frontends
     Route::get('/subscriptions/history', [\App\Http\Controllers\Api\SubscriptionController::class, 'mine']);
@@ -387,6 +388,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/one-off-purchases/{purchase}', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'show']);
     Route::get('/subscriptions/mine', [\App\Http\Controllers\Api\SubscriptionController::class, 'mine']);
 
+    // Transactions & Invoices
+    Route::prefix('transactions')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\TransactionController::class, 'index']);
+        Route::get('/renewals', [\App\Http\Controllers\Api\TransactionController::class, 'renewals']);
+        Route::get('/{invoice}', [\App\Http\Controllers\Api\TransactionController::class, 'show']);
+        Route::get('/{invoice}/download', [\App\Http\Controllers\Api\TransactionController::class, 'download']);
+    });
 
     // Interactions
     Route::post('/quizzes/{quiz}/like', [\App\Http\Controllers\Api\InteractionController::class, 'likeQuiz']);

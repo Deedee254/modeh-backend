@@ -5,6 +5,25 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * OneOffPurchase Model
+ * 
+ * Represents one-time purchases (not subscriptions)
+ * Uses polymorphic relationships for item_type/item_id
+ * 
+ * @property int $id
+ * @property int $user_id
+ * @property string $item_type
+ * @property int $item_id
+ * @property float $amount
+ * @property string $status (pending|completed|failed|refunded)
+ * @property string $gateway (mpesa|stripe|etc)
+ * @property array $gateway_meta
+ * @property array $meta
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ * @property-read \App\Models\User $user
+ */
 class OneOffPurchase extends Model
 {
     use HasFactory;

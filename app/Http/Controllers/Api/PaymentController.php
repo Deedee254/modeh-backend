@@ -94,8 +94,18 @@ class PaymentController extends Controller
             'timestamp' => now(),
         ]);
 
-        // Attempt to find subscription by stored gateway_meta.tx
+        // Attempt to find subscription by stored gateway_meta.tx (initial purchase)
         $sub = Subscription::where('gateway_meta->tx', $txId)->first();
+        
+        // If not found, check for renewal transaction
+        if (!$sub) {
+            $sub = Subscription::where('gateway_meta->renewal_tx', $txId)->first();
+            if ($sub) {
+                // Mark this as a renewal so handler knows to extend dates instead of creating new
+                $request->merge(['is_renewal' => true]);
+            }
+        }
+        
         if (!$sub) {
             // Try one-off purchases
             $purchase = \App\Models\OneOffPurchase::where('gateway_meta->tx', $txId)->first();
@@ -188,6 +198,46 @@ class PaymentController extends Controller
             $this->updateTournamentParticipant($purchase);
         }
 
+        // Create invoice for one-off purchase
+        try {
+            $itemType = ucfirst($purchase->item_type); // 'Quiz', 'Battle', 'Tournament', etc.
+            $invoice = \App\Models\Invoice::create([
+                'invoice_number' => \App\Models\Invoice::generateInvoiceNumber(),
+                'user_id' => $purchase->user_id,
+                'invoiceable_type' => \App\Models\OneOffPurchase::class,
+                'invoiceable_id' => $purchase->id,
+                'amount' => $amount,
+                'currency' => 'KES',
+                'description' => "{$itemType} Unlock - Item #{$purchase->item_id}",
+                'status' => 'paid',
+                'paid_at' => now(),
+                'payment_method' => 'mpesa',
+                'transaction_id' => $txId,
+                'meta' => [
+                    'item_type' => $purchase->item_type,
+                    'item_id' => $purchase->item_id,
+                    'gateway_meta' => $purchase->gateway_meta,
+                ],
+            ]);
+            
+            // Send email with invoice
+            $purchase->user->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
+            
+            Log::info('[Payment] One-off purchase invoice created and email sent', [
+                'invoice_id' => $invoice->id,
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'amount' => $amount,
+                'item_type' => $purchase->item_type,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Payment] One-off purchase invoice creation failed', [
+                'purchase_id' => $purchase->id,
+                'error' => $e->getMessage(),
+            ]);
+            // Don't fail the payment if invoice generation fails
+        }
+
         return response()->json(['ok' => true]);
     }
 
@@ -201,6 +251,7 @@ class PaymentController extends Controller
                 'subscription_id' => $sub->id,
                 'user_id' => $sub->user_id,
                 'tx' => $txId,
+                'is_renewal' => $request->input('is_renewal', false),
             ]);
             return $this->completeSubscription($sub, $txId, $request);
         }
@@ -242,11 +293,13 @@ class PaymentController extends Controller
 
     /**
      * Complete subscription activation, create transaction, and credit wallet.
+     * For renewals, extends the ends_at date instead of creating new dates.
      */
     private function completeSubscription(Subscription $sub, string $txId, Request $request)
     {
         $pkg = $sub->package;
         $days = $pkg->duration_days ?? 30;
+        $isRenewal = $request->input('is_renewal', false);
 
         Log::info('[Payment] Completing subscription activation', [
             'subscription_id' => $sub->id,
@@ -254,12 +307,25 @@ class PaymentController extends Controller
             'package_id' => $pkg->id,
             'tx' => $txId,
             'duration_days' => $days,
+            'is_renewal' => $isRenewal,
         ]);
 
         // Mark subscription active
         $sub->status = 'active';
-        $sub->started_at = now();
-        $sub->ends_at = now()->addDays($days);
+        
+        if ($isRenewal) {
+            // For renewal: extend existing ends_at date by duration_days
+            $sub->ends_at = \Carbon\Carbon::make($sub->ends_at)->addDays($days);
+            Log::info('[Renewal] Extending subscription end date', [
+                'subscription_id' => $sub->id,
+                'new_ends_at' => $sub->ends_at,
+            ]);
+        } else {
+            // For new subscription: set dates now
+            $sub->started_at = now();
+            $sub->ends_at = now()->addDays($days);
+        }
+        
         $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], ['completed_at' => now()]);
         $sub->save();
 
@@ -351,8 +417,50 @@ class PaymentController extends Controller
             }
         }
 
-        // Handle affiliate commission if user was referred
-        $this->handleAffiliateCommission($sub->user_id, $amount, $txId);
+        // Handle affiliate commission if user was referred (only for new subscriptions, not renewals)
+        if (!$isRenewal) {
+            $this->handleAffiliateCommission($sub->user_id, $amount, $txId);
+        }
+
+        // Create invoice and send email notification
+        try {
+            $invoiceService = app(\App\Services\InvoiceService::class);
+            
+            if ($isRenewal) {
+                $description = "Renewal: {$pkg->name} - {$days} days";
+                Log::info('[Renewal] Creating renewal invoice', [
+                    'subscription_id' => $sub->id,
+                    'user_id' => $sub->user_id,
+                    'description' => $description,
+                ]);
+            } else {
+                $description = "Subscription: {$pkg->name} - {$days} days";
+            }
+            
+            $invoice = $invoiceService->createForSubscription($sub, $description);
+            
+            // Mark invoice as paid with transaction details
+            $invoiceService->markAsPaid($invoice, $txId, 'mpesa');
+            
+            // Send email with invoice attached
+            $sub->user->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
+            
+            Log::info('[Payment] Invoice created and email sent', [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'subscription_id' => $sub->id,
+                'user_id' => $sub->user_id,
+                'is_renewal' => $isRenewal,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Payment] Invoice creation or email failed', [
+                'subscription_id' => $sub->id,
+                'user_id' => $sub->user_id,
+                'is_renewal' => $isRenewal,
+                'error' => $e->getMessage(),
+            ]);
+            // Don't fail the payment if invoice generation fails
+        }
 
         Log::info('[Payment] Subscription activation completed successfully', [
             'subscription_id' => $sub->id,
