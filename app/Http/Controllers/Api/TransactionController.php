@@ -70,7 +70,7 @@ class TransactionController extends Controller
         $daysAhead = $validated['days_ahead'] ?? 30;
         $cutoffDate = now()->addDays($daysAhead);
 
-        // Get active subscriptions renewing soon
+        // Get active subscriptions renewing soon based on ends_at date
         $renewals = Invoice::where('user_id', auth()->id())
             ->where('invoiceable_type', 'App\\Models\\Subscription')
             ->where('status', 'paid')
@@ -78,10 +78,11 @@ class TransactionController extends Controller
             ->get()
             ->filter(function ($invoice) use ($cutoffDate) {
                 $sub = $invoice->invoiceable;
-                if (!$sub || !$sub->renews_at) {
+                if (!$sub || !$sub->ends_at || $sub->status !== 'active') {
                     return false;
                 }
-                return $sub->renews_at <= $cutoffDate && $sub->renews_at >= now();
+                // Show subscriptions ending between now and cutoffDate
+                return $sub->ends_at <= $cutoffDate && $sub->ends_at >= now();
             })
             ->values();
 
