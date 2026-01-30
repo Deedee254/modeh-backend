@@ -17,7 +17,7 @@ class PaymentController extends Controller
 {
     public function __construct(private WalletService $walletService) {}
 
-    // Simulate initiating an Mpesa STK Push
+    // Initiate an Mpesa STK Push
     public function initiateMpesa(Request $request, Subscription $subscription)
     {
         $user = Auth::user();
@@ -39,11 +39,52 @@ class PaymentController extends Controller
         return response()->json(['ok' => false, 'message' => 'failed to initiate payment'], 500);
     }
 
-    // Webhook/callback from Mpesa (simulate by POSTing to this endpoint in tools)
+    // Webhook/callback from Mpesa
     public function mpesaCallback(Request $request)
     {
+        $payload = $request->all();
+
+        // Best-effort parsing for Daraja callbacks. Support STK callback structure.
         $txId = $request->input('tx');
         $status = $request->input('status', 'success');
+
+        // If Daraja STK callback structure is present, extract meaningful fields
+        if (isset($payload['Body']['stkCallback'])) {
+            $stk = $payload['Body']['stkCallback'];
+            // prefer CheckoutRequestID (commonly stored as tx) then MerchantRequestID
+            $txId = $stk['CheckoutRequestID'] ?? $stk['MerchantRequestID'] ?? $txId;
+            $status = (isset($stk['ResultCode']) && $stk['ResultCode'] === 0) ? 'success' : 'failure';
+
+            // Extract callback metadata items (Amount, MpesaReceiptNumber/TransactionID, PhoneNumber, TransactionDate)
+            $metaItems = $stk['CallbackMetadata']['Item'] ?? [];
+            $callbackMeta = [];
+            foreach ($metaItems as $item) {
+                if (!isset($item['Name'])) continue;
+                $name = $item['Name'];
+                // Some items may not have a Value (e.g., Balance)
+                $value = $item['Value'] ?? null;
+                $callbackMeta[$name] = $value;
+            }
+
+            // Normalize common names
+            $mpesaReceipt = $callbackMeta['MpesaReceiptNumber'] ?? $callbackMeta['TransactionID'] ?? null;
+            $amount = $callbackMeta['Amount'] ?? null;
+            $phone = $callbackMeta['PhoneNumber'] ?? null;
+            $transactionDate = $callbackMeta['TransactionDate'] ?? null;
+
+            // Attach parsed metadata into a top-level key so we can persist later
+            $payload['parsed_mpesa'] = [
+                'checkout_request_id' => $stk['CheckoutRequestID'] ?? null,
+                'merchant_request_id' => $stk['MerchantRequestID'] ?? null,
+                'result_code' => $stk['ResultCode'] ?? null,
+                'result_desc' => $stk['ResultDesc'] ?? null,
+                'mpesa_receipt' => $mpesaReceipt,
+                'amount' => $amount,
+                'phone' => $phone,
+                'transaction_date' => $transactionDate,
+                'raw' => $stk,
+            ];
+        }
 
         // Log the incoming webhook for auditing (avoid logging sensitive PII)
         Log::info('[Payment] MPESA callback received', [
@@ -65,12 +106,20 @@ class PaymentController extends Controller
                 ]);
                 return response()->json(['ok' => false, 'message' => 'subscription or purchase not found'], 404);
             }
-
             Log::info('[Payment] One-off purchase callback matched', [
                 'purchase_id' => $purchase->id,
                 'tx' => $txId,
                 'status' => $status,
             ]);
+
+            // Persist parsed mpesa details to purchase.gateway_meta if available
+            if (!empty($payload['parsed_mpesa'])) {
+                $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
+                    'mpesa' => $payload['parsed_mpesa'],
+                    'mpesa_tx' => $txId,
+                ]);
+                $purchase->save();
+            }
 
             // Handle one-off purchase
             return $this->handleOneOffPurchase($purchase, $txId, $status);
@@ -82,6 +131,20 @@ class PaymentController extends Controller
             'tx' => $txId,
             'status' => $status,
         ]);
+
+        // Persist parsed mpesa details to subscription.gateway_meta if available
+        if (!empty($payload['parsed_mpesa'])) {
+            $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], [
+                'mpesa' => $payload['parsed_mpesa'],
+                'mpesa_tx' => $txId,
+                // Backwards compatible top-level tx key
+                'tx' => $txId,
+                'mpesa_receipt' => $payload['parsed_mpesa']['mpesa_receipt'] ?? null,
+                'amount' => $payload['parsed_mpesa']['amount'] ?? null,
+                'phone' => $payload['parsed_mpesa']['phone'] ?? null,
+            ]);
+            $sub->save();
+        }
 
         // Handle subscription payment
         return $this->handleSubscription($sub, $txId, $status, $request);

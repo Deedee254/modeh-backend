@@ -30,7 +30,7 @@ class SubscriptionUpdated implements ShouldBroadcast, ShouldQueue
 
     public function broadcastOn()
     {
-        return new PrivateChannel('user.'.$this->userId);
+        return new PrivateChannel('users.'.$this->userId);
     }
 
     public function broadcastWith()

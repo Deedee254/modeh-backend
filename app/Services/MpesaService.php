@@ -4,6 +4,7 @@ namespace App\Services;
 
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class MpesaService
 {
@@ -37,8 +38,11 @@ class MpesaService
 
     protected function getToken(): ?string
     {
-        if ($this->token && $this->tokenExpiresAt && now()->lt($this->tokenExpiresAt)) {
-            return $this->token;
+        // Try cache first (recommended to reduce token generation requests)
+        $cacheKey = 'mpesa.token';
+        $cached = Cache::get($cacheKey);
+        if (!empty($cached)) {
+            return $cached;
         }
 
         $client = $this->httpClient();
@@ -59,6 +63,16 @@ class MpesaService
                 // token typically valid for 3600s
                 $expiresIn = (int)($body['expires_in'] ?? 3500);
                 $this->tokenExpiresAt = now()->addSeconds($expiresIn);
+
+                // Store in cache with a small safety margin (30s)
+                $ttl = max(30, $expiresIn - 30);
+                try {
+                    Cache::put($cacheKey, $this->token, $ttl);
+                } catch (\Throwable $e) {
+                    // Cache may not be available in some environments; ignore safely
+                    Log::warning('MpesaService: failed to cache token: '.$e->getMessage());
+                }
+
                 return $this->token;
             }
         } catch (\Exception $e) {
@@ -81,14 +95,7 @@ class MpesaService
 
     public function initiateStkPush(string $phone, float $amount, ?string $accountRef = null): array
     {
-        // If simulation flag set in config, return a fake successful response (useful for local dev)
-        if (!empty($this->config['simulate'])) {
-            return [
-                'ok' => true,
-                'tx' => 'SIMULATED-'.uniqid(),
-                'message' => 'simulated stk push (sandbox)'
-            ];
-        }
+        // Build and send STK push to Daraja (sandbox or live depending on config)
 
         $token = $this->getToken();
         if (!$token) return ['ok' => false, 'message' => 'failed to obtain oauth token'];
