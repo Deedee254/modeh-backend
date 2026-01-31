@@ -43,20 +43,8 @@ use App\Policies\QuizPolicy;
         Gate::policy(Quiz::class, QuizPolicy::class);
         Gate::policy(Tournament::class, TournamentPolicy::class);
         Gate::define('viewFilament', function ($user = null) {
-            // Allow unauthenticated users to reach the Filament login page.
-            // Filament may evaluate the gate while serving the panel route, so
-            // Filament may evaluate the gate while serving the panel route, so
-            // permit access to the login path and root admin path for guests.
-            try {
-                $path = request()->path();
-            } catch (\Throwable $e) {
-                $path = null;
-            }
-
-            if (in_array($path, ['admin', 'admin/login'], true)) {
-                return true;
-            }
-
+            // Only allow authenticated admin users to access Filament.
+            // Filament will automatically redirect unauthenticated users to /admin/login.
             return $user && $user->role === 'admin';
         });
 
