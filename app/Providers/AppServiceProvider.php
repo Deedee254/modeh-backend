@@ -16,6 +16,7 @@ use App\Observers\TournamentBattleObserver;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\TournamentBattle;
+use App\Http\Middleware\RequestIdMiddleware;
 use Illuminate\Support\Facades\Cache;
 use App\Models\User;
 use App\Policies\QuizPolicy;
@@ -61,7 +62,15 @@ use App\Policies\QuizPolicy;
                 if (Cache::getStore() instanceof \Illuminate\Cache\TaggableStore) {
                     Cache::tags(['dashboard_charts'])->flush();
                 } else {
-                    Cache::flush();
+                    // Avoid calling Cache::flush() on production-managed Redis instances
+                    // which may disallow FLUSHDB or require special permissions.
+                    if (app()->environment('local', 'testing', 'staging')) {
+                        Cache::flush();
+                    } else {
+                        // In production, just clear the dashboard tags if possible
+                        // and skip global flush to avoid issues with managed Redis.
+                        logger()->info('Skipping global Cache::flush() in production environment');
+                    }
                 }
             } catch (\Throwable $e) {
                 logger()->warning('Failed to flush dashboard cache: ' . $e->getMessage());
@@ -96,5 +105,18 @@ use App\Policies\QuizPolicy;
         QuizAttempt::created($flush);
         QuizAttempt::updated($flush);
         QuizAttempt::deleted($flush);
+
+        // Prepend RequestIdMiddleware so each HTTP request has a request_id
+        // available in logs and returns the X-Request-Id header to clients.
+        try {
+            if (!$this->app->runningInConsole()) {
+                // Use the concrete Foundation Kernel so we can call prependMiddleware
+                $kernel = $this->app->make(\Illuminate\Foundation\Http\Kernel::class);
+                $kernel->prependMiddleware(RequestIdMiddleware::class);
+            }
+        } catch (\Throwable $e) {
+            // Ignore during CLI/bootstrap where HTTP kernel isn't available
+            logger()->debug('RequestIdMiddleware registration skipped: ' . $e->getMessage());
+        }
     }
 }

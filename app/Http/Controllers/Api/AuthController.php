@@ -11,6 +11,7 @@ use App\Models\Institution;
 use App\Models\Affiliate;
 use App\Models\AffiliateReferral;
 use App\Models\Package;
+use Illuminate\Support\Carbon;
 use App\Models\Subscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -86,7 +87,12 @@ class AuthController extends Controller
             $defaultPackage = Package::where('is_default', true)->first();
             if ($defaultPackage) {
                 $existingSub = Subscription::where('user_id', $user->id)->orderByDesc('created_at')->first();
-                if (!($existingSub && $existingSub->status === 'active' && (is_null($existingSub->ends_at) || $existingSub->ends_at->gt(now())))) {
+                $endsAtValid = false;
+                if ($existingSub && $existingSub->ends_at) {
+                    // Ensure we compare using Carbon instance to avoid DateTimeInterface::gt() errors
+                    $endsAtValid = Carbon::parse($existingSub->ends_at)->gt(now());
+                }
+                if (!($existingSub && $existingSub->status === 'active' && (is_null($existingSub->ends_at) || $endsAtValid))) {
                     Subscription::updateOrCreate([
                         'user_id' => $user->id,
                     ], [
@@ -398,6 +404,14 @@ class AuthController extends Controller
         // Check if user already exists by email (simplifies new user detection)
         $isNewUser = !User::where('email', $request->email)->exists();
 
+        // Diagnostic logging: capture incoming payload to help debug production failures
+        try {
+            Log::info('socialSync incoming payload', ['provider' => $request->input('provider'), 'payload' => $request->all(), 'ip' => $request->ip()]);
+        } catch (\Throwable $e) {
+            // If logging the payload fails for any reason, still continue — we don't want to block auth flow
+            Log::warning('Failed to log socialSync payload: ' . $e->getMessage());
+        }
+
         // Create a mock object that mimics Socialite user interface for compatibility
         $socialUser = new class($request->all()) {
             private $data;
@@ -412,9 +426,22 @@ class AuthController extends Controller
         };
         $socialUser->token = $request->input('token');
 
-        $user = $socialAuthService->findOrCreateUser($socialUser, $request->input('provider'));
+        // Attempt to find-or-create the user via SocialAuthService with diagnostics
+        try {
+            $user = $socialAuthService->findOrCreateUser($socialUser, $request->input('provider'));
+        } catch (\Throwable $e) {
+            Log::error('socialSync failed in SocialAuthService', [
+                'provider' => $request->input('provider'),
+                'payload' => $request->all(),
+                'exception' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            // Don't return the exception message to clients — log it for debugging
+            return response()->json(['message' => 'Failed to sync social user'], 500);
+        }
 
         if (!$user) {
+            Log::error('socialSync returned null user', ['provider' => $request->input('provider'), 'payload' => $request->all()]);
             return response()->json(['message' => 'Failed to sync social user'], 500);
         }
 

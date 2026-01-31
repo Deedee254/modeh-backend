@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Institution;
+use App\Relations\ArrayRelation;
 
 /**
  * Quizee model - represents quiz taker profile
@@ -97,6 +98,18 @@ class Quizee extends Model
     public function getSubjectModelsAttribute()
     {
         return Subject::whereIn('id', $this->subjects ?? [])->get();
+    }
+
+    /**
+     * Provide a relation-like method so callers can eager-load `subjectModels`
+     * (e.g. ->with('subjectModels')) without Laravel throwing an
+     * "undefined relationship" exception. This wraps the subjects id array
+     * into an ArrayRelation that behaves enough like an Eloquent relation
+     * for eager-loading and matching.
+     */
+    public function subjectModels()
+    {
+        return new ArrayRelation(Subject::query(), $this, 'subjects');
     }
 
     /**

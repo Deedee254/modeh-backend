@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Package;
 use App\Models\Subscription;
+use Illuminate\Support\Carbon;
 
 class AdminSubscriptionController extends Controller
 {
@@ -31,7 +32,11 @@ class AdminSubscriptionController extends Controller
 
         // If the user already has an active (non-expired) subscription, do nothing
         $existing = Subscription::where('user_id', $user->id)->orderByDesc('created_at')->first();
-        if ($existing && $existing->status === 'active' && (is_null($existing->ends_at) || $existing->ends_at->gt(now()))) {
+        $endsAtValid = false;
+        if ($existing && $existing->ends_at) {
+            $endsAtValid = Carbon::parse($existing->ends_at)->gt(now());
+        }
+        if ($existing && $existing->status === 'active' && (is_null($existing->ends_at) || $endsAtValid)) {
             $existing->load('package');
             return response()->json(['ok' => true, 'subscription' => $existing]);
         }

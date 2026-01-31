@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Institution;
+use App\Relations\ArrayRelation;
 
 /**
  * QuizMaster model - represents quiz creator profile
@@ -103,5 +104,13 @@ class QuizMaster extends Model
     public function getSubjectModelsAttribute()
     {
         return $this->getSubjectsModelsAttribute();
+    }
+
+    /**
+     * Relation-like wrapper so `subjectModels` can be eager-loaded safely.
+     */
+    public function subjectModels()
+    {
+        return new ArrayRelation(Subject::query(), $this, 'subjects');
     }
 }
