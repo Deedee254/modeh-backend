@@ -66,6 +66,9 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         'is_profile_completed',
         'avatar_url',
         'bio',
+        // Billing fields
+        'invoice_email',
+        'billing_address',
     ];
 
     /**

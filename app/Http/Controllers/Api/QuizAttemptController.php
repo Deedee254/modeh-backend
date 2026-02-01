@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 
+
 class QuizAttemptController extends Controller
 {
     protected $achievementService;
@@ -379,6 +380,8 @@ class QuizAttemptController extends Controller
                 if ($attempt && method_exists($user, 'increment')) {
                     try {
                         $user->increment('points', $pointsEarned);
+                        // Clear cached /api/me payload so frontend sees updated points immediately
+                        try { Cache::forget("user_me_{$user->id}"); } catch (\Throwable $_) {}
                     } catch (\Exception $e) {
                         // log and continue; some test DBs may not have a points column
                         Log::warning('Could not increment user points: ' . $e->getMessage());
@@ -541,6 +544,8 @@ class QuizAttemptController extends Controller
             if (method_exists($user, 'increment')) {
                 try {
                     $user->increment('points', $pointsEarned);
+                    // Ensure cached /me is refreshed after points update
+                    try { Cache::forget("user_me_{$user->id}"); } catch (\Throwable $_) {}
                 } catch (\Exception $e) {
                     Log::warning('Could not increment user points on marking: ' . $e->getMessage());
                 }
@@ -849,6 +854,15 @@ class QuizAttemptController extends Controller
 
     /**
      * Return aggregated quiz stats for the authenticated user
+     *
+     * Notes:
+     * - The quiz/topic relationships may be represented as objects, arrays or strings
+     *   depending on serialization / environment. Consumers should not assume
+     *     that `$question->topic->name` always exists. The controller defends
+     *   against missing properties and normalizes the topic name.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
      */
     public function getUserStats(Request $request)
     {
@@ -909,7 +923,32 @@ class QuizAttemptController extends Controller
                             continue; // Skip unattempted questions for topic strength? Or count as wrong? Standard is usually specific attempts.
 
                         $ans = $answerMap[$qid];
-                        $topicName = $q->topic ? $q->topic->name : ($attempt->quiz->topic ? $attempt->quiz->topic->name : 'General');
+                        // Determine topic name safely. Topic may be an object, array, string or null.
+                        $topicName = 'General';
+                        try {
+                            if (isset($q->topic)) {
+                    if (is_object($q->topic) && isset($q->topic->name) && $q->topic->name) {
+                        $topicName = $q->topic->name;
+                                } elseif (is_array($q->topic) && isset($q->topic['name']) && $q->topic['name']) {
+                                    $topicName = $q->topic['name'];
+                                } elseif (is_string($q->topic) && trim($q->topic) !== '') {
+                                    $topicName = $q->topic;
+                                }
+                            }
+
+                            // Fallback to quiz-level topic if question-level topic not available
+                            if ($topicName === 'General' && isset($attempt->quiz->topic)) {
+                                if (is_object($attempt->quiz->topic) && isset($attempt->quiz->topic->name) && $attempt->quiz->topic->name) {
+                                    $topicName = $attempt->quiz->topic->name;
+                                } elseif (is_array($attempt->quiz->topic) && isset($attempt->quiz->topic['name']) && $attempt->quiz->topic['name']) {
+                                    $topicName = $attempt->quiz->topic['name'];
+                                } elseif (is_string($attempt->quiz->topic) && trim($attempt->quiz->topic) !== '') {
+                                    $topicName = $attempt->quiz->topic;
+                                }
+                            }
+                        } catch (\Throwable $_) {
+                            $topicName = 'General';
+                        }
 
                         if (!isset($topicStats[$topicName])) {
                             $topicStats[$topicName] = ['correct' => 0, 'total' => 0];

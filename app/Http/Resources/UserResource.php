@@ -35,6 +35,8 @@ class UserResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
+            // Expose points so frontend profile pages can show authoritative points
+            'points' => (int)($this->points ?? 0),
             'role' => $this->role,
             'phone' => $this->phone,
             'avatar' => $this->avatar_url,

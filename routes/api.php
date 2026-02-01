@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BillingController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Models\Quiz;
@@ -191,6 +192,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/institutions/{institution}/analytics/member/{user}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsMember']);
 
     Route::get('/me', [\App\Http\Controllers\Api\UserController::class, 'me']);
+
+    // Billing settings for the authenticated user (frontend expects PATCH /api/me/billing)
+    Route::patch('/me/billing', [BillingController::class, 'update']);
 
 
     // Return only the authenticated user's affiliate record (smaller payload)

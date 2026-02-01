@@ -63,12 +63,15 @@ class TransactionController extends Controller
      */
     public function renewals(Request $request)
     {
+        // Note: Laravel validation doesn't support a `default` rule.
+        // Keep the field optional and apply a default after validation.
         $validated = $request->validate([
-            'days_ahead' => 'integer|min:1|max:365|default:30',
+            'days_ahead' => 'integer|min:1|max:365',
         ]);
 
-        $daysAhead = $validated['days_ahead'] ?? 30;
-        $cutoffDate = now()->addDays($daysAhead);
+    // Ensure daysAhead is numeric (validation ensures integer-like input, but it may be a string)
+    $daysAhead = isset($validated['days_ahead']) ? (int) $validated['days_ahead'] : 30;
+    $cutoffDate = now()->addDays($daysAhead);
 
         // Get active subscriptions renewing soon based on ends_at date
         $renewals = Invoice::where('user_id', auth()->id())

@@ -91,11 +91,27 @@ class QuizMasterController extends Controller
             // Include quizzes if they were eagerly loaded
             if ($user->relationLoaded('quizzes')) {
                 $data['quizzes'] = $user->quizzes->map(function ($quiz) {
+                    // Resolve topic name defensively: topic may be object/array/string/null
+                    $topicName = null;
+                    try {
+                        if (isset($quiz->topic)) {
+                            if (is_object($quiz->topic) && isset($quiz->topic->name)) {
+                                $topicName = $quiz->topic->name;
+                            } elseif (is_array($quiz->topic) && isset($quiz->topic['name'])) {
+                                $topicName = $quiz->topic['name'];
+                            } elseif (is_string($quiz->topic) && trim($quiz->topic) !== '') {
+                                $topicName = $quiz->topic;
+                            }
+                        }
+                    } catch (\Throwable $_) {
+                        $topicName = null;
+                    }
+
                     return [
                         'id' => $quiz->id,
                         'slug' => $quiz->slug,
                         'title' => $quiz->title,
-                        'topic_name' => $quiz->topic->name ?? null,
+                        'topic_name' => $topicName,
                     ];
                 });
             }
@@ -159,10 +175,26 @@ class QuizMasterController extends Controller
             ] : null,
             'subjects' => $subjects,
             'quizzes' => $user->quizzes->map(function ($quiz) {
+                // Resolve topic name defensively
+                $topicName = null;
+                try {
+                    if (isset($quiz->topic)) {
+                        if (is_object($quiz->topic) && isset($quiz->topic->name)) {
+                            $topicName = $quiz->topic->name;
+                        } elseif (is_array($quiz->topic) && isset($quiz->topic['name'])) {
+                            $topicName = $quiz->topic['name'];
+                        } elseif (is_string($quiz->topic) && trim($quiz->topic) !== '') {
+                            $topicName = $quiz->topic;
+                        }
+                    }
+                } catch (\Throwable $_) {
+                    $topicName = null;
+                }
+
                 return [
                     'id' => $quiz->id,
                     'title' => $quiz->title,
-                    'topic_name' => $quiz->topic->name ?? null,
+                    'topic_name' => $topicName,
                 ];
             }),
         ];
