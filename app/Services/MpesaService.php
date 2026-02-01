@@ -172,4 +172,115 @@ class MpesaService
             return ['ok' => false, 'message' => $e->getMessage()];
         }
     }
+
+    /**
+     * Query the status of a previously initiated STK Push.
+     * Used for reconciliation when callback was missed or for manual status checks.
+     *
+     * @param string $checkoutRequestId The CheckoutRequestID from the initial STK Push response
+     * @return array Normalized response: ['ok' => bool, 'status' => 'success|pending|failed', 'result_code' => int|null, ...]
+     */
+    public function queryStkPush(string $checkoutRequestId): array
+    {
+        if (empty(trim($checkoutRequestId))) {
+            return ['ok' => false, 'message' => 'checkoutRequestId is required'];
+        }
+
+        $token = $this->getToken();
+        if (!$token) {
+            return ['ok' => false, 'message' => 'failed to obtain oauth token'];
+        }
+
+        $shortcode = $this->config['shortcode'] ?? null;
+        $passkey = $this->config['passkey'] ?? null;
+
+        if (!$shortcode || !$passkey) {
+            return ['ok' => false, 'message' => 'shortcode or passkey not configured'];
+        }
+
+        $timestamp = now()->format('YmdHis');
+        $password = base64_encode($shortcode . $passkey . $timestamp);
+
+        $payload = [
+            'BusinessShortCode' => $shortcode,
+            'Password' => $password,
+            'Timestamp' => $timestamp,
+            'CheckoutRequestID' => $checkoutRequestId,
+        ];
+
+        try {
+            Log::info('[MPESA] STK Push Query initiated', [
+                'checkout_request_id' => $checkoutRequestId,
+            ]);
+
+            $client = $this->httpClient();
+            $res = $client->request('POST', '/mpesa/stkpushquery/v1/query', [
+                'headers' => ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
+                'json' => $payload,
+            ]);
+
+            $body = json_decode((string)$res->getBody(), true);
+
+            // Check HTTP status and basic response structure
+            if ($res->getStatusCode() !== 200) {
+                Log::warning('[MPESA] STK Push Query HTTP error', [
+                    'checkout_request_id' => $checkoutRequestId,
+                    'status_code' => $res->getStatusCode(),
+                    'body' => $body,
+                ]);
+                return ['ok' => false, 'message' => 'Daraja HTTP error', 'status_code' => $res->getStatusCode(), 'body' => $body];
+            }
+
+            // Check ResponseCode (should be 0 for accepted)
+            if (($body['ResponseCode'] ?? null) !== '0') {
+                Log::warning('[MPESA] STK Push Query failed response code', [
+                    'checkout_request_id' => $checkoutRequestId,
+                    'response_code' => $body['ResponseCode'] ?? 'unknown',
+                    'response_description' => $body['ResponseDescription'] ?? '',
+                ]);
+                return ['ok' => false, 'message' => $body['ResponseDescription'] ?? 'Query failed', 'body' => $body];
+            }
+
+            // Normalize status based on ResultCode
+            $resultCode = $body['ResultCode'] ?? null;
+            $status = 'pending'; // default
+            $resultDesc = $body['ResultDesc'] ?? '';
+
+            if ($resultCode === '0' || $resultCode === 0) {
+                $status = 'success';
+            } elseif ($resultCode !== null && $resultCode !== '') {
+                // Non-zero result code means failed or cancelled
+                $status = 'failed';
+            }
+            // else: no result code yet, still pending
+
+            Log::info('[MPESA] STK Push Query result', [
+                'checkout_request_id' => $checkoutRequestId,
+                'status' => $status,
+                'result_code' => $resultCode,
+                'result_desc' => $resultDesc,
+            ]);
+
+            return [
+                'ok' => true,
+                'status' => $status,
+                'result_code' => $resultCode,
+                'result_desc' => $resultDesc,
+                'mpesa_receipt' => $body['MpesaReceiptNumber'] ?? ($body['ReceiptNumber'] ?? null),
+                'amount' => $body['Amount'] ?? null,
+                'phone' => $body['PhoneNumber'] ?? ($body['MSISDN'] ?? null),
+                'transaction_date' => $body['TransactionDate'] ?? null,
+                'merchant_request_id' => $body['MerchantRequestID'] ?? null,
+                'checkout_request_id' => $body['CheckoutRequestID'] ?? $checkoutRequestId,
+                'raw' => $body,
+            ];
+        } catch (\Exception $e) {
+            Log::error('[MPESA] STK Push Query exception', [
+                'checkout_request_id' => $checkoutRequestId,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+            return ['ok' => false, 'message' => $e->getMessage()];
+        }
+    }
 }

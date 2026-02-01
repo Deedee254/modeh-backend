@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
+use App\Http\Controllers\Api\MpesaController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Models\Quiz;
@@ -196,6 +197,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Billing settings for the authenticated user (frontend expects PATCH /api/me/billing)
     Route::patch('/me/billing', [BillingController::class, 'update']);
 
+    // M-PESA reconciliation endpoint for querying and reconciling payment status
+    Route::post('/mpesa/reconcile', [MpesaController::class, 'reconcile']);
 
     // Return only the authenticated user's affiliate record (smaller payload)
     Route::get('/affiliates/me', [\App\Http\Controllers\Api\AffiliateController::class, 'me']);
