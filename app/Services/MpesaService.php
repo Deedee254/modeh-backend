@@ -141,8 +141,9 @@ class MpesaService
             ]);
             $body = json_decode((string)$res->getBody(), true);
             
-            // successful response contains CheckoutRequestID and ResponseCode 0
-            if (!empty($body['ResponseCode']) && $body['ResponseCode'] == '0') {
+            // successful response contains CheckoutRequestID and ResponseCode 0 (can be int or string)
+            $responseCode = $body['ResponseCode'] ?? null;
+            if ($responseCode !== null && ((int)$responseCode === 0 || $responseCode === '0')) {
                 $tx = $body['CheckoutRequestID'] ?? ($body['MerchantRequestID'] ?? null);
                 Log::info('[MPESA] STK Push successful', [
                     'phone' => $phone,
