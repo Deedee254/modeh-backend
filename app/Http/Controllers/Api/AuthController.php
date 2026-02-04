@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Services\SessionUserCacheService;
 
 class AuthController extends Controller
 {
@@ -149,6 +150,9 @@ class AuthController extends Controller
         // Load relations for richer response
         $user->loadMissing(['quizeeProfile.grade', 'quizeeProfile.level', 'institutions', 'affiliate', 'onboarding']);
 
+        // PHASE 2: Cache user data in session after registration
+        SessionUserCacheService::cacheUserInSession($user, $request);
+
         Log::info('User registered and auto-logged in', ['user_id' => $user->id, 'email' => $user->email, 'role' => $user->role]);
 
         // Return response in the same format as login endpoint so Nuxt-Auth can process it
@@ -261,6 +265,9 @@ class AuthController extends Controller
         // Load relations for richer response
         $user->loadMissing(['quizMasterProfile.grade', 'quizMasterProfile.level', 'institutions', 'affiliate', 'onboarding']);
 
+        // PHASE 2: Cache user data in session after registration
+        SessionUserCacheService::cacheUserInSession($user, $request);
+
         Log::info('Quiz Master registered and auto-logged in', ['user_id' => $user->id, 'email' => $user->email, 'role' => $user->role]);
 
         // Return response in the same format as login endpoint so Nuxt-Auth can process it
@@ -363,6 +370,9 @@ class AuthController extends Controller
 
         // Load relations for richer response
         $user->loadMissing(['institutions', 'affiliate', 'onboarding']);
+
+        // PHASE 2: Cache user data in session after registration
+        SessionUserCacheService::cacheUserInSession($user, $request);
 
         Log::info('Institution Manager registered and auto-logged in', ['user_id' => $user->id, 'email' => $user->email, 'role' => $user->role]);
 
@@ -513,6 +523,9 @@ class AuthController extends Controller
         // Create a personal access token for the session
         $token = $user->createToken('nuxt-auth')->plainTextToken;
 
+        // PHASE 2: Cache user data in session after login (avoid DB hits on subsequent /api/me calls)
+        SessionUserCacheService::cacheUserInSession($user, $request);
+
         Log::info('User logged in', ['user_id' => $user->id, 'email' => $user->email, 'role' => $user->role]);
 
         // Return user data in format expected by Nuxt-Auth
@@ -536,6 +549,9 @@ class AuthController extends Controller
         if ($user) {
             $user->currentAccessToken()?->delete();
         }
+        
+        // PHASE 2: Clear session cache before invalidating session
+        SessionUserCacheService::clearOnLogout($request);
         
         // Fully clear authentication
         Auth::guard('web')->logout();

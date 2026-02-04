@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Services\OnboardingService;
+use App\Services\SessionUserCacheService;
 use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
@@ -29,9 +30,22 @@ class UserController extends Controller
             Auth::guard('web')->login($user);
         }
 
-        $cacheKey = "user_me_{$user->id}";
+        // PHASE 2: THREE-TIER CACHE STRATEGY
+        // 1. Check session cache first (fastest, 5-10ms, no DB hit)
+        // 2. Fall back to Redis cache (fast, 20-50ms, no DB hit)
+        // 3. Fall back to database query (slow, 100-150ms, DB hit)
+        
+        // Level 1: Session Cache (15 minute TTL)
+        $cachedData = SessionUserCacheService::getUserFromSessionCache($user, $request);
+        if ($cachedData !== null) {
+            $response = response()->json($cachedData);
+            return $response->header('X-User-ID', (string)$user->id)
+                ->header('X-User-Email', $user->email)
+                ->header('X-Cache-Source', 'session');
+        }
 
-        // Add cache busting if user has been modified recently (avoid stale cache after updates)
+        // Level 2: Redis Cache (5 minute TTL, adaptive based on update time)
+        $cacheKey = "user_me_{$user->id}";
         $userUpdatedAt = $user->updated_at ? $user->updated_at->timestamp : time();
         $cacheMinutes = max(1, 5 - ((time() - $userUpdatedAt) / 60));
 
@@ -56,11 +70,15 @@ class UserController extends Controller
             return $user;
         });
 
+        // Populate session cache for next request (Redis → Session for future hits)
+        SessionUserCacheService::cacheUserInSession($userData, $request);
+
         // Build response with headers for frontend validation
         // X-User-ID and X-User-Email allow frontend to detect JWT user_id mismatches
         $response = response()->json(UserResource::make($userData));
         return $response->header('X-User-ID', (string)$user->id)
-            ->header('X-User-Email', $user->email);
+            ->header('X-User-Email', $user->email)
+            ->header('X-Cache-Source', 'redis-or-db');
     }
 
     public function search(Request $request)
@@ -160,8 +178,11 @@ class UserController extends Controller
 
         $user->save();
 
-        // Clear me cache to ensure fresh data is returned on next /me request
+        // Clear both caches to ensure fresh data is returned on next /me request
+        // 1. Redis cache
         Cache::forget("user_me_{$user->id}");
+        // 2. Session cache (PHASE 2 addition)
+        SessionUserCacheService::invalidateSessionCache($user, $request);
 
         // Refresh the user model from database to reflect all changes
         $user = $user->fresh();
@@ -232,3 +253,4 @@ class UserController extends Controller
         return response()->json(['theme' => $theme]);
     }
 }
+

@@ -39,6 +39,8 @@ class UserResource extends JsonResource
             'points' => (int)($this->points ?? 0),
             'role' => $this->role,
             'phone' => $this->phone,
+            // Return phones as array for payment modal (frontend expects this for M-PESA number selection)
+            'phones' => $this->phone ? [$this->phone] : [],
             'avatar' => $this->avatar_url,
             'bio' => $this->bio,
             'email_verified_at' => $this->email_verified_at,

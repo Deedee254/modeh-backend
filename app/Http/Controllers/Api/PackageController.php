@@ -315,7 +315,7 @@ class PackageController extends Controller
 
             return response()->json([
                 'ok' => false,
-                'message' => 'failed to initiate mpesa',
+                'message' => $result['message'] ?? 'failed to initiate mpesa',
                 'package' => $this->formatPackageResponse($package),
             ], 500);
 
@@ -323,7 +323,7 @@ class PackageController extends Controller
             Log::error('Mpesa initiate error: ' . $e->getMessage());
             return response()->json([
                 'ok' => false,
-                'message' => 'mpesa initiation error',
+                'message' => 'mpesa initiation error: ' . $e->getMessage(),
                 'package' => $this->formatPackageResponse($package),
             ], 500);
         }
