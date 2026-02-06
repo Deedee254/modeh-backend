@@ -462,6 +462,7 @@ class QuizController extends Controller
             // only my quizzes unless admin OR specifically searching for everyone's quizzes
             // Fix: allow users to see ALL approved/published quizzes by default if no 'mine' filter is present
             if (!$user->is_admin && $request->boolean('mine')) {
+                // When viewing own quizzes, show all statuses (draft, published, scheduled, etc.)
                 $query->where('created_by', $user->id);
             } else if (!$user->is_admin) {
                 // By default for non-admins, show their own OR any approved/published ones
