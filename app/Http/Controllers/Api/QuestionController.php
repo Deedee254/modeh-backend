@@ -64,8 +64,9 @@ class QuestionController extends Controller
         }
 
         // Return all matching questions (frontend will handle pagination)
-        $results = $query->get();
-        return response()->json(['questions' => $results]);
+    $results = $query->get();
+    // Return canonical API resource shape
+    return response()->json(['questions' => \App\Http\Resources\QuestionResource::collection($results)]);
     }
 
     /**
@@ -192,7 +193,7 @@ class QuestionController extends Controller
 
         return response()->json([
             'questions' => [
-                'data' => $results,
+                'data' => \App\Http\Resources\QuestionResource::collection($results),
                 'total' => $total,
                 'per_page' => $perPage,
                 'current_page' => $page,
@@ -448,7 +449,7 @@ class QuestionController extends Controller
         } catch (\Throwable $_) {
         }
 
-        return response()->json(['question' => $question], 201);
+    return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)], 201);
     }
 
     /**
@@ -467,7 +468,7 @@ class QuestionController extends Controller
             $question->load(['grade.level', 'subject', 'topic', 'quiz']);
         } catch (\Throwable $_) {
         }
-        return response()->json(['question' => $question]);
+    return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
     }
 
     /**
@@ -808,7 +809,7 @@ class QuestionController extends Controller
 
         $this->cleanupAfterBulkUpdate($saved, $incomingIds, $quiz);
 
-        return response()->json(['questions' => $saved]);
+    return response()->json(['questions' => \App\Http\Resources\QuestionResource::collection($saved)]);
     }
 
     public function update(Request $request, Question $question)
@@ -836,7 +837,9 @@ class QuestionController extends Controller
             'for_battle' => 'nullable|boolean',
             'is_quiz-master_marked' => 'nullable|boolean',
             'difficulty' => 'nullable|integer|min:1|max:5',
-            'media' => 'nullable|file|max:10240',
+            'media' => 'nullable|file|max:10240|mimes:jpeg,png,jpg,gif,mp3,wav,ogg,m4a,mp4,webm',
+            'youtube_url' => 'nullable|string|regex:/^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/',
+            'media_metadata' => 'nullable|array',
         ]);
 
         if ($v->fails()) {
@@ -846,6 +849,39 @@ class QuestionController extends Controller
         if ($request->hasFile('media')) {
             $path = Storage::disk('public')->putFile('question_media', $request->file('media'));
             $question->media_path = Storage::url($path);
+
+            // Determine media type and optionally extract metadata
+            try {
+                $mediaFile = $request->file('media');
+                $mimeType = $mediaFile->getMimeType();
+                if (strpos($mimeType, 'image/') === 0) {
+                    $question->media_type = 'image';
+                } elseif (strpos($mimeType, 'audio/') === 0) {
+                    $question->media_type = 'audio';
+                } elseif (strpos($mimeType, 'video/') === 0) {
+                    $question->media_type = 'video';
+                }
+                // If media metadata provided, attach it
+                if ($request->has('media_metadata') && is_array($request->get('media_metadata'))) {
+                    $question->media_metadata = $request->get('media_metadata');
+                }
+            } catch (\Throwable $_) {
+                // ignore metadata extraction failures
+            }
+        }
+
+        // Support updating youtube_url similar to store
+        if ($request->has('youtube_url')) {
+            $youtubeUrl = $request->get('youtube_url');
+            $question->youtube_url = $youtubeUrl;
+            if ($youtubeUrl) {
+                if (preg_match('/(?:youtube\.com\/(?:[^\/\n\s]+\/\s*[^\/\n\s]+\/|(?:v|e(?:mbed)?)\/|\s*[^\/\n\s]+\?v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/', $youtubeUrl, $matches)) {
+                    $meta = $question->media_metadata ?? [];
+                    $meta['video_id'] = $matches[1];
+                    $question->media_metadata = $meta;
+                    $question->media_type = 'youtube';
+                }
+            }
         }
 
         // Expect canonical 'answers' array from frontend
@@ -1020,7 +1056,7 @@ class QuestionController extends Controller
             $question->load(['grade.level', 'subject', 'topic', 'quiz']);
         } catch (\Throwable $_) {
         }
-        return response()->json(['question' => $question]);
+    return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
     }
 
     /**
@@ -1042,7 +1078,7 @@ class QuestionController extends Controller
         }
         $question->save();
 
-        return response()->json(['question' => $question]);
+    return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
     }
 
     /**
