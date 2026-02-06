@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Package;
 use App\Models\Subscription;
+use App\Models\MpesaTransaction;
 use Illuminate\Support\Facades\Auth;
 use App\Services\MpesaService;
 use Illuminate\Support\Facades\Log;
@@ -274,6 +275,8 @@ class PackageController extends Controller
             $result = $service->initiateStkPush($phone, $amount, 'Subscription-temp');
             
             if ($result['ok']) {
+                $checkoutRequestId = $result['tx'];  // M-PESA's CheckoutRequestID
+                
                 $subscription = Subscription::create([
                     'user_id' => $user->id,
                     'owner_type' => $ownerType,
@@ -283,22 +286,38 @@ class PackageController extends Controller
                     'gateway' => 'mpesa',
                     'gateway_meta' => [
                         'phone' => $phone,
-                        'tx' => $result['tx'],
+                        'tx' => $checkoutRequestId,
+                        'checkout_request_id' => $checkoutRequestId,
                         'initiated_at' => now()
                     ],
+                ]);
+                
+                // Create MpesaTransaction record for reconciliation
+                MpesaTransaction::create([
+                    'user_id' => $user->id,
+                    'checkout_request_id' => $checkoutRequestId,
+                    'merchant_request_id' => $result['body']['MerchantRequestID'] ?? null,
+                    'amount' => $amount,
+                    'phone' => $phone,
+                    'status' => 'pending',
+                    'billable_type' => Subscription::class,
+                    'billable_id' => $subscription->id,
+                    'raw_response' => json_encode($result['body'] ?? []),
                 ]);
                 
                 Log::info('[Payment] STK push initiated successfully', [
                     'subscription_id' => $subscription->id,
                     'user_id' => $user->id,
-                    'tx' => $result['tx'],
+                    'checkout_request_id' => $checkoutRequestId,
+                    'tx' => $checkoutRequestId,
                     'phone' => $phone,
                 ]);
                 
                 return response()->json([
                     'ok' => true,
                     'subscription' => $subscription,
-                    'tx' => $result['tx'],
+                    'tx' => $checkoutRequestId,
+                    'checkout_request_id' => $checkoutRequestId,  // CheckoutRequestID from M-PESA
                     'message' => $result['message'] ?? null,
                     'previous_subscription' => $previousSubscription,
                     'package' => $this->formatPackageResponse($package),

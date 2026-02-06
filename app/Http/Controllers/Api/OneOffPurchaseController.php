@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\OneOffPurchase;
+use App\Models\MpesaTransaction;
 use App\Services\MpesaService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -42,10 +43,48 @@ class OneOffPurchaseController extends Controller
         $res = $service->initiateStkPush($phone, (float)$purchase->amount, 'OneOff-'.$purchase->id);
 
         if ($res['ok']) {
-            $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], ['tx' => $res['tx'], 'initiated_at' => now()]);
+            $checkoutRequestId = $res['tx'];  // M-PESA's CheckoutRequestID
+            
+            $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
+                'tx' => $checkoutRequestId,
+                'checkout_request_id' => $checkoutRequestId,  // CheckoutRequestID from M-PESA
+                'initiated_at' => now()
+            ]);
             $purchase->save();
-            return response()->json(['ok' => true, 'purchase' => $purchase, 'tx' => $res['tx']]);
+            
+            // Create MpesaTransaction record for reconciliation
+            MpesaTransaction::create([
+                'user_id' => $user->id,
+                'checkout_request_id' => $checkoutRequestId,
+                'merchant_request_id' => $res['body']['MerchantRequestID'] ?? null,
+                'amount' => $purchase->amount,
+                'phone' => $phone,
+                'status' => 'pending',
+                'billable_type' => OneOffPurchase::class,
+                'billable_id' => $purchase->id,
+                'raw_response' => json_encode($res['body'] ?? []),
+            ]);
+            
+            Log::info('[OneOff Purchase] STK Push initiated', [
+                'user_id' => $user->id,
+                'purchase_id' => $purchase->id,
+                'checkout_request_id' => $checkoutRequestId,
+                'amount' => $purchase->amount,
+            ]);
+            
+            return response()->json([
+                'ok' => true, 
+                'purchase' => $purchase, 
+                'tx' => $checkoutRequestId,
+                'checkout_request_id' => $checkoutRequestId  // Return checkout_request_id to frontend
+            ]);
         }
+
+        Log::error('[OneOff Purchase] STK Push failed', [
+            'user_id' => $user->id,
+            'purchase_id' => $purchase->id,
+            'error' => $res['message'] ?? 'unknown error',
+        ]);
 
         return response()->json(['ok' => false, 'message' => 'Failed to initiate payment'], 500);
     }

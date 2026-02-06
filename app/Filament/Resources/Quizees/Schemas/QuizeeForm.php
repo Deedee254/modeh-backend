@@ -3,7 +3,10 @@
 namespace App\Filament\Resources\Quizees\Schemas;
 
 use Filament\Schemas\Schema;
-use Filament\Schemas\Components\Section;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 
 class QuizeeForm
 {
@@ -13,35 +16,35 @@ class QuizeeForm
             ->components([
                 Section::make('Quizee Information')
                     ->schema([
-                        \Filament\Forms\Components\TextInput::make('user.name')
+                        TextInput::make('user.name')
                             ->required()
                             ->maxLength(255),
-                        \Filament\Forms\Components\TextInput::make('user.email')
+                        TextInput::make('user.email')
                             ->email()
                             ->required()
                             ->maxLength(255),
-                        \Filament\Forms\Components\TextInput::make('institution')
+                        TextInput::make('institution')
                             ->label('School/Institution')
                             ->required()
                             ->maxLength(255),
-                        \Filament\Forms\Components\Select::make('grade')
+                        Select::make('grade')
                             ->options(array_combine(range(1, 12), range(1, 12)))
                             ->required(),
-                        \Filament\Forms\Components\TextInput::make('parent_email')
+                        TextInput::make('parent_email')
                             ->label('Parent/Guardian Email')
                             ->email()
                             ->maxLength(255),
                     ]),
-                \Filament\Forms\Components\Section::make('Authentication')
+                Section::make('Authentication')
                     ->schema([
-                        \Filament\Forms\Components\Select::make('user.social_provider')
+                        Select::make('user.social_provider')
                             ->label('Login Method')
                             ->options([
                                 'google' => 'Google',
                                 null => 'Email',
                             ])
                             ->disabled(),
-                        \Filament\Forms\Components\Toggle::make('user.is_profile_completed')
+                        Toggle::make('user.is_profile_completed')
                             ->label('Profile Completed')
                             ->disabled(),
                     ])

@@ -22,6 +22,13 @@ class MpesaService
             'passkey' => null,
             'callback_url' => null,
         ], $config);
+        
+        // Trim whitespace from string config values
+        foreach (['consumer_key', 'consumer_secret', 'shortcode', 'passkey', 'callback_url'] as $key) {
+            if (is_string($this->config[$key])) {
+                $this->config[$key] = trim($this->config[$key]);
+            }
+        }
     }
 
     protected function baseUrl(): string
@@ -134,12 +141,20 @@ class MpesaService
                 'account_ref' => $accountRef,
             ]);
 
+            // Temporary debug: log outgoing payload without secrets (do not log Password)
+            $payloadToLog = $payload;
+            if (isset($payloadToLog['Password'])) unset($payloadToLog['Password']);
+            Log::debug('[MPESA] Outgoing STK payload (safe)', $payloadToLog);
+
             $client = $this->httpClient();
             $res = $client->request('POST', '/mpesa/stkpush/v1/processrequest', [
                 'headers' => ['Authorization' => 'Bearer '.$token, 'Content-Type' => 'application/json'],
                 'json' => $payload,
             ]);
-            $body = json_decode((string)$res->getBody(), true);
+            $rawBody = (string)$res->getBody();
+            // Log raw response for troubleshooting
+            Log::debug('[MPESA] Raw STK response body', ['body' => $rawBody]);
+            $body = json_decode($rawBody, true);
             
             // successful response contains CheckoutRequestID and ResponseCode 0 (can be int or string)
             $responseCode = $body['ResponseCode'] ?? null;
@@ -214,13 +229,21 @@ class MpesaService
                 'checkout_request_id' => $checkoutRequestId,
             ]);
 
+            // Temporary debug: log outgoing query payload without secrets
+            $payloadToLog = $payload;
+            if (isset($payloadToLog['Password'])) unset($payloadToLog['Password']);
+            Log::debug('[MPESA] Outgoing STK query payload (safe)', $payloadToLog);
+
             $client = $this->httpClient();
             $res = $client->request('POST', '/mpesa/stkpushquery/v1/query', [
                 'headers' => ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
                 'json' => $payload,
             ]);
 
-            $body = json_decode((string)$res->getBody(), true);
+            $rawBody = (string)$res->getBody();
+            // Log raw response from Daraja for troubleshooting
+            Log::debug('[MPESA] Raw STK query response body', ['body' => $rawBody]);
+            $body = json_decode($rawBody, true);
 
             // Check HTTP status and basic response structure
             if ($res->getStatusCode() !== 200) {
