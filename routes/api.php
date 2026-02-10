@@ -109,6 +109,8 @@ Route::get('/topics', [\App\Http\Controllers\Api\TopicController::class, 'index'
 // Public topics listing for frontend
 // Get quizzes by topic
 Route::get('/topics/{topic}/quizzes', [\App\Http\Controllers\Api\TopicController::class, 'quizzes']);
+// Global search across public resources
+Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'index']);
 // Public show endpoints for detail pages
 Route::get('/grades/{grade}', [\App\Http\Controllers\Api\GradeController::class, 'show']);
 Route::get('/grades/{grade}/topics', [\App\Http\Controllers\Api\GradeController::class, 'topics']);

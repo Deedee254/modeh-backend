@@ -62,106 +62,177 @@ class HandleTournamentRoundCompletion implements ShouldQueue
     public function handle()
     {
         $start = microtime(true);
-
-    $repo = app(TournamentRepository::class);
-    $tournament = $repo->find($this->tournamentId);
+        $repo = app(TournamentRepository::class);
+        $tournament = $repo->find($this->tournamentId);
+        
         if (! $tournament) {
             logger()->info("HandleTournamentRoundCompletion: tournament {$this->tournamentId} not found");
             return;
         }
 
-        // If tournament is still in upcoming/qualification phase and qualifier end_date has passed,
-        // auto-finalize qualification and generate first round matches.
+        // Handle qualification phase auto-finalization
         if ($tournament->status === 'upcoming') {
-            try {
-                if ($tournament->end_date && Carbon::now()->greaterThan(Carbon::parse($tournament->end_date))) {
-                    logger()->info("HandleTournamentRoundCompletion: auto-finalizing qualification for tournament {$tournament->id} as end_date passed");
-
-                    // Fetch approved participants who attempted qualification
-                    $approvedIds = $tournament->participants()->wherePivot('status', 'approved')->get()->pluck('id')->toArray();
-
-                    $attempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
-                        ->whereIn('user_id', $approvedIds)
-                        ->orderByDesc('score')
-                        ->orderBy('duration_seconds')
-                        ->get();
-
-                    if ($attempts->isEmpty()) {
-                        logger()->info("HandleTournamentRoundCompletion: no qualification attempts found for tournament {$tournament->id}");
-                        return;
-                    }
-
-                    $slots = $tournament->bracket_slots ?? 8;
-                    $selected = $attempts->groupBy('user_id')->map(function($g) { return $g->first(); })->values();
-                    $selected = $selected->take($slots);
-                    $participantIds = $selected->pluck('user_id')->toArray();
-
-                    if (count($participantIds) === 0) {
-                        logger()->info("HandleTournamentRoundCompletion: no eligible participants selected for tournament {$tournament->id}");
-                        return;
-                    }
-
-                    if (count($participantIds) === 1) {
-                        $tournament->finalizeWithWinner((int) $participantIds[0]);
-                        logger()->info("HandleTournamentRoundCompletion: finalized tournament {$tournament->id} with single participant {$participantIds[0]}");
-                        return;
-                    }
-
-                    // generate first round matches immediately (scheduled now)
-                    try {
-                        $tournament->generateMatches($participantIds, 1, Carbon::now());
-                        logger()->info("HandleTournamentRoundCompletion: auto-generated first round for tournament {$tournament->id}");
-                    } catch (\Throwable $e) {
-                        logger()->error('HandleTournamentRoundCompletion: failed to auto-generate matches for tournament ' . $tournament->id . ': ' . $e->getMessage());
-                    }
-
-                    return;
-                }
-            } catch (\Throwable $e) {
-                logger()->error('HandleTournamentRoundCompletion: error while checking auto-finalize for tournament ' . $tournament->id . ': ' . $e->getMessage());
-                // continue to other logic if possible
-            }
+            $this->handleQualificationPhase($tournament);
+            return;
         }
 
-        // Only process active tournaments for round completion/new-round creation
+        // Handle active tournament round completion
         if ($tournament->status !== 'active') {
             logger()->info("HandleTournamentRoundCompletion: tournament {$this->tournamentId} is not active ({$tournament->status})");
             return;
         }
 
-        // determine the highest round that exists
+        $this->handleActiveRound($tournament);
+        $duration = microtime(true) - $start;
+        logger()->info(sprintf('HandleTournamentRoundCompletion: finished tournament %d in %.3fs', $this->tournamentId, $duration));
+    }
+
+    /**
+     * Handle qualification phase auto-finalization
+     */
+    private function handleQualificationPhase(\App\Models\Tournament $tournament): void
+    {
+        try {
+            if (! $tournament->end_date || ! Carbon::now()->greaterThan(Carbon::parse($tournament->end_date))) {
+                return;
+            }
+
+            logger()->info("HandleTournamentRoundCompletion: auto-finalizing qualification for tournament {$tournament->id}");
+
+            // Fetch approved participants who attempted qualification
+            $approvedIds = $tournament->participants()->wherePivot('status', 'approved')->get()->pluck('id')->toArray();
+
+            $attempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+                ->whereIn('user_id', $approvedIds)
+                ->orderByDesc('score')
+                ->orderBy('duration_seconds')
+                ->get();
+
+            if ($attempts->isEmpty()) {
+                logger()->info("HandleTournamentRoundCompletion: no qualification attempts found for tournament {$tournament->id}");
+                return;
+            }
+
+            $participantIds = $this->selectTopQualifiers($tournament, $attempts);
+
+            if (count($participantIds) === 0) {
+                logger()->info("HandleTournamentRoundCompletion: no eligible participants selected for tournament {$tournament->id}");
+                return;
+            }
+
+            if (count($participantIds) === 1) {
+                $tournament->finalizeWithWinner((int) $participantIds[0]);
+                logger()->info("HandleTournamentRoundCompletion: finalized tournament {$tournament->id} with single participant {$participantIds[0]}");
+                return;
+            }
+
+            // Generate first round matches immediately
+            try {
+                $tournament->generateMatches($participantIds, 1, Carbon::now());
+                logger()->info("HandleTournamentRoundCompletion: auto-generated first round for tournament {$tournament->id}");
+            } catch (\Throwable $e) {
+                logger()->error('HandleTournamentRoundCompletion: failed to auto-generate matches for tournament ' . $tournament->id . ': ' . $e->getMessage());
+            }
+        } catch (\Throwable $e) {
+            logger()->error('HandleTournamentRoundCompletion: error in qualification phase for tournament ' . $tournament->id . ': ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Select top qualifiers based on score and duration
+     */
+    private function selectTopQualifiers(\App\Models\Tournament $tournament, $attempts): array
+    {
+        $slots = $tournament->bracket_slots ?? 8;
+        $selected = $attempts->groupBy('user_id')->map(function($g) { return $g->first(); })->values();
+        $selected = $selected->take($slots);
+        return $selected->pluck('user_id')->toArray();
+    }
+
+    /**
+     * Handle active tournament round completion
+     */
+    private function handleActiveRound(\App\Models\Tournament $tournament): void
+    {
+        // Determine the highest round that exists
         $maxRound = (int) $tournament->battles()->max('round');
         if ($maxRound <= 0) return;
 
-        // ensure all battles in this round are completed and have a winner
+        // Ensure all battles in this round are completed and have a winner
         $battles = $tournament->battles()->where('round', $maxRound)->get();
         if ($battles->isEmpty()) return;
 
         $allCompleted = $battles->every(function ($b) { return $b->status === 'completed' && !is_null($b->winner_id); });
         if (! $allCompleted) return;
 
-        // if next round already exists, skip
+        // If next round already exists, skip
         $nextExists = $tournament->battles()->where('round', $maxRound + 1)->exists();
         if ($nextExists) return;
 
-        // collect winners
+        // Collect winners
         $winners = $battles->pluck('winner_id')->filter()->map(function ($id) { return (int) $id; })->unique()->values()->toArray();
 
         if (count($winners) <= 1) {
-            // declare tournament winner
-            if (count($winners) === 1) {
-                $winnerId = $winners[0];
-                logger()->info("Tournament {$tournament->id} has a final winner: {$winnerId}");
-                if (is_callable([$tournament, 'finalizeWithWinner'])) {
-                    $tournament->finalizeWithWinner($winnerId);
-                }
-            } else {
-                logger()->info("Tournament {$tournament->id} has no winners for round {$maxRound}");
-            }
+            $this->finalizeTournamentIfNeeded($tournament, $winners, $maxRound);
             return;
         }
 
-        // schedule new round creations after configured delay
+        // Create next round
+        $this->createNextRound($tournament, $winners, $maxRound);
+    }
+
+    /**
+     * Finalize tournament if only one or zero winners remain
+     */
+    private function finalizeTournamentIfNeeded(\App\Models\Tournament $tournament, array $winners, int $maxRound): void
+    {
+        if (count($winners) === 1) {
+            $winnerId = $winners[0];
+            logger()->info("Tournament {$tournament->id} has a final winner: {$winnerId}");
+            if (is_callable([$tournament, 'finalizeWithWinner'])) {
+                $tournament->finalizeWithWinner($winnerId);
+            }
+        } else {
+            logger()->info("Tournament {$tournament->id} has no winners for round {$maxRound}");
+        }
+    }
+
+    /**
+     * Create next round battles
+     */
+    private function createNextRound(\App\Models\Tournament $tournament, array $winners, int $maxRound): void
+    {
+        $delayMinutes = $this->calculateRoundDelay($tournament);
+        $scheduledAt = Carbon::now()->addMinutes($delayMinutes);
+
+        if (! is_callable([$tournament, 'createBattlesForRound'])) {
+            return;
+        }
+
+        try {
+            $created = DB::transaction(function () use ($tournament, $winners, $maxRound, $scheduledAt) {
+                $created = $tournament->createBattlesForRound($winners, $maxRound + 1, $scheduledAt);
+                $this->handleByes($tournament, $created, $winners, $maxRound, $scheduledAt);
+                return $created;
+            });
+
+            logger()->info("HandleTournamentRoundCompletion: Created " . count($created) . " battles for tournament {$tournament->id} round " . ($maxRound + 1));
+            $this->dispatchRoundCreatedEvent($tournament, $maxRound + 1, $created);
+            $this->logByeAdvances($tournament, $created, $winners);
+        } catch (\Throwable $e) {
+            logger()->error('HandleTournamentRoundCompletion: failed to create next round for tournament ' . $tournament->id . ': ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Calculate round delay in minutes
+     */
+    private function calculateRoundDelay(\App\Models\Tournament $tournament): int
+    {
+        if (!is_null($tournament->round_delay_days) && $tournament->round_delay_days !== '') {
+            return intval($tournament->round_delay_days) * 24 * 60;
+        }
+
         $rules = [];
         if (is_array($tournament->rules)) {
             $rules = $tournament->rules;
@@ -170,70 +241,65 @@ class HandleTournamentRoundCompletion implements ShouldQueue
             if (is_array($decoded)) $rules = $decoded;
         }
 
-        // Prefer explicit tournament.round_delay_days (days) when present. Fall back to rules['round_delay_minutes'] or 5 minutes.
-        if (!is_null($tournament->round_delay_days) && $tournament->round_delay_days !== '') {
-            $delayMinutes = intval($tournament->round_delay_days) * 24 * 60;
-        } else {
-            $delayMinutes = isset($rules['round_delay_minutes']) ? intval($rules['round_delay_minutes']) : 5;
+        return isset($rules['round_delay_minutes']) ? intval($rules['round_delay_minutes']) : 5;
+    }
+
+    /**
+     * Handle byes (unpaired winners)
+     */
+    private function handleByes(\App\Models\Tournament $tournament, array $created, array $winners, int $maxRound, $scheduledAt): void
+    {
+        $pairedIds = [];
+        foreach ($created as $c) {
+            $pairedIds[] = $c->player1_id;
+            $pairedIds[] = $c->player2_id;
         }
 
-        $scheduledAt = Carbon::now()->addMinutes($delayMinutes);
-
-        // create next round battles (assumes Tournament::createBattlesForRound exists)
-        if (is_callable([$tournament, 'createBattlesForRound'])) {
-            try {
-                $created = DB::transaction(function () use ($tournament, $winners, $maxRound, $scheduledAt) {
-                    $created = $tournament->createBattlesForRound($winners, $maxRound + 1, $scheduledAt);
-
-                    // handle byes (unpaired winners) by auto-advancing them inside the transaction
-                    $pairedIds = [];
-                    foreach ($created as $c) {
-                        $pairedIds[] = $c->player1_id;
-                        $pairedIds[] = $c->player2_id;
-                    }
-                    $byes = array_diff($winners, $pairedIds);
-                    if (!empty($byes)) {
-                        foreach ($byes as $uid) {
-                            $tournament->battles()->create([
-                                'round' => $maxRound + 1,
-                                'player1_id' => $uid,
-                                'player2_id' => $uid,
-                                'winner_id' => $uid,
-                                'status' => 'completed',
-                                'scheduled_at' => $scheduledAt,
-                                'completed_at' => Carbon::now()
-                            ]);
-                        }
-                    }
-
-                    return $created;
-                });
-
-                logger()->info("HandleTournamentRoundCompletion: Created " . count($created) . " battles for tournament {$tournament->id} round " . ($maxRound + 1));
-
-                // dispatch a broadcast/event after commit so clients only receive it when DB is durable
-                try {
-                    event(new TournamentRoundCreated($tournament->id, $maxRound + 1, $created));
-                } catch (\Throwable $_e) {
-                    logger()->error('HandleTournamentRoundCompletion: failed to dispatch TournamentRoundCreated event: ' . $_e->getMessage());
-                }
-
-                // log any auto-advanced byes for visibility
-                $pairedIds = [];
-                foreach ($created as $c) {
-                    $pairedIds[] = $c->player1_id;
-                    $pairedIds[] = $c->player2_id;
-                }
-                $byes = array_diff($winners, $pairedIds);
-                if (!empty($byes)) {
-                    logger()->info('Auto-advanced ' . count($byes) . ' byes to next round for tournament ' . $tournament->id);
-                }
-            } catch (\Throwable $e) {
-                logger()->error('HandleTournamentRoundCompletion: failed to create next round for tournament ' . $tournament->id . ': ' . $e->getMessage());
-            }
+        $byes = array_diff($winners, $pairedIds);
+        if (empty($byes)) {
+            return;
         }
-        $duration = microtime(true) - $start;
-        logger()->info(sprintf('HandleTournamentRoundCompletion: finished tournament %d in %.3fs', $this->tournamentId, $duration));
+
+        foreach ($byes as $uid) {
+            $tournament->battles()->create([
+                'round' => $maxRound + 1,
+                'player1_id' => $uid,
+                'player2_id' => 0,
+                'winner_id' => $uid,
+                'status' => 'bye',
+                'scheduled_at' => $scheduledAt,
+                'completed_at' => Carbon::now()
+            ]);
+        }
+    }
+
+    /**
+     * Dispatch TournamentRoundCreated event
+     */
+    private function dispatchRoundCreatedEvent(\App\Models\Tournament $tournament, int $round, array $created): void
+    {
+        try {
+            event(new TournamentRoundCreated($tournament->id, $round, $created));
+        } catch (\Throwable $e) {
+            logger()->error('HandleTournamentRoundCompletion: failed to dispatch TournamentRoundCreated event: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Log auto-advanced byes
+     */
+    private function logByeAdvances(\App\Models\Tournament $tournament, array $created, array $winners): void
+    {
+        $pairedIds = [];
+        foreach ($created as $c) {
+            $pairedIds[] = $c->player1_id;
+            $pairedIds[] = $c->player2_id;
+        }
+
+        $byes = array_diff($winners, $pairedIds);
+        if (!empty($byes)) {
+            logger()->info('Auto-advanced ' . count($byes) . ' byes to next round for tournament ' . $tournament->id);
+        }
     }
 
     /**

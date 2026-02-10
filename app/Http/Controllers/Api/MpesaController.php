@@ -102,6 +102,38 @@ class MpesaController extends Controller
                 'result_desc' => $queryResult['result_desc'],
             ]);
 
+            $expectedAmount = null;
+            if ($transaction->billable instanceof \App\Models\Subscription) {
+                $expectedAmount = (float) ($transaction->billable->package->price ?? 0);
+            } elseif ($transaction->billable instanceof \App\Models\OneOffPurchase) {
+                $expectedAmount = (float) ($transaction->billable->amount ?? 0);
+            }
+
+            if ($expectedAmount !== null && $expectedAmount > 0 && isset($queryResult['amount'])) {
+                $received = (float) $queryResult['amount'];
+                if ($received > 0 && abs($received - $expectedAmount) > 0.01) {
+                    $transaction->markFailed(null, 'Amount mismatch');
+                    Log::warning('[MPESA] Reconcile: amount mismatch', [
+                        'transaction_id' => $transaction->id,
+                        'expected' => $expectedAmount,
+                        'received' => $received,
+                    ]);
+
+                    DB::commit();
+                    $transaction->refresh();
+                    if ($transaction->billable) {
+                        $this->processBillable($transaction);
+                    }
+
+                    return response()->json([
+                        'ok' => false,
+                        'message' => 'Amount mismatch',
+                        'status' => 'failed',
+                        'transaction' => $this->formatTransaction($transaction),
+                    ], 409);
+                }
+            }
+
             $newStatus = $queryResult['status'];
 
             if ($newStatus === 'success') {
@@ -131,13 +163,9 @@ class MpesaController extends Controller
                 // Mark success and process billable (e.g., activate subscription)
                 $transaction->markSuccess(
                     $queryResult['mpesa_receipt'],
-                    $queryResult['result_desc']
+                    $queryResult['result_desc'],
+                    $queryResult['transaction_date'] ?? null
                 );
-
-                // Process the billable (e.g., activate subscription)
-                if ($transaction->billable) {
-                    $this->processBillable($transaction);
-                }
 
                 Log::info('[MPESA] Reconcile: marked success', [
                     'user_id' => $user->id,
@@ -185,6 +213,10 @@ class MpesaController extends Controller
         // Refresh and return normalized response
         $transaction->refresh();
 
+        if (in_array($transaction->status, ['success', 'failed', 'cancelled']) && $transaction->billable) {
+            $this->processBillable($transaction);
+        }
+
         return response()->json([
             'ok' => true,
             'status' => $transaction->status,
@@ -202,15 +234,15 @@ class MpesaController extends Controller
             return;
         }
 
-        $billable = $transaction->billable;
-
-        // Example: if billable is a Subscription, activate it
-        if (method_exists($billable, 'markActive')) {
-            $billable->markActive();
+        try {
+            app(\App\Http\Controllers\Api\PaymentController::class)
+                ->processMpesaBillable($transaction, $transaction->status, []);
+        } catch (\Throwable $e) {
+            Log::error('[MPESA] Failed to process billable after reconciliation', [
+                'transaction_id' => $transaction->id,
+                'error' => $e->getMessage(),
+            ]);
         }
-
-        // Emit event or dispatch job if needed
-        // event(new TransactionSucceeded($transaction));
     }
 
     /**

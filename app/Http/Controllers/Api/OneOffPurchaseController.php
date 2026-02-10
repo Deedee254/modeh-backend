@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\OneOffPurchase;
+use App\Models\Quiz;
+use App\Models\Battle;
+use App\Models\Tournament;
 use App\Models\MpesaTransaction;
 use App\Services\MpesaService;
 use Illuminate\Support\Facades\Auth;
@@ -18,18 +21,32 @@ class OneOffPurchaseController extends Controller
         if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
 
         $data = $request->validate([
-            'item_type' => 'required|string', // 'quiz' or 'battle'
+            'item_type' => 'required|in:quiz,battle,tournament',
             'item_id' => 'required',
-            'amount' => 'required|numeric',
+            'amount' => 'nullable|numeric',
             'phone' => 'nullable|string',
             'gateway' => 'nullable|string',
         ]);
+
+        $resolvedAmount = $this->resolveOneOffAmount($data['item_type'], $data['item_id']);
+        if ($resolvedAmount === null || $resolvedAmount <= 0) {
+            return response()->json(['ok' => false, 'message' => 'Invalid item or price not configured'], 422);
+        }
+
+        if (!empty($data['amount']) && (float)$data['amount'] != (float)$resolvedAmount) {
+            Log::warning('[OneOff Purchase] Client amount mismatch', [
+                'item_type' => $data['item_type'],
+                'item_id' => $data['item_id'],
+                'client_amount' => $data['amount'],
+                'resolved_amount' => $resolvedAmount,
+            ]);
+        }
 
         $purchase = OneOffPurchase::create([
             'user_id' => $user->id,
             'item_type' => $data['item_type'],
             'item_id' => $data['item_id'],
-            'amount' => $data['amount'],
+            'amount' => $resolvedAmount,
             'status' => 'pending',
             'gateway' => $data['gateway'] ?? 'mpesa',
             'gateway_meta' => ['phone' => $data['phone'] ?? $user->phone ?? null],
@@ -87,6 +104,23 @@ class OneOffPurchaseController extends Controller
         ]);
 
         return response()->json(['ok' => false, 'message' => 'Failed to initiate payment'], 500);
+    }
+
+    private function resolveOneOffAmount(string $type, $itemId): ?float
+    {
+        switch ($type) {
+            case 'quiz':
+                $quiz = Quiz::find($itemId);
+                return $quiz ? (float) ($quiz->one_off_price ?? 0) : null;
+            case 'battle':
+                $battle = Battle::find($itemId);
+                return $battle ? (float) ($battle->one_off_price ?? 0) : null;
+            case 'tournament':
+                $tournament = Tournament::find($itemId);
+                return $tournament ? (float) ($tournament->entry_fee ?? 0) : null;
+            default:
+                return null;
+        }
     }
 
     public function show(Request $request, $purchaseId)

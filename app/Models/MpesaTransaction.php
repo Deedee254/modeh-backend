@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -96,13 +97,15 @@ class MpesaTransaction extends Model
     /**
      * Mark as successfully reconciled
      */
-    public function markSuccess(?string $receipt = null, ?string $resultDesc = null): void
+    public function markSuccess(?string $receipt = null, ?string $resultDesc = null, $transactionDate = null): void
     {
+        $parsedDate = self::parseTransactionDate($transactionDate);
         $this->update([
             'status' => 'success',
             'result_code' => 0,
             'result_desc' => $resultDesc ?? 'Payment received',
             'mpesa_receipt' => $receipt ?? $this->mpesa_receipt,
+            'transaction_date' => $parsedDate ?? $this->transaction_date,
             'reconciled_at' => now(),
         ]);
     }
@@ -134,5 +137,39 @@ class MpesaTransaction extends Model
             'last_retry_at' => now(),
             'next_retry_at' => now()->addSeconds($delaySeconds),
         ]);
+    }
+
+    /**
+     * Parse a Daraja transaction date (YYYYMMDDHHMMSS) or generic date string.
+     */
+    public static function parseTransactionDate($value): ?Carbon
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value);
+        }
+
+        $str = trim((string) $value);
+        if ($str === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{14}$/', $str)) {
+            try {
+                return Carbon::createFromFormat('YmdHis', $str, config('app.timezone', 'UTC'));
+            } catch (\Throwable $_) {
+                return null;
+            }
+        }
+
+        $ts = strtotime($str);
+        if ($ts !== false) {
+            return Carbon::createFromTimestamp($ts, config('app.timezone', 'UTC'));
+        }
+
+        return null;
     }
 }

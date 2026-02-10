@@ -88,12 +88,18 @@ class ReconsileMpesaTransaction implements ShouldQueue
                 if (!$existingReceipt) {
                     $transaction->markSuccess(
                         $queryResult['mpesa_receipt'],
-                        $queryResult['result_desc']
+                        $queryResult['result_desc'],
+                        $queryResult['transaction_date'] ?? null
                     );
 
-                    // Process billable
-                    if ($transaction->billable && method_exists($transaction->billable, 'markActive')) {
-                        $transaction->billable->markActive();
+                    try {
+                        app(\App\Http\Controllers\Api\PaymentController::class)
+                            ->processMpesaBillable($transaction, 'success', []);
+                    } catch (\Throwable $e) {
+                        Log::error('[MPESA Job] Billable processing failed', [
+                            'transaction_id' => $transaction->id,
+                            'error' => $e->getMessage(),
+                        ]);
                     }
 
                     Log::info('[MPESA Job] Transaction reconciled as success', [
@@ -111,6 +117,17 @@ class ReconsileMpesaTransaction implements ShouldQueue
                     $queryResult['result_code'],
                     $queryResult['result_desc']
                 );
+
+                try {
+                    app(\App\Http\Controllers\Api\PaymentController::class)
+                        ->processMpesaBillable($transaction, 'failed', []);
+                } catch (\Throwable $e) {
+                    Log::error('[MPESA Job] Billable failure processing failed', [
+                        'transaction_id' => $transaction->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+
                 Log::warning('[MPESA Job] Transaction marked failed', [
                     'transaction_id' => $transaction->id,
                     'result_code' => $queryResult['result_code'],

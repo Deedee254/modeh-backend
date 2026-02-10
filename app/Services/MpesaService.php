@@ -115,6 +115,10 @@ class MpesaService
             return ['ok' => false, 'message' => 'shortcode or passkey not configured'];
         }
 
+        if (!$callback || !is_string($callback) || trim($callback) === '') {
+            return ['ok' => false, 'message' => 'callback_url not configured'];
+        }
+
         $timestamp = now()->format('YmdHis');
         $password = base64_encode($shortcode.$passkey.$timestamp);
 
@@ -129,7 +133,7 @@ class MpesaService
             'PartyA' => $phone,
             'PartyB' => $shortcode,
             'PhoneNumber' => $phone,
-            'CallBackURL' => $callback ?? ($this->baseUrl().'/mpesa/callback'),
+            'CallBackURL' => $callback,
             'AccountReference' => $accountRef ?? 'Subscription',
             'TransactionDesc' => 'Subscription payment',
         ];

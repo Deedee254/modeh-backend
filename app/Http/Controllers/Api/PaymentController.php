@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use App\Models\Subscription;
 use App\Models\PaymentSetting;
 use App\Models\Package;
+use App\Models\MpesaTransaction;
+use App\Models\OneOffPurchase;
 use App\Services\MpesaService;
 use App\Services\WalletService;
 use Illuminate\Support\Facades\Auth;
@@ -25,18 +27,50 @@ class PaymentController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
-        // Use MpesaService with config from env
-        $service = new MpesaService(config('services.mpesa'));
         $amount = $subscription->package->price ?? 0;
         $phone = $request->phone ?? ($subscription->gateway_meta['phone'] ?? null) ?? ($subscription->user->phone ?? null);
+
+        if (!$phone || !is_string($phone) || trim($phone) === '') {
+            return response()->json(['ok' => false, 'message' => 'Phone number required for mpesa payments'], 422);
+        }
+
+        // Use MpesaService with config from env
+        $service = new MpesaService(config('services.mpesa'));
         $res = $service->initiateStkPush($phone, $amount, 'Subscription-'.$subscription->id);
 
         if ($res['ok']) {
-            $subscription->update(['gateway_meta' => array_merge($subscription->gateway_meta ?? [], ['tx' => $res['tx'], 'initiated_at' => now()])]);
-            return response()->json(['ok' => true, 'tx' => $res['tx'], 'message' => $res['message']]);
+            $checkoutRequestId = $res['tx'];
+
+            $subscription->update([
+                'gateway_meta' => array_merge($subscription->gateway_meta ?? [], [
+                    'tx' => $checkoutRequestId,
+                    'checkout_request_id' => $checkoutRequestId,
+                    'initiated_at' => now(),
+                ])
+            ]);
+
+            // Create MpesaTransaction record for reconciliation
+            MpesaTransaction::create([
+                'user_id' => $user->id,
+                'checkout_request_id' => $checkoutRequestId,
+                'merchant_request_id' => $res['body']['MerchantRequestID'] ?? null,
+                'amount' => $amount,
+                'phone' => $phone,
+                'status' => 'pending',
+                'billable_type' => Subscription::class,
+                'billable_id' => $subscription->id,
+                'raw_response' => json_encode($res['body'] ?? []),
+            ]);
+
+            return response()->json([
+                'ok' => true,
+                'tx' => $checkoutRequestId,
+                'checkout_request_id' => $checkoutRequestId,
+                'message' => $res['message'] ?? null,
+            ]);
         }
 
-        return response()->json(['ok' => false, 'message' => 'failed to initiate payment'], 500);
+        return response()->json(['ok' => false, 'message' => $res['message'] ?? 'failed to initiate payment'], 500);
     }
 
     // Webhook/callback from Mpesa
@@ -47,13 +81,17 @@ class PaymentController extends Controller
         // Best-effort parsing for Daraja callbacks. Support STK callback structure.
         $txId = $request->input('tx');
         $status = $request->input('status', 'success');
+        $resultCode = null;
+        $resultDesc = null;
 
         // If Daraja STK callback structure is present, extract meaningful fields
         if (isset($payload['Body']['stkCallback'])) {
             $stk = $payload['Body']['stkCallback'];
             // prefer CheckoutRequestID (commonly stored as tx) then MerchantRequestID
             $txId = $stk['CheckoutRequestID'] ?? $stk['MerchantRequestID'] ?? $txId;
-            $status = (isset($stk['ResultCode']) && $stk['ResultCode'] === 0) ? 'success' : 'failure';
+            $resultCode = $stk['ResultCode'] ?? null;
+            $resultDesc = $stk['ResultDesc'] ?? null;
+            $status = (isset($stk['ResultCode']) && (int)$stk['ResultCode'] === 0) ? 'success' : 'failed';
 
             // Extract callback metadata items (Amount, MpesaReceiptNumber/TransactionID, PhoneNumber, TransactionDate)
             $metaItems = $stk['CallbackMetadata']['Item'] ?? [];
@@ -86,39 +124,164 @@ class PaymentController extends Controller
             ];
         }
 
+        $status = $this->normalizeMpesaStatus($status, $resultCode);
+
+        $checkoutId = $payload['parsed_mpesa']['checkout_request_id'] ?? $txId;
+        if (!$checkoutId) {
+            return response()->json(['ok' => false, 'message' => 'Missing checkout_request_id'], 400);
+        }
+
         // Log the incoming webhook for auditing (avoid logging sensitive PII)
         Log::info('[Payment] MPESA callback received', [
-            'tx' => $txId,
+            'tx' => $checkoutId,
             'status' => $status,
             'request_ip' => $request->ip(),
             'timestamp' => now(),
         ]);
 
-        // Attempt to find subscription by stored gateway_meta.tx (initial purchase)
-        $sub = Subscription::where('gateway_meta->tx', $txId)->first();
-        
-        // If not found, check for renewal transaction
-        if (!$sub) {
-            $sub = Subscription::where('gateway_meta->renewal_tx', $txId)->first();
+        $mpesaTx = MpesaTransaction::where('checkout_request_id', $checkoutId)->first();
+        $sub = null;
+        $purchase = null;
+
+        if (!$mpesaTx) {
+            // Attempt to find subscription by stored gateway_meta.tx or checkout_request_id (initial purchase)
+            $sub = Subscription::where('gateway_meta->tx', $checkoutId)
+                ->orWhere('gateway_meta->checkout_request_id', $checkoutId)
+                ->first();
+            
+            // If not found, check for renewal transaction
+            if (!$sub) {
+                $sub = Subscription::where('gateway_meta->renewal_tx', $checkoutId)->first();
+                if ($sub) {
+                    // Mark this as a renewal so handler knows to extend dates instead of creating new
+                    $request->merge(['is_renewal' => true]);
+                }
+            }
+
+            if (!$sub) {
+                // Try one-off purchases
+                $purchase = OneOffPurchase::where('gateway_meta->tx', $checkoutId)
+                    ->orWhere('gateway_meta->checkout_request_id', $checkoutId)
+                    ->first();
+            }
+
             if ($sub) {
-                // Mark this as a renewal so handler knows to extend dates instead of creating new
-                $request->merge(['is_renewal' => true]);
+                $mpesaTx = MpesaTransaction::firstOrCreate(
+                    ['checkout_request_id' => $checkoutId],
+                    [
+                        'user_id' => $sub->user_id,
+                        'merchant_request_id' => $payload['parsed_mpesa']['merchant_request_id'] ?? null,
+                        'amount' => $payload['parsed_mpesa']['amount'] ?? ($sub->package->price ?? null),
+                        'phone' => $payload['parsed_mpesa']['phone'] ?? ($sub->gateway_meta['phone'] ?? null),
+                        'status' => 'pending',
+                        'billable_type' => Subscription::class,
+                        'billable_id' => $sub->id,
+                        'raw_response' => $payload['parsed_mpesa']['raw'] ?? $payload,
+                    ]
+                );
+                if (!$mpesaTx->billable_type || !$mpesaTx->billable_id) {
+                    $mpesaTx->update([
+                        'billable_type' => Subscription::class,
+                        'billable_id' => $sub->id,
+                    ]);
+                }
+            } elseif ($purchase) {
+                $mpesaTx = MpesaTransaction::firstOrCreate(
+                    ['checkout_request_id' => $checkoutId],
+                    [
+                        'user_id' => $purchase->user_id,
+                        'merchant_request_id' => $payload['parsed_mpesa']['merchant_request_id'] ?? null,
+                        'amount' => $payload['parsed_mpesa']['amount'] ?? $purchase->amount,
+                        'phone' => $payload['parsed_mpesa']['phone'] ?? ($purchase->gateway_meta['phone'] ?? null),
+                        'status' => 'pending',
+                        'billable_type' => OneOffPurchase::class,
+                        'billable_id' => $purchase->id,
+                        'raw_response' => $payload['parsed_mpesa']['raw'] ?? $payload,
+                    ]
+                );
+                if (!$mpesaTx->billable_type || !$mpesaTx->billable_id) {
+                    $mpesaTx->update([
+                        'billable_type' => OneOffPurchase::class,
+                        'billable_id' => $purchase->id,
+                    ]);
+                }
             }
         }
-        
-        if (!$sub) {
-            // Try one-off purchases
-            $purchase = \App\Models\OneOffPurchase::where('gateway_meta->tx', $txId)->first();
-            if (!$purchase) {
-                Log::warning('[Payment] Callback TX not found in subscriptions or purchases', [
-                    'tx' => $txId,
-                    'status' => $status,
-                ]);
-                return response()->json(['ok' => false, 'message' => 'subscription or purchase not found'], 404);
+
+        if ($mpesaTx) {
+            $parsed = $payload['parsed_mpesa'] ?? [];
+            $receipt = $parsed['mpesa_receipt'] ?? null;
+
+            $expectedAmount = null;
+            if ($sub) {
+                $expectedAmount = (float) ($sub->package->price ?? 0);
+            } elseif ($purchase) {
+                $expectedAmount = (float) ($purchase->amount ?? 0);
             }
+
+            if ($expectedAmount !== null && $expectedAmount > 0 && isset($parsed['amount'])) {
+                $received = (float) $parsed['amount'];
+                if ($received > 0 && abs($received - $expectedAmount) > 0.01) {
+                    Log::warning('[Payment] Amount mismatch on callback', [
+                        'checkout_request_id' => $checkoutId,
+                        'expected' => $expectedAmount,
+                        'received' => $received,
+                    ]);
+                    if ($mpesaTx) {
+                        $mpesaTx->update([
+                            'result_desc' => 'Amount mismatch',
+                            'status' => 'failed',
+                        ]);
+                    }
+                    return response()->json(['ok' => false, 'message' => 'Amount mismatch'], 409);
+                }
+            }
+
+            if (!empty($receipt)) {
+                $dup = MpesaTransaction::where('mpesa_receipt', $receipt)
+                    ->where('id', '!=', $mpesaTx->id)
+                    ->where('status', 'success')
+                    ->exists();
+                if ($dup) {
+                    Log::warning('[Payment] Duplicate M-PESA receipt detected', [
+                        'receipt' => $receipt,
+                        'checkout_request_id' => $checkoutId,
+                    ]);
+                    return response()->json(['ok' => false, 'message' => 'Duplicate receipt'], 409);
+                }
+            }
+
+            $mpesaTx->update([
+                'result_code' => $parsed['result_code'] ?? $resultCode,
+                'result_desc' => $parsed['result_desc'] ?? $resultDesc,
+                'mpesa_receipt' => $receipt,
+                'transaction_date' => MpesaTransaction::parseTransactionDate($parsed['transaction_date'] ?? null),
+                'raw_response' => $parsed['raw'] ?? $payload,
+                'status' => $status === 'success' ? 'success' : ($status === 'cancelled' ? 'cancelled' : 'failed'),
+            ]);
+
+            if (!$sub && !$purchase) {
+                $billable = $mpesaTx->billable;
+                if ($billable instanceof Subscription) {
+                    $sub = $billable;
+                } elseif ($billable instanceof OneOffPurchase) {
+                    $purchase = $billable;
+                }
+            }
+        }
+
+        if (!$sub && !$purchase) {
+            Log::warning('[Payment] Callback TX not found in subscriptions or purchases', [
+                'tx' => $checkoutId,
+                'status' => $status,
+            ]);
+            return response()->json(['ok' => false, 'message' => 'subscription or purchase not found'], 404);
+        }
+
+        if ($purchase) {
             Log::info('[Payment] One-off purchase callback matched', [
                 'purchase_id' => $purchase->id,
-                'tx' => $txId,
+                'tx' => $checkoutId,
                 'status' => $status,
             ]);
 
@@ -126,19 +289,19 @@ class PaymentController extends Controller
             if (!empty($payload['parsed_mpesa'])) {
                 $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
                     'mpesa' => $payload['parsed_mpesa'],
-                    'mpesa_tx' => $txId,
+                    'mpesa_tx' => $checkoutId,
                 ]);
                 $purchase->save();
             }
 
             // Handle one-off purchase
-            return $this->handleOneOffPurchase($purchase, $txId, $status);
+            return $this->handleOneOffPurchase($purchase, $checkoutId, $status);
         }
 
         Log::info('[Payment] Subscription callback matched', [
             'subscription_id' => $sub->id,
             'user_id' => $sub->user_id,
-            'tx' => $txId,
+            'tx' => $checkoutId,
             'status' => $status,
         ]);
 
@@ -146,9 +309,9 @@ class PaymentController extends Controller
         if (!empty($payload['parsed_mpesa'])) {
             $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], [
                 'mpesa' => $payload['parsed_mpesa'],
-                'mpesa_tx' => $txId,
+                'mpesa_tx' => $checkoutId,
                 // Backwards compatible top-level tx key
-                'tx' => $txId,
+                'tx' => $checkoutId,
                 'mpesa_receipt' => $payload['parsed_mpesa']['mpesa_receipt'] ?? null,
                 'amount' => $payload['parsed_mpesa']['amount'] ?? null,
                 'phone' => $payload['parsed_mpesa']['phone'] ?? null,
@@ -157,7 +320,7 @@ class PaymentController extends Controller
         }
 
         // Handle subscription payment
-        return $this->handleSubscription($sub, $txId, $status, $request);
+        return $this->handleSubscription($sub, $checkoutId, $status, $request);
     }
 
     /**
@@ -165,6 +328,12 @@ class PaymentController extends Controller
      */
     private function handleOneOffPurchase(\App\Models\OneOffPurchase $purchase, string $txId, string $status)
     {
+        if ($status === 'success') {
+            if ($purchase->status === 'confirmed' && \App\Models\Transaction::where('tx_id', $txId)->exists()) {
+                return response()->json(['ok' => true, 'skipped' => true]);
+            }
+        }
+
         if ($status !== 'success') {
             $purchase->status = 'cancelled';
             $purchase->save();
@@ -264,6 +433,30 @@ class PaymentController extends Controller
             'status' => $status,
         ]);
 
+        $isRenewal = $request->input('is_renewal', false);
+        if (!$isRenewal) {
+            $gwMeta = is_array($sub->gateway_meta) ? $sub->gateway_meta : [];
+            if (($gwMeta['renewal_tx'] ?? null) === $txId) {
+                $isRenewal = true;
+            }
+        }
+
+        if ($isRenewal) {
+            $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], [
+                'renewal_failed_at' => now(),
+                'renewal_failure_status' => $status,
+            ]);
+            $sub->save();
+
+            Log::warning('[Payment] Renewal payment failed; keeping active subscription', [
+                'subscription_id' => $sub->id,
+                'tx' => $txId,
+                'status' => $status,
+            ]);
+
+            return response()->json(['ok' => false, 'renewal_failed' => true]);
+        }
+
         $sub->status = 'cancelled';
         $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], [
             'failed_at' => now(),
@@ -310,6 +503,21 @@ class PaymentController extends Controller
             'is_renewal' => $isRenewal,
         ]);
 
+        // Prevent duplicate transaction processing
+        if (\App\Models\Transaction::where('tx_id', $txId)->exists()) {
+            Log::warning('[Payment] Duplicate transaction attempt prevented', [
+                'subscription_id' => $sub->id,
+                'tx' => $txId,
+            ]);
+            return response()->json(['ok' => true, 'skipped' => true]);
+        }
+
+        $existingMeta = is_array($sub->gateway_meta) ? $sub->gateway_meta : [];
+        $existingTx = $existingMeta['mpesa_tx'] ?? ($existingMeta['tx'] ?? null);
+        if ($existingTx && $existingTx === $txId && $sub->status === 'active' && !empty($existingMeta['completed_at'])) {
+            return response()->json(['ok' => true, 'skipped' => true]);
+        }
+
         // Mark subscription active
         $sub->status = 'active';
         
@@ -348,15 +556,6 @@ class PaymentController extends Controller
             if ($quiz) {
                 $quizMasterId = $quiz->user_id ?? ($quiz->created_by ?? null);
             }
-        }
-
-        // Prevent duplicate transactions
-        if (\App\Models\Transaction::where('tx_id', $txId)->exists()) {
-            Log::warning('[Payment] Duplicate transaction attempt prevented', [
-                'subscription_id' => $sub->id,
-                'tx' => $txId,
-            ]);
-            return response()->json(['ok' => true, 'skipped' => true]);
         }
 
         // Create transaction
@@ -728,4 +927,52 @@ class PaymentController extends Controller
         }
         return 60.0; // default: 60% to platform
     }
+
+    /**
+     * Normalize M-PESA status for internal processing.
+     */
+    private function normalizeMpesaStatus(string $status, $resultCode = null): string
+    {
+        $s = strtolower(trim($status));
+        if ($resultCode !== null && $resultCode !== '') {
+            return ((int) $resultCode === 0) ? 'success' : 'failed';
+        }
+        if (in_array($s, ['success', 'succeeded', 'ok'])) return 'success';
+        if (in_array($s, ['cancelled', 'canceled'])) return 'cancelled';
+        if (in_array($s, ['failed', 'failure', 'error'])) return 'failed';
+        return $s ?: 'failed';
+    }
+
+    /**
+     * Process a reconciled MpesaTransaction and update its billable.
+     */
+    public function processMpesaBillable(MpesaTransaction $transaction, string $status, array $payload = [])
+    {
+        $status = $this->normalizeMpesaStatus($status, $transaction->result_code ?? null);
+        $txId = $transaction->checkout_request_id;
+        $request = new Request($payload);
+
+        $billable = $transaction->billable;
+        if ($billable instanceof Subscription) {
+            return $this->handleSubscription($billable, $txId, $status, $request);
+        }
+        if ($billable instanceof OneOffPurchase) {
+            return $this->handleOneOffPurchase($billable, $txId, $status);
+        }
+
+        return response()->json(['ok' => false, 'message' => 'Unsupported billable type'], 422);
+    }
+
+
+    private function expectedAmountForBillable($billable): ?float
+    {
+        if ($billable instanceof Subscription) {
+            return (float) ($billable->package->price ?? 0);
+        }
+        if ($billable instanceof OneOffPurchase) {
+            return (float) ($billable->amount ?? 0);
+        }
+        return null;
+    }
+
 }

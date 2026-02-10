@@ -79,13 +79,15 @@ class TournamentBattle extends Model
     const STATUS_COMPLETED = 'completed';
     const STATUS_FORFEITED = 'forfeited';
     const STATUS_CANCELLED = 'cancelled';
+    const STATUS_BYE = 'bye';  // Bye status for auto-advanced players
 
     const VALID_STATUSES = [
         self::STATUS_SCHEDULED,
         self::STATUS_IN_PROGRESS,
         self::STATUS_COMPLETED,
         self::STATUS_FORFEITED,
-        self::STATUS_CANCELLED
+        self::STATUS_CANCELLED,
+        self::STATUS_BYE
     ];
 
     public function tournament()

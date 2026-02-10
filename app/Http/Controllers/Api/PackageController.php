@@ -476,6 +476,18 @@ class PackageController extends Controller
                 $subscription->gateway_meta = array_merge($subscription->gateway_meta ?? [], $renewalMeta);
                 $subscription->save();
 
+                MpesaTransaction::create([
+                    'user_id' => $user->id,
+                    'checkout_request_id' => $res['tx'],
+                    'merchant_request_id' => $res['body']['MerchantRequestID'] ?? null,
+                    'amount' => $amount,
+                    'phone' => $phone,
+                    'status' => 'pending',
+                    'billable_type' => Subscription::class,
+                    'billable_id' => $subscription->id,
+                    'raw_response' => json_encode($res['body'] ?? []),
+                ]);
+
                 Log::info('[Renewal] M-PESA renewal initiated', [
                     'subscription_id' => $subscription->id,
                     'user_id' => $user->id,
