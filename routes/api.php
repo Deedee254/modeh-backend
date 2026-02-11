@@ -255,6 +255,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/quizzes/{quiz}/start', [\App\Http\Controllers\Api\QuizAttemptController::class, 'startAttempt']);
     // mark a previously saved attempt (requires subscription)
     Route::post('/quiz-attempts/{attempt}/mark', [\App\Http\Controllers\Api\QuizAttemptController::class, 'markAttempt']);
+    // Sync guest attempt (guest user signs up and syncs their guest attempts to their account)
+    Route::post('/quizzes/sync-guest-attempt', [\App\Http\Controllers\Api\QuizAttemptController::class, 'syncGuestAttempt']);
     // Fetch a user's attempt details
     Route::get('/quiz-attempts/{attempt}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'showAttempt']);
     // Review attempt (returns per-question details to the attempt owner without requiring subscription)

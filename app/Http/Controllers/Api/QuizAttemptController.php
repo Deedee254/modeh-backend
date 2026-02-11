@@ -1049,4 +1049,110 @@ class QuizAttemptController extends Controller
 
         return response()->json(array_merge(['ok' => true], $stats));
     }
+
+    /**
+     * Sync a guest attempt to the authenticated user's account
+     * When a guest user completes a quiz and then signs up, they can sync their guest attempts
+     */
+    public function syncGuestAttempt(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $payload = $request->validate([
+            'quiz_id' => 'required|integer|exists:quizzes,id',
+            'score' => 'nullable|numeric',
+            'percentage' => 'nullable|numeric',
+            'correct_count' => 'nullable|integer',
+            'incorrect_count' => 'nullable|integer',
+            'total_questions' => 'nullable|integer',
+            'time_taken' => 'nullable|integer',
+            'results' => 'nullable|array',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $quiz = Quiz::findOrFail($payload['quiz_id']);
+            
+            // Check if user already has an attempt for this quiz (avoid duplicates)
+            $existingAttempt = QuizAttempt::where('user_id', $user->id)
+                ->where('quiz_id', $quiz->id)
+                ->first();
+
+            if ($existingAttempt) {
+                DB::commit();
+                return response()->json([
+                    'ok' => true,
+                    'message' => 'Attempt already synced',
+                    'user' => $user->fresh()
+                ]);
+            }
+
+            // Calculate points from the guest attempt score
+            $pointsEarned = (int) (($payload['score'] ?? 0) * ($quiz->points_per_question ?? 1));
+
+            // Create the attempt record
+            $attempt = QuizAttempt::create([
+                'user_id' => $user->id,
+                'quiz_id' => $quiz->id,
+                'answers' => [], // Guest attempts don't store detailed answers
+                'score' => $payload['score'],
+                'points_earned' => $pointsEarned,
+                'total_time_seconds' => $payload['time_taken'],
+                'per_question_time' => null, // Not available from guest attempt
+            ]);
+
+            // Award points to user
+            if ($pointsEarned > 0 && method_exists($user, 'increment')) {
+                try {
+                    $user->increment('points', $pointsEarned);
+                    Cache::forget("user_me_{$user->id}");
+                } catch (\Exception $e) {
+                    Log::warning('Could not increment user points during sync: ' . $e->getMessage());
+                }
+            }
+
+            // Check achievements
+            $awarded = [];
+            $achievementPayload = [
+                'quiz_id' => $quiz->id,
+                'quiz_name' => $quiz->name,
+                'score' => $payload['score'] ?? 0,
+                'percentage' => $payload['percentage'] ?? 0,
+                'correct_count' => $payload['correct_count'] ?? 0,
+                'total_questions' => $payload['total_questions'] ?? 0,
+            ];
+
+            try {
+                $achievements = $this->achievementService->checkAchievements($user, $achievementPayload);
+                if (is_array($achievements) && count($achievements)) {
+                    $awarded = array_merge($awarded, $achievements);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Failed to check achievements during sync: ' . $e->getMessage());
+            }
+
+            // Invalidate caches
+            Cache::forget('user-stats:' . $user->id);
+
+            DB::commit();
+
+            $refreshedUser = $user->fresh()->load('achievements');
+            return response()->json([
+                'ok' => true,
+                'message' => 'Guest attempt synced successfully',
+                'attempt_id' => $attempt->id,
+                'points_awarded' => $pointsEarned,
+                'awarded_achievements' => $awarded,
+                'user' => $refreshedUser,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to sync guest attempt: ' . $e->getMessage());
+            return response()->json(['ok' => false, 'message' => 'Failed to sync attempt'], 500);
+        }
+    }
 }
