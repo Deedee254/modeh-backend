@@ -224,8 +224,13 @@ class QuizAttemptController extends Controller
                 'body' => isset($q['body']) ? $q['body'] : (isset($q->body) ? $q->body : (isset($q['text']) ? $q['text'] : '')),
                 'options' => isset($q['options']) ? $q['options'] : (isset($q->options) ? $q->options : []),
                 'media_path' => isset($q['media_path']) ? $q['media_path'] : (isset($q->media_path) ? $q->media_path : null),
-                'marks' => isset($q['marks']) ? $q['marks'] : (isset($q->marks) ? $q->marks : 1), // Ensure marks are available per question if needed
+                'media' => isset($q['media']) ? $q['media'] : (isset($q->media) ? $q->media : null),
+                'youtube_url' => isset($q['youtube_url']) ? $q['youtube_url'] : (isset($q->youtube_url) ? $q->youtube_url : null),
+                'youtube' => isset($q['youtube']) ? $q['youtube'] : (isset($q->youtube) ? $q->youtube : null),
+                'marks' => isset($q['marks']) ? $q['marks'] : (isset($q->marks) ? $q->marks : 1),
                 'answers' => isset($q['answers']) ? $q['answers'] : (isset($q->answers) ? $q->answers : []),
+                'option_mode' => isset($q['option_mode']) ? $q['option_mode'] : (isset($q->option_mode) ? $q->option_mode : null),
+                'is_approved' => isset($q['is_approved']) ? $q['is_approved'] : (isset($q->is_approved) ? $q->is_approved : null),
             ];
         }
 
@@ -683,15 +688,23 @@ class QuizAttemptController extends Controller
                 $isCorrect = in_array($submitted, $correctNormalized);
             }
 
+            // Map correct answer indices to their display text in the current options array
+            $correctAnswerTexts = [];
+            foreach ($correctAnswers as $correctIdx) {
+                // correctIdx might be an integer index or an option ID/text
+                $correctText = $this->toText($correctIdx, $optionMap);
+                if ($correctText !== '') {
+                    $correctAnswerTexts[] = $correctText;
+                }
+            }
+
             $details[] = [
                 'question_id' => $q->id,
                 'body' => $q->body,
                 'options' => $q->options,
                 'provided' => $providedDisplay,
                 'correct' => $isCorrect,
-                'correct_answers' => array_map(function ($v) use ($optionMap) {
-                    return $this->toText($v, $optionMap);
-                }, $correctAnswers),
+                'correct_answers' => $correctAnswerTexts,
                 'explanation' => $q->explanation ?? null,
             ];
         }

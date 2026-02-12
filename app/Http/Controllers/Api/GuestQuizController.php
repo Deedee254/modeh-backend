@@ -42,6 +42,11 @@ class GuestQuizController extends Controller
                 'body' => isset($q['body']) ? $q['body'] : (isset($q->body) ? $q->body : (isset($q['text']) ? $q['text'] : '')),
                 'marks' => isset($q['marks']) ? $q['marks'] : (isset($q->marks) ? $q->marks : 1),
                 'media_path' => isset($q['media_path']) ? $q['media_path'] : (isset($q->media_path) ? $q->media_path : null),
+                'media' => isset($q['media']) ? $q['media'] : (isset($q->media) ? $q->media : null),
+                'youtube_url' => isset($q['youtube_url']) ? $q['youtube_url'] : (isset($q->youtube_url) ? $q->youtube_url : null),
+                'youtube' => isset($q['youtube']) ? $q['youtube'] : (isset($q->youtube) ? $q->youtube : null),
+                'option_mode' => isset($q['option_mode']) ? $q['option_mode'] : (isset($q->option_mode) ? $q->option_mode : null),
+                'is_approved' => isset($q['is_approved']) ? $q['is_approved'] : (isset($q->is_approved) ? $q->is_approved : null),
             ];
 
             // Include options WITHOUT the is_correct field to prevent cheating
