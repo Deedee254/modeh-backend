@@ -246,13 +246,25 @@ class TournamentQuestionService
             $parts = array_filter(array_map('trim', preg_split('/[|,]/', $rowData['choices'])));
             foreach ($parts as $p) $options[] = ['text' => $p];
         } else {
+            // CRITICAL: Preserve empty option columns to maintain alignment with numeric answer indexes
+            // Previously this only added non-empty options, which caused empty cells to be skipped
+            // and numeric answers (e.g., "2") to point to wrong options.
             for ($i = 1; $i <= 10; $i++) {
                 $k1 = 'option_' . $i;
                 $k2 = 'option' . $i;
-                if (!empty($rowData[$k1])) {
-                    $options[] = ['text' => $rowData[$k1]];
-                } elseif (!empty($rowData[$k2])) {
-                    $options[] = ['text' => $rowData[$k2]];
+                $optValue = null;
+                if (isset($rowData[$k1])) {
+                    $optValue = $rowData[$k1];
+                } elseif (isset($rowData[$k2])) {
+                    $optValue = $rowData[$k2];
+                }
+                // Add option if the column exists, even if empty (preserve alignment)
+                // But stop if we hit an empty option after finding at least one non-empty
+                if ($optValue !== null) {
+                    $options[] = ['text' => trim((string)$optValue)];
+                } elseif (!empty($options)) {
+                    // Stop when we hit first gap after finding options
+                    break;
                 }
             }
         }

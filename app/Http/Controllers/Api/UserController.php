@@ -144,6 +144,7 @@ class UserController extends Controller
             'phone' => 'sometimes|nullable|string|max:20',
             'bio' => 'sometimes|nullable|string|max:1000',
             'institution' => 'sometimes|nullable|string',
+            'avatar' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif|max:5120', // 5MB max
         ];
 
         $validator = Validator::make($data, $rules);
@@ -151,7 +152,7 @@ class UserController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Handle avatar upload
+        // Handle avatar upload (CRITICAL: Must check hasFile, not just $data)
         if ($request->hasFile('avatar')) {
             $file = $request->file('avatar');
             $path = $file->store('avatars', 'public');
