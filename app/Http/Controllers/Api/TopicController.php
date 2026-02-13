@@ -109,6 +109,23 @@ class TopicController extends Controller
                 });
             }
 
+            // If client requests topics from the quiz-master's followed subjects only
+            // e.g. ?followed=1
+            if ($request->get('followed')) {
+                try {
+                    if ($request->user() && $request->user()->quizMasterProfile) {
+                        $profile = $request->user()->quizMasterProfile;
+                        $subjectIds = $profile->subjects ?? [];
+                        if (is_array($subjectIds) && count($subjectIds) > 0) {
+                            $query->whereIn('subject_id', $subjectIds);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // If anything goes wrong while resolving profile subjects, ignore and continue without filtering
+                    \Log::warning('Failed to apply followed-subjects filter', ['error' => $e->getMessage()]);
+                }
+            }
+
             $query->orderBy('name', 'asc');
 
             // Strategy C: Limit pagination to prevent huge caches

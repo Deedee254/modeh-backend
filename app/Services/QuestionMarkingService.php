@@ -36,13 +36,22 @@ class QuestionMarkingService
      */
     public function toText($val, array $optionMap = []): string
     {
-        if (is_array($val) && (isset($val['body']) || isset($val['text']))) {
-            return $val['text'] ?? $val['body'] ?? '';
+        if (is_array($val) && (isset($val['body']) || isset($val['text']) || isset($val['option']))) {
+            return $val['text'] ?? $val['body'] ?? $val['option'] ?? '';
         }
         if (!is_array($val)) {
             $key = (string)$val;
             if ($key !== '' && isset($optionMap[$key])) {
                 return $optionMap[$key];
+            }
+            // If submitted as normalized text, recover canonical option casing where possible.
+            $needle = strtolower(trim($key));
+            if ($needle !== '') {
+                foreach ($optionMap as $txt) {
+                    if (strtolower(trim((string) $txt)) === $needle) {
+                        return (string) $txt;
+                    }
+                }
             }
         }
         return (string)$val;

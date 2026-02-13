@@ -35,16 +35,27 @@ class QuizAttemptController extends Controller
     private function buildOptionMap($q)
     {
         $optionMap = [];
-        if (is_array($q->options)) {
-            foreach ($q->options as $idx => $opt) {
-                if (is_array($opt)) {
-                    if (isset($opt['id'])) {
-                        $optionMap[(string) $opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
-                    }
-                    if (isset($opt['text']) || isset($opt['body'])) {
-                        $optionMap[(string) $idx] = $opt['text'] ?? $opt['body'] ?? null;
-                    }
+        $options = $q->options;
+        if (is_string($options)) {
+            $decoded = json_decode($options, true);
+            $options = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($options)) {
+            $options = [];
+        }
+
+        foreach ($options as $idx => $opt) {
+            if (is_array($opt)) {
+                $text = $opt['text'] ?? $opt['body'] ?? $opt['option'] ?? null;
+                if (isset($opt['id']) && $text !== null) {
+                    $optionMap[(string) $opt['id']] = $text;
                 }
+                if ($text !== null) {
+                    $optionMap[(string) $idx] = $text;
+                }
+            } elseif (is_string($opt) || is_numeric($opt)) {
+                $optionMap[(string) $idx] = (string) $opt;
             }
         }
         return $optionMap;
@@ -55,13 +66,22 @@ class QuizAttemptController extends Controller
      */
     private function toText($val, array $optionMap = [])
     {
-        if (is_array($val) && (isset($val['body']) || isset($val['text']))) {
-            return $val['text'] ?? $val['body'] ?? '';
+        if (is_array($val) && (isset($val['body']) || isset($val['text']) || isset($val['option']))) {
+            return $val['text'] ?? $val['body'] ?? $val['option'] ?? '';
         }
         if (!is_array($val)) {
             $key = (string) $val;
             if ($key !== '' && isset($optionMap[$key])) {
                 return $optionMap[$key];
+            }
+            // If answer was normalized to text (e.g. lowercase), map it back to canonical option text.
+            $normalizedNeedle = strtolower(trim($key));
+            if ($normalizedNeedle !== '') {
+                foreach ($optionMap as $txt) {
+                    if (strtolower(trim((string) $txt)) === $normalizedNeedle) {
+                        return (string) $txt;
+                    }
+                }
             }
         }
         return (string) $val;
@@ -228,7 +248,8 @@ class QuizAttemptController extends Controller
                 'youtube_url' => isset($q['youtube_url']) ? $q['youtube_url'] : (isset($q->youtube_url) ? $q->youtube_url : null),
                 'youtube' => isset($q['youtube']) ? $q['youtube'] : (isset($q->youtube) ? $q->youtube : null),
                 'marks' => isset($q['marks']) ? $q['marks'] : (isset($q->marks) ? $q->marks : 1),
-                'answers' => isset($q['answers']) ? $q['answers'] : (isset($q->answers) ? $q->answers : []),
+                // Never expose correct answers in the public take-quiz payload.
+                'answers' => [],
                 'option_mode' => isset($q['option_mode']) ? $q['option_mode'] : (isset($q->option_mode) ? $q->option_mode : null),
                 'is_approved' => isset($q['is_approved']) ? $q['is_approved'] : (isset($q->is_approved) ? $q->is_approved : null),
             ];
@@ -705,6 +726,8 @@ class QuizAttemptController extends Controller
                 'provided' => $providedDisplay,
                 'correct' => $isCorrect,
                 'correct_answers' => $correctAnswerTexts,
+                'marks' => (float) ($q->marks ?: 1),
+                'points_awarded' => $isCorrect ? (float) ($q->marks ?: 1) : 0.0,
                 'explanation' => $q->explanation ?? null,
             ];
         }

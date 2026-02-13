@@ -168,7 +168,12 @@ class Quiz extends Model
                     if (!empty($q['answers']) && is_array($q['answers'])) {
                         $newAnswers = [];
                         foreach ($q['answers'] as $ans) {
-                            if (isset($indexMap[$ans])) $newAnswers[] = $indexMap[$ans];
+                            if (isset($indexMap[$ans])) {
+                                $newAnswers[] = $indexMap[$ans];
+                                continue;
+                            }
+                            // Preserve non-index answers (e.g. textual answers) instead of dropping them.
+                            $newAnswers[] = $ans;
                         }
                         $q['answers'] = $newAnswers;
                     }
