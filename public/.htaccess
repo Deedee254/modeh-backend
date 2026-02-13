@@ -13,6 +13,12 @@
     RewriteCond %{HTTP:x-xsrf-token} .
     RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
 
+    # Security: Block access to sensitive files
+    RewriteRule "^\.(env|htaccess|git)" - [F]
+    
+    # Security: Prevent access to hidden files
+    RewriteRule "^\." - [F]
+
     # Redirect Trailing Slashes If Not A Folder...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_URI} (.+)/$
@@ -22,4 +28,20 @@
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
+</IfModule>
+
+<FilesMatch "\\.(env|php|phtml|php3|php4|php5|phps)$">
+    Deny from all
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    # Remove server signature
+    Header always unset X-Powered-By
+    Header unset X-Powered-By
+    
+    # Security headers
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
