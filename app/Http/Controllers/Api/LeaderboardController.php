@@ -13,6 +13,11 @@ class LeaderboardController extends Controller
      *
      * Query params supported:
      *  - timeframe: all-time (default), daily, weekly, monthly (currently treated as all-time)
+     *  - level_id: filter by level (optional)
+     *  - grade_id: filter by grade (optional)
+     *  - subject_id: filter by subject (optional)
+     *  - topic_id: filter by topic (optional)
+     *  - quiz_id: filter by quiz (optional)
      *  - page: pagination page
      *  - per_page: items per page (default 50)
      *  - sort_by: points|name|created_at (default points)
@@ -22,6 +27,11 @@ class LeaderboardController extends Controller
     public function index(Request $request)
     {
         $timeframe = $request->get('timeframe', 'all-time');
+        $levelId = $request->get('level_id');
+        $gradeId = $request->get('grade_id');
+        $subjectId = $request->get('subject_id');
+        $topicId = $request->get('topic_id');
+        $quizId = $request->get('quiz_id');
         $page = (int) $request->get('page', 1);
         $perPage = (int) $request->get('per_page', 50);
         $sortBy = $request->get('sort_by', 'points');
@@ -56,6 +66,41 @@ class LeaderboardController extends Controller
             $query->where(function ($sub) use ($q) {
                 $sub->where('name', 'like', "%{$q}%")
                     ->orWhere('email', 'like', "%{$q}%");
+            });
+        }
+
+        // Filter by level if provided
+        if ($levelId) {
+            $query->whereHas('grades', function ($sub) use ($levelId) {
+                $sub->where('level_id', $levelId);
+            });
+        }
+
+        // Filter by grade if provided
+        if ($gradeId) {
+            $query->whereHas('grades', function ($sub) use ($gradeId) {
+                $sub->where('grade_id', $gradeId);
+            });
+        }
+
+        // Filter by subject if provided
+        if ($subjectId) {
+            $query->whereHas('subjects', function ($sub) use ($subjectId) {
+                $sub->where('subject_id', $subjectId);
+            });
+        }
+
+        // Filter by topic if provided
+        if ($topicId) {
+            $query->whereHas('topics', function ($sub) use ($topicId) {
+                $sub->where('topic_id', $topicId);
+            });
+        }
+
+        // Filter by quiz if provided (users who have attempted the quiz)
+        if ($quizId) {
+            $query->whereHas('attempts', function ($sub) use ($quizId) {
+                $sub->where('quiz_id', $quizId);
             });
         }
 
