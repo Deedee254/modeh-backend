@@ -71,35 +71,39 @@ class LeaderboardController extends Controller
 
         // Filter by level if provided
         if ($levelId) {
-            $query->whereHas('grades', function ($sub) use ($levelId) {
+            $query->whereHas('quizeeProfile', function ($sub) use ($levelId) {
                 $sub->where('level_id', $levelId);
             });
         }
 
         // Filter by grade if provided
         if ($gradeId) {
-            $query->whereHas('grades', function ($sub) use ($gradeId) {
+            $query->whereHas('quizeeProfile', function ($sub) use ($gradeId) {
                 $sub->where('grade_id', $gradeId);
             });
         }
 
         // Filter by subject if provided
+        // Note: subjects are stored as JSON array in the quizee profile, so we use whereHas with whereJsonContains
         if ($subjectId) {
-            $query->whereHas('subjects', function ($sub) use ($subjectId) {
-                $sub->where('subject_id', $subjectId);
+            $query->whereHas('quizeeProfile', function ($sub) use ($subjectId) {
+                $sub->whereJsonContains('subjects', (int)$subjectId);
             });
         }
 
         // Filter by topic if provided
+        // Note: topics are accessed through quiz attempts, so find users who attempted quizzes with this topic
         if ($topicId) {
-            $query->whereHas('topics', function ($sub) use ($topicId) {
-                $sub->where('topic_id', $topicId);
+            $query->whereHas('quizAttempts', function ($sub) use ($topicId) {
+                $sub->whereHas('quiz', function ($quizSub) use ($topicId) {
+                    $quizSub->where('topic_id', $topicId);
+                });
             });
         }
 
         // Filter by quiz if provided (users who have attempted the quiz)
         if ($quizId) {
-            $query->whereHas('attempts', function ($sub) use ($quizId) {
+            $query->whereHas('quizAttempts', function ($sub) use ($quizId) {
                 $sub->where('quiz_id', $quizId);
             });
         }
