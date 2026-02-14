@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -75,7 +76,17 @@ class UserController extends Controller
 
         // Build response with headers for frontend validation
         // X-User-ID and X-User-Email allow frontend to detect JWT user_id mismatches
-        $response = response()->json(UserResource::make($userData));
+        // Convert resource to array to avoid double-wrapping by response()->json()
+        $userArray = UserResource::make($userData)->toArray($request);
+        
+        Log::debug('me: returning user data', [
+            'user_id' => $user->id,
+            'user_email' => $user->email,
+            'response_user_id' => $userArray['id'] ?? 'missing',
+            'response_email' => $userArray['email'] ?? 'missing',
+        ]);
+        
+        $response = response()->json($userArray);
         return $response->header('X-User-ID', (string)$user->id)
             ->header('X-User-Email', $user->email)
             ->header('X-Cache-Source', 'redis-or-db');

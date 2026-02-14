@@ -38,6 +38,9 @@ class SessionUserCacheService
     /**
      * TTL in minutes for session cache before forcing a DB refresh
      * Set to 0 to disable session caching (useful for testing)
+     * 
+     * DEBUG: Set to 0 to bypass session cache and force fresh DB queries
+     * This helps isolate cache-related bugs where wrong user data is returned
      */
     const CACHE_TTL_MINUTES = 15;
 
