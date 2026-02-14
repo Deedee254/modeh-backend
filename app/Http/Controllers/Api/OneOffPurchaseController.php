@@ -42,21 +42,33 @@ class OneOffPurchaseController extends Controller
             ]);
         }
 
+        $gateway = $data['gateway'] ?? 'mpesa';
+        $phone = $data['phone'] ?? ($user->phone ?? null);
+
+        if ($gateway === 'mpesa' && (!$phone || !is_string($phone) || trim($phone) === '')) {
+            return response()->json([
+                'ok' => false,
+                'require_phone' => true,
+                'message' => 'Phone number required for mpesa payments',
+            ], 422);
+        }
+
+        $phone = is_string($phone) ? trim($phone) : $phone;
+
         $purchase = OneOffPurchase::create([
             'user_id' => $user->id,
             'item_type' => $data['item_type'],
             'item_id' => $data['item_id'],
             'amount' => $resolvedAmount,
             'status' => 'pending',
-            'gateway' => $data['gateway'] ?? 'mpesa',
-            'gateway_meta' => ['phone' => $data['phone'] ?? $user->phone ?? null],
+            'gateway' => $gateway,
+            'gateway_meta' => ['phone' => $phone],
             'meta' => [],
         ]);
 
         // initiate mpesa push via MpesaService
         $config = config('services.mpesa');
         $service = new MpesaService($config);
-        $phone = $data['phone'] ?? ($user->phone ?? null);
         $res = $service->initiateStkPush($phone, (float)$purchase->amount, 'OneOff-'.$purchase->id);
 
         if ($res['ok']) {

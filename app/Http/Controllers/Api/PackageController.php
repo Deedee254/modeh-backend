@@ -354,12 +354,7 @@ class PackageController extends Controller
     private function validateMpesaConfig()
     {
         $config = config('services.mpesa');
-        $requiredKeys = ['consumer_key', 'consumer_secret', 'shortcode'];
-        
-        $isSandbox = isset($config['environment']) && $config['environment'] === 'sandbox';
-        if (!$isSandbox) {
-            $requiredKeys[] = 'passkey';
-        }
+        $requiredKeys = ['consumer_key', 'consumer_secret', 'shortcode', 'passkey', 'callback_url'];
         
         $missing = [];
         foreach ($requiredKeys as $key) {
