@@ -1,5 +1,5 @@
 <x-filament::page>
-    <div id="admin-chat-root" class="h-[700px]"> 
+    <div id="admin-chat-root" class="h-[700px] relative"> 
         <!-- Minimal mounting point for the Vue admin chat app -->
         <div id="admin-chat-app" class="h-full"></div>
     </div>

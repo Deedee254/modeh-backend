@@ -11,7 +11,12 @@ use Illuminate\Support\Facades\DB;
 class TopSubjectsPie extends PieChartWidget
 {
     protected static ?int $sort = 10;
-    protected int | string | array $columnSpan = 1;
+    protected int|string|array $columnSpan = [
+        'sm' => 1,
+        'md' => 1,
+        'lg' => 1,
+        'xl' => 1,
+    ];
 
     use InteractsWithPageFilters;
 
@@ -49,13 +54,18 @@ class TopSubjectsPie extends PieChartWidget
         $labels = [];
         $data = [];
         $palette = [
-            '#4dc9f6','#f67019','#f53794','#537bc4','#acc236','#166a8f','#00a950','#58595b','#8549ba'
+            '#537bc4', // Blue
+            '#891f21', // Burgundy
+            '#F9B82E', // Yellow
+            '#acc236', // Green
+            '#166a8f', // Dark Blue
+            '#00a950', // Emerald
         ];
         $colors = [];
         foreach ($rows as $r) {
             $subject = Subject::find($r->subject_id);
             $labels[] = $subject ? $subject->name : "#{$r->subject_id}";
-            $data[] = (int)$r->cnt;
+            $data[] = (int) $r->cnt;
             $colors[] = $palette[count($colors) % count($palette)];
         }
 

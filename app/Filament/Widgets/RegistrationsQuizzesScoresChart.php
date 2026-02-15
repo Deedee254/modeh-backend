@@ -17,7 +17,12 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
 
     use InteractsWithPageFilters;
 
-    protected int | string | array $columnSpan = 2;
+    protected int|string|array $columnSpan = [
+        'sm' => 1,
+        'md' => 1,
+        'lg' => 2,
+        'xl' => 2,
+    ];
 
     protected function getData(): array
     {
@@ -51,12 +56,15 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
                     ->whereBetween('quiz_attempts.created_at', [$start, $end])
                     ->join('quizzes', 'quiz_attempts.quiz_id', '=', 'quizzes.id');
 
-                if ($level) $attemptsQuery->where('quizzes.level_id', $level);
-                if ($grade) $attemptsQuery->where('quizzes.grade_id', $grade);
-                if ($creator) $attemptsQuery->where('quizzes.user_id', $creator);
+                if ($level)
+                    $attemptsQuery->where('quizzes.level_id', $level);
+                if ($grade)
+                    $attemptsQuery->where('quizzes.grade_id', $grade);
+                if ($creator)
+                    $attemptsQuery->where('quizzes.user_id', $creator);
 
                 $attemptsRows = $attemptsQuery->groupBy('day')->orderBy('day')->get()
-                    ->mapWithKeys(fn($r) => [ $r->day => ['attempts' => (int)$r->attempts, 'avg' => (float)$r->avg_score] ])
+                    ->mapWithKeys(fn($r) => [$r->day => ['attempts' => (int) $r->attempts, 'avg' => (float) $r->avg_score]])
                     ->toArray();
 
                 return [$registrationsRows, $attemptsRows];
@@ -77,12 +85,15 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
                     ->whereBetween('quiz_attempts.created_at', [$start, $end])
                     ->join('quizzes', 'quiz_attempts.quiz_id', '=', 'quizzes.id');
 
-                if ($level) $attemptsQuery->where('quizzes.level_id', $level);
-                if ($grade) $attemptsQuery->where('quizzes.grade_id', $grade);
-                if ($creator) $attemptsQuery->where('quizzes.user_id', $creator);
+                if ($level)
+                    $attemptsQuery->where('quizzes.level_id', $level);
+                if ($grade)
+                    $attemptsQuery->where('quizzes.grade_id', $grade);
+                if ($creator)
+                    $attemptsQuery->where('quizzes.user_id', $creator);
 
                 $attemptsRows = $attemptsQuery->groupBy('day')->orderBy('day')->get()
-                    ->mapWithKeys(fn($r) => [ $r->day => ['attempts' => (int)$r->attempts, 'avg' => (float)$r->avg_score] ])
+                    ->mapWithKeys(fn($r) => [$r->day => ['attempts' => (int) $r->attempts, 'avg' => (float) $r->avg_score]])
                     ->toArray();
 
                 return [$registrationsRows, $attemptsRows];
@@ -99,9 +110,9 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
         foreach ($period as $dt) {
             $day = $dt->format('Y-m-d');
             $labels[] = Carbon::parse($day)->format('M j');
-            $registrations[] = (int)($registrationsRows[$day] ?? 0);
-            $quizzesTaken[] = (int)($attemptsRows[$day]['attempts'] ?? 0);
-            $avgScores[] = (float)($attemptsRows[$day]['avg'] ?? 0);
+            $registrations[] = (int) ($registrationsRows[$day] ?? 0);
+            $quizzesTaken[] = (int) ($attemptsRows[$day]['attempts'] ?? 0);
+            $avgScores[] = (float) ($attemptsRows[$day]['avg'] ?? 0);
         }
 
         return [
@@ -110,21 +121,24 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
                 [
                     'label' => 'Registrations',
                     'data' => $registrations,
-                    'borderColor' => '#4dc9f6',
-                    'backgroundColor' => 'rgba(77,201,246,0.15)',
+                    'borderColor' => '#537bc4', // Slate Blue
+                    'backgroundColor' => 'rgba(83,123,196,0.1)',
+                    'tension' => 0.4,
                 ],
                 [
                     'label' => 'Quizzes taken',
                     'data' => $quizzesTaken,
-                    'borderColor' => '#f67019',
-                    'backgroundColor' => 'rgba(246,112,25,0.15)',
+                    'borderColor' => '#891f21', // Burgundy
+                    'backgroundColor' => 'rgba(137,31,33,0.1)',
+                    'tension' => 0.4,
                 ],
                 [
                     'label' => 'Avg score',
                     'data' => $avgScores,
-                    'borderColor' => '#537bc4',
-                    'backgroundColor' => 'rgba(83,123,196,0.15)',
+                    'borderColor' => '#F9B82E', // Brand Yellow
+                    'backgroundColor' => 'rgba(249,184,46,0.1)',
                     'yAxisID' => 'score',
+                    'tension' => 0.4,
                 ],
             ],
             'options' => [

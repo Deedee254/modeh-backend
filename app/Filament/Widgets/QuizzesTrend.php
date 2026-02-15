@@ -12,7 +12,12 @@ use Carbon\Carbon;
 class QuizzesTrend extends BarChartWidget
 {
     protected static ?int $sort = 5;
-    protected int | string | array $columnSpan = 1;
+    protected int|string|array $columnSpan = [
+        'sm' => 1,
+        'md' => 1,
+        'lg' => 1,
+        'xl' => 1,
+    ];
 
     use InteractsWithPageFilters;
 
@@ -34,9 +39,12 @@ class QuizzesTrend extends BarChartWidget
                     ->select(DB::raw("DATE(created_at) as day"), DB::raw('COUNT(*) as cnt'))
                     ->whereBetween('created_at', [$start, $end]);
 
-                if ($level) $rows->where('level_id', $level);
-                if ($grade) $rows->where('grade_id', $grade);
-                if ($creator) $rows->where('user_id', $creator);
+                if ($level)
+                    $rows->where('level_id', $level);
+                if ($grade)
+                    $rows->where('grade_id', $grade);
+                if ($creator)
+                    $rows->where('user_id', $creator);
 
                 $rows = $rows->groupBy('day')->orderBy('day')->pluck('cnt', 'day')->toArray();
 
@@ -48,9 +56,12 @@ class QuizzesTrend extends BarChartWidget
                     ->select(DB::raw("DATE(created_at) as day"), DB::raw('COUNT(*) as cnt'))
                     ->whereBetween('created_at', [$start, $end]);
 
-                if ($level) $rows->where('level_id', $level);
-                if ($grade) $rows->where('grade_id', $grade);
-                if ($creator) $rows->where('user_id', $creator);
+                if ($level)
+                    $rows->where('level_id', $level);
+                if ($grade)
+                    $rows->where('grade_id', $grade);
+                if ($creator)
+                    $rows->where('user_id', $creator);
 
                 $rows = $rows->groupBy('day')->orderBy('day')->pluck('cnt', 'day')->toArray();
 
@@ -65,7 +76,7 @@ class QuizzesTrend extends BarChartWidget
         foreach ($period as $dt) {
             $day = $dt->format('Y-m-d');
             $labels[] = Carbon::parse($day)->format('M j');
-            $data[] = (int)($result[$day] ?? 0);
+            $data[] = (int) ($result[$day] ?? 0);
         }
 
         return [
@@ -73,7 +84,7 @@ class QuizzesTrend extends BarChartWidget
                 [
                     'label' => 'Quizzes created',
                     'data' => $data,
-                    'backgroundColor' => '#acc236',
+                    'backgroundColor' => '#891f21', // Brand Burgundy
                 ],
             ],
             'labels' => $labels,

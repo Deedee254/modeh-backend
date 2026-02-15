@@ -95,20 +95,39 @@ class AdminStatsOverview extends StatsOverviewWidget
         if ($level || $grade || $creator) {
             // apply quiz-related filters by joining to quizzes
             $avgScoreQuery->whereHas('quiz', function ($q) use ($level, $grade, $creator) {
-                if ($level) $q->where('level_id', $level);
-                if ($grade) $q->where('grade_id', $grade);
-                if ($creator) $q->where('user_id', $creator);
+                if ($level)
+                    $q->where('level_id', $level);
+                if ($grade)
+                    $q->where('grade_id', $grade);
+                if ($creator)
+                    $q->where('user_id', $creator);
             });
         }
         $avgScore = $avgScoreQuery->avg('score') ?? 0;
 
         return [
-            Stat::make('Users', $totalUsers)->description("{$newUsers7} new in 7d"),
-            Stat::make('Quizzes', $totalQuizzes)->description("{$quizzes7} created in 7d"),
-            Stat::make('Active Subscriptions', $activeSubscriptions),
-            Stat::make('Revenue (30d)', number_format($revenue30, 2)),
-            Stat::make('Pending approvals', $pendingApprovals),
-            Stat::make('Average score', number_format($avgScore, 2)),
+            Stat::make('Users', $totalUsers)
+                ->description("{$newUsers7} new in 7d")
+                ->descriptionIcon('heroicon-m-user-group')
+                ->color('success')
+                ->icon('heroicon-o-users'),
+            Stat::make('Quizzes', $totalQuizzes)
+                ->description("{$quizzes7} created in 7d")
+                ->descriptionIcon('heroicon-m-arrow-trending-up')
+                ->color('info')
+                ->icon('heroicon-o-clipboard-document-list'),
+            Stat::make('Active Subscriptions', $activeSubscriptions)
+                ->icon('heroicon-o-credit-card')
+                ->color('warning'),
+            Stat::make('Revenue (30d)', number_format($revenue30, 2))
+                ->icon('heroicon-o-banknotes')
+                ->color('success'),
+            Stat::make('Pending approvals', $pendingApprovals)
+                ->icon('heroicon-o-check-circle')
+                ->color($pendingApprovals > 0 ? 'danger' : 'success'),
+            Stat::make('Average score', number_format($avgScore, 2))
+                ->icon('heroicon-o-academic-cap')
+                ->color($avgScore > 70 ? 'success' : ($avgScore > 40 ? 'warning' : 'danger')),
         ];
     }
 }

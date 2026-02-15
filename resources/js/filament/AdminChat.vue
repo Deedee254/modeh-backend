@@ -1,13 +1,13 @@
 <template>
   <main class="flex-1 overflow-auto p-3 md:p-4">
-    <div class="md:flex h-[calc(100vh-6rem)] overflow-hidden bg-background">
-      <div class="w-72 duration-300 xl:w-80 border-r flex flex-col max-md:absolute max-md:top-20 max-md:border-t max-md:left-0 max-md:h-full max-md:z-10 max-md:bg-background max-md:w-full min-h-0" :class="isMobile && showChatWindowOnMobile ? 'max-md:-translate-x-full' : 'max-md:translate-x-0'">
+    <div class="md:flex h-[calc(100vh-6rem)] overflow-hidden bg-background relative">
+      <div class="w-72 duration-300 xl:w-80 border-r flex flex-col max-md:absolute max-md:top-0 max-md:left-0 max-md:h-full max-md:z-10 max-md:bg-background max-md:w-full min-h-0" :class="isMobile && showChatWindowOnMobile ? 'max-md:-translate-x-full' : 'max-md:translate-x-0'">
         <div class="p-4 border-b border-border bg-white text-foreground sticky top-0 z-10 flex-shrink-0">
           <div class="flex items-center justify-between mb-4">
             <h1 class="text-xl font-semibold">Chats</h1>
           </div>
           <div class="relative">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary-foreground/70">
               <circle cx="11" cy="11" r="8"></circle>
               <path d="m21 21-4.3-4.3"></path>
             </svg>
@@ -66,7 +66,7 @@
           </transition-group>
         </div>
       </div>
-      <div v-if="!isMobile || showChatWindowOnMobile" class="flex flex-1 flex-col min-w-0 overflow-hidden bg-gradient-to-b from-muted/30 to-background min-h-0 max-md:absolute max-md:inset-0 max-md:top-20">
+      <div v-if="!isMobile || showChatWindowOnMobile" class="flex flex-1 flex-col min-w-0 overflow-hidden bg-gradient-to-b from-muted/30 to-background min-h-0 max-md:absolute max-md:inset-0 max-md:top-0 max-md:z-20">
       <div class="flex items-center gap-3 p-4 bg-white border-b border-border sticky top-0 z-10 flex-shrink-0">
         <button 
           v-if="isMobile && showChatWindowOnMobile" 
@@ -221,7 +221,7 @@ export default {
   data() {
     return {
       tabs: [
-        { label: 'All', value: 'all' },
+        { label: 'Recent', value: 'all' },
         { label: 'Online', value: 'online' },
         { label: 'Unread', value: 'unread' }
       ],
@@ -277,15 +277,47 @@ export default {
     resolveAvatar(thread) {
       const avatarPlaceholder = '/logo/avatar-placeholder.png'
       try {
+        if (!thread) return avatarPlaceholder
+        
         let val = null
-        if (thread && typeof thread === 'object') {
-          val = thread.avatar_url || thread.avatar || thread.photo || thread.profile_image || null
+        let name = null
+        
+        if (typeof thread === 'object') {
+          // Priority fields matching frontend resolveUserAvatar
+          val = thread.avatar_url || thread.avatar || thread.image || thread.picture || thread.photo || thread.avatarUrl || thread.profile_image || null
+          
+          // Check nested profile if still null
+          if (!val && thread.profile) {
+            const p = thread.profile
+            val = p.avatar_url || p.avatar || p.image || p.photo || null
+          }
+          
+          name = thread.name || thread.other_name || thread.displayName || null
         } else {
           val = thread
         }
-        return val || avatarPlaceholder
-      } catch {
-        return (typeof thread === 'string' ? thread : null) || avatarPlaceholder
+        
+        // If we have a string that looks like a path but isn't a full URL, we might need a loader or base URL.
+        // But for now, we'll follow the resolveAvatar logic from frontend as closely as possible.
+        if (val && typeof val === 'string') {
+          if (val.startsWith('http') || val.startsWith('/') || val.startsWith('data:')) {
+            return val
+          }
+          // Handle storage paths (standardizing with frontend)
+          if (val.startsWith('storage/')) return '/' + val
+          if (val.startsWith('public/')) return '/' + val.replace('public/', 'storage/')
+          return '/storage/' + val
+        }
+
+        // Fallback to UI Avatars for consistency with frontend letter avatars if possible
+        if (name) {
+          return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`
+        }
+        
+        return avatarPlaceholder
+      } catch (e) {
+        console.error('Avatar resolution failed', e)
+        return avatarPlaceholder
       }
     },
     threadKey(thread) {
@@ -467,10 +499,8 @@ export default {
     },
     getTickState(message) {
       if (!message) return 'none'
-      if (message.is_read === true) return 'read'
-      const id = message.id
-      const isOptimistic = typeof id === 'string' && id.startsWith('msg-')
-      if (id && !isOptimistic) return 'read'
+      if (message.is_read) return 'read'
+      if (message.id && !String(message.id).startsWith('msg-')) return 'double'
       return 'single'
     },
     resendFailedMessage(m) {
@@ -652,7 +682,7 @@ export default {
 }
 
 .chat-bubble.received {
-  background: #f5f5f5;
+  background: #F9B82E;
   color: #111827;
   border-radius: 18px 18px 18px 4px;
   box-shadow: 0 1px 0 rgba(0,0,0,0.05);
