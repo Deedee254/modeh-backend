@@ -41,7 +41,12 @@ class UserResource extends JsonResource
             'phone' => $this->phone,
             // Return phones as array for payment modal (frontend expects this for M-PESA number selection)
             'phones' => $this->phone ? [$this->phone] : [],
-            'avatar' => $this->avatar_url,
+            // Keep canonical field + backwards-compatible aliases.
+            // `$this->avatar` uses the model accessor fallback: avatar_url -> social_avatar.
+            'avatar_url' => $this->avatar_url,
+            'avatar' => $this->avatar,
+            'image' => $this->avatar,
+            'picture' => $this->avatar,
             'bio' => $this->bio,
             'email_verified_at' => $this->email_verified_at,
             'affiliate_code' => $this->affiliate_code,
