@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\Log;
 
 class TournamentController extends Controller
 {
+    private const SIMPLE_FLOW_MAX_ATTEMPTS = 3;
+
     protected $achievementService;
     protected $markingService;
 
@@ -59,6 +61,8 @@ class TournamentController extends Controller
 
     public function show(Tournament $tournament)
     {
+        $this->maybeFinalizeSimpleFlowTournament($tournament);
+
     // Eager-load commonly used relations. Include the tournament-level questions
     // so frontend callers (qualifier) receive the configured question set without
     // needing an extra request.
@@ -703,62 +707,39 @@ class TournamentController extends Controller
 
     public function leaderboard(Tournament $tournament)
     {
-        // Detect if tournament is in qualifier phase: upcoming status and no battles created yet
-        $hasAnyBattle = $tournament->battles()->exists();
-        $isQualifierPhase = $tournament->status === 'upcoming' && !$hasAnyBattle;
+        $this->maybeFinalizeSimpleFlowTournament($tournament);
+        $attemptCounts = $this->attemptCountsByUser($tournament);
+        $latestAttempts = $this->latestAttemptsQuery($tournament)
+            ->with('user:id,name,avatar,avatar_url')
+            ->orderByDesc('score')
+            ->orderByRaw('CASE WHEN duration_seconds IS NULL THEN 2147483647 ELSE duration_seconds END ASC')
+            ->orderBy('id')
+            ->get();
 
-        if ($isQualifierPhase) {
-            // Return qualifier leaderboard from qualification attempts (sorted by score desc, then duration asc for tie-breaking)
-            // Eager-load user to avoid N+1 queries. A qualification attempt may
-            // reference a user that has been deleted, so guard accesses with
-            // fallbacks to attempt columns where appropriate.
-            $attempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
-                ->with('user:id,name,avatar,avatar_url')
-                ->orderByDesc('score')
-                ->orderBy('duration_seconds')
-                ->get();
+        $leaderboard = $latestAttempts->values()->map(function ($attempt, $index) use ($attemptCounts) {
+            $user = $attempt->user;
+            $userId = $user->id ?? $attempt->user_id;
+            $attemptsUsed = (int) ($attemptCounts[$userId] ?? 0);
 
-            $leaderboard = $attempts->map(function ($attempt) {
-                $user = $attempt->user;
-                $userId = $user->id ?? $attempt->user_id;
-                $name = $user->name ?? null;
-                $avatarUrl = $user->avatar_url ?? null;
-                $avatar = $user->avatar ?? null;
-
-                return [
-                    'id' => $userId,
-                    'name' => $name,
-                    'avatar_url' => $avatarUrl,
-                    'avatar' => $avatar,
-                    'points' => $attempt->score,
-                    'duration_seconds' => $attempt->duration_seconds,
-                    'completed_at' => $attempt->created_at,
-                ];
-            })->values();
-        } else {
-            // Return bracket leaderboard from tournament battles
-            $participants = $tournament->participants()
-                ->where('role', 'quizee')
-                ->withPivot('score', 'rank', 'completed_at')
-                ->get();
-
-            $leaderboard = $participants->map(function ($p) {
-                return [
-                    'id' => $p->id,
-                    'name' => $p->name,
-                    'avatar_url' => $p->avatar_url ?? null,
-                    'avatar' => $p->avatar ?? null,
-                    'points' => $p->pivot->score ?? null,
-                    'rank' => $p->pivot->rank ?? null,
-                    'completed_at' => $p->pivot->completed_at ?? null,
-                ];
-            })->sortByDesc('points')->values();
-        }
+            return [
+                'id' => $userId,
+                'name' => $user->name ?? null,
+                'avatar_url' => $user->avatar_url ?? null,
+                'avatar' => $user->avatar ?? null,
+                'points' => (float) $attempt->score,
+                'duration_seconds' => $attempt->duration_seconds,
+                'rank' => $index + 1,
+                'attempts_used' => $attemptsUsed,
+                'attempts_remaining' => max(0, self::SIMPLE_FLOW_MAX_ATTEMPTS - $attemptsUsed),
+                'completed_at' => $attempt->created_at,
+            ];
+        });
 
         return response()->json([
             'tournament' => $tournament->only(['id', 'name', 'status']),
             'leaderboard' => $leaderboard,
-            'is_qualifier_phase' => $isQualifierPhase
+            'max_attempts' => self::SIMPLE_FLOW_MAX_ATTEMPTS,
+            'is_qualifier_phase' => false
         ]);
     }
 
@@ -768,17 +749,22 @@ class TournamentController extends Controller
      */
     public function qualifierLeaderboard(Tournament $tournament, Request $request)
     {
+        $this->maybeFinalizeSimpleFlowTournament($tournament);
         $per_page = $request->get('per_page', 50);
-        
-        $attempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+
+        $attempts = $this->latestAttemptsQuery($tournament)
             ->with('user:id,name,email,avatar_url,social_avatar')
             ->orderByDesc('score')
-            ->orderBy('duration_seconds')
+            ->orderByRaw('CASE WHEN duration_seconds IS NULL THEN 2147483647 ELSE duration_seconds END ASC')
+            ->orderBy('id')
             ->paginate($per_page);
 
+        $attemptCounts = $this->attemptCountsByUser($tournament);
+
         return response()->json([
-            'data' => $attempts->map(function ($attempt) {
+            'data' => $attempts->map(function ($attempt) use ($attemptCounts) {
                 $user = $attempt->user;
+                $attemptsUsed = (int) ($attemptCounts[$attempt->user_id] ?? 0);
                 return [
                     'id' => $attempt->id,
                     'user_id' => $attempt->user_id,
@@ -792,6 +778,8 @@ class TournamentController extends Controller
                     'score' => $attempt->score,
                     'duration_seconds' => $attempt->duration_seconds,
                     'status' => $attempt->status ?? 'completed',
+                    'attempts_used' => $attemptsUsed,
+                    'attempts_remaining' => max(0, self::SIMPLE_FLOW_MAX_ATTEMPTS - $attemptsUsed),
                     'completed_at' => $attempt->created_at,
                 ];
             }),
@@ -895,33 +883,41 @@ class TournamentController extends Controller
      */
     public function qualificationStatus(Request $request, Tournament $tournament)
     {
+        $this->maybeFinalizeSimpleFlowTournament($tournament);
         $user = $request->user();
         if (! $user) {
-            return response()->json(['qualified' => false, 'attempt' => null, 'rank' => null]);
+            return response()->json(['qualified' => false, 'attempt' => null, 'rank' => null, 'attempts_used' => 0, 'attempts_remaining' => self::SIMPLE_FLOW_MAX_ATTEMPTS]);
         }
 
-        // Check if user has submitted a qualification attempt
+        $attemptsUsed = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+            ->where('user_id', $user->id)
+            ->count();
+
+        // Check if user has submitted a tournament attempt
         $attempt = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
             ->where('user_id', $user->id)
+            ->orderByDesc('id')
             ->first();
 
         if (! $attempt) {
-            return response()->json(['qualified' => false, 'attempt' => null, 'rank' => null]);
+            return response()->json([
+                'qualified' => false,
+                'attempt' => null,
+                'rank' => null,
+                'attempts_used' => 0,
+                'attempts_remaining' => self::SIMPLE_FLOW_MAX_ATTEMPTS,
+            ]);
         }
 
-        // Compute rank: count how many unique users have better scores or same score with faster duration
-        $betterAttempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
-            ->where(function ($q) use ($attempt) {
-                $q->where('score', '>', $attempt->score)
-                    ->orWhere(function ($q2) use ($attempt) {
-                        $q2->where('score', $attempt->score)
-                            ->where('duration_seconds', '<', $attempt->duration_seconds ?? PHP_INT_MAX);
-                    });
-            })
-            ->distinct('user_id')
-            ->count('user_id');
-
-        $rank = $betterAttempts + 1;
+        $orderedUserIds = $this->latestAttemptsQuery($tournament)
+            ->orderByDesc('score')
+            ->orderByRaw('CASE WHEN duration_seconds IS NULL THEN 2147483647 ELSE duration_seconds END ASC')
+            ->orderBy('id')
+            ->pluck('user_id')
+            ->values()
+            ->all();
+        $rankIdx = array_search($user->id, $orderedUserIds, true);
+        $rank = $rankIdx === false ? null : $rankIdx + 1;
 
         return response()->json([
             'qualified' => true,
@@ -930,8 +926,10 @@ class TournamentController extends Controller
                 'duration_seconds' => $attempt->duration_seconds,
                 'created_at' => $attempt->created_at
             ],
+            'attempts_used' => $attemptsUsed,
+            'attempts_remaining' => max(0, self::SIMPLE_FLOW_MAX_ATTEMPTS - $attemptsUsed),
             'rank' => $rank,
-            'message' => "You are ranked #{$rank}"
+            'message' => $rank ? "You are ranked #{$rank}" : null
         ]);
     }
 
@@ -940,6 +938,7 @@ class TournamentController extends Controller
      */
     public function qualifySubmit(Request $request, Tournament $tournament)
     {
+        $this->maybeFinalizeSimpleFlowTournament($tournament);
         $user = $request->user();
         if (! $user) return response()->json(['message' => 'Unauthorized'], 401);
 
@@ -988,11 +987,24 @@ class TournamentController extends Controller
 
         // Build leaderboard context
         $leaderboard = $this->buildQualifierLeaderboard($tournament);
+        $attemptsUsed = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+            ->where('user_id', $user->id)
+            ->count();
+        $rank = $leaderboard->search(function ($row) use ($user) {
+            return (int) ($row['user_id'] ?? 0) === (int) $user->id;
+        });
+        $rank = $rank === false ? null : $rank + 1;
+
+        $this->maybeFinalizeSimpleFlowTournament($tournament->fresh());
 
         return response()->json([
-            'message' => 'Qualification attempt recorded',
+            'message' => 'Tournament attempt recorded',
             'attempt' => $attempt,
-            'leaderboard' => $leaderboard
+            'rank' => $rank,
+            'attempts_used' => $attemptsUsed,
+            'attempts_remaining' => max(0, self::SIMPLE_FLOW_MAX_ATTEMPTS - $attemptsUsed),
+            'leaderboard' => $leaderboard,
+            'max_attempts' => self::SIMPLE_FLOW_MAX_ATTEMPTS,
         ]);
     }
 
@@ -1013,22 +1025,22 @@ class TournamentController extends Controller
         }
 
         // Check tournament status
-        if ($tournament->status !== 'upcoming') {
-            return response()->json(['message' => 'Qualification period has closed for this tournament'], 400);
+        if (!in_array($tournament->status, ['upcoming', 'active'], true)) {
+            return response()->json(['message' => 'Tournament is not accepting attempts'], 400);
         }
 
         // Check user registration and payment
         $participant = $tournament->participants()->where('user_id', $user->id)->first();
         if (! $participant || ($participant->pivot->status ?? 'pending_payment') !== 'paid') {
-            return response()->json(['message' => 'You must be registered and payment must be confirmed to take this qualifier'], 403);
+            return response()->json(['message' => 'You must be registered and payment must be confirmed before submitting your tournament attempt'], 403);
         }
 
-        // Check single attempt policy
-        $existing = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+        // Enforce retry policy: only latest attempt counts, max 3 attempts.
+        $attemptsUsed = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
             ->where('user_id', $user->id)
-            ->first();
-        if ($existing) {
-            return response()->json(['message' => 'Only a single qualification attempt is allowed'], 400);
+            ->count();
+        if ($attemptsUsed >= self::SIMPLE_FLOW_MAX_ATTEMPTS) {
+            return response()->json(['message' => 'Maximum tournament attempts reached'], 400);
         }
 
         return null;
@@ -1217,14 +1229,17 @@ class TournamentController extends Controller
      */
     private function buildQualifierLeaderboard(Tournament $tournament): \Illuminate\Support\Collection
     {
-        return TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+        $attemptCounts = $this->attemptCountsByUser($tournament);
+        return $this->latestAttemptsQuery($tournament)
             ->with('user:id,name,avatar_url,social_avatar')
             ->orderByDesc('score')
-            ->orderBy('duration_seconds')
+            ->orderByRaw('CASE WHEN duration_seconds IS NULL THEN 2147483647 ELSE duration_seconds END ASC')
+            ->orderBy('id')
             ->limit(10)
             ->get()
-            ->map(function($a) {
+            ->map(function($a, $index) use ($attemptCounts) {
                 $user = $a->user;
+                $attemptsUsed = (int) ($attemptCounts[$a->user_id] ?? 0);
                 return [
                     'user_id' => $a->user_id,
                     'name' => $user->name ?? null,
@@ -1232,11 +1247,64 @@ class TournamentController extends Controller
                     'avatar' => $user->avatar ?? null,
                     'image' => $user->avatar ?? null,
                     'picture' => $user->avatar ?? null,
-                    'score' => $a->score,
+                    'rank' => $index + 1,
+                    'score' => (float) $a->score,
                     'duration_seconds' => $a->duration_seconds,
+                    'attempts_used' => $attemptsUsed,
+                    'attempts_remaining' => max(0, self::SIMPLE_FLOW_MAX_ATTEMPTS - $attemptsUsed),
                     'created_at' => $a->created_at
                 ];
             });
+    }
+
+    private function latestAttemptsQuery(Tournament $tournament): \Illuminate\Database\Eloquent\Builder
+    {
+        $latestIdsSub = TournamentQualificationAttempt::query()
+            ->selectRaw('MAX(id) as id')
+            ->where('tournament_id', $tournament->id)
+            ->groupBy('user_id');
+
+        return TournamentQualificationAttempt::query()
+            ->where('tournament_id', $tournament->id)
+            ->whereIn('id', $latestIdsSub);
+    }
+
+    private function attemptCountsByUser(Tournament $tournament): array
+    {
+        return TournamentQualificationAttempt::query()
+            ->where('tournament_id', $tournament->id)
+            ->select('user_id', DB::raw('COUNT(*) as attempts_used'))
+            ->groupBy('user_id')
+            ->pluck('attempts_used', 'user_id')
+            ->map(function ($v) {
+                return (int) $v;
+            })
+            ->toArray();
+    }
+
+    private function maybeFinalizeSimpleFlowTournament(Tournament $tournament): void
+    {
+        if ($tournament->status === 'completed') {
+            return;
+        }
+
+        if ($tournament->battles()->exists()) {
+            return;
+        }
+
+        if (!$tournament->end_date || now()->lt($tournament->end_date)) {
+            return;
+        }
+
+        $winnerAttempt = $this->latestAttemptsQuery($tournament)
+            ->orderByDesc('score')
+            ->orderByRaw('CASE WHEN duration_seconds IS NULL THEN 2147483647 ELSE duration_seconds END ASC')
+            ->orderBy('id')
+            ->first();
+
+        $tournament->status = 'completed';
+        $tournament->winner_id = $winnerAttempt?->user_id;
+        $tournament->save();
     }
 
     /**
