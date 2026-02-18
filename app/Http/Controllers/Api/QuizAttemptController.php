@@ -299,7 +299,7 @@ class QuizAttemptController extends Controller
                 'created_by' => $quiz->author ? [
                     'id' => $quiz->author->id,
                     'name' => $quiz->author->name,
-                    'avatar' => $quiz->author->avatar_url ?? $quiz->author->social_avatar ?? null,
+                    'avatar' => $quiz->author->avatar ?? null,
                     'slug' => $quiz->author->username ?? $quiz->author->name ?? null,
                 ] : null,
                 'likes_count' => $quiz->likes_count ?? 0,

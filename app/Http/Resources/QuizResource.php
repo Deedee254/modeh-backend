@@ -40,7 +40,7 @@ class QuizResource extends JsonResource
             'created_by' => [
                 'id' => $this->author?->id,
                 'name' => $this->author?->name,
-                'avatar' => $this->author?->avatar_url ?? $this->author?->social_avatar ?? null,
+                'avatar' => $this->author?->avatar ?? null,
                 'slug' => $this->author?->slug,
             ],
             'is_paid' => $this->is_paid,

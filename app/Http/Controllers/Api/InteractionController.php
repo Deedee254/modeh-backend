@@ -179,8 +179,7 @@ class InteractionController extends Controller
                         'id' => $u->id,
                         'name' => $u->name,
                         'email' => $u->email,
-                        // Prefer explicit uploaded avatar_url then fall back to social_avatar
-                        'avatar' => $u->avatar_url ?? $u->social_avatar,
+                        'avatar' => $u->avatar,
                     ];
                 })->values();
         }
@@ -195,7 +194,7 @@ class InteractionController extends Controller
                         'id' => $u->id,
                         'name' => $u->name,
                         'email' => $u->email,
-                        'avatar' => $u->avatar_url ?? $u->social_avatar,
+                        'avatar' => $u->avatar,
                     ];
                 })->values();
         }
@@ -222,8 +221,7 @@ class InteractionController extends Controller
                 'users.id',
                 'users.name',
                 'users.email',
-                'users.avatar_url',
-                'users.social_avatar'
+                DB::raw('COALESCE(users.avatar_url, users.social_avatar) as avatar')
             )
             ->paginate($perPage);
 
@@ -272,8 +270,7 @@ class InteractionController extends Controller
                 'users.id',
                 'users.name',
                 'users.email',
-                'users.avatar_url',
-                'users.social_avatar',
+                DB::raw('COALESCE(users.avatar_url, users.social_avatar) as avatar'),
                 'quiz_likes.created_at as liked_at'
             )
             ->orderBy('quiz_likes.created_at', 'desc')

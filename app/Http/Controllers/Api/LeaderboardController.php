@@ -137,8 +137,7 @@ class LeaderboardController extends Controller
                 return [
                     'id' => $u->id,
                     'name' => $u->name ?? ($u->email ?? 'Unknown'),
-                    // Prefer uploaded avatar_url, then any avatar property, then social_avatar
-                    'avatar' => $u->avatar_url ?? ($u->avatar ?? $u->social_avatar ?? null),
+                    'avatar' => $u->avatar,
                     'points' => (int)($u->points ?? 0), // Force integer
                     'country' => $u->country ?? null,
                 ];

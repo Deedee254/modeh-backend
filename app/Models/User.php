@@ -106,6 +106,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
      */
     protected $appends = [
         'affiliate_code',
+        'avatar',
     ];
 
     /**

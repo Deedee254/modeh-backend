@@ -112,7 +112,7 @@ class UserController extends Controller
         if (!$email)
             return response()->json(['message' => 'email required'], 400);
 
-        $user = User::where('email', $email)->first(['id', 'name', 'email', 'avatar_url']);
+        $user = User::where('email', $email)->first(['id', 'name', 'email', 'avatar_url', 'social_avatar']);
         if (!$user)
             return response()->json(['message' => 'not found'], 404);
         return response()->json(['user' => $user]);
@@ -265,4 +265,3 @@ class UserController extends Controller
         return response()->json(['theme' => $theme]);
     }
 }
-

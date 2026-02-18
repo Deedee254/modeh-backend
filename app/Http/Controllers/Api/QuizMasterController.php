@@ -71,9 +71,7 @@ class QuizMasterController extends Controller
             $data = [
                 'id' => $user->id,
                 'name' => $user->name,
-                // Prefer explicit uploaded avatar_url then fall back to social_avatar
-                'avatar' => $user->avatar_url ?? $user->social_avatar,
-                'avatar_url' => $user->avatar_url ?? $user->social_avatar,
+                'avatar' => $user->avatar,
                 'headline' => $profile->headline ?: 'An experienced quiz master',
                 'bio' => $profile->bio ?? '',
                 'institution' => $profile->institution ?: '',
@@ -165,7 +163,7 @@ class QuizMasterController extends Controller
         $data = [
             'id' => $user->id,
             'name' => $user->name,
-            'avatar' => $user->avatar_url ?? $user->social_avatar,
+            'avatar' => $user->avatar,
             'headline' => $profile->headline ?? 'An experienced quiz master',
             'bio' => $profile->bio,
             'institution' => $profile->institution ?? 'Independent Educator',

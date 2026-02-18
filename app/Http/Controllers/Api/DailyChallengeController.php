@@ -243,7 +243,7 @@ class DailyChallengeController extends Controller
                     'daily_challenge_submissions.score',
                     'daily_challenge_submissions.completed_at',
                         'users.name as user_name',
-                        'users.avatar_url as user_avatar',
+                        \DB::raw('COALESCE(users.avatar_url, users.social_avatar) as user_avatar'),
                     'grades.name as grade_name',
                     'levels.name as level_name'
                 )
