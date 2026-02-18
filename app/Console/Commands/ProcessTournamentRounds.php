@@ -8,30 +8,26 @@ use App\Models\TournamentQualificationAttempt;
 
 class ProcessTournamentRounds extends Command
 {
-    protected $signature = 'tournaments:process-rounds {--force : Force closure regardless of scheduled end dates}';
-    protected $description = 'Process tournament rounds and finalize ended simple tournaments';
+    protected $signature = 'tournaments:process-rounds';
+    protected $description = 'Finalize ended simple-flow tournaments';
 
     public function handle()
     {
-        $this->info('Scanning tournaments for round processing and simple-flow finalization...');
+        $this->info('Scanning tournaments for simple-flow finalization...');
 
-        $query = Tournament::whereIn('status', ['upcoming', 'active'])->get();
+        /** @var \Illuminate\Database\Eloquent\Collection<int, Tournament> $tournaments */
+        $tournaments = Tournament::query()
+            ->whereIn('status', ['upcoming', 'active'])
+            ->get();
 
-        foreach ($query as $t) {
+        foreach ($tournaments as $t) {
+            if (!$t instanceof Tournament) {
+                continue;
+            }
+
             try {
-                $current = $t->getCurrentRound();
-                if ($current <= 0) {
-                    if ($this->finalizeSimpleFlowTournament($t)) {
-                        $this->info("Tournament {$t->id}: finalized simple flow winner");
-                    }
-                    continue;
-                }
-
-                $res = $t->closeRoundAndAdvance($current, (bool) $this->option('force'));
-                if (!empty($res['ok']) && $res['ok'] === true) {
-                    $this->info("Tournament {$t->id}: processed round {$current} -> next: " . ($res['next_round'] ?? 'n/a'));
-                } else {
-                    $this->info("Tournament {$t->id}: no action ({$res['message']})");
+                if ($this->finalizeSimpleFlowTournament($t)) {
+                    $this->info("Tournament {$t->id}: finalized simple flow winner");
                 }
             } catch (\Throwable $e) {
                 \Log::error('Failed processing tournament rounds for ' . $t->id . ': ' . $e->getMessage());

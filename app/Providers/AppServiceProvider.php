@@ -12,10 +12,8 @@ use App\Observers\UserDailyChallengeObserver;
 use App\Observers\BattleObserver;
 use App\Observers\QuizObserver;
 use App\Observers\DashboardCacheInvalidationObserver;
-use App\Observers\TournamentBattleObserver;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
-use App\Models\TournamentBattle;
 use App\Http\Middleware\RequestIdMiddleware;
 use Illuminate\Support\Facades\Cache;
 use App\Models\User;
@@ -54,7 +52,6 @@ use App\Policies\QuizPolicy;
         UserDailyChallenge::observe(UserDailyChallengeObserver::class);
         Battle::observe(BattleObserver::class);
     Quiz::observe(QuizObserver::class);
-        TournamentBattle::observe(TournamentBattleObserver::class);
 
         // Register lightweight cache invalidation listeners for dashboard widgets
         $flush = function ($model = null) {

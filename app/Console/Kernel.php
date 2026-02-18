@@ -11,7 +11,7 @@ class Kernel extends ConsoleKernel
     {
         // Run prune command daily at 02:00
         $schedule->command('metrics:prune-buckets')->dailyAt('02:00');
-        // Process tournament rounds every 10 minutes to auto-close rounds whose end-date passed
+        // Process tournaments every 10 minutes to auto-finalize simple-flow winners
         $schedule->command('tournaments:process-rounds')->everyTenMinutes();
     }
 

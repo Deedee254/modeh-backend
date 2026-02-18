@@ -10,7 +10,6 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Filament\Tables;
 use Filament\Forms;
-use Filament\Actions\Action;
 use Illuminate\Database\Eloquent\Builder;
 
 class QualifierLeaderboard extends Page implements HasTable
@@ -50,48 +49,6 @@ class QualifierLeaderboard extends Page implements HasTable
         } catch (\Throwable $_) {
             // non-fatal: leave qualifierIds empty and fallback to no highlighting
             $this->qualifierIds = [];
-        }
-    }
-
-    protected function getActions(): array
-    {
-        return [
-            Action::make('finalize_and_generate')
-                ->label('Close Qualifier & Generate Battles')
-                ->action(fn () => $this->finalizeAndGenerateBattles())
-                ->requiresConfirmation()
-                ->modalHeading('Close Qualifier Phase')
-                ->modalDescription('This will close the qualifier phase and generate the tournament bracket battles. This action cannot be undone.')
-                ->visible(fn () => $this->record->status === 'upcoming')
-                ->color('success')
-                ->icon('heroicon-o-play-circle'),
-        ];
-    }
-
-    public function finalizeAndGenerateBattles(): void
-    {
-        try {
-            // Close the qualifier phase by updating tournament status to 'active'
-            $this->record->update(['status' => 'active']);
-            
-            // Generate the battles/matches for the tournament
-            $this->record->generateMatches();
-            
-            // Show success message
-            \Filament\Notifications\Notification::make()
-                ->title('Success')
-                ->body('Qualifier closed and battles generated successfully!')
-                ->success()
-                ->send();
-            
-            // Redirect to view page
-            redirect(TournamentResource::getUrl('view', ['record' => $this->record]));
-        } catch (\Exception $e) {
-            \Filament\Notifications\Notification::make()
-                ->title('Error')
-                ->body($e->getMessage())
-                ->danger()
-                ->send();
         }
     }
 

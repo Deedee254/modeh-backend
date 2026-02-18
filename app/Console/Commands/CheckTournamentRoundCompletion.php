@@ -25,8 +25,8 @@ class CheckTournamentRoundCompletion extends Command
 
     public function handle()
     {
-        // Deprecated: scheduling removed in favor of event-driven observer + queued job
-        $this->info('tournaments:check-rounds is deprecated. Tournament processing is event-driven via TournamentBattleObserver.');
+        // Deprecated: round-based tournament processing has been removed.
+        $this->info('tournaments:check-rounds is deprecated. Tournament flow is now qualifier-only.');
         return 0;
     }
 }

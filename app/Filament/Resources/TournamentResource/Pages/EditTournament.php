@@ -302,12 +302,6 @@ class EditTournament extends EditRecord
                     $this->halt();
                 }),
 
-            Action::make('generate_matches')
-                ->action(fn () => $this->record->generateMatches())
-                ->requiresConfirmation()
-                ->visible(fn () => $this->record->status === 'upcoming')
-                ->color('success')
-                ->icon('heroicon-o-play'),
             Action::make('view_leaderboard')
                 ->url(fn () => route('admin.tournaments.leaderboard', $this->record))
                 ->openUrlInNewTab()

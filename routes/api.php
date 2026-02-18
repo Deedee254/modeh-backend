@@ -134,7 +134,6 @@ Route::get('/recommendations/quizzes', [\App\Http\Controllers\Api\Recommendation
 // Public tournament routes for listing and viewing
 Route::get('/tournaments', [\App\Http\Controllers\Api\TournamentController::class, 'index']);
 Route::get('/tournaments/{tournament}', [\App\Http\Controllers\Api\TournamentController::class, 'show']);
-Route::get('/tournaments/{tournament}/tree', [\App\Http\Controllers\Api\TournamentController::class, 'tree']);
 Route::get('/tournaments/{tournament}/leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'leaderboard']);
 Route::get('/tournaments/{tournament}/qualifier-leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'qualifierLeaderboard']);
 // Tournament user-specific data (may return different results based on auth status)
@@ -438,14 +437,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Tournaments
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);
-    Route::get('/tournaments/{tournament}/battles', [\App\Http\Controllers\Api\TournamentController::class, 'battles']);
-    Route::get('/tournaments/{tournament}/battles/{battle}', [\App\Http\Controllers\Api\TournamentController::class, 'showBattle']);
-    Route::post('/tournaments/battles/{battle}/submit', [\App\Http\Controllers\Api\TournamentController::class, 'submitBattle']);
-    Route::post('/tournaments/battles/{battle}/forfeit', [\App\Http\Controllers\Api\TournamentController::class, 'forfeitBattle']);
-    Route::post('/tournaments/battles/{battle}/draft', [\App\Http\Controllers\Api\TournamentController::class, 'saveDraft']);
-    Route::get('/tournaments/battles/{battle}/draft', [\App\Http\Controllers\Api\TournamentController::class, 'loadDraft']);
-    Route::post('/tournaments/{tournament}/battles/{battle}/mark', [\App\Http\Controllers\Api\TournamentController::class, 'mark']);
-    Route::get('/tournaments/{tournament}/battles/{battle}/result', [\App\Http\Controllers\Api\TournamentController::class, 'result']);
     Route::post('/tournaments/{tournament}/qualify/submit', [\App\Http\Controllers\Api\TournamentController::class, 'qualifySubmit']);
 
     // Admin tournament management (requires admin role)
@@ -453,10 +444,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/admin/tournaments', [\App\Http\Controllers\Api\AdminTournamentController::class, 'store']);
         Route::put('/admin/tournaments/{tournament}', [\App\Http\Controllers\Api\AdminTournamentController::class, 'update']);
         Route::post('/admin/tournaments/{tournament}/questions', [\App\Http\Controllers\Api\AdminTournamentController::class, 'attachQuestions']);
-        Route::post('/admin/tournaments/{tournament}/battles/{battle}/attach-questions', [\App\Http\Controllers\Api\AdminTournamentController::class, 'attachQuestionsToBattle']);
-        Route::post('/admin/tournaments/{tournament}/generate-matches', [\App\Http\Controllers\Api\AdminTournamentController::class, 'generateMatches']);
-        Route::post('/admin/tournaments/{tournament}/advance-round', [\App\Http\Controllers\Api\AdminTournamentController::class, 'advanceRound']);
-        Route::post('/admin/tournaments/{tournament}/finalize-qualification', [\App\Http\Controllers\Api\AdminTournamentController::class, 'finalizeQualification']);
         Route::delete('/admin/tournaments/{tournament}', [\App\Http\Controllers\Api\AdminTournamentController::class, 'destroy']);
         // Admin approve/reject tournament registrations
         Route::post('/admin/tournaments/{tournament}/registrations/{user}/approve', [\App\Http\Controllers\Api\TournamentController::class, 'approveRegistration']);

@@ -24,14 +24,14 @@ class PendingRegistrations extends Page implements Tables\Contracts\HasTable
 
     public function getTitle(): string
     {
-        return 'Pending Tournament Registrations';
+        return 'Tournament Registrations Pending Payment';
     }
 
     public function table(Table $table): Table
     {
         return $table
             ->query(fn () => TournamentParticipant::query()
-                ->where('tournament_participants.status', 'pending')
+                ->where('tournament_participants.status', 'pending_payment')
                 ->join('users', 'users.id', '=', 'tournament_participants.user_id')
                 ->join('tournaments', 'tournaments.id', '=', 'tournament_participants.tournament_id')
                 ->select('tournament_participants.*', 'users.name as user_name', 'users.email as user_email', 'tournaments.name as tournament_name'))
