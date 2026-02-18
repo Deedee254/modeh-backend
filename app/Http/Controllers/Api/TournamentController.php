@@ -940,35 +940,13 @@ class TournamentController extends Controller
         $user = $request->user();
         if (! $user) return response()->json(['message' => 'Unauthorized'], 401);
 
-        // Check tournament window: qualify is allowed during 'upcoming' status (registration + qualifier phase)
-        $now = now();
-        if ($tournament->start_date && $now->lt($tournament->start_date)) {
-            return response()->json(['message' => 'Qualification has not started'], 400);
-        }
-        if ($tournament->end_date && $now->gt($tournament->end_date)) {
-            return response()->json(['message' => 'Qualification is closed'], 400);
+        // Validate tournament state
+        $validationError = $this->validateQualifySubmitState($tournament, $user);
+        if ($validationError) {
+            return $validationError;
         }
 
-        // Allow qualification only during 'upcoming' phase (before first round battles are created)
-        // Once battles are created, tournament transitions to 'active' and qualifier closes
-        if ($tournament->status !== 'upcoming') {
-            return response()->json(['message' => 'Qualification period has closed for this tournament'], 400);
-        }
-
-        // Ensure user is registered and paid
-        $participant = $tournament->participants()->where('user_id', $user->id)->first();
-        if (! $participant || ($participant->pivot->status ?? 'pending_payment') !== 'paid') {
-            return response()->json(['message' => 'You must be registered and payment must be confirmed to take this qualifier'], 403);
-        }
-
-        // Single attempt policy: prevent a second attempt
-        $existing = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
-            ->where('user_id', $user->id)
-            ->first();
-        if ($existing) {
-            return response()->json(['message' => 'Only a single qualification attempt is allowed'], 400);
-        }
-
+        // Validate and extract request data
         $data = $request->validate([
             'answers' => 'required|array',
             'answers.*.question_id' => 'required|integer',
@@ -977,84 +955,23 @@ class TournamentController extends Controller
         ]);
 
         $questions = $tournament->questions()->get()->keyBy('id');
+        $shuffleSeed = (string) $request->input('shuffle_seed', '');
 
+        // Process answers and compute score
         $computedScore = 0.0;
         $answersToStore = [];
 
         foreach ($data['answers'] as $ans) {
-            $qId = (int) ($ans['question_id'] ?? 0);
-            $given = $ans['answer'] ?? null;
-
-            if (! $questions->has($qId)) {
-                return response()->json(['message' => "Question {$qId} not found for this tournament"], 400);
+            $answerData = $this->processQualifyAnswer($ans, $questions, $shuffleSeed);
+            if (is_array($answerData) && isset($answerData['error'])) {
+                return response()->json(['message' => $answerData['error']], 400);
             }
 
-            $q = $questions->get($qId);
-            // If the client submitted indices based on a shuffled options
-            // ordering we provided earlier, translate indices back to the
-            // original option values using the provided shuffle_seed.
-            $shuffleSeed = $request->input('shuffle_seed');
-            if ($shuffleSeed && ! empty($q->options)) {
-                $opts = [];
-                if (is_array($q->options)) {
-                    $opts = $q->options;
-                } elseif (is_string($q->options)) {
-                    $decoded = json_decode((string) $q->options, true);
-                    if (is_array($decoded)) $opts = $decoded;
-                }
-                $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
-
-                if (is_array($given)) {
-                    $mapped = [];
-                    foreach ($given as $g) {
-                        if (is_numeric($g) && isset($shuffled[(int) $g])) {
-                            $opt = $shuffled[(int) $g];
-                            $mapped[] = $opt['id'] ?? $opt['text'] ?? $opt['body'] ?? $opt;
-                        } else {
-                            $mapped[] = $g;
-                        }
-                    }
-                    $given = $mapped;
-                } else {
-                    if (is_numeric($given) && isset($shuffled[(int) $given])) {
-                        $opt = $shuffled[(int) $given];
-                        $given = $opt['id'] ?? $opt['text'] ?? $opt['body'] ?? $opt;
-                    }
-                }
-            }
-            $marks = $q->marks ?? 1;
-
-            // Resolve a consistent "correct answers" shape for the marking service.
-            $correctAnswers = [];
-            if ($q->type === 'mcq') {
-                if (! is_null($q->correct)) {
-                    $correctAnswers = [(string) $q->correct];
-                } elseif (! empty($q->answers)) {
-                    $correctAnswers = is_array($q->answers) ? $q->answers : [$q->answers];
-                }
-            } elseif ($q->type === 'multi') {
-                if (is_array($q->corrects)) {
-                    $correctAnswers = $q->corrects;
-                } elseif (is_string($q->corrects)) {
-                    $decoded = json_decode($q->corrects, true);
-                    $correctAnswers = is_array($decoded) ? $decoded : [];
-                }
-            } else {
-                $correctAnswers = $q->answers ?? [];
-            }
-
-            $isCorrect = $this->markingService->isAnswerCorrect($given, $correctAnswers, $q);
-            $points = $isCorrect ? $marks : 0;
-
-            $answersToStore[] = [
-                'question_id' => $qId,
-                'answer' => is_array($given) ? $given : (string) ($given ?? ''),
-                'points' => round((float) $points, 2)
-            ];
-
-            $computedScore += (float) $points;
+            $answersToStore[] = $answerData;
+            $computedScore += (float) ($answerData['points'] ?? 0);
         }
 
+        // Create attempt record
         $attempt = TournamentQualificationAttempt::create([
             'tournament_id' => $tournament->id,
             'user_id' => $user->id,
@@ -1063,7 +980,223 @@ class TournamentController extends Controller
             'duration_seconds' => $data['duration_seconds'] ?? null
         ]);
 
-        // Update participant pivot score so leaderboard endpoints reflect qualifier standings
+        // Update participant pivot score
+        $this->updateQualifyParticipantScore($tournament, $user, $attempt);
+
+        // Build leaderboard context
+        $leaderboard = $this->buildQualifierLeaderboard($tournament);
+
+        return response()->json([
+            'message' => 'Qualification attempt recorded',
+            'attempt' => $attempt,
+            'leaderboard' => $leaderboard
+        ]);
+    }
+
+    /**
+     * Validate tournament state for qualification submission
+     * @return \Illuminate\Http\JsonResponse|null Error response or null if valid
+     */
+    private function validateQualifySubmitState(Tournament $tournament, \App\Models\User $user): ?\Illuminate\Http\JsonResponse
+    {
+        $now = now();
+
+        // Check tournament window
+        if ($tournament->start_date && $now->lt($tournament->start_date)) {
+            return response()->json(['message' => 'Qualification has not started'], 400);
+        }
+        if ($tournament->end_date && $now->gt($tournament->end_date)) {
+            return response()->json(['message' => 'Qualification is closed'], 400);
+        }
+
+        // Check tournament status
+        if ($tournament->status !== 'upcoming') {
+            return response()->json(['message' => 'Qualification period has closed for this tournament'], 400);
+        }
+
+        // Check user registration and payment
+        $participant = $tournament->participants()->where('user_id', $user->id)->first();
+        if (! $participant || ($participant->pivot->status ?? 'pending_payment') !== 'paid') {
+            return response()->json(['message' => 'You must be registered and payment must be confirmed to take this qualifier'], 403);
+        }
+
+        // Check single attempt policy
+        $existing = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+            ->where('user_id', $user->id)
+            ->first();
+        if ($existing) {
+            return response()->json(['message' => 'Only a single qualification attempt is allowed'], 400);
+        }
+
+        return null;
+    }
+
+    /**
+     * Process a single answer from the qualification submission
+     * @param array $answerInput The answer from request
+     * @param \Illuminate\Support\Collection $questions Keyed by question ID
+     * @param string $shuffleSeed Optional shuffle seed for unmapping indices
+     * @return array Answer record with points, or error array
+     */
+    private function processQualifyAnswer(array $answerInput, \Illuminate\Support\Collection $questions, string $shuffleSeed): array
+    {
+        $qId = (int) ($answerInput['question_id'] ?? 0);
+        $given = $answerInput['answer'] ?? null;
+
+        if (! $questions->has($qId)) {
+            return ['error' => "Question {$qId} not found for this tournament"];
+        }
+
+        $q = $questions->get($qId);
+
+        // Unmap shuffled indices if needed
+        if ($shuffleSeed && ! empty($q->options)) {
+            $given = $this->unmapShuffledAnswer($given, $q, $shuffleSeed);
+        }
+
+        // Resolve correct answers for the marking service
+        $correctAnswers = $this->resolveCorrectAnswers($q);
+
+        // Grade the answer
+        $marks = (int) ($q->marks ?? 1);
+        $isCorrect = $this->markingService->isAnswerCorrect($given, $correctAnswers, $q);
+        $points = $isCorrect ? $marks : 0;
+
+        return [
+            'question_id' => $qId,
+            'answer' => is_array($given) ? $given : (string) ($given ?? ''),
+            'points' => round((float) $points, 2)
+        ];
+    }
+
+    /**
+     * Unmap shuffled option indices back to original values
+     * @param mixed $given The provided answer (index or value)
+     * @param object $question The question model
+     * @param string $shuffleSeed The shuffle seed from the response
+     * @return mixed The unmapped answer
+     */
+    private function unmapShuffledAnswer(mixed $given, object $question, string $shuffleSeed): mixed
+    {
+        $opts = $this->extractOptionsArray($question->options);
+        if (empty($opts)) {
+            return $given;
+        }
+
+        $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $question->id);
+
+        if (is_array($given)) {
+            return $this->unmapArrayAnswer($given, $shuffled);
+        }
+
+        return $this->unmapSingleAnswer($given, $shuffled);
+    }
+
+    /**
+     * Extract options array from question (handles array and JSON string formats)
+     * @param mixed $options Raw options from question
+     * @return array The options array
+     */
+    private function extractOptionsArray(mixed $options): array
+    {
+        if (is_array($options)) {
+            return $options;
+        }
+
+        if (is_string($options)) {
+            $decoded = json_decode($options, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Unmap an array of answer indices/values
+     * @param array $given The array of answers
+     * @param array $shuffled The shuffled options
+     * @return array The unmapped answers
+     */
+    private function unmapArrayAnswer(array $given, array $shuffled): array
+    {
+        $mapped = [];
+        foreach ($given as $g) {
+            if (is_numeric($g) && isset($shuffled[(int) $g])) {
+                $mapped[] = $this->extractOptionValue($shuffled[(int) $g]);
+            } else {
+                $mapped[] = $g;
+            }
+        }
+        return $mapped;
+    }
+
+    /**
+     * Unmap a single answer index/value
+     * @param mixed $given The answer
+     * @param array $shuffled The shuffled options
+     * @return mixed The unmapped answer
+     */
+    private function unmapSingleAnswer(mixed $given, array $shuffled): mixed
+    {
+        if (is_numeric($given) && isset($shuffled[(int) $given])) {
+            return $this->extractOptionValue($shuffled[(int) $given]);
+        }
+        return $given;
+    }
+
+    /**
+     * Extract a display value from an option (tries id, text, body, or returns the option)
+     * @param mixed $option The option from the shuffled array
+     * @return mixed The extracted value
+     */
+    private function extractOptionValue(mixed $option): mixed
+    {
+        if (is_array($option)) {
+            return $option['id'] ?? $option['text'] ?? $option['body'] ?? $option;
+        }
+        return $option;
+    }
+
+    /**
+     * Resolve the correct answers for a question based on its type
+     * @param object $question The question model
+     * @return array Array of correct answers
+     */
+    private function resolveCorrectAnswers(object $question): array
+    {
+        $correctAnswers = [];
+
+        if ($question->type === 'mcq') {
+            if (! is_null($question->correct)) {
+                $correctAnswers = [(string) $question->correct];
+            } elseif (! empty($question->answers)) {
+                $correctAnswers = is_array($question->answers) ? $question->answers : [$question->answers];
+            }
+        } elseif ($question->type === 'multi') {
+            if (is_array($question->corrects)) {
+                $correctAnswers = $question->corrects;
+            } elseif (is_string($question->corrects)) {
+                $decoded = json_decode($question->corrects, true);
+                $correctAnswers = is_array($decoded) ? $decoded : [];
+            }
+        } else {
+            $correctAnswers = $question->answers ?? [];
+        }
+
+        return $correctAnswers;
+    }
+
+    /**
+     * Update the participant score in the tournament pivot table
+     * @param Tournament $tournament
+     * @param \App\Models\User $user
+     * @param TournamentQualificationAttempt $attempt
+     * @return void
+     */
+    private function updateQualifyParticipantScore(Tournament $tournament, \App\Models\User $user, TournamentQualificationAttempt $attempt): void
+    {
         try {
             $tournament->participants()->updateExistingPivot($user->id, [
                 'score' => $attempt->score,
@@ -1072,9 +1205,16 @@ class TournamentController extends Controller
         } catch (\Exception $_) {
             // non-fatal; continue
         }
+    }
 
-        // Build a small qualifier leaderboard (top 10) to return context
-        $leaderboard = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+    /**
+     * Build the top 10 qualifier leaderboard
+     * @param Tournament $tournament
+     * @return \Illuminate\Support\Collection
+     */
+    private function buildQualifierLeaderboard(Tournament $tournament): \Illuminate\Support\Collection
+    {
+        return TournamentQualificationAttempt::where('tournament_id', $tournament->id)
             ->orderByDesc('score')
             ->orderBy('duration_seconds')
             ->limit(10)
@@ -1087,12 +1227,6 @@ class TournamentController extends Controller
                     'created_at' => $a->created_at
                 ];
             });
-
-        return response()->json([
-            'message' => 'Qualification attempt recorded',
-            'attempt' => $attempt,
-            'leaderboard' => $leaderboard
-        ]);
     }
 
     /**
