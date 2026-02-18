@@ -771,7 +771,7 @@ class TournamentController extends Controller
         $per_page = $request->get('per_page', 50);
         
         $attempts = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
-            ->with('user:id,name,email,avatar,avatar_url')
+            ->with('user:id,name,email,avatar_url,social_avatar')
             ->orderByDesc('score')
             ->orderBy('duration_seconds')
             ->paginate($per_page);
@@ -784,8 +784,11 @@ class TournamentController extends Controller
                     'user_id' => $attempt->user_id,
                     'user_name' => $user->name ?? null,
                     'user_email' => $user->email ?? null,
+                    'avatar_url' => $user->avatar_url ?? null,
                     'avatar' => $user->avatar ?? null,
                     'user_avatar' => $user->avatar ?? null,
+                    'image' => $user->avatar ?? null,
+                    'picture' => $user->avatar ?? null,
                     'score' => $attempt->score,
                     'duration_seconds' => $attempt->duration_seconds,
                     'status' => $attempt->status ?? 'completed',
@@ -1215,13 +1218,20 @@ class TournamentController extends Controller
     private function buildQualifierLeaderboard(Tournament $tournament): \Illuminate\Support\Collection
     {
         return TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+            ->with('user:id,name,avatar_url,social_avatar')
             ->orderByDesc('score')
             ->orderBy('duration_seconds')
             ->limit(10)
             ->get()
             ->map(function($a) {
+                $user = $a->user;
                 return [
                     'user_id' => $a->user_id,
+                    'name' => $user->name ?? null,
+                    'avatar_url' => $user->avatar_url ?? null,
+                    'avatar' => $user->avatar ?? null,
+                    'image' => $user->avatar ?? null,
+                    'picture' => $user->avatar ?? null,
                     'score' => $a->score,
                     'duration_seconds' => $a->duration_seconds,
                     'created_at' => $a->created_at
