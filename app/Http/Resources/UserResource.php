@@ -30,6 +30,8 @@ class UserResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $resolvedAvatar = $this->avatar ?: ($this->social_avatar ?: $this->avatar_url);
+
         $payload = [
             // Core user fields (clean, no duplicates)
             'id' => $this->id,
@@ -44,9 +46,10 @@ class UserResource extends JsonResource
             // Canonical avatar field for frontend clients.
             // Legacy aliases are still included for backward compatibility.
             'avatar_url' => $this->avatar_url,
-            'avatar' => $this->avatar,
-            'image' => $this->avatar,
-            'picture' => $this->avatar,
+            'social_avatar' => $this->social_avatar,
+            'avatar' => $resolvedAvatar,
+            'image' => $resolvedAvatar,
+            'picture' => $resolvedAvatar,
             'bio' => $this->bio,
             'email_verified_at' => $this->email_verified_at,
             'affiliate_code' => $this->affiliate_code,
