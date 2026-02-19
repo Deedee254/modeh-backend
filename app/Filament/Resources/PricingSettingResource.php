@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\PricingSettingResource\Pages;
 use App\Models\PricingSetting;
 use BackedEnum;
+use UnitEnum;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Filament\Forms\Components\TextInput;
@@ -19,7 +20,7 @@ class PricingSettingResource extends Resource
     protected static ?string $model = PricingSetting::class;
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-tag';
-    protected static string|null $navigationGroup = 'Payments & Subscriptions';
+    protected static UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
     protected static ?int $navigationSort = 2;
     protected static ?string $label = 'Default Pricing';
     protected static ?string $pluralLabel = 'Default Pricing';
