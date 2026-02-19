@@ -122,8 +122,6 @@ Route::get('/subjects/{subject}/topics', [\App\Http\Controllers\Api\SubjectContr
 Route::get('/sponsors', [\App\Http\Controllers\Api\SponsorController::class, 'index']);
 // Public packages listing for pricing page
 Route::get('/packages', [\App\Http\Controllers\Api\PackageController::class, 'index']);
-// Public subscription status check (by transaction id) - available to anonymous users for frontend polling
-Route::get('/subscriptions/status', [\App\Http\Controllers\Api\SubscriptionController::class, 'statusByTx']);
 Route::get('/quiz-masters', [\App\Http\Controllers\Api\QuizMasterController::class, 'index']);
 Route::get('/quiz-masters/{id}', [\App\Http\Controllers\Api\QuizMasterController::class, 'show']);
 // quiz-master's followers (moved to authenticated group below)
@@ -177,8 +175,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/institution-approvals/{approvalRequest}/approve', [\App\Http\Controllers\Api\InstitutionApprovalController::class, 'approve']);
     Route::post('/institution-approvals/{approvalRequest}/reject', [\App\Http\Controllers\Api\InstitutionApprovalController::class, 'reject']);
 
-    // Subscription & assignment endpoints for institutions
-    Route::get('/institutions/{institution}/subscription', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'subscription']);
+    // Institution member management endpoints
     Route::post('/institutions/{institution}/assignment/revoke', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'revokeAssignment']);
     // Direct invitations
     Route::post('/institutions/{institution}/members/invite', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'invite']);
@@ -230,8 +227,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/invite-quizee', [\App\Http\Controllers\Api\ParentController::class, 'inviteQuizee']);
         Route::get('/quizee/{quizeeId}/analytics', [\App\Http\Controllers\Api\ParentController::class, 'getQuizeeAnalytics']);
         Route::delete('/quizee/{quizeeId}', [\App\Http\Controllers\Api\ParentController::class, 'removeQuizee']);
-        Route::post('/quizee/{quizeeId}/subscription', [\App\Http\Controllers\Api\ParentController::class, 'manageSubscription']);
-        Route::get('/subscriptions', [\App\Http\Controllers\Api\ParentController::class, 'getSubscriptions']);
     });
 
     // quiz-master Quiz endpoints
@@ -239,6 +234,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::patch('/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizController::class, 'update']);
     // Admin approve quiz
     Route::post('/quizzes/{quiz}/approve', [\App\Http\Controllers\Api\QuizController::class, 'approve']);
+    // Mark quiz as institutional (for members of institutions)
+    Route::post('/quizzes/{quiz}/institutional', [\App\Http\Controllers\Api\QuizController::class, 'markInstitutional']);
 
     // Quiz analytics for owners/admins
     Route::get('/quizzes/{quiz}/analytics', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'show']);
@@ -252,13 +249,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\QuizAttemptController::class, 'submit']);
     // server-side start attempt (creates draft attempt with server started_at)
     Route::post('/quizzes/{quiz}/start', [\App\Http\Controllers\Api\QuizAttemptController::class, 'startAttempt']);
-    // mark a previously saved attempt (requires subscription)
+    // mark a previously saved attempt and compute score
     Route::post('/quiz-attempts/{attempt}/mark', [\App\Http\Controllers\Api\QuizAttemptController::class, 'markAttempt']);
     // Sync guest attempt (guest user signs up and syncs their guest attempts to their account)
     Route::post('/quizzes/sync-guest-attempt', [\App\Http\Controllers\Api\QuizAttemptController::class, 'syncGuestAttempt']);
     // Fetch a user's attempt details
     Route::get('/quiz-attempts/{attempt}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'showAttempt']);
-    // Review attempt (returns per-question details to the attempt owner without requiring subscription)
+    // Review attempt (returns per-question details to the attempt owner)
     Route::get('/quiz-attempts/{attempt}/review', [\App\Http\Controllers\Api\QuizAttemptController::class, 'reviewAttempt']);
     // List authenticated user's quiz attempts (quizee)
     Route::get('/quiz-attempts', [\App\Http\Controllers\Api\QuizAttemptController::class, 'index']);

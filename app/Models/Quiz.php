@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Auth;
  * @property int $id
  * @property int|null $created_by User ID who created the quiz
  * @property int|null $user_id User ID who owns the quiz
+ * @property int|null $institution_id Institution ID if this quiz belongs to an institution (nullable - public by default)
+ * @property bool $is_institutional Whether this quiz requires institutional membership for free access
  * @property int|null $topic_id Topic ID for this quiz
  * @property int|null $subject_id Subject ID for this quiz
  * @property int|null $grade_id Grade ID for this quiz
@@ -19,8 +21,8 @@ use Illuminate\Support\Facades\Auth;
  * @property string|null $description Quiz description
  * @property string|null $youtube_url YouTube URL for quiz
  * @property string|null $cover_image Cover image path for quiz
- * @property bool $is_paid Whether this quiz is paid
- * @property string|null $one_off_price One-time purchase price
+ * @property bool $is_paid Whether this quiz is paid (one-off price for non-members)
+ * @property string|null $one_off_price One-time purchase price for non-members
  * @property int|null $timer_seconds Total timer in seconds
  * @property int|null $per_question_seconds Time per question in seconds
  * @property bool $use_per_question_timer Whether to use per-question timer
@@ -40,6 +42,7 @@ use Illuminate\Support\Facades\Auth;
  * @property-read \App\Models\Subject|null $subject
  * @property-read \App\Models\Grade|null $grade
  * @property-read \App\Models\User|null $author
+ * @property-read \App\Models\Institution|null $institution
  * @property-read \App\Models\QuizMaster|null $quizMaster
  * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\Question[] $questions
  * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\QuizAttempt[] $attempts
@@ -49,10 +52,11 @@ class Quiz extends Model
     use HasFactory;
 
     // Include user_id so tests and factory-created quizzes can set the owning user
-    protected $fillable = ['topic_id', 'subject_id', 'grade_id', 'level_id', 'user_id', 'created_by', 'title', 'slug', 'description', 'youtube_url', 'cover_image', 'is_paid', 'one_off_price', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'difficulty', 'is_approved', 'is_draft', 'approval_requested_at'];
+    protected $fillable = ['topic_id', 'subject_id', 'grade_id', 'level_id', 'user_id', 'created_by', 'title', 'slug', 'description', 'youtube_url', 'cover_image', 'is_paid', 'one_off_price', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'difficulty', 'is_approved', 'is_draft', 'approval_requested_at', 'institution_id', 'is_institutional'];
 
     protected $casts = [
         'is_paid' => 'boolean',
+        'is_institutional' => 'boolean',
         'is_approved' => 'boolean',
         'use_per_question_timer' => 'boolean',
         'shuffle_questions' => 'boolean',
@@ -100,6 +104,11 @@ class Quiz extends Model
         return $this->belongsTo(\App\Models\Grade::class);
     }
 
+    public function institution()
+    {
+        return $this->belongsTo(\App\Models\Institution::class, 'institution_id');
+    }
+
     public function author()
     {
         return $this->belongsTo(User::class, 'user_id');
@@ -142,6 +151,45 @@ class Quiz extends Model
         $this->difficulty = $avg;
         $this->save();
         return $this->difficulty;
+    }
+
+    /**
+     * Check if a user has access to this quiz for free.
+     * Rules:
+     * - If quiz is not institutional: free for everyone
+     * - If quiz is institutional: free only for institution members, others must pay
+     * 
+     * @param \App\Models\User $user
+     * @return bool
+     */
+    public function isFreeForUser($user)
+    {
+        // If not an institutional quiz, it's free (unless one_off_price is set separately)
+        if (!$this->is_institutional || !$this->institution_id) {
+            return !$this->is_paid; // Free if not marked as paid
+        }
+
+        // If institutional, check if user is a member of that institution
+        return $this->institution->users()
+            ->where('user_id', $user->id)
+            ->exists();
+    }
+
+    /**
+     * Get the price a user needs to pay for this quiz.
+     * Returns null if free, or the amount they need to pay.
+     * 
+     * @param \App\Models\User $user
+     * @return float|null
+     */
+    public function getPriceForUser($user)
+    {
+        if ($this->isFreeForUser($user)) {
+            return null;
+        }
+
+        // User needs to pay one-off price
+        return (float) ($this->one_off_price ?? 0);
     }
 
     // Return questions optionally shuffled and with answers shuffled per settings

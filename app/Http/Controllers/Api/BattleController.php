@@ -1064,13 +1064,11 @@ class BattleController extends Controller
         $userIsInitiator = $user->id === $battle->initiator_id;
         $userPoints = $userIsInitiator ? $initiatorPoints : $opponentPoints;
 
-        // Get active subscription and calculate remaining after this reveal
-        $activeSub = SubscriptionLimitService::getActiveSubscription($user);
-        $limit = $activeSub ? SubscriptionLimitService::getPackageLimit($activeSub->package, 'quiz_results') : 10;
-        
-        // Calculate remaining after this reveal
-        $used = SubscriptionLimitService::countTodayUsage($user->id) + 1;
-        $remaining = $limit ? max(0, $limit - $used) : null;
+        // Pay-per-view model: expose attempt counts instead of subscription limits.
+        $battleAttemptsCount = Battle::where(function ($q) use ($user) {
+            $q->where('initiator_id', $user->id)
+              ->orWhere('opponent_id', $user->id);
+        })->count();
 
         $result = [
             'score' => max($initiatorPoints, $opponentPoints),
@@ -1104,12 +1102,9 @@ class BattleController extends Controller
             'ok' => true,
             'result' => $result,
             'awarded_achievements' => $awarded,
-            'usage' => [
-                'limit' => $limitCheck['limit'],
-                'used' => $limitCheck['used'] + 1,
-                'remaining' => max(0, ($limitCheck['remaining'] ?? 1) - 1),
-                'type' => 'reveals'
-            ]
+            'attempt_counts' => [
+                'battle_attempts_count' => $battleAttemptsCount,
+            ],
         ]);
     }
 }

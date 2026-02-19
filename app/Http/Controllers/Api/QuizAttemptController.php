@@ -11,7 +11,8 @@ use App\Models\Subject;
 use App\Models\QuizAttempt;
 use App\Models\DailyUsageTracking;
 use App\Services\AchievementService;
-use App\Services\SubscriptionLimitService;
+use App\Services\QuizAccessService;
+use App\Services\InstitutionPackageUsageService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -320,12 +321,68 @@ class QuizAttemptController extends Controller
         ]);
     }
 
+    /**
+     * Validate that a user has access to attempt a quiz
+     * Returns access result or error response
+     * 
+     * @param Quiz $quiz
+     * @param \App\Models\User $user
+     * @return array|object {ok: bool, access_result?: array, error?: string, requires_payment?: bool, price?: float}
+     */
+    private function validateQuizAccess(Quiz $quiz, $user)
+    {
+        $access = QuizAccessService::checkAccess($quiz, $user);
+
+        // Log the access check
+        QuizAccessService::logAccess($quiz, $user, $access);
+
+        // If free access, allow
+        if ($access['is_free']) {
+            return [
+                'ok' => true,
+                'access_result' => $access,
+            ];
+        }
+
+        // User needs to pay - check if they already have a confirmed one-off purchase
+        $hasPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
+            ->where('item_type', 'quiz')
+            ->where('item_id', $quiz->id)
+            ->where('status', 'confirmed')
+            ->exists();
+
+        if (!$hasPurchase) {
+            // Need to initiate payment
+            return [
+                'ok' => false,
+                'requires_payment' => true,
+                'price' => $access['price'],
+                'message' => 'Payment required',
+                'access_result' => $access,
+            ];
+        }
+
+        // Has paid, allow access
+        return [
+            'ok' => true,
+            'access_result' => $access,
+        ];
+    }
+
     public function submit(Request $request, Quiz $quiz)
     {
         $user = $request->user();
         if (!$user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
+
+        // Validate that user has access to this quiz (free or paid)
+        $accessValidation = $this->validateQuizAccess($quiz, $user);
+        if (!$accessValidation['ok']) {
+            return response()->json($accessValidation, 403);
+        }
+
+        $accessResult = $accessValidation['access_result'];
 
         // allow missing or partial answers (accept empty submissions)
         $payload = $request->validate([
@@ -351,6 +408,11 @@ class QuizAttemptController extends Controller
         // Allow submit to only persist answers and defer marking (score calculation, points, achievements)
         $defer = $request->boolean('defer_marking', false);
 
+        // Track whether this attempt was paid for or via institutional access
+        $isPaid = !$accessResult['is_free'];
+        $isInstitutionalAccess = $accessResult['institution_member'] ?? false;
+        $institutionId = $accessResult['institution_id'] ?? null;
+
         // persist attempt
         try {
             DB::beginTransaction();
@@ -363,6 +425,9 @@ class QuizAttemptController extends Controller
                         $attempt->answers = $answers;
                         $attempt->total_time_seconds = $totalTimeSeconds;
                         $attempt->per_question_time = $questionTimes;
+                        $attempt->paid_for = $isPaid;
+                        $attempt->institution_access = $isInstitutionalAccess;
+                        $attempt->institution_id = $institutionId;
                         $attempt->save();
                     }
                 } else {
@@ -374,6 +439,9 @@ class QuizAttemptController extends Controller
                         'points_earned' => null,
                         'total_time_seconds' => $totalTimeSeconds,
                         'per_question_time' => $questionTimes,
+                        'paid_for' => $isPaid,
+                        'institution_access' => $isInstitutionalAccess,
+                        'institution_id' => $institutionId,
                     ]);
                 }
             } else {
@@ -388,6 +456,9 @@ class QuizAttemptController extends Controller
                         $attempt->points_earned = $pointsEarned;
                         $attempt->total_time_seconds = $totalTimeSeconds;
                         $attempt->per_question_time = $questionTimes;
+                        $attempt->paid_for = $isPaid;
+                        $attempt->institution_access = $isInstitutionalAccess;
+                        $attempt->institution_id = $institutionId;
                         $attempt->save();
                     }
                 } else {
@@ -399,7 +470,27 @@ class QuizAttemptController extends Controller
                         'points_earned' => $pointsEarned,
                         'total_time_seconds' => $totalTimeSeconds,
                         'per_question_time' => $questionTimes,
+                        'paid_for' => $isPaid,
+                        'institution_access' => $isInstitutionalAccess,
+                        'institution_id' => $institutionId,
                     ]);
+                }
+
+                // Record institution usage if applicable
+                if ($isInstitutionalAccess && $institutionId) {
+                    try {
+                        $institution = \App\Models\Institution::find($institutionId);
+                        if ($institution) {
+                            InstitutionPackageUsageService::recordQuizAttempt(
+                                $institution,
+                                $user,
+                                null, // subscription will be tracked separately if needed
+                                ['quiz_id' => $quiz->id]
+                            );
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning('Failed to record institution usage: ' . $e->getMessage());
+                    }
                 }
 
                 // persist points to user atomically; don't let missing column break the attempt
@@ -487,69 +578,17 @@ class QuizAttemptController extends Controller
 
     /**
      * Mark a previously saved (possibly deferred) attempt and return enriched result.
-     * Requires an active subscription before revealing results.
+     * In the new institutional model, access is determined by QuizAccessService.
      */
     public function markAttempt(Request $request, QuizAttempt $attempt)
     {
         $user = $request->user();
-        if (!$user)
+        if (!$user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
         if ($attempt->user_id !== $user->id) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
-        }
-
-        // Extract subscription preference context from request if present
-        $context = [
-            'subscription_type' => $request->input('subscription_type'),
-            'institution_id' => $request->input('institution_id'),
-        ];
-
-        // Use centralized service for subscription validation
-        $subValidation = SubscriptionLimitService::validateSubscriptionAccess($user, $context);
-
-        if (!$subValidation['allowed']) {
-            return response()->json([
-                'ok' => false,
-                'message' => $subValidation['message'] ?? 'Subscription or one-off purchase required'
-            ], 403);
-        }
-
-        // Check one-off purchase as alternative
-        $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
-            ->where('item_type', 'quiz')
-            ->where('item_id', $attempt->quiz_id)
-            ->where('status', 'confirmed')
-            ->exists();
-
-        if (!$hasOneOff && !$subValidation['subscription']) {
-            return response()->json(['ok' => false, 'message' => 'Subscription or one-off purchase required'], 403);
-        }
-
-        // Enforce package limits if present
-        $activeSub = $subValidation['subscription'];
-        if ($activeSub && $activeSub->package && is_array($activeSub->package->features)) {
-            $features = $activeSub->package->features;
-            // limit key path: features.limits.quiz_results => integer allowed per day (or null = unlimited)
-            $limit = $features['limits']['quiz_results'] ?? $features['limits']['results'] ?? null;
-            if ($limit !== null) {
-                // compute todays usage for this subscription
-                $used = SubscriptionLimitService::countTodayUsage($user->id, $activeSub->id);
-                if ($used >= intval($limit)) {
-                    $remaining = max(0, intval($limit) - intval($used));
-                    return response()->json([
-                        'ok' => false,
-                        'code' => 'limit_reached',
-                        'limit' => [
-                            'type' => 'quiz_results',
-                            'value' => intval($limit),
-                            'used' => intval($used),
-                            'remaining' => $remaining,
-                        ],
-                        'message' => 'Result access limit reached for your plan'
-                    ], 403);
-                }
-            }
         }
 
         // Recompute score from stored answers
@@ -615,51 +654,6 @@ class QuizAttemptController extends Controller
 
         // Get the quiz early to check if it's free
         $quiz = $attempt->quiz()->with('questions')->first();
-        $isFreeQuiz = !$quiz->is_paid || $quiz->one_off_price == 0;
-
-        // Only check subscription limits if the quiz is NOT free
-        if (!$isFreeQuiz) {
-            $context = [
-                'subscription_type' => $request->input('subscription_type'),
-                'institution_id' => $request->input('institution_id'),
-            ];
-            $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'quiz_results', $context);
-
-            if (!$limitCheck['allowed']) {
-                return response()->json([
-                    'ok' => false,
-                    'code' => 'limit_reached',
-                    'message' => 'Daily result reveal limit reached for your plan',
-                    'limit' => [
-                        'type' => 'quiz_results',
-                        'value' => $limitCheck['limit'],
-                        'used' => $limitCheck['used'],
-                        'remaining' => $limitCheck['remaining'],
-                    ]
-                ], 403);
-            }
-        }
-
-        // Get active subscription for tracking (only if not free quiz)
-        $context = [
-            'subscription_type' => $request->input('subscription_type'),
-            'institution_id' => $request->input('institution_id'),
-        ];
-        $activeSub = !$isFreeQuiz ? SubscriptionLimitService::getActiveSubscription($user, $context) : null;
-        $subDetails = $activeSub ? SubscriptionLimitService::getSubscriptionDetails($user, $context) : null;
-
-        $limit = $activeSub ? SubscriptionLimitService::getPackageLimit($activeSub->package, 'quiz_results') : null;
-
-        // Record which subscription was used for this reveal (if not already recorded)
-        if ($activeSub && !$attempt->subscription_id) {
-            $attempt->subscription_id = $activeSub->id;
-            $attempt->subscription_type = $subDetails['subscription_type'] ?? 'personal';
-            $attempt->save();
-        }
-
-        // Calculate remaining after this reveal
-        $used = $activeSub ? (SubscriptionLimitService::countTodayUsage($user->id, $activeSub->id) + 1) : null;
-        $remaining = $limit && $used ? max(0, $limit - $used) : null;
 
         // Build per-question correctness info (answers stored on attempt)
         $answers = $attempt->answers ?? [];
@@ -805,6 +799,12 @@ class QuizAttemptController extends Controller
             }
         }
 
+        // Pay-per-view model: expose attempt counts instead of subscription limits.
+        $quizAttemptsCount = QuizAttempt::where('user_id', $user->id)
+            ->where('quiz_id', $attempt->quiz_id)
+            ->count();
+        $totalAttemptsCount = QuizAttempt::where('user_id', $user->id)->count();
+
         return response()->json([
             'ok' => true,
             'attempt' => [
@@ -826,12 +826,10 @@ class QuizAttemptController extends Controller
                 'fastest' => $fastestAnswer,
                 'slowest' => $slowestAnswer
             ],
-            'usage' => [
-                'limit' => $limit,
-                'used' => $used,
-                'remaining' => $remaining,
-                'type' => 'reveals'
-            ]
+            'attempt_counts' => [
+                'quiz_attempts_count' => $quizAttemptsCount,
+                'total_attempts_count' => $totalAttemptsCount,
+            ],
         ]);
     }
 

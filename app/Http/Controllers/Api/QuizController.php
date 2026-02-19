@@ -946,4 +946,53 @@ class QuizController extends Controller
 
         return response()->json(['quiz' => $quiz]);
     }
+
+    /**
+     * Mark a quiz as institutional (accessible via institution membership)
+     * Only quiz creator or admin can do this
+     */
+    public function markInstitutional(Request $request, Quiz $quiz)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        // Only allow owner or admin to update
+        if ($quiz->created_by && $quiz->created_by !== $user->id && !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'institution_id' => 'required|exists:institutions,id',
+            'is_institutional' => 'required|boolean',
+        ]);
+
+        // If the quiz creator is not part of this institution, reject
+        if (!$user->is_admin) {
+            $inInstitution = \App\Models\Institution::find($validated['institution_id'])
+                ->users()
+                ->where('user_id', $user->id)
+                ->exists();
+
+            if (!$inInstitution) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'You must be a member of this institution to mark quizzes as institutional'
+                ], 403);
+            }
+        }
+
+        $quiz->institution_id = $validated['is_institutional'] ? $validated['institution_id'] : null;
+        $quiz->is_institutional = $validated['is_institutional'];
+        $quiz->save();
+
+        return response()->json([
+            'ok' => true,
+            'quiz' => $quiz,
+            'message' => $validated['is_institutional'] 
+                ? 'Quiz marked as institutional' 
+                : 'Quiz unmarked as institutional'
+        ]);
+    }
 }
