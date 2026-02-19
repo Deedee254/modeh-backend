@@ -343,7 +343,7 @@ class InstitutionMemberController extends Controller
             ->orderByDesc('started_at')
             ->first();
 
-        if (!$activeSub) return response()->json(['ok' => false, 'message' => 'No active subscription found'], 404);
+        if (!$activeSub) return response()->json(['ok' => false, 'message' => 'No active institution package found'], 404);
 
         $assignment = SubscriptionAssignment::where('subscription_id', $activeSub->id)
             ->where('user_id', $data['user_id'])

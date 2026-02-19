@@ -345,6 +345,9 @@ class PaymentController extends Controller
         $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], ['completed_at' => now()]);
         $purchase->save();
 
+        // Provision institution package subscription when package purchases are confirmed.
+        $this->provisionInstitutionPackageFromPurchase($purchase, $txId);
+
         $amount = $purchase->amount ?? 0;
         $platformSharePct = $this->getPlatformSharePercentage();
         $totalQuizMasterShare = round(($amount * (100.0 - $platformSharePct)) / 100.0, 2);
@@ -408,6 +411,82 @@ class PaymentController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Create/refresh an institution subscription when a package one-off purchase succeeds.
+     */
+    private function provisionInstitutionPackageFromPurchase(\App\Models\OneOffPurchase $purchase, string $txId): void
+    {
+        if ($purchase->item_type !== 'package') {
+            return;
+        }
+
+        try {
+            $package = Package::find($purchase->item_id);
+            if (!$package || ($package->audience ?? 'quizee') !== 'institution') {
+                Log::warning('[Payment] Package purchase ignored: invalid institution package', [
+                    'purchase_id' => $purchase->id,
+                    'package_id' => $purchase->item_id,
+                ]);
+                return;
+            }
+
+            $meta = is_array($purchase->gateway_meta) ? $purchase->gateway_meta : [];
+            $institutionId = $meta['institution_id'] ?? null;
+            if (!$institutionId) {
+                Log::warning('[Payment] Package purchase ignored: missing institution_id', [
+                    'purchase_id' => $purchase->id,
+                ]);
+                return;
+            }
+
+            $institution = \App\Models\Institution::find($institutionId);
+            if (!$institution) {
+                Log::warning('[Payment] Package purchase ignored: institution not found', [
+                    'purchase_id' => $purchase->id,
+                    'institution_id' => $institutionId,
+                ]);
+                return;
+            }
+
+            $existingProvisioned = Subscription::where('owner_type', \App\Models\Institution::class)
+                ->where('owner_id', $institution->id)
+                ->where('gateway_meta->purchase_id', $purchase->id)
+                ->first();
+            if ($existingProvisioned) {
+                return;
+            }
+
+            Subscription::where('owner_type', \App\Models\Institution::class)
+                ->where('owner_id', $institution->id)
+                ->where('status', 'active')
+                ->update([
+                    'status' => 'cancelled',
+                    'ends_at' => now(),
+                ]);
+
+            Subscription::create([
+                'user_id' => $purchase->user_id,
+                'owner_type' => \App\Models\Institution::class,
+                'owner_id' => $institution->id,
+                'package_id' => $package->id,
+                'status' => 'active',
+                'gateway' => 'one_off_purchase',
+                'gateway_meta' => array_merge($meta, [
+                    'purchase_id' => $purchase->id,
+                    'tx' => $txId,
+                    'activated_at' => now()->toDateTimeString(),
+                ]),
+                'started_at' => now(),
+                'ends_at' => $package->duration_days ? now()->addDays($package->duration_days) : null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Payment] Failed provisioning institution package from purchase', [
+                'purchase_id' => $purchase->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

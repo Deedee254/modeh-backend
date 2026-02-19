@@ -601,13 +601,13 @@ class BattleController extends Controller
             ->where('status', 'confirmed')
             ->exists();
 
-        // User needs: subscription (personal or institution) OR one-off purchase
+        // User needs: active institution package OR one-off purchase
         $hasValidSubscription = $subValidation['allowed'] && $subValidation['subscription'];
         
         if (!$hasValidSubscription && !$hasOneOff) {
             return response()->json([
                 'ok' => false, 
-                'message' => $subValidation['message'] ?? 'Subscription or one-off purchase required'
+                'message' => $subValidation['message'] ?? 'Institution package or one-off purchase required'
             ], 403);
         }
 

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Subscription;
-use App\Models\DailyUsageTracking;
 use Illuminate\Support\Facades\Auth;
 
 class SubscriptionController extends Controller
@@ -14,12 +13,10 @@ class SubscriptionController extends Controller
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
-        
-        // Get personal subscriptions
-        $subs = Subscription::with('package')->where('user_id', $user->id)->orderBy('created_at', 'desc')->get();
-        $primarySub = $subs->first();
-        
-        // Get institution subscriptions if user belongs to institutions
+
+        $user->loadMissing('institutions');
+
+        // Institution package subscriptions for institutions the user belongs to.
         $institutionSubs = [];
         if ($user->institutions && $user->institutions->count() > 0) {
             foreach ($user->institutions as $institution) {
@@ -36,23 +33,14 @@ class SubscriptionController extends Controller
                         'package_id' => $instSub->package_id,
                         'package' => $instSub->package,
                         'status' => $instSub->status,
+                        'renews_at' => $instSub->ends_at,
                         'limit' => self::getPackageLimit($instSub->package, 'quiz_results'),
                         'type' => 'institution'
                     ];
                 }
             }
         }
-        
-        // Calculate remaining for personal subscription
-        if ($primarySub) {
-            $limit = self::getPackageLimit($primarySub->package, 'quiz_results');
-            $used = $this->countTodayUsage($user->id);
-            $primarySub->limit = $limit;
-            $primarySub->used = $used;
-            $primarySub->remaining = $limit ? max(0, $limit - $used) : null;
-            $primarySub->type = 'personal';
-        }
-        
+
         // Calculate remaining for institution subscriptions
         foreach ($institutionSubs as &$instSub) {
             $limit = $instSub['limit'];
@@ -60,10 +48,12 @@ class SubscriptionController extends Controller
             $instSub['used'] = $used;
             $instSub['remaining'] = $limit ? max(0, $limit - $used) : null;
         }
-        
+
+        $primarySub = $institutionSubs[0] ?? null;
+
         return response()->json([
             'ok' => true,
-            'subscriptions' => $subs,
+            'subscriptions' => $institutionSubs,
             'subscription' => $primarySub,
             'institution_subscriptions' => $institutionSubs,
             'has_institution' => count($institutionSubs) > 0
@@ -110,7 +100,21 @@ class SubscriptionController extends Controller
     public function status(Request $request, Subscription $subscription)
     {
         $user = Auth::user();
-        if (!$user || $subscription->user_id !== $user->id) return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+
+        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+
+        $isOwner = ((int) $subscription->user_id === (int) $user->id);
+        $isInstitutionMember = false;
+        if ($subscription->owner_type === \App\Models\Institution::class) {
+            $isInstitutionMember = $user->institutions()
+                ->where('institutions.id', $subscription->owner_id)
+                ->exists();
+        }
+
+        if (!$isOwner && !$isInstitutionMember) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         return response()->json(['ok' => true, 'subscription' => $subscription, 'status' => $subscription->status]);
     }
 }

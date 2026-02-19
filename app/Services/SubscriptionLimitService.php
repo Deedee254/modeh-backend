@@ -4,19 +4,16 @@ namespace App\Services;
 
 use App\Models\Subscription;
 use App\Models\Institution;
-use App\Models\User;
 
 /**
  * Service for managing subscription limits and access control
- * Handles subscription validation, limit checking, and access prioritization
- * (institution subscriptions take precedence over personal ones)
+ * Handles institution package validation and daily limits.
  */
 class SubscriptionLimitService
 {
     /**
-     * Get the active subscription for a user (personal or institution)
-     * If context is provided (subscription_type, institution_id), it will try to return that specific one.
-     * Otherwise, institution subscriptions take precedence if user is part of any institution.
+     * Get active institution subscription for a user.
+     * If context includes institution_id, that institution is preferred.
      *
      * @param User $user The user to get the active subscription for
      * @param array $context Optional parameters for specific subscription selection
@@ -24,11 +21,9 @@ class SubscriptionLimitService
      */
     public static function getActiveSubscription($user, $context = [])
     {
-        $preferredType = $context['subscription_type'] ?? null;
         $institutionId = $context['institution_id'] ?? null;
 
-        // If institution is preferred, try to find it first
-        if ($preferredType === 'institution' && $institutionId) {
+        if ($institutionId) {
             $instSub = Subscription::where('owner_type', Institution::class)
                 ->where('owner_id', $institutionId)
                 ->where('status', 'active')
@@ -41,22 +36,7 @@ class SubscriptionLimitService
             if ($instSub) {
                 return $instSub;
             }
-        }
-
-        // If personal is preferred, try to find it first
-        if ($preferredType === 'personal') {
-            $personalSub = Subscription::where('user_id', $user->id)
-                ->where('owner_type', User::class)
-                ->where('status', 'active')
-                ->where(function ($q) {
-                    $now = now();
-                    $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-                })
-                ->orderByDesc('started_at')
-                ->first();
-            if ($personalSub) {
-                return $personalSub;
-            }
+            return null;
         }
 
         // Default behavior: Check for institution subscriptions first (they take precedence)
@@ -77,15 +57,7 @@ class SubscriptionLimitService
             }
         }
         
-        // Fall back to personal subscription
-        return Subscription::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where(function ($q) {
-                $now = now();
-                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-            })
-            ->orderByDesc('started_at')
-            ->first();
+        return null;
     }
     
     /**
@@ -160,7 +132,7 @@ class SubscriptionLimitService
         if (!$activeSub) {
             return [
                 'allowed' => false,
-                'reason' => 'No active subscription',
+                'reason' => 'No active institution package',
                 'limit' => null,
                 'used' => 0,
                 'remaining' => 0
@@ -191,14 +163,14 @@ class SubscriptionLimitService
     }
     
     /**
-     * Get active subscription details including type (personal or institution)
+     * Get active subscription details.
      *
      * @param User $user The user to get subscription details for
      * @param array $context Optional parameters for subscription selection
      * @return array{subscription_id: int, subscription_type: string, limit: int|null, used: int, remaining: int|null}|null
      *         Array containing subscription details if active, null otherwise:
      *         - subscription_id: The subscription ID
-     *         - subscription_type: 'personal' or 'institution'
+     *         - subscription_type: 'institution'
      *         - limit: Daily limit value (null if unlimited)
      *         - used: Number of results used today
      *         - remaining: Number of results remaining today (null if unlimited)
@@ -211,13 +183,12 @@ class SubscriptionLimitService
             return null;
         }
         
-        $type = $activeSub->owner_type === Institution::class ? 'institution' : 'personal';
         $limit = self::getPackageLimit($activeSub->package, 'quiz_results');
         $used = self::countTodayUsage($user->id, $activeSub->id);
         
         return [
             'subscription_id' => $activeSub->id,
-            'subscription_type' => $type,
+            'subscription_type' => 'institution',
             'limit' => $limit,
             'used' => $used,
             'remaining' => $limit ? max(0, $limit - $used) : null
@@ -225,8 +196,7 @@ class SubscriptionLimitService
     }
 
     /**
-     * Validate subscription access with helpful error messages
-     * Checks both institution and personal subscriptions with proper precedence
+     * Validate institution package access with helpful error messages.
      *
      * @param User $user The user to validate subscription for
      * @param array $context Optional parameters for subscription selection
@@ -234,11 +204,9 @@ class SubscriptionLimitService
      */
     public static function validateSubscriptionAccess($user, $context = [])
     {
-        $preferredType = $context['subscription_type'] ?? null;
         $institutionId = $context['institution_id'] ?? null;
 
-        // If institution is preferred, check it first
-        if ($preferredType === 'institution' && $institutionId) {
+        if ($institutionId) {
             $instSub = Subscription::where('owner_type', Institution::class)
                 ->where('owner_id', $institutionId)
                 ->where('status', 'active')
@@ -257,28 +225,12 @@ class SubscriptionLimitService
                     'subscription' => $instSub
                 ];
             }
-        }
-
-        // If personal is preferred, check it first
-        if ($preferredType === 'personal') {
-            $personalSub = Subscription::where('user_id', $user->id)
-                ->where('owner_type', User::class)
-                ->where('status', 'active')
-                ->where(function ($q) {
-                    $now = now();
-                    $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-                })
-                ->orderByDesc('started_at')
-                ->first();
-            
-            if ($personalSub) {
-                return [
-                    'allowed' => true,
-                    'message' => null,
-                    'subscription_type' => 'personal',
-                    'subscription' => $personalSub
-                ];
-            }
+            return [
+                'allowed' => false,
+                'message' => "Your institution's package is inactive or missing. Please contact your institution administrator.",
+                'subscription_type' => 'institution',
+                'subscription' => null
+            ];
         }
 
         // Default behavior: Check institution subscriptions first (they take precedence if available)
@@ -321,47 +273,11 @@ class SubscriptionLimitService
             }
         }
         
-        // Fall back to personal subscription
-        $personalSub = Subscription::where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where(function ($q) {
-                $now = now();
-                $q->whereNull('ends_at')->orWhere('ends_at', '>', $now);
-            })
-            ->orderByDesc('started_at')
-            ->first();
-        
-        if ($personalSub) {
-            return [
-                'allowed' => true,
-                'message' => null,
-                'subscription_type' => 'personal',
-                'subscription' => $personalSub
-            ];
-        }
-
-        // Check if personal subscription exists but is expired
-        $expiredPersonalSub = Subscription::where('user_id', $user->id)
-            ->where('owner_type', User::class)
-            ->where('status', 'active')
-            ->where('ends_at', '<=', now())
-            ->orderByDesc('ends_at')
-            ->first();
-        
-        if ($expiredPersonalSub) {
-            return [
-                'allowed' => false,
-                'message' => 'Your subscription has expired. Please renew your subscription to continue.',
-                'subscription_type' => 'personal',
-                'subscription' => null
-            ];
-        }
-
-        // No subscription at all
+        // No institution package at all
         return [
             'allowed' => false,
-            'message' => 'You need an active subscription to access this feature.',
-            'subscription_type' => null,
+            'message' => 'You need an active institution package to access this feature.',
+            'subscription_type' => 'institution',
             'subscription' => null
         ];
     }

@@ -20,8 +20,8 @@ class GuestQuizController extends Controller
      */
     public function getQuestions(Quiz $quiz)
     {
-        // Check if quiz is premium/paid - guests can only take free quizzes
-        if ($quiz->is_paid) {
+        // Guests can only take public free quizzes (never institutional / paid).
+        if ($quiz->is_paid || $quiz->is_institutional) {
             return response()->json([
                 'error' => 'This quiz requires authentication. Please login or register to continue.',
                 'code' => 'PREMIUM_QUIZ'
@@ -98,8 +98,8 @@ class GuestQuizController extends Controller
      */
     public function submit(Request $request, Quiz $quiz)
     {
-        // Check if quiz is premium/paid
-        if ($quiz->is_paid) {
+        // Guests can only submit public free quizzes.
+        if ($quiz->is_paid || $quiz->is_institutional) {
             return response()->json([
                 'error' => 'This quiz requires authentication. Please login or register to continue.',
                 'code' => 'PREMIUM_QUIZ'
@@ -168,6 +168,13 @@ class GuestQuizController extends Controller
      */
     public function markQuestion(Request $request, Quiz $quiz)
     {
+        if ($quiz->is_paid || $quiz->is_institutional) {
+            return response()->json([
+                'error' => 'This quiz requires authentication. Please login or register to continue.',
+                'code' => 'PREMIUM_QUIZ'
+            ], 403);
+        }
+
         $v = Validator::make($request->all(), [
             'question_id' => 'required|integer',
             'selected' => 'nullable',

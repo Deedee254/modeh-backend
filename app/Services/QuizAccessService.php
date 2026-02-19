@@ -57,15 +57,14 @@ class QuizAccessService
                 ];
             }
 
-            // Non-member must pay
-            $price = (float) ($quiz->one_off_price ?? 0);
+            // Non-members cannot access institutional assessments.
             return [
-                'can_access' => true,
+                'can_access' => false,
                 'is_free' => false,
                 'institution_member' => false,
                 'institution_id' => $quiz->institution_id,
-                'price' => $price,
-                'message' => "Pay-per-attempt required: {$price}"
+                'price' => null,
+                'message' => 'Only members of the assigned institution can take this assessment.'
             ];
         }
 
@@ -83,7 +82,7 @@ class QuizAccessService
         }
 
         // Paid public quiz
-        $price = (float) ($quiz->one_off_price ?? 0);
+        $price = (float) ($quiz->one_off_price ?? self::getDefaultQuizPrice());
         return [
             'can_access' => true,
             'is_free' => false,
@@ -168,6 +167,38 @@ class QuizAccessService
             ]);
         } catch (\Throwable $e) {
             // Ignore logging failures
+        }
+    }
+
+    /**
+     * Get the global default one-off price for quizzes.
+     * Falls back to 0 if no setting is configured.
+     * 
+     * @return float
+     */
+    private static function getDefaultQuizPrice(): float
+    {
+        try {
+            $setting = \App\Models\PricingSetting::singleton();
+            return (float) ($setting->default_quiz_one_off_price ?? 0);
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Get the global default one-off price for battles.
+     * Falls back to 0 if no setting is configured.
+     * 
+     * @return float
+     */
+    private static function getDefaultBattlePrice(): float
+    {
+        try {
+            $setting = \App\Models\PricingSetting::singleton();
+            return (float) ($setting->default_battle_one_off_price ?? 0);
+        } catch (\Throwable $e) {
+            return 0;
         }
     }
 }

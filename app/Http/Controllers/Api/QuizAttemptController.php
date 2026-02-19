@@ -336,6 +336,16 @@ class QuizAttemptController extends Controller
         // Log the access check
         QuizAccessService::logAccess($quiz, $user, $access);
 
+        // Access denied regardless of payment (e.g., non-member on institutional quiz)
+        if (!($access['can_access'] ?? false)) {
+            return [
+                'ok' => false,
+                'requires_payment' => false,
+                'message' => $access['message'] ?? 'Access denied',
+                'access_result' => $access,
+            ];
+        }
+
         // If free access, allow
         if ($access['is_free']) {
             return [
@@ -367,6 +377,36 @@ class QuizAttemptController extends Controller
             'ok' => true,
             'access_result' => $access,
         ];
+    }
+
+    /**
+     * Return access decision for authenticated quiz taker.
+     */
+    public function access(Request $request, Quiz $quiz)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $access = QuizAccessService::checkAccess($quiz, $user);
+        QuizAccessService::logAccess($quiz, $user, $access);
+
+        return response()->json($access, ($access['can_access'] ?? false) ? 200 : 403);
+    }
+
+    /**
+     * Validate access in the same shape used by submit/start gating.
+     */
+    public function validateAccess(Request $request, Quiz $quiz)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        $result = $this->validateQuizAccess($quiz, $user);
+        return response()->json($result, ($result['ok'] ?? false) ? 200 : 403);
     }
 
     public function submit(Request $request, Quiz $quiz)
@@ -551,6 +591,12 @@ class QuizAttemptController extends Controller
         $user = $request->user();
         if (!$user)
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+
+        // Enforce the same quiz access guard before creating server-side attempts.
+        $accessValidation = $this->validateQuizAccess($quiz, $user);
+        if (!($accessValidation['ok'] ?? false)) {
+            return response()->json($accessValidation, 403);
+        }
 
         $payload = $request->validate([
             'meta' => 'nullable|array',

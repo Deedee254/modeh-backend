@@ -165,6 +165,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::put('/institutions/{institution}', [\App\Http\Controllers\Api\InstitutionController::class, 'update']);
     // Institution member management (institution manager only)
     Route::get('/institutions/{institution}/members', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'index']);
+    Route::get('/institutions/{institution}/subscription', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'subscription']);
     Route::get('/institutions/{institution}/requests', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'requests']);
     Route::get('/institutions/{institution}/members/invites', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'listInvites']);
     Route::post('/institutions/{institution}/members/accept', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'accept']);
@@ -246,6 +247,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/quizzes/{quiz}/likers', [\App\Http\Controllers\Api\InteractionController::class, 'quizLikers']);
 
     // quizee quiz take endpoints (show quiz without answers, submit answers)
+    Route::get('/quizzes/{quiz}/access', [\App\Http\Controllers\Api\QuizAttemptController::class, 'access']);
+    Route::post('/quizzes/{quiz}/validate-access', [\App\Http\Controllers\Api\QuizAttemptController::class, 'validateAccess']);
     Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\QuizAttemptController::class, 'submit']);
     // server-side start attempt (creates draft attempt with server started_at)
     Route::post('/quizzes/{quiz}/start', [\App\Http\Controllers\Api\QuizAttemptController::class, 'startAttempt']);

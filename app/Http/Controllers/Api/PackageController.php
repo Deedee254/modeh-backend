@@ -90,53 +90,61 @@ class PackageController extends Controller
      */
     private function resolveSubscriptionOwner(Request $request, $user): array
     {
-        $ownerType = \App\Models\User::class;
-        $ownerId = $user->id;
+        $requestOwnerType = $request->input('owner_type', 'institution');
+        if ($requestOwnerType !== 'institution' && !\str_contains((string) $requestOwnerType, 'Institution')) {
+            return [
+                'error' => ['ok' => false, 'message' => 'Only institution package subscriptions are allowed'],
+                'status' => 422
+            ];
+        }
 
-        $requestOwnerType = $request->input('owner_type');
-        if ($requestOwnerType === 'institution' || ($requestOwnerType && \str_contains($requestOwnerType, 'Institution'))) {
-            $institutionId = $request->input('owner_id');
-            if (!$institutionId) {
-                return [
-                    'error' => ['ok' => false, 'message' => 'owner_id (institution id) required for institution subscription'],
-                    'status' => 422
-                ];
-            }
+        $institutionId = $request->input('owner_id');
 
-            // Find institution by ID or slug
+        $institution = null;
+        if ($institutionId) {
             $instQuery = \App\Models\Institution::query();
             if (\ctype_digit(\strval($institutionId))) {
                 $instQuery->where('id', (int)$institutionId);
             } else {
                 $instQuery->where('slug', $institutionId);
             }
-            
             $institution = $instQuery->first();
-            if (!$institution) {
-                return [
-                    'error' => ['ok' => false, 'message' => 'Institution not found'],
-                    'status' => 404
-                ];
-            }
-
-            // Verify user is institution manager
-            $isManager = $institution->users()
-                ->where('users.id', $user->id)
+        } else {
+            // If owner_id is omitted, infer from institutions the user manages.
+            $managed = $user->institutions()
                 ->wherePivot('role', 'institution-manager')
-                ->exists();
-            
-            if (!$isManager) {
+                ->get(['institutions.id']);
+            if ($managed->count() === 1) {
+                $institution = \App\Models\Institution::find($managed->first()->id);
+            } elseif ($managed->count() > 1) {
                 return [
-                    'error' => ['ok' => false, 'message' => 'Forbidden: must be an institution-manager to subscribe on behalf of institution'],
-                    'status' => 403
+                    'error' => ['ok' => false, 'message' => 'owner_id is required when managing multiple institutions'],
+                    'status' => 422
                 ];
             }
-
-            $ownerType = \App\Models\Institution::class;
-            $ownerId = $institution->id;
         }
 
-        return [$ownerType, $ownerId];
+        if (!$institution) {
+            return [
+                'error' => ['ok' => false, 'message' => 'Institution not found'],
+                'status' => 404
+            ];
+        }
+
+        // Verify user is institution manager
+        $isManager = $institution->users()
+            ->where('users.id', $user->id)
+            ->wherePivot('role', 'institution-manager')
+            ->exists();
+
+        if (!$isManager) {
+            return [
+                'error' => ['ok' => false, 'message' => 'Forbidden: must be an institution-manager to subscribe on behalf of institution'],
+                'status' => 403
+            ];
+        }
+
+        return [\App\Models\Institution::class, $institution->id];
     }
 
     /**
@@ -145,13 +153,9 @@ class PackageController extends Controller
     private function validatePackageAudience(Package $package, string $ownerType)
     {
         $packageAudience = $package->audience ?? 'quizee';
-        
+
         if ($ownerType === \App\Models\Institution::class && $packageAudience !== 'institution') {
             return ['ok' => false, 'message' => 'Package is not available for institutions'];
-        }
-        
-        if ($ownerType === \App\Models\User::class && $packageAudience !== 'quizee') {
-            return ['ok' => false, 'message' => 'Package is not available for users'];
         }
 
         return true;

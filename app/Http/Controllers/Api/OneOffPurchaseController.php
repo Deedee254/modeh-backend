@@ -21,12 +21,21 @@ class OneOffPurchaseController extends Controller
         if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
 
         $data = $request->validate([
-            'item_type' => 'required|in:quiz,battle,tournament',
+            'item_type' => 'required|in:quiz,battle,tournament,package',
             'item_id' => 'required',
             'amount' => 'nullable|numeric',
             'phone' => 'nullable|string',
             'gateway' => 'nullable|string',
+            'institution_id' => 'nullable',
         ]);
+
+        if ($data['item_type'] === 'package') {
+            $institutionValidation = $this->resolveInstitutionForPackagePurchase($request, $user);
+            if (!$institutionValidation['ok']) {
+                return response()->json(['ok' => false, 'message' => $institutionValidation['message']], $institutionValidation['status']);
+            }
+            $data['institution_id'] = $institutionValidation['institution_id'];
+        }
 
         $resolvedAmount = $this->resolveOneOffAmount($data['item_type'], $data['item_id']);
         if ($resolvedAmount === null || $resolvedAmount <= 0) {
@@ -62,7 +71,10 @@ class OneOffPurchaseController extends Controller
             'amount' => $resolvedAmount,
             'status' => 'pending',
             'gateway' => $gateway,
-            'gateway_meta' => ['phone' => $phone],
+            'gateway_meta' => array_filter([
+                'phone' => $phone,
+                'institution_id' => $data['institution_id'] ?? null,
+            ], fn($v) => $v !== null && $v !== ''),
             'meta' => [],
         ]);
 
@@ -120,19 +132,68 @@ class OneOffPurchaseController extends Controller
 
     private function resolveOneOffAmount(string $type, $itemId): ?float
     {
+        try {
+            $pricingSetting = \App\Models\PricingSetting::singleton();
+        } catch (\Throwable $e) {
+            $pricingSetting = null;
+        }
+
         switch ($type) {
             case 'quiz':
                 $quiz = Quiz::find($itemId);
-                return $quiz ? (float) ($quiz->one_off_price ?? 0) : null;
+                return $quiz ? (float) ($quiz->one_off_price ?? ($pricingSetting->default_quiz_one_off_price ?? 0)) : null;
             case 'battle':
                 $battle = Battle::find($itemId);
-                return $battle ? (float) ($battle->one_off_price ?? 0) : null;
+                return $battle ? (float) ($battle->one_off_price ?? ($pricingSetting->default_battle_one_off_price ?? 0)) : null;
             case 'tournament':
                 $tournament = Tournament::find($itemId);
                 return $tournament ? (float) ($tournament->entry_fee ?? 0) : null;
+            case 'package':
+                $package = \App\Models\Package::find($itemId);
+                if (!$package || ($package->audience ?? 'quizee') !== 'institution') return null;
+                return (float) ($package->price ?? 0);
             default:
                 return null;
         }
+    }
+
+    private function resolveInstitutionForPackagePurchase(Request $request, $user): array
+    {
+        $institutionId = $request->input('institution_id');
+        $institution = null;
+
+        if ($institutionId) {
+            $instQuery = \App\Models\Institution::query();
+            if (\ctype_digit(\strval($institutionId))) {
+                $instQuery->where('id', (int) $institutionId);
+            } else {
+                $instQuery->where('slug', $institutionId);
+            }
+            $institution = $instQuery->first();
+        } else {
+            $managed = $user->institutions()
+                ->wherePivot('role', 'institution-manager')
+                ->get(['institutions.id']);
+            if ($managed->count() === 1) {
+                $institution = \App\Models\Institution::find($managed->first()->id);
+            } elseif ($managed->count() > 1) {
+                return ['ok' => false, 'status' => 422, 'message' => 'institution_id is required when managing multiple institutions'];
+            }
+        }
+
+        if (!$institution) {
+            return ['ok' => false, 'status' => 404, 'message' => 'Institution not found'];
+        }
+
+        $isManager = $institution->users()
+            ->where('users.id', $user->id)
+            ->wherePivot('role', 'institution-manager')
+            ->exists();
+        if (!$isManager) {
+            return ['ok' => false, 'status' => 403, 'message' => 'Only institution managers can purchase institution packages'];
+        }
+
+        return ['ok' => true, 'institution_id' => $institution->id];
     }
 
     public function show(Request $request, $purchaseId)
