@@ -18,7 +18,7 @@ class PricingSettingResource extends Resource
     protected static ?string $model = PricingSetting::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-tag';
-    protected static ?string $navigationGroup = 'Payments & Subscriptions';
+    protected static \UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
     protected static ?int $navigationSort = 2;
     protected static ?string $label = 'Default Pricing';
     protected static ?string $pluralLabel = 'Default Pricing';
