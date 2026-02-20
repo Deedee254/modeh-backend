@@ -260,6 +260,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/quiz-attempts/{attempt}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'showAttempt']);
     // Review attempt (returns per-question details to the attempt owner)
     Route::get('/quiz-attempts/{attempt}/review', [\App\Http\Controllers\Api\QuizAttemptController::class, 'reviewAttempt']);
+    // Check if attempt results are accessible (or requires payment)
+    Route::get('/quiz-attempts/{attempt}/access', [\App\Http\Controllers\Api\QuizAttemptController::class, 'checkAttemptAccess']);
     // List authenticated user's quiz attempts (quizee)
     Route::get('/quiz-attempts', [\App\Http\Controllers\Api\QuizAttemptController::class, 'index']);
     // Aggregated quiz stats for dashboard

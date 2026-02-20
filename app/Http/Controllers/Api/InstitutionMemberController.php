@@ -8,6 +8,7 @@ use App\Models\Institution;
 use App\Models\User;
 use App\Models\Subscription;
 use App\Models\SubscriptionAssignment;
+use App\Services\InstitutionPackageUsageService;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
@@ -238,6 +239,17 @@ class InstitutionMemberController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+            
+            // Record seat usage when new member is added
+            try {
+                InstitutionPackageUsageService::recordSeatUsage($institution, $u);
+                Log::info('[Institution] Seat usage recorded for new member', [
+                    'institution_id' => $institution->id,
+                    'user_id' => $u->id,
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('[Institution] Failed to record seat usage for new member: ' . $e->getMessage());
+            }
         }
 
         // Mark user's profile as verified with this institution

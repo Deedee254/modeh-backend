@@ -777,6 +777,20 @@ class PaymentController extends Controller
             $this->creditWallet($quizMasterId, $quizMasterShare);
         }
 
+        // Mark quiz attempt as paid if one was specified in the purchase
+        if (!empty($purchase->meta['attempt_id'])) {
+            $attempt = \App\Models\QuizAttempt::find($purchase->meta['attempt_id']);
+            if ($attempt && $attempt->user_id === $purchase->user_id && $attempt->quiz_id === $purchase->item_id) {
+                $attempt->update(['paid_for' => true]);
+                Log::info('[Payment] Quiz attempt marked as paid', [
+                    'attempt_id' => $attempt->id,
+                    'user_id' => $purchase->user_id,
+                    'quiz_id' => $purchase->item_id,
+                    'purchase_id' => $purchase->id,
+                ]);
+            }
+        }
+
         // Handle affiliate commission if user was referred
         $this->handleAffiliateCommission($purchase->user_id, $amount, $txId);
     }

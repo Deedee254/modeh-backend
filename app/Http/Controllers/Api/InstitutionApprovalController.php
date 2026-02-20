@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Institution;
 use App\Models\InstitutionApprovalRequest;
+use App\Services\InstitutionPackageUsageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class InstitutionApprovalController extends Controller
 {
@@ -55,6 +57,20 @@ class InstitutionApprovalController extends Controller
                 'role' => $approvalRequest->profile_type,
                 'status' => 'active',
             ]);
+            
+            // Record seat usage when approved user is added
+            try {
+                $approvedUser = \App\Models\User::find($approvalRequest->user_id);
+                if ($approvedUser) {
+                    InstitutionPackageUsageService::recordSeatUsage($institution, $approvedUser);
+                    Log::info('[Institution] Seat usage recorded for approved member', [
+                        'institution_id' => $institution->id,
+                        'user_id' => $approvalRequest->user_id,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('[Institution] Failed to record seat usage for approved member: ' . $e->getMessage());
+            }
         }
 
         return response()->json([

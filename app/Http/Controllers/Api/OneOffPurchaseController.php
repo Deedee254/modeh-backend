@@ -27,6 +27,7 @@ class OneOffPurchaseController extends Controller
             'phone' => 'nullable|string',
             'gateway' => 'nullable|string',
             'institution_id' => 'nullable',
+            'attempt_id' => 'nullable|integer',  // Quiz attempt ID when paying for results
         ]);
 
         if ($data['item_type'] === 'package') {
@@ -75,7 +76,9 @@ class OneOffPurchaseController extends Controller
                 'phone' => $phone,
                 'institution_id' => $data['institution_id'] ?? null,
             ], fn($v) => $v !== null && $v !== ''),
-            'meta' => [],
+            'meta' => array_filter([
+                'attempt_id' => $data['attempt_id'] ?? null,
+            ], fn($v) => $v !== null),
         ]);
 
         // initiate mpesa push via MpesaService

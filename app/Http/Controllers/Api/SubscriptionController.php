@@ -7,8 +7,19 @@ use Illuminate\Http\Request;
 use App\Models\Subscription;
 use Illuminate\Support\Facades\Auth;
 
+/**
+ * SubscriptionController
+ * 
+ * Handles institution package subscriptions.
+ * NOTE: Individual quizees do NOT have subscriptions - they use one-off purchases.
+ * Only institution members have access via institution package subscriptions.
+ */
 class SubscriptionController extends Controller
 {
+    /**
+     * Get institution package subscriptions for the authenticated user
+     * Returns subscriptions for all institutions the user belongs to
+     */
     public function mine(Request $request)
     {
         $user = Auth::user();

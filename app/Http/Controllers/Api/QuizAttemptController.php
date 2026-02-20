@@ -915,17 +915,33 @@ class QuizAttemptController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
 
         $perPage = max(1, (int) $request->get('per_page', 10));
-        $q = QuizAttempt::query()->where('user_id', $user->id)->orderBy('created_at', 'desc');
+        
+        $q = QuizAttempt::query()
+            ->where('user_id', $user->id)
+            ->with(['quiz:id,title,one_off_price,is_paid'])
+            ->orderBy('created_at', 'desc');
+        
         $data = $q->paginate($perPage);
 
-        // map attempts to a simple shape
+        // map attempts to a simple shape with payment and access info
         $data->getCollection()->transform(function ($a) {
             return [
                 'id' => $a->id,
                 'quiz_id' => $a->quiz_id,
+                'quiz' => [
+                    'id' => $a->quiz->id,
+                    'title' => $a->quiz->title,
+                    'is_paid' => $a->quiz->is_paid,
+                    'one_off_price' => $a->quiz->one_off_price,
+                ],
                 'score' => $a->score,
                 'points_earned' => $a->points_earned ?? 0,
+                'paid_for' => (bool) $a->paid_for,
+                'institution_access' => (bool) $a->institution_access,
+                'institution_id' => $a->institution_id,
+                'total_time_seconds' => $a->total_time_seconds,
                 'created_at' => $a->created_at,
+                'is_locked' => ($a->paid_for === false) && ($a->quiz->is_paid || (!empty($a->quiz->one_off_price) && $a->quiz->one_off_price > 0)),
             ];
         });
 
@@ -1234,5 +1250,84 @@ class QuizAttemptController extends Controller
             Log::error('Failed to sync guest attempt: ' . $e->getMessage());
             return response()->json(['ok' => false, 'message' => 'Failed to sync attempt'], 500);
         }
+    }
+
+    /**
+     * Check if user has access to view quiz attempt results
+     * Used when user wants to view results of a previous attempt
+     * 
+     * @param Request $request
+     * @param QuizAttempt $attempt
+     * @return \Illuminate\Http\JsonResponse
+     * 
+     * Route: GET /api/quiz-attempts/{attempt}/access
+     */
+    public function checkAttemptAccess(Request $request, QuizAttempt $attempt)
+    {
+        $user = $request->user();
+        
+        // Verify ownership
+        if (!$user || $attempt->user_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $quiz = $attempt->quiz;
+        if (!$quiz) {
+            return response()->json(['message' => 'Quiz not found'], 404);
+        }
+
+        // Determine if results are locked
+        // Results are locked if: quiz is paid AND attempt hasn't been paid for yet
+        $isLocked = ($attempt->paid_for === false) && 
+                    ($quiz->is_paid || (!empty($quiz->one_off_price) && $quiz->one_off_price > 0));
+        
+        if (!$isLocked) {
+            // Results are accessible
+            return response()->json([
+                'can_view' => true,
+                'locked' => false,
+                'attempt_id' => $attempt->id,
+                'quiz_id' => $quiz->id,
+            ]);
+        }
+
+        // Results are locked - check if user has already paid for this quiz
+        $existingPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
+            ->where('item_type', 'quiz')
+            ->where('item_id', $quiz->id)
+            ->where('status', 'confirmed')
+            ->first();
+
+        if ($existingPurchase) {
+            // User has paid for this quiz - mark this attempt as paid
+            $attempt->update(['paid_for' => true]);
+            
+            return response()->json([
+                'can_view' => true,
+                'locked' => false,
+                'attempt_id' => $attempt->id,
+                'quiz_id' => $quiz->id,
+                'message' => 'Access granted via existing purchase',
+            ]);
+        }
+
+        // Results are locked and not paid - return payment info
+        $price = (float) ($quiz->one_off_price ?? 0);
+        
+        return response()->json([
+            'can_view' => false,
+            'locked' => true,
+            'attempt_id' => $attempt->id,
+            'quiz_id' => $quiz->id,
+            'requires_payment' => true,
+            'price' => $price,
+            'currency' => 'KES',
+            'quiz' => [
+                'id' => $quiz->id,
+                'title' => $quiz->title,
+                'one_off_price' => $quiz->one_off_price,
+            ],
+            'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
+        ], 403);
     }
 }

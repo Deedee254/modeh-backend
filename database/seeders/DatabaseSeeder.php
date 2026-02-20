@@ -31,7 +31,6 @@ class DatabaseSeeder extends Seeder
             PaymentSettingsSeeder::class,
             PackageSeeder::class,
             InstitutionManagerSeeder::class,
-            AssignSubscriptionsSeeder::class,
             // Sponsors and Testimonials
             SponsorSeeder::class,
             TestimonialSeeder::class,
