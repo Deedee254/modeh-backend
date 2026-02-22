@@ -138,6 +138,10 @@ class PaymentController extends Controller
         Log::info('[Payment] MPESA callback received', [
             'tx' => $checkoutId,
             'status' => $status,
+            'result_code' => $payload['parsed_mpesa']['result_code'] ?? $resultCode,
+            'result_desc' => $payload['parsed_mpesa']['result_desc'] ?? $resultDesc,
+            'mpesa_receipt' => $payload['parsed_mpesa']['mpesa_receipt'] ?? null,
+            'phone' => $this->maskPhone($payload['parsed_mpesa']['phone'] ?? null),
             'request_ip' => $request->ip(),
             'timestamp' => now(),
         ]);
@@ -169,6 +173,7 @@ class PaymentController extends Controller
             }
 
             if ($sub) {
+                $seedTraceId = is_array($sub->gateway_meta) ? ($sub->gateway_meta['trace_id'] ?? null) : null;
                 $mpesaTx = MpesaTransaction::firstOrCreate(
                     ['checkout_request_id' => $checkoutId],
                     [
@@ -179,7 +184,10 @@ class PaymentController extends Controller
                         'status' => 'pending',
                         'billable_type' => Subscription::class,
                         'billable_id' => $sub->id,
-                        'raw_response' => $payload['parsed_mpesa']['raw'] ?? $payload,
+                        'raw_response' => array_filter([
+                            'trace_id' => $seedTraceId,
+                            'callback' => $payload['parsed_mpesa']['raw'] ?? $payload,
+                        ], fn ($v) => $v !== null),
                     ]
                 );
                 if (!$mpesaTx->billable_type || !$mpesaTx->billable_id) {
@@ -189,6 +197,7 @@ class PaymentController extends Controller
                     ]);
                 }
             } elseif ($purchase) {
+                $seedTraceId = is_array($purchase->gateway_meta) ? ($purchase->gateway_meta['trace_id'] ?? null) : null;
                 $mpesaTx = MpesaTransaction::firstOrCreate(
                     ['checkout_request_id' => $checkoutId],
                     [
@@ -199,7 +208,10 @@ class PaymentController extends Controller
                         'status' => 'pending',
                         'billable_type' => OneOffPurchase::class,
                         'billable_id' => $purchase->id,
-                        'raw_response' => $payload['parsed_mpesa']['raw'] ?? $payload,
+                        'raw_response' => array_filter([
+                            'trace_id' => $seedTraceId,
+                            'callback' => $payload['parsed_mpesa']['raw'] ?? $payload,
+                        ], fn ($v) => $v !== null),
                     ]
                 );
                 if (!$mpesaTx->billable_type || !$mpesaTx->billable_id) {
@@ -210,6 +222,8 @@ class PaymentController extends Controller
                 }
             }
         }
+
+        $traceId = $this->resolveTraceId($mpesaTx, $sub, $purchase);
 
         if ($mpesaTx) {
             $parsed = $payload['parsed_mpesa'] ?? [];
@@ -226,6 +240,7 @@ class PaymentController extends Controller
                 $received = (float) $parsed['amount'];
                 if ($received > 0 && abs($received - $expectedAmount) > 0.01) {
                     Log::warning('[Payment] Amount mismatch on callback', [
+                        'trace_id' => $traceId,
                         'checkout_request_id' => $checkoutId,
                         'expected' => $expectedAmount,
                         'received' => $received,
@@ -247,6 +262,7 @@ class PaymentController extends Controller
                     ->exists();
                 if ($dup) {
                     Log::warning('[Payment] Duplicate M-PESA receipt detected', [
+                        'trace_id' => $traceId,
                         'receipt' => $receipt,
                         'checkout_request_id' => $checkoutId,
                     ]);
@@ -254,12 +270,16 @@ class PaymentController extends Controller
                 }
             }
 
+            $existingRaw = is_array($mpesaTx->raw_response) ? $mpesaTx->raw_response : [];
+            if ($traceId) {
+                $existingRaw['trace_id'] = $traceId;
+            }
             $mpesaTx->update([
                 'result_code' => $parsed['result_code'] ?? $resultCode,
                 'result_desc' => $parsed['result_desc'] ?? $resultDesc,
                 'mpesa_receipt' => $receipt,
                 'transaction_date' => MpesaTransaction::parseTransactionDate($parsed['transaction_date'] ?? null),
-                'raw_response' => $parsed['raw'] ?? $payload,
+                'raw_response' => array_merge($existingRaw, ['callback' => $parsed['raw'] ?? $payload]),
                 'status' => $status === 'success' ? 'success' : ($status === 'cancelled' ? 'cancelled' : 'failed'),
             ]);
 
@@ -275,6 +295,7 @@ class PaymentController extends Controller
 
         if (!$sub && !$purchase) {
             Log::warning('[Payment] Callback TX not found in subscriptions or purchases', [
+                'trace_id' => $traceId,
                 'tx' => $checkoutId,
                 'status' => $status,
             ]);
@@ -283,6 +304,7 @@ class PaymentController extends Controller
 
         if ($purchase) {
             Log::info('[Payment] One-off purchase callback matched', [
+                'trace_id' => $traceId,
                 'purchase_id' => $purchase->id,
                 'tx' => $checkoutId,
                 'status' => $status,
@@ -302,6 +324,7 @@ class PaymentController extends Controller
         }
 
         Log::info('[Payment] Subscription callback matched', [
+            'trace_id' => $traceId,
             'subscription_id' => $sub->id,
             'user_id' => $sub->user_id,
             'tx' => $checkoutId,
@@ -331,6 +354,17 @@ class PaymentController extends Controller
      */
     private function handleOneOffPurchase(\App\Models\OneOffPurchase $purchase, string $txId, string $status)
     {
+        $traceId = $purchase->gateway_meta['trace_id'] ?? null;
+        Log::info('[Payment] One-off purchase processing', [
+            'trace_id' => $traceId,
+            'purchase_id' => $purchase->id,
+            'user_id' => $purchase->user_id,
+            'item_type' => $purchase->item_type,
+            'item_id' => $purchase->item_id,
+            'tx' => $txId,
+            'status' => $status,
+        ]);
+
         if ($status === 'success') {
             if ($purchase->status === 'confirmed' && \App\Models\Transaction::where('tx_id', $txId)->exists()) {
                 return response()->json(['ok' => true, 'skipped' => true]);
@@ -338,8 +372,15 @@ class PaymentController extends Controller
         }
 
         if ($status !== 'success') {
-            $purchase->status = 'cancelled';
+            $purchase->status = $status === 'cancelled' ? 'cancelled' : 'failed';
             $purchase->save();
+            Log::warning('[Payment] One-off purchase not successful', [
+                'trace_id' => $traceId,
+                'purchase_id' => $purchase->id,
+                'tx' => $txId,
+                'status' => $status,
+                'saved_status' => $purchase->status,
+            ]);
             return response()->json(['ok' => false]);
         }
 
@@ -1078,12 +1119,40 @@ class PaymentController extends Controller
     {
         $s = strtolower(trim($status));
         if ($resultCode !== null && $resultCode !== '') {
-            return ((int) $resultCode === 0) ? 'success' : 'failed';
+            $rc = (int) $resultCode;
+            if ($rc === 0) return 'success';
+            if ($rc === 1032) return 'cancelled';
+            return 'failed';
         }
         if (in_array($s, ['success', 'succeeded', 'ok'])) return 'success';
         if (in_array($s, ['cancelled', 'canceled'])) return 'cancelled';
         if (in_array($s, ['failed', 'failure', 'error'])) return 'failed';
         return $s ?: 'failed';
+    }
+
+    private function maskPhone(?string $phone): ?string
+    {
+        if (!$phone) return null;
+        $value = preg_replace('/\s+/', '', (string) $phone);
+        if (strlen($value) <= 5) return $value;
+        return substr($value, 0, 4) . str_repeat('*', max(0, strlen($value) - 6)) . substr($value, -2);
+    }
+
+    private function resolveTraceId(?MpesaTransaction $mpesaTx = null, ?Subscription $sub = null, ?OneOffPurchase $purchase = null): ?string
+    {
+        if ($mpesaTx && is_array($mpesaTx->raw_response) && !empty($mpesaTx->raw_response['trace_id'])) {
+            return (string) $mpesaTx->raw_response['trace_id'];
+        }
+
+        if ($purchase && is_array($purchase->gateway_meta) && !empty($purchase->gateway_meta['trace_id'])) {
+            return (string) $purchase->gateway_meta['trace_id'];
+        }
+
+        if ($sub && is_array($sub->gateway_meta) && !empty($sub->gateway_meta['trace_id'])) {
+            return (string) $sub->gateway_meta['trace_id'];
+        }
+
+        return null;
     }
 
     /**

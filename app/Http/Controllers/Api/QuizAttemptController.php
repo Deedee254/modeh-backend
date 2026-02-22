@@ -939,16 +939,19 @@ class QuizAttemptController extends Controller
 
         // map attempts to a simple shape with payment and access info
         $data->getCollection()->transform(function ($a) {
-            $effectivePrice = $this->resolveQuizOneOffPrice($a->quiz);
+            $quiz = $a->quiz;
+            $effectivePrice = $quiz ? $this->resolveQuizOneOffPrice($quiz) : 0.0;
+            $isPaidQuiz = (bool) ($quiz->is_paid ?? false);
+
             return [
                 'id' => $a->id,
                 'quiz_id' => $a->quiz_id,
-                'quiz' => [
-                    'id' => $a->quiz->id,
-                    'title' => $a->quiz->title,
-                    'is_paid' => $a->quiz->is_paid,
+                'quiz' => $quiz ? [
+                    'id' => $quiz->id,
+                    'title' => $quiz->title,
+                    'is_paid' => $isPaidQuiz,
                     'one_off_price' => $effectivePrice,
-                ],
+                ] : null,
                 'score' => $a->score,
                 'points_earned' => $a->points_earned ?? 0,
                 'paid_for' => (bool) $a->paid_for,
@@ -956,7 +959,7 @@ class QuizAttemptController extends Controller
                 'institution_id' => $a->institution_id,
                 'total_time_seconds' => $a->total_time_seconds,
                 'created_at' => $a->created_at,
-                'is_locked' => ($a->paid_for === false) && ($a->quiz->is_paid || $effectivePrice > 0),
+                'is_locked' => $quiz ? (($a->paid_for === false) && ($isPaidQuiz || $effectivePrice > 0)) : false,
             ];
         });
 

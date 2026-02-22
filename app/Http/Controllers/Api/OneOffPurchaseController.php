@@ -66,6 +66,18 @@ class OneOffPurchaseController extends Controller
         }
 
         $phone = is_string($phone) ? trim($phone) : $phone;
+        $traceId = (string) Str::ulid();
+
+        Log::info('[OneOff Purchase] Initiating payment', [
+            'trace_id' => $traceId,
+            'user_id' => $user->id,
+            'item_type' => $data['item_type'],
+            'item_id' => $data['item_id'],
+            'attempt_id' => $data['attempt_id'] ?? null,
+            'amount' => $resolvedAmount,
+            'gateway' => $gateway,
+            'phone' => $this->maskPhone($phone),
+        ]);
 
         $purchase = OneOffPurchase::create([
             'user_id' => $user->id,
@@ -77,6 +89,7 @@ class OneOffPurchaseController extends Controller
             'gateway_meta' => array_filter([
                 'phone' => $phone,
                 'institution_id' => $data['institution_id'] ?? null,
+                'trace_id' => $traceId,
             ], fn($v) => $v !== null && $v !== ''),
             'meta' => array_filter([
                 'attempt_id' => $data['attempt_id'] ?? null,
@@ -86,7 +99,19 @@ class OneOffPurchaseController extends Controller
         // initiate mpesa push via MpesaService
         $config = config('services.mpesa');
         $service = new MpesaService($config);
-        $res = $service->initiateStkPush($phone, (float)$purchase->amount, 'OneOff-'.$purchase->id);
+        $res = $service->initiateStkPush($phone, (float)$purchase->amount, 'OneOff-'.$purchase->id, $traceId);
+
+        Log::info('[OneOff Purchase] STK initiation response', [
+            'trace_id' => $traceId,
+            'user_id' => $user->id,
+            'purchase_id' => $purchase->id,
+            'ok' => (bool) ($res['ok'] ?? false),
+            'tx' => $res['tx'] ?? null,
+            'response_code' => $res['body']['ResponseCode'] ?? null,
+            'response_description' => $res['body']['ResponseDescription'] ?? null,
+            'customer_message' => $res['body']['CustomerMessage'] ?? null,
+            'error' => $res['message'] ?? null,
+        ]);
 
         if ($res['ok']) {
             $checkoutRequestId = $res['tx'];  // M-PESA's CheckoutRequestID
@@ -94,7 +119,8 @@ class OneOffPurchaseController extends Controller
             $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
                 'tx' => $checkoutRequestId,
                 'checkout_request_id' => $checkoutRequestId,  // CheckoutRequestID from M-PESA
-                'initiated_at' => now()
+                'initiated_at' => now(),
+                'trace_id' => $traceId,
             ]);
             $purchase->save();
             
@@ -108,10 +134,14 @@ class OneOffPurchaseController extends Controller
                 'status' => 'pending',
                 'billable_type' => OneOffPurchase::class,
                 'billable_id' => $purchase->id,
-                'raw_response' => json_encode($res['body'] ?? []),
+                'raw_response' => [
+                    'trace_id' => $traceId,
+                    'init' => $res['body'] ?? [],
+                ],
             ]);
             
             Log::info('[OneOff Purchase] STK Push initiated', [
+                'trace_id' => $traceId,
                 'user_id' => $user->id,
                 'purchase_id' => $purchase->id,
                 'checkout_request_id' => $checkoutRequestId,
@@ -122,17 +152,24 @@ class OneOffPurchaseController extends Controller
                 'ok' => true, 
                 'purchase' => $purchase, 
                 'tx' => $checkoutRequestId,
-                'checkout_request_id' => $checkoutRequestId  // Return checkout_request_id to frontend
+                'checkout_request_id' => $checkoutRequestId,  // Return checkout_request_id to frontend
+                'trace_id' => $traceId,
             ]);
         }
 
         Log::error('[OneOff Purchase] STK Push failed', [
+            'trace_id' => $traceId,
             'user_id' => $user->id,
             'purchase_id' => $purchase->id,
             'error' => $res['message'] ?? 'unknown error',
         ]);
 
-        return response()->json(['ok' => false, 'message' => 'Failed to initiate payment'], 500);
+        return response()->json([
+            'ok' => false,
+            'message' => $res['message'] ?? 'Failed to initiate payment',
+            'error_code' => $res['body']['ResponseCode'] ?? null,
+            'trace_id' => $traceId,
+        ], 500);
     }
 
     private function resolveOneOffAmount(string $type, $itemId): ?float
@@ -253,6 +290,19 @@ class OneOffPurchaseController extends Controller
         }
 
         $gateway = $data['gateway'] ?? 'mpesa';
+        $traceId = (string) Str::ulid();
+
+        Log::info('[Guest OneOff Purchase] Initiating payment', [
+            'trace_id' => $traceId,
+            'guest_identifier' => $data['guest_identifier'],
+            'item_type' => $data['item_type'],
+            'item_id' => $data['item_id'],
+            'guest_attempt_id' => $data['guest_attempt_id'] ?? null,
+            'amount' => $resolvedAmount,
+            'gateway' => $gateway,
+            'phone' => $this->maskPhone($phone),
+        ]);
+
         $purchase = OneOffPurchase::create([
             'user_id' => null,
             'guest_identifier' => $data['guest_identifier'],
@@ -263,6 +313,7 @@ class OneOffPurchaseController extends Controller
             'gateway' => $gateway,
             'gateway_meta' => array_filter([
                 'phone' => $phone,
+                'trace_id' => $traceId,
             ], fn($v) => $v !== null && $v !== ''),
             'meta' => array_filter([
                 'guest_attempt_id' => $data['guest_attempt_id'] ?? null,
@@ -270,20 +321,38 @@ class OneOffPurchaseController extends Controller
         ]);
 
         $service = new MpesaService(config('services.mpesa'));
-        $res = $service->initiateStkPush($phone, (float) $purchase->amount, 'GuestOneOff-' . $purchase->id);
+        $res = $service->initiateStkPush($phone, (float) $purchase->amount, 'GuestOneOff-' . $purchase->id, $traceId);
+
+        Log::info('[Guest OneOff Purchase] STK initiation response', [
+            'trace_id' => $traceId,
+            'purchase_id' => $purchase->id,
+            'ok' => (bool) ($res['ok'] ?? false),
+            'tx' => $res['tx'] ?? null,
+            'response_code' => $res['body']['ResponseCode'] ?? null,
+            'response_description' => $res['body']['ResponseDescription'] ?? null,
+            'customer_message' => $res['body']['CustomerMessage'] ?? null,
+            'error' => $res['message'] ?? null,
+        ]);
 
         if (!$res['ok']) {
             Log::error('[Guest OneOff Purchase] STK Push failed', [
+                'trace_id' => $traceId,
                 'purchase_id' => $purchase->id,
                 'error' => $res['message'] ?? 'unknown error',
             ]);
-            return response()->json(['ok' => false, 'message' => 'Failed to initiate payment'], 500);
+            return response()->json([
+                'ok' => false,
+                'message' => $res['message'] ?? 'Failed to initiate payment',
+                'error_code' => $res['body']['ResponseCode'] ?? null,
+                'trace_id' => $traceId,
+            ], 500);
         }
 
         $checkoutRequestId = $res['tx'];
         $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
             'tx' => $checkoutRequestId,
             'checkout_request_id' => $checkoutRequestId,
+            'trace_id' => $traceId,
             'initiated_at' => now(),
         ]);
         $purchase->save();
@@ -297,7 +366,10 @@ class OneOffPurchaseController extends Controller
             'status' => 'pending',
             'billable_type' => OneOffPurchase::class,
             'billable_id' => $purchase->id,
-            'raw_response' => json_encode($res['body'] ?? []),
+            'raw_response' => [
+                'trace_id' => $traceId,
+                'init' => $res['body'] ?? [],
+            ],
         ]);
 
         return response()->json([
@@ -305,6 +377,7 @@ class OneOffPurchaseController extends Controller
             'purchase' => $purchase,
             'tx' => $checkoutRequestId,
             'checkout_request_id' => $checkoutRequestId,
+            'trace_id' => $traceId,
         ]);
     }
 
@@ -363,5 +436,13 @@ class OneOffPurchaseController extends Controller
             'unlock_token' => $token->token,
             'unlock_expires_at' => optional($token->expires_at)->toIso8601String(),
         ]);
+    }
+
+    private function maskPhone(?string $phone): ?string
+    {
+        if (!$phone) return null;
+        $value = preg_replace('/\s+/', '', (string) $phone);
+        if (strlen($value) <= 5) return $value;
+        return substr($value, 0, 4) . str_repeat('*', max(0, strlen($value) - 6)) . substr($value, -2);
     }
 }

@@ -100,7 +100,7 @@ class MpesaService
         return $p;
     }
 
-    public function initiateStkPush(string $phone, float $amount, ?string $accountRef = null): array
+    public function initiateStkPush(string $phone, float $amount, ?string $accountRef = null, ?string $traceId = null): array
     {
         // Build and send STK push to Daraja (sandbox or live depending on config)
 
@@ -140,6 +140,7 @@ class MpesaService
 
         try {
             Log::info('[MPESA] STK Push initiated', [
+                'trace_id' => $traceId,
                 'phone' => $phone,
                 'amount' => $amount,
                 'account_ref' => $accountRef,
@@ -165,6 +166,7 @@ class MpesaService
             if ($responseCode !== null && ((int)$responseCode === 0 || $responseCode === '0')) {
                 $tx = $body['CheckoutRequestID'] ?? ($body['MerchantRequestID'] ?? null);
                 Log::info('[MPESA] STK Push successful', [
+                    'trace_id' => $traceId,
                     'phone' => $phone,
                     'tx' => $tx,
                     'response' => $body,
@@ -174,6 +176,7 @@ class MpesaService
             
             $errorMsg = $body['errorMessage'] ?? json_encode($body);
             Log::warning('[MPESA] STK Push failed', [
+                'trace_id' => $traceId,
                 'phone' => $phone,
                 'response_code' => $body['ResponseCode'] ?? 'unknown',
                 'error_message' => $errorMsg,
@@ -182,6 +185,7 @@ class MpesaService
             return ['ok' => false, 'message' => $errorMsg, 'body' => $body];
         } catch (\Exception $e) {
             Log::error('[MPESA] STK Push exception', [
+                'trace_id' => $traceId,
                 'phone' => $phone,
                 'amount' => $amount,
                 'error' => $e->getMessage(),
@@ -276,6 +280,9 @@ class MpesaService
 
             if ($resultCode === '0' || $resultCode === 0) {
                 $status = 'success';
+            } elseif ($resultCode === '1032' || $resultCode === 1032) {
+                // User cancelled on phone.
+                $status = 'cancelled';
             } elseif ($resultCode !== null && $resultCode !== '') {
                 // Non-zero result code means failed or cancelled
                 $status = 'failed';

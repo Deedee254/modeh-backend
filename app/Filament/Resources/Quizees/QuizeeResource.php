@@ -24,7 +24,7 @@ class QuizeeResource extends Resource
     protected static ?string $navigationLabel = 'Quizees';
     protected static ?string $modelLabel = 'Quizee';
     protected static ?string $pluralLabel = 'Quizees';
-    protected static ?string $recordTitleAttribute = 'name';
+    protected static ?string $recordTitleAttribute = 'first_name';
 
     public static function getNavigationGroup(): ?string
     {

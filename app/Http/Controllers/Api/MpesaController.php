@@ -42,6 +42,12 @@ class MpesaController extends Controller
         $checkoutId = $validated['checkout_request_id'];
         $source = $validated['source'] ?? 'user';
 
+        Log::info('[MPESA] Reconcile requested', [
+            'user_id' => $user->id,
+            'checkout_request_id' => $checkoutId,
+            'source' => $source,
+        ]);
+
         // Find the transaction
         $transaction = MpesaTransaction::where('checkout_request_id', $checkoutId)
             ->where('user_id', $user->id)
@@ -54,10 +60,12 @@ class MpesaController extends Controller
                 'checkout_request_id' => $checkoutId,
             ], 404);
         }
+        $traceId = $this->extractTraceId($transaction);
 
         // If already reconciled (success/failed), return current state (idempotent)
         if (in_array($transaction->status, ['success', 'failed', 'cancelled'])) {
             Log::info('[MPESA] Reconcile: transaction already final', [
+                'trace_id' => $traceId,
                 'user_id' => $user->id,
                 'checkout_request_id' => $checkoutId,
                 'status' => $transaction->status,
@@ -74,8 +82,20 @@ class MpesaController extends Controller
         // Query Daraja for current status
         $queryResult = $this->mpesaService->queryStkPush($checkoutId);
 
+        Log::info('[MPESA] Reconcile query response', [
+            'trace_id' => $traceId,
+            'user_id' => $user->id,
+            'checkout_request_id' => $checkoutId,
+            'ok' => (bool) ($queryResult['ok'] ?? false),
+            'status' => $queryResult['status'] ?? null,
+            'result_code' => $queryResult['result_code'] ?? null,
+            'result_desc' => $queryResult['result_desc'] ?? null,
+            'receipt' => $queryResult['mpesa_receipt'] ?? null,
+        ]);
+
         if (!$queryResult['ok']) {
             Log::warning('[MPESA] Reconcile query failed', [
+                'trace_id' => $traceId,
                 'user_id' => $user->id,
                 'checkout_request_id' => $checkoutId,
                 'error' => $queryResult['message'],
@@ -114,6 +134,7 @@ class MpesaController extends Controller
                 if ($received > 0 && abs($received - $expectedAmount) > 0.01) {
                     $transaction->markFailed(null, 'Amount mismatch');
                     Log::warning('[MPESA] Reconcile: amount mismatch', [
+                        'trace_id' => $traceId,
                         'transaction_id' => $transaction->id,
                         'expected' => $expectedAmount,
                         'received' => $received,
@@ -147,6 +168,7 @@ class MpesaController extends Controller
 
                 if ($existingReceipt) {
                     Log::warning('[MPESA] Reconcile: duplicate receipt detected', [
+                        'trace_id' => $traceId,
                         'receipt' => $queryResult['mpesa_receipt'],
                         'transaction_id' => $transaction->id,
                     ]);
@@ -168,6 +190,7 @@ class MpesaController extends Controller
                 );
 
                 Log::info('[MPESA] Reconcile: marked success', [
+                    'trace_id' => $traceId,
                     'user_id' => $user->id,
                     'transaction_id' => $transaction->id,
                     'receipt' => $queryResult['mpesa_receipt'],
@@ -180,6 +203,7 @@ class MpesaController extends Controller
                 );
 
                 Log::warning('[MPESA] Reconcile: marked failed', [
+                    'trace_id' => $traceId,
                     'user_id' => $user->id,
                     'transaction_id' => $transaction->id,
                     'result_code' => $queryResult['result_code'],
@@ -189,6 +213,7 @@ class MpesaController extends Controller
                 // Still pending
                 $transaction->scheduleRetry();
                 Log::info('[MPESA] Reconcile: still pending, scheduled retry', [
+                    'trace_id' => $traceId,
                     'user_id' => $user->id,
                     'transaction_id' => $transaction->id,
                     'next_retry_at' => $transaction->next_retry_at,
@@ -199,6 +224,7 @@ class MpesaController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('[MPESA] Reconcile exception', [
+                'trace_id' => $traceId,
                 'user_id' => $user->id,
                 'transaction_id' => $transaction->id,
                 'error' => $e->getMessage(),
@@ -264,6 +290,7 @@ class MpesaController extends Controller
     {
         return [
             'id' => $transaction->id,
+            'trace_id' => $this->extractTraceId($transaction),
             'checkout_request_id' => $transaction->checkout_request_id,
             'merchant_request_id' => $transaction->merchant_request_id,
             'status' => $transaction->status,
@@ -278,5 +305,20 @@ class MpesaController extends Controller
             'next_retry_at' => $transaction->next_retry_at?->toIso8601String(),
             'created_at' => $transaction->created_at?->toIso8601String(),
         ];
+    }
+
+    protected function extractTraceId(MpesaTransaction $transaction): ?string
+    {
+        $raw = $transaction->raw_response;
+        if (is_array($raw) && !empty($raw['trace_id'])) {
+            return (string) $raw['trace_id'];
+        }
+
+        $billable = $transaction->billable;
+        if ($billable && isset($billable->gateway_meta) && is_array($billable->gateway_meta) && !empty($billable->gateway_meta['trace_id'])) {
+            return (string) $billable->gateway_meta['trace_id'];
+        }
+
+        return null;
     }
 }
