@@ -9,11 +9,14 @@ use App\Models\PaymentSetting;
 use App\Models\Package;
 use App\Models\MpesaTransaction;
 use App\Models\OneOffPurchase;
+use App\Models\GuestUnlockToken;
+use App\Models\GuestQuizAttempt;
 use App\Services\MpesaService;
 use App\Services\WalletService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class PaymentController extends Controller
 {
@@ -345,6 +348,10 @@ class PaymentController extends Controller
         $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], ['completed_at' => now()]);
         $purchase->save();
 
+        if (!$purchase->user_id) {
+            $this->createGuestUnlockToken($purchase);
+        }
+
         // Provision institution package subscription when package purchases are confirmed.
         $this->provisionInstitutionPackageFromPurchase($purchase, $txId);
 
@@ -358,12 +365,15 @@ class PaymentController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        // Dispatch based on item type
-        match ($purchase->item_type) {
-            'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-            'battle' => $this->createTransactionForBattle($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-            default => $this->createGenericTransaction($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-        };
+        // Guest purchases do not produce user-linked transactions/invoices.
+        if ($purchase->user_id) {
+            // Dispatch based on item type
+            match ($purchase->item_type) {
+                'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+                'battle' => $this->createTransactionForBattle($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+                default => $this->createGenericTransaction($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+            };
+        }
 
         // Update tournament participant if applicable
         if ($purchase->item_type === 'tournament') {
@@ -373,7 +383,8 @@ class PaymentController extends Controller
         // Create invoice for one-off purchase
         try {
             $itemType = ucfirst($purchase->item_type); // 'Quiz', 'Battle', 'Tournament', etc.
-            $invoice = \App\Models\Invoice::create([
+            if ($purchase->user_id) {
+                $invoice = \App\Models\Invoice::create([
                 'invoice_number' => \App\Models\Invoice::generateInvoiceNumber(),
                 'user_id' => $purchase->user_id,
                 'invoiceable_type' => \App\Models\OneOffPurchase::class,
@@ -390,18 +401,19 @@ class PaymentController extends Controller
                     'item_id' => $purchase->item_id,
                     'gateway_meta' => $purchase->gateway_meta,
                 ],
-            ]);
-            
-            // Send email with invoice
-            $purchase->user->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
-            
-            Log::info('[Payment] One-off purchase invoice created and email sent', [
-                'invoice_id' => $invoice->id,
-                'purchase_id' => $purchase->id,
-                'user_id' => $purchase->user_id,
-                'amount' => $amount,
-                'item_type' => $purchase->item_type,
-            ]);
+                ]);
+
+                // Send email with invoice
+                $purchase->user?->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
+
+                Log::info('[Payment] One-off purchase invoice created and email sent', [
+                    'invoice_id' => $invoice->id,
+                    'purchase_id' => $purchase->id,
+                    'user_id' => $purchase->user_id,
+                    'amount' => $amount,
+                    'item_type' => $purchase->item_type,
+                ]);
+            }
         } catch (\Throwable $e) {
             Log::error('[Payment] One-off purchase invoice creation failed', [
                 'purchase_id' => $purchase->id,
@@ -411,6 +423,44 @@ class PaymentController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    private function createGuestUnlockToken(OneOffPurchase $purchase): void
+    {
+        if (!$purchase->guest_identifier) {
+            return;
+        }
+
+        $existing = GuestUnlockToken::where('purchase_id', $purchase->id)
+            ->where('guest_identifier', $purchase->guest_identifier)
+            ->where('expires_at', '>', now())
+            ->latest('id')
+            ->first();
+
+        if (!$existing) {
+            $existing = GuestUnlockToken::create([
+                'token' => Str::random(64),
+                'guest_identifier' => $purchase->guest_identifier,
+                'item_type' => $purchase->item_type,
+                'item_id' => $purchase->item_id,
+                'purchase_id' => $purchase->id,
+                'guest_attempt_id' => $purchase->meta['guest_attempt_id'] ?? null,
+                'expires_at' => now()->addHours(24),
+            ]);
+        }
+
+        // If checkout was initiated for a concrete guest attempt, unlock it immediately.
+        $attemptId = $purchase->meta['guest_attempt_id'] ?? null;
+        if ($attemptId && $purchase->item_type === 'quiz') {
+            GuestQuizAttempt::where('id', $attemptId)
+                ->where('quiz_id', $purchase->item_id)
+                ->where('guest_identifier', $purchase->guest_identifier)
+                ->update([
+                    'is_locked' => false,
+                    'unlocked_at' => now(),
+                    'unlock_purchase_id' => $purchase->id,
+                ]);
+        }
     }
 
     /**

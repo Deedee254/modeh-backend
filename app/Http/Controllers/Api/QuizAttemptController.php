@@ -27,6 +27,20 @@ class QuizAttemptController extends Controller
         $this->achievementService = $achievementService;
     }
 
+    private function resolveQuizOneOffPrice(Quiz $quiz): float
+    {
+        if (!is_null($quiz->one_off_price)) {
+            return (float) $quiz->one_off_price;
+        }
+
+        try {
+            $setting = \App\Models\PricingSetting::singleton();
+            return (float) ($setting->default_quiz_one_off_price ?? 0);
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+    }
+
     /**
      * Build a map of option id/index => display text for a question's options
      *
@@ -293,7 +307,7 @@ class QuizAttemptController extends Controller
                 'questions_count' => count($questions),
                 'marks' => $totalMarks, // Ensure specific total marks are included
                 'is_paid' => (bool) $quiz->is_paid,
-                'price' => $quiz->one_off_price,
+                'price' => $this->resolveQuizOneOffPrice($quiz),
                 // liked status
                 'liked' => $liked,
                 // Creator info
@@ -925,6 +939,7 @@ class QuizAttemptController extends Controller
 
         // map attempts to a simple shape with payment and access info
         $data->getCollection()->transform(function ($a) {
+            $effectivePrice = $this->resolveQuizOneOffPrice($a->quiz);
             return [
                 'id' => $a->id,
                 'quiz_id' => $a->quiz_id,
@@ -932,7 +947,7 @@ class QuizAttemptController extends Controller
                     'id' => $a->quiz->id,
                     'title' => $a->quiz->title,
                     'is_paid' => $a->quiz->is_paid,
-                    'one_off_price' => $a->quiz->one_off_price,
+                    'one_off_price' => $effectivePrice,
                 ],
                 'score' => $a->score,
                 'points_earned' => $a->points_earned ?? 0,
@@ -941,7 +956,7 @@ class QuizAttemptController extends Controller
                 'institution_id' => $a->institution_id,
                 'total_time_seconds' => $a->total_time_seconds,
                 'created_at' => $a->created_at,
-                'is_locked' => ($a->paid_for === false) && ($a->quiz->is_paid || (!empty($a->quiz->one_off_price) && $a->quiz->one_off_price > 0)),
+                'is_locked' => ($a->paid_for === false) && ($a->quiz->is_paid || $effectivePrice > 0),
             ];
         });
 
@@ -1166,6 +1181,7 @@ class QuizAttemptController extends Controller
             'total_questions' => 'nullable|integer',
             'time_taken' => 'nullable|integer',
             'results' => 'nullable|array',
+            'guest_identifier' => 'nullable|string',
         ]);
 
         try {
@@ -1173,27 +1189,24 @@ class QuizAttemptController extends Controller
 
             $quiz = Quiz::findOrFail($payload['quiz_id']);
             
-            // Check if user already has an attempt for this quiz (avoid duplicates)
-            $existingAttempt = QuizAttempt::where('user_id', $user->id)
-                ->where('quiz_id', $quiz->id)
-                ->first();
-
-            if ($existingAttempt) {
-                DB::commit();
-                return response()->json([
-                    'ok' => true,
-                    'message' => 'Attempt already synced',
-                    'user' => $user->fresh()
-                ]);
-            }
-
             // Calculate points from the guest attempt score
             $pointsEarned = (int) (($payload['score'] ?? 0) * ($quiz->points_per_question ?? 1));
+
+            $paidFor = false;
+            if (!empty($payload['guest_identifier'])) {
+                $paidFor = \App\Models\OneOffPurchase::whereNull('user_id')
+                    ->where('guest_identifier', $payload['guest_identifier'])
+                    ->where('item_type', 'quiz')
+                    ->where('item_id', $quiz->id)
+                    ->where('status', 'confirmed')
+                    ->exists();
+            }
 
             // Create the attempt record
             $attempt = QuizAttempt::create([
                 'user_id' => $user->id,
                 'quiz_id' => $quiz->id,
+                'paid_for' => $paidFor,
                 'answers' => [], // Guest attempts don't store detailed answers
                 'score' => $payload['score'],
                 'points_earned' => $pointsEarned,
@@ -1278,8 +1291,9 @@ class QuizAttemptController extends Controller
 
         // Determine if results are locked
         // Results are locked if: quiz is paid AND attempt hasn't been paid for yet
-        $isLocked = ($attempt->paid_for === false) && 
-                    ($quiz->is_paid || (!empty($quiz->one_off_price) && $quiz->one_off_price > 0));
+        $effectivePrice = $this->resolveQuizOneOffPrice($quiz);
+        $isLocked = ($attempt->paid_for === false) &&
+                    ($quiz->is_paid || $effectivePrice > 0);
         
         if (!$isLocked) {
             // Results are accessible
@@ -1312,7 +1326,7 @@ class QuizAttemptController extends Controller
         }
 
         // Results are locked and not paid - return payment info
-        $price = (float) ($quiz->one_off_price ?? 0);
+        $price = $effectivePrice;
         
         return response()->json([
             'can_view' => false,
@@ -1325,7 +1339,7 @@ class QuizAttemptController extends Controller
             'quiz' => [
                 'id' => $quiz->id,
                 'title' => $quiz->title,
-                'one_off_price' => $quiz->one_off_price,
+                'one_off_price' => $effectivePrice,
             ],
             'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
         ], 403);

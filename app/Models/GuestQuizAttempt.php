@@ -18,8 +18,11 @@ use Illuminate\Support\Str;
  * @property int $incorrect_count Number of incorrect answers
  * @property int $skipped_count Number of skipped questions
  * @property int $time_taken Time taken in seconds
- * @property array $results Detailed results for each question
- * @property int|null $user_id User ID if guest converted to user
+     * @property array $results Detailed results for each question
+     * @property bool $is_locked Whether result viewing requires one-off payment
+     * @property \DateTimeInterface|null $unlocked_at
+     * @property int|null $unlock_purchase_id
+     * @property int|null $user_id User ID if guest converted to user
  * @property \DateTimeInterface $created_at
  * @property \DateTimeInterface $updated_at
  *
@@ -45,6 +48,9 @@ class GuestQuizAttempt extends Model
         'skipped_count',
         'time_taken',
         'results',
+        'is_locked',
+        'unlocked_at',
+        'unlock_purchase_id',
         'user_id',
     ];
 
@@ -56,6 +62,8 @@ class GuestQuizAttempt extends Model
         'incorrect_count' => 'integer',
         'skipped_count' => 'integer',
         'time_taken' => 'integer',
+        'is_locked' => 'boolean',
+        'unlocked_at' => 'datetime',
     ];
 
     protected static function boot()

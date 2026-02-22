@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Quiz;
+use App\Models\GuestQuizAttempt;
+use App\Models\OneOffPurchase;
+use App\Models\GuestUnlockToken;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -20,11 +23,11 @@ class GuestQuizController extends Controller
      */
     public function getQuestions(Quiz $quiz)
     {
-        // Guests can only take public free quizzes (never institutional / paid).
-        if ($quiz->is_paid || $quiz->is_institutional) {
+        // Guests can never take institutional quizzes.
+        if ($quiz->is_institutional) {
             return response()->json([
                 'error' => 'This quiz requires authentication. Please login or register to continue.',
-                'code' => 'PREMIUM_QUIZ'
+                'code' => 'INSTITUTIONAL_QUIZ'
             ], 403);
         }
 
@@ -83,6 +86,8 @@ class GuestQuizController extends Controller
                 'use_per_question_timer' => (bool) $quiz->use_per_question_timer,
                 'shuffle_questions' => (bool) $quiz->shuffle_questions,
                 'shuffle_answers' => (bool) $quiz->shuffle_answers,
+                'is_paid' => (bool) $quiz->is_paid,
+                'price' => $this->resolveQuizOneOffPrice($quiz),
                 'questions' => $questions,
             ],
         ]);
@@ -98,11 +103,11 @@ class GuestQuizController extends Controller
      */
     public function submit(Request $request, Quiz $quiz)
     {
-        // Guests can only submit public free quizzes.
-        if ($quiz->is_paid || $quiz->is_institutional) {
+        // Guests can never submit institutional quizzes.
+        if ($quiz->is_institutional) {
             return response()->json([
                 'error' => 'This quiz requires authentication. Please login or register to continue.',
-                'code' => 'PREMIUM_QUIZ'
+                'code' => 'INSTITUTIONAL_QUIZ'
             ], 403);
         }
 
@@ -131,14 +136,19 @@ class GuestQuizController extends Controller
         // Calculate score
         $scoringResult = $this->calculateScore($validated['answers'], $questions);
 
-        // Prepare minimal result payload for guests (no per-question breakdown)
+        $price = $this->resolveQuizOneOffPrice($quiz);
+        $requiresPayment = ((bool) $quiz->is_paid) || ($price > 0);
+        $isUnlocked = !$requiresPayment || OneOffPurchase::whereNull('user_id')
+            ->where('guest_identifier', $validated['guest_identifier'])
+            ->where('item_type', 'quiz')
+            ->where('item_id', $quiz->id)
+            ->where('status', 'confirmed')
+            ->exists();
+
+        // Prepare minimal result payload for guests
         // Use quiz questions count as total so omitted answers are treated as incorrect
         $totalQuestions = $questions->count();
         $correctCount = $scoringResult['correct_count'] ?? 0;
-
-        // Generate a unique attempt ID for client-side result storage/reference
-        // Format: guest_{quiz_id}_{guest_identifier_hash}_{timestamp}
-        $attemptId = 'guest_' . $quiz->id . '_' . substr(hash('sha256', $validated['guest_identifier']), 0, 8) . '_' . time();
 
         $result = [
             'quiz_id' => $quiz->id,
@@ -153,11 +163,39 @@ class GuestQuizController extends Controller
             'total_questions' => $totalQuestions,
             'time_taken' => $validated['time_taken'] ?? 0,
             'attempted_at' => now()->toIso8601String(),
+            'price' => $price,
+            'requires_payment' => $requiresPayment,
+            'locked' => !$isUnlocked,
         ];
+
+        // Persist guest attempt so unlocked results can be fetched after payment/login.
+        $guestAttempt = GuestQuizAttempt::create([
+            'quiz_id' => $quiz->id,
+            'guest_identifier' => $validated['guest_identifier'],
+            'score' => (int) round((float) $scoringResult['score']),
+            'percentage' => (int) round((float) $scoringResult['score']),
+            'correct_count' => (int) $correctCount,
+            'incorrect_count' => (int) max(0, $totalQuestions - $correctCount),
+            'skipped_count' => 0,
+            'time_taken' => (int) ($validated['time_taken'] ?? 0),
+            'results' => $scoringResult['results'] ?? [],
+            'is_locked' => !$isUnlocked,
+            'unlocked_at' => $isUnlocked ? now() : null,
+        ]);
+
+        if (!$isUnlocked) {
+            // Do not expose detailed per-question marking before purchase.
+            $result['results'] = [];
+        } else {
+            $result['results'] = $scoringResult['results'] ?? [];
+        }
 
         return response()->json([
             'success' => true,
-            'attempt_id' => $attemptId,
+            'attempt_id' => $guestAttempt->id,
+            'requires_payment' => $requiresPayment,
+            'locked' => !$isUnlocked,
+            'price' => $price,
             'attempt' => $result
         ]);
     }
@@ -168,10 +206,10 @@ class GuestQuizController extends Controller
      */
     public function markQuestion(Request $request, Quiz $quiz)
     {
-        if ($quiz->is_paid || $quiz->is_institutional) {
+        if ($quiz->is_institutional) {
             return response()->json([
                 'error' => 'This quiz requires authentication. Please login or register to continue.',
-                'code' => 'PREMIUM_QUIZ'
+                'code' => 'INSTITUTIONAL_QUIZ'
             ], 403);
         }
 
@@ -220,6 +258,76 @@ class GuestQuizController extends Controller
             'correct' => (bool) $isCorrect,
             'explanation' => $question->explanation ?? null,
             'correct_answer' => $this->formatAnswer($question->answers),
+        ]);
+    }
+
+    /**
+     * Fetch a persisted guest attempt with payment-aware unlock checks.
+     */
+    public function showAttempt(Request $request, string $attemptId)
+    {
+        $attempt = GuestQuizAttempt::with('quiz')->find($attemptId);
+        if (!$attempt || !$attempt->quiz) {
+            return response()->json(['ok' => false, 'message' => 'Attempt not found'], 404);
+        }
+
+        $guestIdentifier = (string) $request->query('guest_identifier', '');
+        $unlockToken = (string) $request->query('unlock_token', '');
+        $price = $this->resolveQuizOneOffPrice($attempt->quiz);
+        $requiresPayment = ((bool) $attempt->quiz->is_paid) || ($price > 0);
+        $isUnlocked = !$requiresPayment || !$attempt->is_locked;
+
+        if (!$isUnlocked) {
+            $hasGuestPurchase = false;
+            if ($guestIdentifier !== '') {
+                $hasGuestPurchase = OneOffPurchase::whereNull('user_id')
+                    ->where('guest_identifier', $guestIdentifier)
+                    ->where('item_type', 'quiz')
+                    ->where('item_id', $attempt->quiz_id)
+                    ->where('status', 'confirmed')
+                    ->exists();
+            }
+
+            $hasUnlockToken = false;
+            if ($unlockToken !== '') {
+                $token = GuestUnlockToken::where('token', $unlockToken)
+                    ->where('item_type', 'quiz')
+                    ->where('item_id', $attempt->quiz_id)
+                    ->where('expires_at', '>', now())
+                    ->first();
+                $hasUnlockToken = (bool) $token;
+            }
+
+            if ($hasGuestPurchase || $hasUnlockToken) {
+                $attempt->is_locked = false;
+                $attempt->unlocked_at = now();
+                $attempt->save();
+                $isUnlocked = true;
+            }
+        }
+
+        $payload = [
+            'quiz_id' => $attempt->quiz_id,
+            'quiz_title' => $attempt->quiz->title,
+            'quiz_slug' => $attempt->quiz->slug,
+            'guest_identifier' => $attempt->guest_identifier,
+            'score' => $attempt->score,
+            'percentage' => $attempt->percentage,
+            'correct_count' => $attempt->correct_count,
+            'incorrect_count' => $attempt->incorrect_count,
+            'total_questions' => $attempt->correct_count + $attempt->incorrect_count + $attempt->skipped_count,
+            'time_taken' => $attempt->time_taken,
+            'attempted_at' => optional($attempt->created_at)->toIso8601String(),
+            'price' => $price,
+            'requires_payment' => $requiresPayment,
+            'locked' => !$isUnlocked,
+            'results' => $isUnlocked ? ($attempt->results ?? []) : [],
+        ];
+
+        return response()->json([
+            'ok' => true,
+            'attempt_id' => $attempt->id,
+            'attempt' => $payload,
         ]);
     }
 
@@ -422,5 +530,19 @@ class GuestQuizController extends Controller
             'earned_marks' => $earnedMarks,
             'total_marks' => $totalQuizMarks
         ];
+    }
+
+    private function resolveQuizOneOffPrice(Quiz $quiz): float
+    {
+        if (!is_null($quiz->one_off_price)) {
+            return (float) $quiz->one_off_price;
+        }
+
+        try {
+            $setting = \App\Models\PricingSetting::singleton();
+            return (float) ($setting->default_quiz_one_off_price ?? 0);
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
     }
 }

@@ -12,7 +12,8 @@ use Illuminate\Database\Eloquent\Model;
  * Uses polymorphic relationships for item_type/item_id
  * 
  * @property int $id
- * @property int $user_id
+ * @property int|null $user_id
+ * @property string|null $guest_identifier
  * @property string $item_type
  * @property int $item_id
  * @property float $amount
@@ -28,7 +29,7 @@ class OneOffPurchase extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'item_type', 'item_id', 'amount', 'status', 'gateway', 'gateway_meta', 'meta'];
+    protected $fillable = ['user_id', 'guest_identifier', 'item_type', 'item_id', 'amount', 'status', 'gateway', 'gateway_meta', 'meta'];
 
     protected $casts = [
         'gateway_meta' => 'array',

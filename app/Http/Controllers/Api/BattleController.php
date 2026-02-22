@@ -18,7 +18,6 @@ use App\Models\Quiz;
 use App\Models\User;
 use App\Services\AchievementService;
 use App\Services\QuestionMarkingService;
-use App\Services\SubscriptionLimitService;
 
 class BattleController extends Controller
 {
@@ -29,6 +28,29 @@ class BattleController extends Controller
     {
         $this->achievementService = $achievementService;
         $this->questionMarkingService = new QuestionMarkingService();
+    }
+
+    private function getEffectiveBattlePrice(Battle $battle): float
+    {
+        if (!is_null($battle->one_off_price)) {
+            return (float) $battle->one_off_price;
+        }
+
+        try {
+            $setting = \App\Models\PricingSetting::singleton();
+            return (float) ($setting->default_battle_one_off_price ?? 0);
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+    }
+
+    private function userHasBattlePurchase($user, Battle $battle): bool
+    {
+        return \App\Models\OneOffPurchase::where('user_id', $user->id)
+            ->where('item_type', 'battle')
+            ->where('item_id', $battle->getKey())
+            ->where('status', 'confirmed')
+            ->exists();
     }
     public function store(Request $request)
     {
@@ -126,6 +148,7 @@ class BattleController extends Controller
         if (isset($settings['time_per_question'])) {
             $battle->time_per_question = $settings['time_per_question'];
         }
+        $battle->one_off_price = $this->getEffectiveBattlePrice($battle);
         return response()->json($battle);
     }
 
@@ -585,54 +608,16 @@ class BattleController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // Extract subscription preference context from request if present
-        $context = [
-            'subscription_type' => $request->input('subscription_type'),
-            'institution_id' => $request->input('institution_id'),
-        ];
-
-        // Use centralized service for subscription validation
-        $subValidation = \App\Services\SubscriptionLimitService::validateSubscriptionAccess($user, $context);
-
-        // Check one-off purchase as alternative
-        $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
-            ->where('item_type', 'battle')
-            ->where('item_id', $battle->getKey())
-            ->where('status', 'confirmed')
-            ->exists();
-
-        // User needs: active institution package OR one-off purchase
-        $hasValidSubscription = $subValidation['allowed'] && $subValidation['subscription'];
-        
-        if (!$hasValidSubscription && !$hasOneOff) {
+        $price = $this->getEffectiveBattlePrice($battle);
+        if ($price > 0 && !$this->userHasBattlePurchase($user, $battle)) {
             return response()->json([
-                'ok' => false, 
-                'message' => $subValidation['message'] ?? 'Institution package or one-off purchase required'
+                'ok' => false,
+                'requires_payment' => true,
+                'price' => $price,
+                'currency' => 'KES',
+                'message' => 'Payment required to view battle results',
+                'checkout_url' => '/quizee/payments/checkout?type=battle&id=' . $battle->getKey(),
             ], 403);
-        }
-
-        // Only check limits if user has active subscription
-        if ($hasValidSubscription) {
-            $context = [
-                'subscription_type' => $request->input('subscription_type'),
-                'institution_id' => $request->input('institution_id'),
-            ];
-            $limitCheck = \App\Services\SubscriptionLimitService::checkDailyLimit($user, 'battle_results', $context);
-            
-            if (!$limitCheck['allowed']) {
-                return response()->json([
-                    'ok' => false,
-                    'code' => 'limit_reached',
-                    'limit' => [
-                        'type' => 'battle_results',
-                        'value' => $limitCheck['limit'],
-                        'used' => $limitCheck['used'],
-                        'remaining' => $limitCheck['remaining'],
-                        'subscription_type' => $subValidation['subscription_type']
-                    ],
-                    'message' => 'Daily battle result reveal limit reached for your plan'
-                ], 403);
-            }
         }
 
         try {
@@ -670,12 +655,6 @@ class BattleController extends Controller
             
             $battle->status = 'completed';
             $battle->completed_at = now();
-
-            // Record which subscription was used for this reveal
-            if ($hasValidSubscription && $subValidation['subscription']) {
-                $battle->subscription_id = $subValidation['subscription']->id;
-                $battle->subscription_type = $subValidation['subscription_type'] ?? 'personal';
-            }
 
             $battle->save();
 
@@ -863,27 +842,23 @@ class BattleController extends Controller
     public function result(Request $request, Battle $battle)
     {
         $user = $request->user();
-        
-        // Extract subscription preference context from request if present
-        $context = [
-            'subscription_type' => $request->input('subscription_type'),
-            'institution_id' => $request->input('institution_id'),
-        ];
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
-        // Always check subscription limits for battle results
-        $limitCheck = SubscriptionLimitService::checkDailyLimit($user, 'battle_results', $context);
-        
-        if (!$limitCheck['allowed']) {
+        if (!in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $price = $this->getEffectiveBattlePrice($battle);
+        if ($price > 0 && !$this->userHasBattlePurchase($user, $battle)) {
             return response()->json([
                 'ok' => false,
-                'code' => 'limit_reached',
-                'message' => 'Daily result reveal limit reached for your plan',
-                'limit' => [
-                    'type' => 'battle_results',
-                    'value' => $limitCheck['limit'],
-                    'used' => $limitCheck['used'],
-                    'remaining' => $limitCheck['remaining'],
-                ]
+                'requires_payment' => true,
+                'price' => $price,
+                'currency' => 'KES',
+                'message' => 'Payment required to view battle results',
+                'checkout_url' => '/quizee/payments/checkout?type=battle&id=' . $battle->getKey(),
             ], 403);
         }
 

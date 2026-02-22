@@ -95,6 +95,10 @@ Route::prefix('guest')->group(function () {
     Route::post('/quizzes/{quiz}/submit', [\App\Http\Controllers\Api\GuestQuizController::class, 'submit'])->middleware('throttle:30,1');
     // Per-question marking for guest users (allows server-side marking without exposing all answers)
     Route::post('/quizzes/{quiz}/mark', [\App\Http\Controllers\Api\GuestQuizController::class, 'markQuestion'])->middleware('throttle:60,1');
+    Route::get('/attempts/{attempt}', [\App\Http\Controllers\Api\GuestQuizController::class, 'showAttempt'])->middleware('throttle:120,1');
+    // Guest pay-to-unlock results.
+    Route::post('/one-off-purchases', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'storeGuest'])->middleware('throttle:30,1');
+    Route::post('/one-off-purchases/status', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'guestStatus'])->middleware('throttle:60,1');
 });
 
 // Public grades listing for frontend

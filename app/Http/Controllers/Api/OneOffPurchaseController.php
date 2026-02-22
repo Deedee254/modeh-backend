@@ -9,9 +9,11 @@ use App\Models\Quiz;
 use App\Models\Battle;
 use App\Models\Tournament;
 use App\Models\MpesaTransaction;
+use App\Models\GuestUnlockToken;
 use App\Services\MpesaService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class OneOffPurchaseController extends Controller
 {
@@ -213,5 +215,153 @@ class OneOffPurchaseController extends Controller
         }
 
         return response()->json(['ok' => true, 'purchase' => $purchase]);
+    }
+
+    /**
+     * Guest one-off purchase creation.
+     * Allows a guest to pay to unlock a quiz/battle result without authentication.
+     */
+    public function storeGuest(Request $request)
+    {
+        $data = $request->validate([
+            'item_type' => 'required|in:quiz,battle',
+            'item_id' => 'required',
+            'amount' => 'nullable|numeric',
+            'phone' => 'required|string',
+            'gateway' => 'nullable|string',
+            'guest_identifier' => 'required|string|min:6',
+            'guest_attempt_id' => 'nullable|string',
+        ]);
+
+        $resolvedAmount = $this->resolveOneOffAmount($data['item_type'], $data['item_id']);
+        if ($resolvedAmount === null || $resolvedAmount <= 0) {
+            return response()->json(['ok' => false, 'message' => 'Invalid item or price not configured'], 422);
+        }
+
+        if (!empty($data['amount']) && (float) $data['amount'] != (float) $resolvedAmount) {
+            Log::warning('[Guest OneOff Purchase] Client amount mismatch', [
+                'item_type' => $data['item_type'],
+                'item_id' => $data['item_id'],
+                'client_amount' => $data['amount'],
+                'resolved_amount' => $resolvedAmount,
+            ]);
+        }
+
+        $phone = trim((string) $data['phone']);
+        if ($phone === '') {
+            return response()->json(['ok' => false, 'message' => 'Phone number required for mpesa payments'], 422);
+        }
+
+        $gateway = $data['gateway'] ?? 'mpesa';
+        $purchase = OneOffPurchase::create([
+            'user_id' => null,
+            'guest_identifier' => $data['guest_identifier'],
+            'item_type' => $data['item_type'],
+            'item_id' => $data['item_id'],
+            'amount' => $resolvedAmount,
+            'status' => 'pending',
+            'gateway' => $gateway,
+            'gateway_meta' => array_filter([
+                'phone' => $phone,
+            ], fn($v) => $v !== null && $v !== ''),
+            'meta' => array_filter([
+                'guest_attempt_id' => $data['guest_attempt_id'] ?? null,
+            ], fn($v) => $v !== null && $v !== ''),
+        ]);
+
+        $service = new MpesaService(config('services.mpesa'));
+        $res = $service->initiateStkPush($phone, (float) $purchase->amount, 'GuestOneOff-' . $purchase->id);
+
+        if (!$res['ok']) {
+            Log::error('[Guest OneOff Purchase] STK Push failed', [
+                'purchase_id' => $purchase->id,
+                'error' => $res['message'] ?? 'unknown error',
+            ]);
+            return response()->json(['ok' => false, 'message' => 'Failed to initiate payment'], 500);
+        }
+
+        $checkoutRequestId = $res['tx'];
+        $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
+            'tx' => $checkoutRequestId,
+            'checkout_request_id' => $checkoutRequestId,
+            'initiated_at' => now(),
+        ]);
+        $purchase->save();
+
+        MpesaTransaction::create([
+            'user_id' => null,
+            'checkout_request_id' => $checkoutRequestId,
+            'merchant_request_id' => $res['body']['MerchantRequestID'] ?? null,
+            'amount' => $purchase->amount,
+            'phone' => $phone,
+            'status' => 'pending',
+            'billable_type' => OneOffPurchase::class,
+            'billable_id' => $purchase->id,
+            'raw_response' => json_encode($res['body'] ?? []),
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'purchase' => $purchase,
+            'tx' => $checkoutRequestId,
+            'checkout_request_id' => $checkoutRequestId,
+        ]);
+    }
+
+    /**
+     * Guest polling endpoint for purchase status and unlock token.
+     */
+    public function guestStatus(Request $request)
+    {
+        $data = $request->validate([
+            'checkout_request_id' => 'required|string',
+            'guest_identifier' => 'required|string',
+        ]);
+
+        $purchase = OneOffPurchase::where(function ($q) use ($data) {
+            $q->where('gateway_meta->tx', $data['checkout_request_id'])
+                ->orWhere('gateway_meta->checkout_request_id', $data['checkout_request_id']);
+        })
+            ->whereNull('user_id')
+            ->where('guest_identifier', $data['guest_identifier'])
+            ->first();
+
+        if (!$purchase) {
+            return response()->json(['ok' => false, 'message' => 'Purchase not found'], 404);
+        }
+
+        if ($purchase->status !== 'confirmed') {
+            return response()->json([
+                'ok' => true,
+                'status' => $purchase->status ?: 'pending',
+                'purchase_id' => $purchase->id,
+            ]);
+        }
+
+        $token = GuestUnlockToken::where('purchase_id', $purchase->id)
+            ->where('guest_identifier', $data['guest_identifier'])
+            ->where('expires_at', '>', now())
+            ->latest('id')
+            ->first();
+
+        if (!$token) {
+            $token = GuestUnlockToken::create([
+                'token' => Str::random(64),
+                'guest_identifier' => $data['guest_identifier'],
+                'item_type' => $purchase->item_type,
+                'item_id' => $purchase->item_id,
+                'purchase_id' => $purchase->id,
+                'guest_attempt_id' => $purchase->meta['guest_attempt_id'] ?? null,
+                'expires_at' => now()->addHours(24),
+            ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'status' => 'confirmed',
+            'purchase_id' => $purchase->id,
+            'unlock_token' => $token->token,
+            'unlock_expires_at' => optional($token->expires_at)->toIso8601String(),
+        ]);
     }
 }
