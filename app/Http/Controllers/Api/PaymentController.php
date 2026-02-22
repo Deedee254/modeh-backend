@@ -31,14 +31,18 @@ class PaymentController extends Controller
         }
 
         $amount = $subscription->package->price ?? 0;
-        $phone = $request->phone ?? ($subscription->gateway_meta['phone'] ?? null) ?? ($subscription->user->phone ?? null);
+        $rawPhone = $request->phone ?? ($subscription->gateway_meta['phone'] ?? null) ?? ($subscription->user->phone ?? null);
 
-        if (!$phone || !is_string($phone) || trim($phone) === '') {
+        if (!$rawPhone || !is_string($rawPhone) || trim($rawPhone) === '') {
             return response()->json(['ok' => false, 'message' => 'Phone number required for mpesa payments'], 422);
         }
 
         // Use MpesaService with config from env
         $service = new MpesaService(config('services.mpesa'));
+        $phone = $service->normalizePhone($rawPhone);
+        if (!$phone) {
+            return response()->json(['ok' => false, 'message' => 'Invalid phone number. Use 2547XXXXXXXX or 07XXXXXXXX'], 422);
+        }
         $res = $service->initiateStkPush($phone, $amount, 'Subscription-'.$subscription->id);
 
         if ($res['ok']) {

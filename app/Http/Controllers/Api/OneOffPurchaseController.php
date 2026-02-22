@@ -55,17 +55,12 @@ class OneOffPurchaseController extends Controller
         }
 
         $gateway = $data['gateway'] ?? 'mpesa';
-        $phone = $data['phone'] ?? ($user->phone ?? null);
-
-        if ($gateway === 'mpesa' && (!$phone || !is_string($phone) || trim($phone) === '')) {
-            return response()->json([
-                'ok' => false,
-                'require_phone' => true,
-                'message' => 'Phone number required for mpesa payments',
-            ], 422);
+        $service = new MpesaService(config('services.mpesa'));
+        $phoneResolution = $this->resolveMpesaPhone($service, $data['phone'] ?? ($user->phone ?? null), $gateway);
+        if (!$phoneResolution['ok']) {
+            return response()->json($phoneResolution['error'], 422);
         }
-
-        $phone = is_string($phone) ? trim($phone) : $phone;
+        $phone = $phoneResolution['phone'];
         $traceId = (string) Str::ulid();
 
         Log::info('[OneOff Purchase] Initiating payment', [
@@ -97,8 +92,6 @@ class OneOffPurchaseController extends Controller
         ]);
 
         // initiate mpesa push via MpesaService
-        $config = config('services.mpesa');
-        $service = new MpesaService($config);
         $res = $service->initiateStkPush($phone, (float)$purchase->amount, 'OneOff-'.$purchase->id, $traceId);
 
         Log::info('[OneOff Purchase] STK initiation response', [
@@ -284,12 +277,13 @@ class OneOffPurchaseController extends Controller
             ]);
         }
 
-        $phone = trim((string) $data['phone']);
-        if ($phone === '') {
-            return response()->json(['ok' => false, 'message' => 'Phone number required for mpesa payments'], 422);
-        }
-
         $gateway = $data['gateway'] ?? 'mpesa';
+        $service = new MpesaService(config('services.mpesa'));
+        $phoneResolution = $this->resolveMpesaPhone($service, $data['phone'] ?? null, $gateway);
+        if (!$phoneResolution['ok']) {
+            return response()->json($phoneResolution['error'], 422);
+        }
+        $phone = $phoneResolution['phone'];
         $traceId = (string) Str::ulid();
 
         Log::info('[Guest OneOff Purchase] Initiating payment', [
@@ -320,7 +314,6 @@ class OneOffPurchaseController extends Controller
             ], fn($v) => $v !== null && $v !== ''),
         ]);
 
-        $service = new MpesaService(config('services.mpesa'));
         $res = $service->initiateStkPush($phone, (float) $purchase->amount, 'GuestOneOff-' . $purchase->id, $traceId);
 
         Log::info('[Guest OneOff Purchase] STK initiation response', [
@@ -444,5 +437,37 @@ class OneOffPurchaseController extends Controller
         $value = preg_replace('/\s+/', '', (string) $phone);
         if (strlen($value) <= 5) return $value;
         return substr($value, 0, 4) . str_repeat('*', max(0, strlen($value) - 6)) . substr($value, -2);
+    }
+
+    private function resolveMpesaPhone(MpesaService $service, $rawPhone, string $gateway): array
+    {
+        if ($gateway !== 'mpesa') {
+            return ['ok' => true, 'phone' => is_string($rawPhone) ? trim($rawPhone) : $rawPhone];
+        }
+
+        if (!is_string($rawPhone) || trim($rawPhone) === '') {
+            return [
+                'ok' => false,
+                'error' => [
+                    'ok' => false,
+                    'require_phone' => true,
+                    'message' => 'Phone number required for mpesa payments',
+                ],
+            ];
+        }
+
+        $normalized = $service->normalizePhone($rawPhone);
+        if (!$normalized) {
+            return [
+                'ok' => false,
+                'error' => [
+                    'ok' => false,
+                    'require_phone' => true,
+                    'message' => 'Invalid phone number. Use 2547XXXXXXXX or 07XXXXXXXX',
+                ],
+            ];
+        }
+
+        return ['ok' => true, 'phone' => $normalized];
     }
 }

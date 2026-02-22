@@ -88,15 +88,31 @@ class MpesaService
         return null;
     }
 
-    protected function formatPhone(string $phone): string
+    /**
+     * Normalize Kenyan phone numbers to 254XXXXXXXXX format.
+     * Returns null when the number is invalid.
+     */
+    public function normalizePhone(?string $phone): ?string
     {
-        $p = trim($phone);
-        // normalize leading 0 to 254
-        if (preg_match('/^0/', $p)) {
-            $p = '254'.ltrim($p, '0');
+        if (!is_string($phone) || trim($phone) === '') {
+            return null;
         }
-        // if starts with + remove +
-        if (strpos($p, '+') === 0) $p = substr($p, 1);
+
+        $p = preg_replace('/\D+/', '', trim($phone));
+        if (!$p) {
+            return null;
+        }
+
+        if (str_starts_with($p, '0') && strlen($p) === 10) {
+            $p = '254' . substr($p, 1);
+        } elseif ((str_starts_with($p, '7') || str_starts_with($p, '1')) && strlen($p) === 9) {
+            $p = '254' . $p;
+        }
+
+        if (!preg_match('/^254(7|1)\d{8}$/', $p)) {
+            return null;
+        }
+
         return $p;
     }
 
@@ -122,28 +138,34 @@ class MpesaService
         $timestamp = now()->format('YmdHis');
         $password = base64_encode($shortcode.$passkey.$timestamp);
 
-        $phone = $this->formatPhone($phone);
+        $normalizedPhone = $this->normalizePhone($phone);
+        if (!$normalizedPhone) {
+            return ['ok' => false, 'message' => 'Invalid phone number. Use 2547XXXXXXXX or 07XXXXXXXX'];
+        }
+
+        $ref = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($accountRef ?? 'Subscription'));
+        $ref = substr($ref !== '' ? $ref : 'Subscription', 0, 20);
 
         $payload = [
             'BusinessShortCode' => $shortcode,
             'Password' => $password,
             'Timestamp' => $timestamp,
             'TransactionType' => 'CustomerPayBillOnline',
-            'Amount' => (int)ceil($amount),
-            'PartyA' => $phone,
+            'Amount' => max(1, (int) ceil($amount)),
+            'PartyA' => $normalizedPhone,
             'PartyB' => $shortcode,
-            'PhoneNumber' => $phone,
+            'PhoneNumber' => $normalizedPhone,
             'CallBackURL' => $callback,
-            'AccountReference' => $accountRef ?? 'Subscription',
+            'AccountReference' => $ref,
             'TransactionDesc' => 'Subscription payment',
         ];
 
         try {
             Log::info('[MPESA] STK Push initiated', [
                 'trace_id' => $traceId,
-                'phone' => $phone,
+                'phone' => $normalizedPhone,
                 'amount' => $amount,
-                'account_ref' => $accountRef,
+                'account_ref' => $ref,
             ]);
 
             // Temporary debug: log outgoing payload without secrets (do not log Password)
@@ -167,7 +189,7 @@ class MpesaService
                 $tx = $body['CheckoutRequestID'] ?? ($body['MerchantRequestID'] ?? null);
                 Log::info('[MPESA] STK Push successful', [
                     'trace_id' => $traceId,
-                    'phone' => $phone,
+                    'phone' => $normalizedPhone,
                     'tx' => $tx,
                     'response' => $body,
                 ]);
@@ -177,7 +199,7 @@ class MpesaService
             $errorMsg = $body['errorMessage'] ?? json_encode($body);
             Log::warning('[MPESA] STK Push failed', [
                 'trace_id' => $traceId,
-                'phone' => $phone,
+                'phone' => $normalizedPhone,
                 'response_code' => $body['ResponseCode'] ?? 'unknown',
                 'error_message' => $errorMsg,
                 'full_response' => $body,
@@ -186,7 +208,7 @@ class MpesaService
         } catch (\Exception $e) {
             Log::error('[MPESA] STK Push exception', [
                 'trace_id' => $traceId,
-                'phone' => $phone,
+                'phone' => $normalizedPhone,
                 'amount' => $amount,
                 'error' => $e->getMessage(),
                 'code' => $e->getCode(),
@@ -264,10 +286,11 @@ class MpesaService
             }
 
             // Check ResponseCode (should be 0 for accepted)
-            if (($body['ResponseCode'] ?? null) !== '0') {
+            $responseCode = $body['ResponseCode'] ?? null;
+            if ($responseCode === null || (int) $responseCode !== 0) {
                 Log::warning('[MPESA] STK Push Query failed response code', [
                     'checkout_request_id' => $checkoutRequestId,
-                    'response_code' => $body['ResponseCode'] ?? 'unknown',
+                    'response_code' => $responseCode ?? 'unknown',
                     'response_description' => $body['ResponseDescription'] ?? '',
                 ]);
                 return ['ok' => false, 'message' => $body['ResponseDescription'] ?? 'Query failed', 'body' => $body];
