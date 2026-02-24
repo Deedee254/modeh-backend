@@ -55,7 +55,35 @@ class OneOffPurchaseController extends Controller
         }
 
         $gateway = $data['gateway'] ?? 'mpesa';
+        $mpesaConfig = config('services.mpesa', []);
+        if ($gateway === 'mpesa') {
+            $missing = $this->missingMpesaConfig($mpesaConfig);
+            if (!empty($missing)) {
+                $this->logMpesaFlow('store.config_missing', [
+                    'user_id' => $user->id,
+                    'missing' => $missing,
+                    'environment' => $mpesaConfig['environment'] ?? null,
+                    'callback_url' => $mpesaConfig['callback_url'] ?? null,
+                ]);
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'gateway_not_configured',
+                    'message' => 'M-Pesa gateway not configured on server',
+                    'missing' => $missing,
+                ], 500);
+            }
+        }
+
         $service = new MpesaService(config('services.mpesa'));
+        $this->logMpesaFlow('store.before_stk', [
+            'user_id' => $user->id,
+            'item_type' => $data['item_type'],
+            'item_id' => $data['item_id'],
+            'gateway' => $gateway,
+            'environment' => $mpesaConfig['environment'] ?? null,
+            'shortcode_configured' => !empty($mpesaConfig['shortcode']),
+            'callback_url' => $mpesaConfig['callback_url'] ?? null,
+        ]);
         $phoneResolution = $this->resolveMpesaPhone($service, $data['phone'] ?? ($user->phone ?? null), $gateway);
         if (!$phoneResolution['ok']) {
             return response()->json($phoneResolution['error'], 422);
@@ -104,6 +132,15 @@ class OneOffPurchaseController extends Controller
             'response_description' => $res['body']['ResponseDescription'] ?? null,
             'customer_message' => $res['body']['CustomerMessage'] ?? null,
             'error' => $res['message'] ?? null,
+        ]);
+        $this->logMpesaFlow('store.stk_response', [
+            'trace_id' => $traceId,
+            'user_id' => $user->id,
+            'purchase_id' => $purchase->id,
+            'ok' => (bool) ($res['ok'] ?? false),
+            'tx' => $res['tx'] ?? null,
+            'message' => $res['message'] ?? null,
+            'body' => $res['body'] ?? null,
         ]);
 
         if ($res['ok']) {
@@ -278,7 +315,35 @@ class OneOffPurchaseController extends Controller
         }
 
         $gateway = $data['gateway'] ?? 'mpesa';
+        $mpesaConfig = config('services.mpesa', []);
+        if ($gateway === 'mpesa') {
+            $missing = $this->missingMpesaConfig($mpesaConfig);
+            if (!empty($missing)) {
+                $this->logMpesaFlow('store_guest.config_missing', [
+                    'guest_identifier' => $data['guest_identifier'] ?? null,
+                    'missing' => $missing,
+                    'environment' => $mpesaConfig['environment'] ?? null,
+                    'callback_url' => $mpesaConfig['callback_url'] ?? null,
+                ]);
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'gateway_not_configured',
+                    'message' => 'M-Pesa gateway not configured on server',
+                    'missing' => $missing,
+                ], 500);
+            }
+        }
+
         $service = new MpesaService(config('services.mpesa'));
+        $this->logMpesaFlow('store_guest.before_stk', [
+            'guest_identifier' => $data['guest_identifier'],
+            'item_type' => $data['item_type'],
+            'item_id' => $data['item_id'],
+            'gateway' => $gateway,
+            'environment' => $mpesaConfig['environment'] ?? null,
+            'shortcode_configured' => !empty($mpesaConfig['shortcode']),
+            'callback_url' => $mpesaConfig['callback_url'] ?? null,
+        ]);
         $phoneResolution = $this->resolveMpesaPhone($service, $data['phone'] ?? null, $gateway);
         if (!$phoneResolution['ok']) {
             return response()->json($phoneResolution['error'], 422);
@@ -325,6 +390,14 @@ class OneOffPurchaseController extends Controller
             'response_description' => $res['body']['ResponseDescription'] ?? null,
             'customer_message' => $res['body']['CustomerMessage'] ?? null,
             'error' => $res['message'] ?? null,
+        ]);
+        $this->logMpesaFlow('store_guest.stk_response', [
+            'trace_id' => $traceId,
+            'purchase_id' => $purchase->id,
+            'ok' => (bool) ($res['ok'] ?? false),
+            'tx' => $res['tx'] ?? null,
+            'message' => $res['message'] ?? null,
+            'body' => $res['body'] ?? null,
         ]);
 
         if (!$res['ok']) {
@@ -469,5 +542,33 @@ class OneOffPurchaseController extends Controller
         }
 
         return ['ok' => true, 'phone' => $normalized];
+    }
+
+    private function missingMpesaConfig(array $config): array
+    {
+        $required = ['environment', 'consumer_key', 'consumer_secret', 'shortcode', 'passkey', 'callback_url'];
+        $missing = [];
+        foreach ($required as $key) {
+            $value = $config[$key] ?? null;
+            if (!is_string($value) || trim($value) === '') {
+                $missing[] = $key;
+            }
+        }
+        return $missing;
+    }
+
+    private function logMpesaFlow(string $stage, array $context = []): void
+    {
+        try {
+            Log::build([
+                'driver' => 'single',
+                'path' => storage_path('logs/mpesa-oneoff-flow.log'),
+                'level' => 'debug',
+            ])->info('[MPESA ONEOFF FLOW] ' . $stage, array_merge([
+                'at' => now()->toIso8601String(),
+            ], $context));
+        } catch (\Throwable $_) {
+            // keep payment flow unaffected if logging fails
+        }
     }
 }
