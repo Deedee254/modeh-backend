@@ -45,6 +45,7 @@ class QuizResource extends JsonResource
             ],
             'is_paid' => $this->is_paid,
             'one_off_price' => $this->one_off_price,
+            'default_quiz_one_off_price' => $this->getDefaultQuizPrice(),
             'timer_seconds' => $this->timer_seconds,
             'per_question_seconds' => $this->per_question_seconds,
             'use_per_question_timer' => $this->use_per_question_timer,
@@ -90,5 +91,19 @@ class QuizResource extends JsonResource
             // User attempt data
             'last_attempt' => $this->whenLoaded('userLastAttempt'),
         ];
+    }
+
+    /**
+     * Get the global default quiz one-off price.
+     * Used as fallback when quiz doesn't have its own price.
+     */
+    private function getDefaultQuizPrice(): ?float
+    {
+        try {
+            $setting = \App\Models\PricingSetting::singleton();
+            return (float) ($setting->default_quiz_one_off_price ?? 0) ?: null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 }
