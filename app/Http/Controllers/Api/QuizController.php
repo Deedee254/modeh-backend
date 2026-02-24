@@ -130,6 +130,7 @@ class QuizController extends Controller
         }
 
         $this->normalizeBooleanInputs($request, ['is_paid', 'use_per_question_timer', 'shuffle_questions', 'shuffle_answers', 'is_draft']);
+        $this->normalizeVideoUrlInput($request, 'youtube_url');
 
         // Log incoming payload for debugging (don't include file streams)
         Log::info('QuizController@update incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
@@ -647,6 +648,7 @@ class QuizController extends Controller
         }
 
         $this->normalizeBooleanInputs($request, ['is_paid', 'use_per_question_timer', 'shuffle_questions', 'shuffle_answers', 'is_draft']);
+        $this->normalizeVideoUrlInput($request, 'youtube_url');
 
         // Log incoming payload for debugging (don't include file streams)
         Log::info('QuizController@store incoming', array_merge($request->except(['cover', 'question_media']), ['files' => array_keys($request->files->all())]));
@@ -720,6 +722,37 @@ class QuizController extends Controller
             'subject' => $subject,
             'request' => $request,
         ];
+    }
+
+    private function normalizeVideoUrlInput(Request $request, string $key): void
+    {
+        if (!$request->has($key)) {
+            return;
+        }
+
+        $value = $request->get($key);
+        if (!is_string($value)) {
+            return;
+        }
+
+        $value = trim($value);
+        if ($value === '') {
+            $request->merge([$key => null]);
+            return;
+        }
+
+        // Some clients submit full iframe/embed HTML. Extract the iframe src so URL validation can pass.
+        if (preg_match('/<iframe[^>]*\bsrc=["\']([^"\']+)["\']/i', $value, $matches) === 1) {
+            $value = html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5);
+        }
+
+        $value = trim($value);
+        if ($value === '') {
+            $request->merge([$key => null]);
+            return;
+        }
+
+        $request->merge([$key => $value]);
     }
 
     private function handleCoverUpload(Request $request): ?string

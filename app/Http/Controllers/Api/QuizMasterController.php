@@ -37,8 +37,10 @@ class QuizMasterController extends Controller
             // We'll search by user name containing parts of the slug
             $slugParts = explode('-', $request->slug);
             // Filter users whose name matches the slug pattern
-            $query->whereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%{$request->slug}%"])
-                  ->orWhereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%".implode("%", $slugParts)."%"]);
+            $query->where(function ($slugQuery) use ($request, $slugParts) {
+                $slugQuery->whereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%{$request->slug}%"])
+                    ->orWhereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%" . implode("%", $slugParts) . "%"]);
+            });
             
             $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes.topic'])->get();
         } else {
@@ -60,6 +62,9 @@ class QuizMasterController extends Controller
         
         $collection->transform(function ($user) use ($currentUserId) {
             $profile = $user->quizMasterProfile;
+            if (!$profile) {
+                return null;
+            }
             $subjects = Subject::whereIn('id', $profile->subjects ?? [])->get()
                 ->map(function ($subject) {
                     return [
@@ -129,6 +134,8 @@ class QuizMasterController extends Controller
 
             return $data;
         });
+
+        $collection = $collection->filter()->values();
 
         // If it's a paginated collection, reconstruct it; otherwise return wrapped result
         if ($isPaginated) {

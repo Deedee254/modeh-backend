@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 
@@ -28,6 +29,18 @@ class MpesaService
             if (is_string($this->config[$key])) {
                 $this->config[$key] = trim($this->config[$key]);
             }
+        }
+
+        // Lightweight, non-sensitive instantiation log to help trace runtime usage.
+        // Do NOT log secrets (consumer_key/consumer_secret/passkey).
+        try {
+            Log::info('[MPESA] Service constructed', [
+                'environment' => $this->config['environment'] ?? 'unknown',
+                'shortcode_configured' => !empty($this->config['shortcode']),
+                'callback_configured' => !empty($this->config['callback_url']),
+            ]);
+        } catch (\Throwable $e) {
+            // Silently ignore logging failures; logging shouldn't break the constructor.
         }
     }
 
@@ -82,7 +95,21 @@ class MpesaService
 
                 return $this->token;
             }
+        } catch (RequestException $e) {
+            $statusCode = $e->hasResponse() ? $e->getResponse()->getStatusCode() : null;
+            $responseBody = $e->hasResponse() ? (string) $e->getResponse()->getBody() : null;
+            $this->logDarajaError('token_request_exception', [
+                'status_code' => $statusCode,
+                'response_body' => $responseBody,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+            Log::error('MpesaService token error: '.$e->getMessage());
         } catch (\Exception $e) {
+            $this->logDarajaError('token_exception', [
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
             Log::error('MpesaService token error: '.$e->getMessage());
         }
         return null;
@@ -197,6 +224,12 @@ class MpesaService
             }
             
             $errorMsg = $body['errorMessage'] ?? json_encode($body);
+            $this->logDarajaError('stk_push_non_success_response', [
+                'trace_id' => $traceId,
+                'phone' => $normalizedPhone,
+                'amount' => $amount,
+                'response' => $body,
+            ]);
             Log::warning('[MPESA] STK Push failed', [
                 'trace_id' => $traceId,
                 'phone' => $normalizedPhone,
@@ -205,7 +238,36 @@ class MpesaService
                 'full_response' => $body,
             ]);
             return ['ok' => false, 'message' => $errorMsg, 'body' => $body];
+        } catch (RequestException $e) {
+            $statusCode = $e->hasResponse() ? $e->getResponse()->getStatusCode() : null;
+            $responseBody = $e->hasResponse() ? (string) $e->getResponse()->getBody() : null;
+            $this->logDarajaError('stk_push_request_exception', [
+                'trace_id' => $traceId,
+                'phone' => $normalizedPhone,
+                'amount' => $amount,
+                'status_code' => $statusCode,
+                'response_body' => $responseBody,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+            Log::error('[MPESA] STK Push exception', [
+                'trace_id' => $traceId,
+                'phone' => $normalizedPhone,
+                'amount' => $amount,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            return ['ok' => false, 'message' => $e->getMessage(), 'status_code' => $statusCode, 'body' => $responseBody ? json_decode($responseBody, true) : null];
         } catch (\Exception $e) {
+            $this->logDarajaError('stk_push_exception', [
+                'trace_id' => $traceId,
+                'phone' => $normalizedPhone,
+                'amount' => $amount,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
             Log::error('[MPESA] STK Push exception', [
                 'trace_id' => $traceId,
                 'phone' => $normalizedPhone,
@@ -288,12 +350,43 @@ class MpesaService
             // Check ResponseCode (should be 0 for accepted)
             $responseCode = $body['ResponseCode'] ?? null;
             if ($responseCode === null || (int) $responseCode !== 0) {
+                $responseDescription = (string) ($body['ResponseDescription'] ?? '');
+                $lowerDesc = strtolower($responseDescription);
+                $looksTransient = str_contains($lowerDesc, 'processing')
+                    || str_contains($lowerDesc, 'pending')
+                    || str_contains($lowerDesc, 'timed out')
+                    || str_contains($lowerDesc, 'timeout')
+                    || str_contains($lowerDesc, 'try again');
+
+                if ($looksTransient) {
+                    Log::info('[MPESA] STK Push Query transient response treated as pending', [
+                        'checkout_request_id' => $checkoutRequestId,
+                        'response_code' => $responseCode,
+                        'response_description' => $responseDescription,
+                    ]);
+
+                    return [
+                        'ok' => true,
+                        'status' => 'pending',
+                        'result_code' => null,
+                        'result_desc' => $responseDescription !== '' ? $responseDescription : 'Pending',
+                        'checkout_request_id' => $body['CheckoutRequestID'] ?? $checkoutRequestId,
+                        'raw' => $body,
+                    ];
+                }
+
                 Log::warning('[MPESA] STK Push Query failed response code', [
                     'checkout_request_id' => $checkoutRequestId,
                     'response_code' => $responseCode ?? 'unknown',
-                    'response_description' => $body['ResponseDescription'] ?? '',
+                    'response_description' => $responseDescription,
                 ]);
-                return ['ok' => false, 'message' => $body['ResponseDescription'] ?? 'Query failed', 'body' => $body];
+                $this->logDarajaError('stk_query_non_success_response', [
+                    'checkout_request_id' => $checkoutRequestId,
+                    'response_code' => $responseCode,
+                    'response_description' => $responseDescription,
+                    'response' => $body,
+                ]);
+                return ['ok' => false, 'message' => $responseDescription !== '' ? $responseDescription : 'Query failed', 'body' => $body];
             }
 
             // Normalize status based on ResultCode
@@ -332,13 +425,59 @@ class MpesaService
                 'checkout_request_id' => $body['CheckoutRequestID'] ?? $checkoutRequestId,
                 'raw' => $body,
             ];
+        } catch (RequestException $e) {
+            $statusCode = $e->hasResponse() ? $e->getResponse()->getStatusCode() : null;
+            $responseBody = $e->hasResponse() ? (string) $e->getResponse()->getBody() : null;
+            $this->logDarajaError('stk_query_request_exception', [
+                'checkout_request_id' => $checkoutRequestId,
+                'status_code' => $statusCode,
+                'response_body' => $responseBody,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+
+            Log::error('[MPESA] STK Push Query request exception', [
+                'checkout_request_id' => $checkoutRequestId,
+                'status_code' => $statusCode,
+                'response_body' => $responseBody,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+
+            return [
+                'ok' => false,
+                'message' => $e->getMessage(),
+                'status_code' => $statusCode,
+                'body' => $responseBody ? json_decode($responseBody, true) : null,
+            ];
         } catch (\Exception $e) {
+            $this->logDarajaError('stk_query_exception', [
+                'checkout_request_id' => $checkoutRequestId,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
             Log::error('[MPESA] STK Push Query exception', [
                 'checkout_request_id' => $checkoutRequestId,
                 'error' => $e->getMessage(),
                 'code' => $e->getCode(),
             ]);
             return ['ok' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    private function logDarajaError(string $kind, array $context = []): void
+    {
+        try {
+            Log::build([
+                'driver' => 'single',
+                'path' => storage_path('logs/mpesa-daraja-errors.log'),
+                'level' => 'debug',
+            ])->error('[DARAJA ERROR] ' . $kind, array_merge([
+                'at' => now()->toIso8601String(),
+                'environment' => $this->config['environment'] ?? null,
+            ], $context));
+        } catch (\Throwable $_) {
+            // do not break payment flow due to logging issues
         }
     }
 }

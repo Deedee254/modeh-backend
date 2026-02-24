@@ -98,18 +98,28 @@ class MpesaController extends Controller
                 'trace_id' => $traceId,
                 'user_id' => $user->id,
                 'checkout_request_id' => $checkoutId,
-                'error' => $queryResult['message'],
+                'query_result' => $queryResult,
             ]);
 
             // Transient error: schedule retry
             $transaction->scheduleRetry();
 
-            return response()->json([
+            $payload = [
                 'ok' => false,
                 'message' => 'Failed to query Daraja; will retry',
                 'status' => 'pending',
                 'next_retry_at' => $transaction->next_retry_at,
-            ]);
+                // expose some fields for frontend diagnostics
+                'httpStatus' => $queryResult['status_code'] ?? null,
+                'errorMessage' => $queryResult['message'] ?? null,
+            ];
+
+            if (config('app.debug')) {
+                // When debugging, include the raw query result to help tracing
+                $payload['debug'] = $queryResult;
+            }
+
+            return response()->json($payload);
         }
 
         // Process the query result
@@ -299,11 +309,11 @@ class MpesaController extends Controller
             'mpesa_receipt' => $transaction->mpesa_receipt,
             'result_code' => $transaction->result_code,
             'result_desc' => $transaction->result_desc,
-            'transaction_date' => $transaction->transaction_date?->toIso8601String(),
-            'reconciled_at' => $transaction->reconciled_at?->toIso8601String(),
+            'transaction_date' => ($transaction->transaction_date instanceof \DateTimeInterface) ? $transaction->transaction_date->format(DATE_ATOM) : (is_string($transaction->transaction_date) ? $transaction->transaction_date : null),
+            'reconciled_at' => ($transaction->reconciled_at instanceof \DateTimeInterface) ? $transaction->reconciled_at->format(DATE_ATOM) : (is_string($transaction->reconciled_at) ? $transaction->reconciled_at : null),
             'retry_count' => $transaction->retry_count,
-            'next_retry_at' => $transaction->next_retry_at?->toIso8601String(),
-            'created_at' => $transaction->created_at?->toIso8601String(),
+            'next_retry_at' => ($transaction->next_retry_at instanceof \DateTimeInterface) ? $transaction->next_retry_at->format(DATE_ATOM) : (is_string($transaction->next_retry_at) ? $transaction->next_retry_at : null),
+            'created_at' => ($transaction->created_at instanceof \DateTimeInterface) ? $transaction->created_at->format(DATE_ATOM) : (is_string($transaction->created_at) ? $transaction->created_at : null),
         ];
     }
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Services\OnboardingService;
+use App\Services\MpesaService;
 use App\Services\SessionUserCacheService;
 use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\Cache;
@@ -146,6 +147,7 @@ class UserController extends Controller
     public function update(Request $request)
     {
         $user = $request->user();
+        $mpesa = app(MpesaService::class);
 
         $data = $request->all();
 
@@ -178,7 +180,16 @@ class UserController extends Controller
             $user->email = $data['email'];
         }
         if ($request->has('phone')) {
-            $user->phone = $data['phone'];
+            $rawPhone = $data['phone'];
+            if ($rawPhone === null || trim((string) $rawPhone) === '') {
+                $user->phone = null;
+            } else {
+                $normalizedPhone = $mpesa->normalizePhone((string) $rawPhone);
+                if (!$normalizedPhone) {
+                    return response()->json(['errors' => ['phone' => ['Invalid phone number. Use 2547XXXXXXXX or 07XXXXXXXX']]], 422);
+                }
+                $user->phone = $normalizedPhone;
+            }
         }
         // Save bio on users table for all roles
         if ($request->has('bio')) {

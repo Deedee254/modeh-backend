@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\MpesaService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -31,6 +32,7 @@ class UserResource extends JsonResource
     public function toArray(Request $request): array
     {
         $resolvedAvatar = $this->avatar ?: ($this->social_avatar ?: $this->avatar_url);
+        $normalizedPhone = app(MpesaService::class)->normalizePhone($this->phone);
 
         $payload = [
             // Core user fields (clean, no duplicates)
@@ -42,7 +44,8 @@ class UserResource extends JsonResource
             'role' => $this->role,
             'phone' => $this->phone,
             // Return phones as array for payment modal (frontend expects this for M-PESA number selection)
-            'phones' => $this->phone ? [$this->phone] : [],
+            // Only expose valid normalized MSISDN values to avoid bad presets in checkout.
+            'phones' => $normalizedPhone ? [$normalizedPhone] : [],
             // Canonical avatar field for frontend clients.
             // Legacy aliases are still included for backward compatibility.
             'avatar_url' => $this->avatar_url,

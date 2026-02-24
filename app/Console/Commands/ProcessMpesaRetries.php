@@ -42,11 +42,12 @@ class ProcessMpesaRetries extends Command
         $this->info("Found {$transactions->count()} pending transaction(s) to retry.");
 
         foreach ($transactions as $transaction) {
-            $this->info("Dispatching retry for transaction {$transaction->id} (checkout: {$transaction->checkout_request_id})");
-            ReconsileMpesaTransaction::dispatch($transaction->id);
+            $this->info("Processing retry for transaction {$transaction->id} (checkout: {$transaction->checkout_request_id})");
+            // Run synchronously so scheduled retries do not depend on queue workers being alive.
+            ReconsileMpesaTransaction::dispatchSync($transaction->id);
         }
 
-        $this->info('All retry jobs dispatched.');
+        $this->info('All retry jobs processed.');
         return 0;
     }
 }

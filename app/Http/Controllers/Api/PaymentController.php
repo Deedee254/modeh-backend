@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Events\PaymentStatusUpdated;
 use Illuminate\Http\Request;
 use App\Models\Subscription;
 use App\Models\PaymentSetting;
@@ -83,6 +84,7 @@ class PaymentController extends Controller
     // Webhook/callback from Mpesa
     public function mpesaCallback(Request $request)
     {
+        $this->logMpesaCallbackRaw($request);
         $payload = $request->all();
 
         // Best-effort parsing for Daraja callbacks. Support STK callback structure.
@@ -324,7 +326,15 @@ class PaymentController extends Controller
             }
 
             // Handle one-off purchase
-            return $this->handleOneOffPurchase($purchase, $checkoutId, $status);
+            $response = $this->handleOneOffPurchase($purchase, $checkoutId, $status);
+            $this->emitPaymentStatusUpdate(
+                $purchase->user_id,
+                $checkoutId,
+                $status,
+                $payload['parsed_mpesa'] ?? [],
+                'one_off'
+            );
+            return $response;
         }
 
         Log::info('[Payment] Subscription callback matched', [
@@ -350,7 +360,15 @@ class PaymentController extends Controller
         }
 
         // Handle subscription payment
-        return $this->handleSubscription($sub, $checkoutId, $status, $request);
+        $response = $this->handleSubscription($sub, $checkoutId, $status, $request);
+        $this->emitPaymentStatusUpdate(
+            $sub->user_id,
+            $checkoutId,
+            $status,
+            $payload['parsed_mpesa'] ?? [],
+            'subscription'
+        );
+        return $response;
     }
 
     /**
@@ -1159,6 +1177,32 @@ class PaymentController extends Controller
         return null;
     }
 
+    private function emitPaymentStatusUpdate($userId, string $txId, string $status, array $parsedMpesa = [], ?string $kind = null): void
+    {
+        if (!$userId) {
+            return;
+        }
+
+        try {
+            event(new PaymentStatusUpdated(
+                (int) $userId,
+                $txId,
+                $status,
+                $parsedMpesa['checkout_request_id'] ?? $txId,
+                $kind,
+                $parsedMpesa['mpesa_receipt'] ?? null,
+                $parsedMpesa['result_desc'] ?? null
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('[Payment] Failed to broadcast payment status update', [
+                'user_id' => $userId,
+                'tx' => $txId,
+                'status' => $status,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     /**
      * Process a reconciled MpesaTransaction and update its billable.
      */
@@ -1189,6 +1233,34 @@ class PaymentController extends Controller
             return (float) ($billable->amount ?? 0);
         }
         return null;
+    }
+
+    /**
+     * Temporary verbose logger for incoming Daraja callbacks.
+     * Writes full callback context to a dedicated file for diagnostics.
+     */
+    private function logMpesaCallbackRaw(Request $request): void
+    {
+        try {
+            Log::build([
+                'driver' => 'single',
+                'path' => storage_path('logs/mpesa-callback-raw.log'),
+                'level' => 'debug',
+            ])->info('[MPESA CALLBACK RAW]', [
+                'received_at' => now()->toIso8601String(),
+                'method' => $request->method(),
+                'url' => $request->fullUrl(),
+                'ip' => $request->ip(),
+                'headers' => $request->headers->all(),
+                'query' => $request->query(),
+                'raw_body' => $request->getContent(),
+                'parsed_payload' => $request->all(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('[MPESA CALLBACK RAW] Failed to write callback debug log', [
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
 }
