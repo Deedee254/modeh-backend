@@ -177,7 +177,7 @@ class MpesaService
             'BusinessShortCode' => $shortcode,
             'Password' => $password,
             'Timestamp' => $timestamp,
-            'TransactionType' => 'CustomerPayBillOnline',
+            'TransactionType' => 'CustomerBuyGoodsOnline',
             'Amount' => max(1, (int) ceil($amount)),
             'PartyA' => $normalizedPhone,
             'PartyB' => $shortcode,
@@ -199,6 +199,7 @@ class MpesaService
             $payloadToLog = $payload;
             if (isset($payloadToLog['Password'])) unset($payloadToLog['Password']);
             Log::debug('[MPESA] Outgoing STK payload (safe)', $payloadToLog);
+            Log::debug('[MPESA] Callback URL being sent', ['callback_url' => $callback, 'env' => $this->config['environment']]);
 
             $client = $this->httpClient();
             $res = $client->request('POST', '/mpesa/stkpush/v1/processrequest', [
