@@ -53,13 +53,13 @@ class MpesaService
 
     protected function httpClient(array $opts = [])
     {
-        return new Client(array_merge(['base_uri' => $this->baseUrl(), 'timeout' => 10], $opts));
+        return new Client(array_merge(['base_uri' => $this->baseUrl(), 'timeout' => 30], $opts));
     }
 
     protected function getToken(): ?string
     {
         // Try cache first (recommended to reduce token generation requests)
-        $cacheKey = 'mpesa.token';
+        $cacheKey = 'mpesa.token.'.$this->config['environment'];
         $cached = Cache::get($cacheKey);
         if (!empty($cached)) {
             return $cached;
@@ -125,7 +125,7 @@ class MpesaService
             return null;
         }
 
-        $p = preg_replace('/\D+/', '', trim($phone));
+        $p = preg_replace('/[^0-9]/', '', $phone);
         if (!$p) {
             return null;
         }
@@ -158,8 +158,8 @@ class MpesaService
             return ['ok' => false, 'message' => 'shortcode or passkey not configured'];
         }
 
-        if (!$callback || !is_string($callback) || trim($callback) === '') {
-            return ['ok' => false, 'message' => 'callback_url not configured'];
+        if (!$callback || !filter_var($callback, FILTER_VALIDATE_URL)) {
+            return ['ok' => false, 'message' => 'Invalid callback_url'];
         }
 
         $timestamp = now()->format('YmdHis');
@@ -170,8 +170,8 @@ class MpesaService
             return ['ok' => false, 'message' => 'Invalid phone number. Use 2547XXXXXXXX or 07XXXXXXXX'];
         }
 
-        $ref = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($accountRef ?? 'Subscription'));
-        $ref = substr($ref !== '' ? $ref : 'Subscription', 0, 20);
+        $ref = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($accountRef ?? 'SUBSCRIPTION'));
+        $ref = substr($ref !== '' ? $ref : 'SUBSCRIPTION', 0, 20);
 
         $payload = [
             'BusinessShortCode' => $shortcode,
@@ -184,7 +184,7 @@ class MpesaService
             'PhoneNumber' => $normalizedPhone,
             'CallBackURL' => $callback,
             'AccountReference' => $ref,
-            'TransactionDesc' => 'Subscription payment',
+            'TransactionDesc' => 'SUBSCRIPTION payment',
         ];
 
         try {
