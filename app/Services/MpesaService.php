@@ -20,12 +20,13 @@ class MpesaService
             'consumer_key' => null,
             'consumer_secret' => null,
             'shortcode' => null,
+            'till_number' => null,
             'passkey' => null,
             'callback_url' => null,
         ], $config);
         
         // Trim whitespace from string config values
-        foreach (['consumer_key', 'consumer_secret', 'shortcode', 'passkey', 'callback_url'] as $key) {
+        foreach (['consumer_key', 'consumer_secret', 'shortcode', 'till_number', 'passkey', 'callback_url'] as $key) {
             if (is_string($this->config[$key])) {
                 $this->config[$key] = trim($this->config[$key]);
             }
@@ -151,6 +152,7 @@ class MpesaService
         if (!$token) return ['ok' => false, 'message' => 'failed to obtain oauth token'];
 
         $shortcode = $this->config['shortcode'] ?? null;
+        $tillNumber = $this->config['till_number'] ?? $shortcode; // fallback to shortcode if till_number not set
         $passkey = $this->config['passkey'] ?? null;
         $callback = $this->config['callback_url'] ?? null;
 
@@ -180,7 +182,7 @@ class MpesaService
             'TransactionType' => 'CustomerBuyGoodsOnline',
             'Amount' => max(1, (int) ceil($amount)),
             'PartyA' => $normalizedPhone,
-            'PartyB' => $shortcode,
+            'PartyB' => $tillNumber,
             'PhoneNumber' => $normalizedPhone,
             'CallBackURL' => $callback,
             'AccountReference' => $ref,
