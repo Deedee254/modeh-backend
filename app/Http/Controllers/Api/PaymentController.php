@@ -741,7 +741,7 @@ class PaymentController extends Controller
             $meta = array_merge($meta, $sub->gateway_meta ?? []);
         }
         $quizId = $meta['quiz_id'] ?? null;
-        $quizMasterId = $meta['quiz_master_id'] ?? null;
+        $quizMasterId = $meta['quiz-master_id'] ?? null;
 
         if (!$quizMasterId && $quizId) {
             $quiz = \App\Models\Quiz::find($quizId);
@@ -754,10 +754,10 @@ class PaymentController extends Controller
         $transaction = \App\Models\Transaction::create([
             'tx_id' => $txId,
             'user_id' => $sub->user_id,
-            'quiz_master_id' => $quizMasterId,
+            'quiz-master_id' => $quizMasterId,
             'quiz_id' => $quizId,
             'amount' => $amount,
-            'quiz_master_share' => $quizMasterShare,
+            'quiz-master_share' => $quizMasterShare,
             'platform_share' => $platformShare,
             'gateway' => 'mpesa',
             'meta' => $meta,
@@ -768,7 +768,7 @@ class PaymentController extends Controller
             'transaction_id' => $transaction->id,
             'tx' => $txId,
             'amount' => $amount,
-            'quiz_master_share' => $quizMasterShare,
+            'quiz-master_share' => $quizMasterShare,
             'platform_share' => $platformShare,
         ]);
 
@@ -795,13 +795,13 @@ class PaymentController extends Controller
             try {
                 $this->creditWallet($quizMasterId, $quizMasterShare);
                 Log::info('[Payment] Quiz master wallet credited', [
-                    'quiz_master_id' => $quizMasterId,
+                    'quiz-master_id' => $quizMasterId,
                     'amount' => $quizMasterShare,
                     'tx' => $txId,
                 ]);
             } catch (\Throwable $e) {
                 Log::error('[Payment] Quiz master wallet credit failed', [
-                    'quiz_master_id' => $quizMasterId,
+                    'quiz-master_id' => $quizMasterId,
                     'amount' => $quizMasterShare,
                     'error' => $e->getMessage(),
                 ]);
@@ -876,10 +876,10 @@ class PaymentController extends Controller
         \App\Models\Transaction::create([
             'tx_id' => $txId,
             'user_id' => $purchase->user_id,
-            'quiz_master_id' => $quizMasterId,
+            'quiz-master_id' => $quizMasterId,
             'quiz_id' => $purchase->item_id,
             'amount' => $amount,
-            'quiz_master_share' => $quizMasterShare,
+            'quiz-master_share' => $quizMasterShare,
             'platform_share' => $platformShare,
             'gateway' => 'mpesa',
             'meta' => ['one_off' => true, 'item_type' => 'quiz', 'item_id' => $purchase->item_id],
@@ -928,10 +928,10 @@ class PaymentController extends Controller
             \App\Models\Transaction::create([
                 'tx_id' => $txId,
                 'user_id' => $purchase->user_id,
-                'quiz_master_id' => $ownerId,
+                'quiz-master_id' => $ownerId,
                 'quiz_id' => null,
                 'amount' => $amount,
-                'quiz_master_share' => $ownerShare,
+                'quiz-master_share' => $ownerShare,
                 'platform_share' => round($platformShare * ($ownerShare / max(0.0001, $totalQuizMasterShare)), 2),
                 'gateway' => 'mpesa',
                 'meta' => ['one_off' => true, 'item_type' => 'battle', 'item_id' => $purchase->item_id, 'question_owner_breakdown' => array_keys($questionOwners)],
@@ -953,10 +953,10 @@ class PaymentController extends Controller
         \App\Models\Transaction::create([
             'tx_id' => $txId,
             'user_id' => $purchase->user_id,
-            'quiz_master_id' => null,
+            'quiz-master_id' => null,
             'quiz_id' => null,
             'amount' => $amount,
-            'quiz_master_share' => $quizMasterShare,
+            'quiz-master_share' => $quizMasterShare,
             'platform_share' => $platformShare,
             'gateway' => 'mpesa',
             'meta' => ['one_off' => true, 'item_type' => $purchase->item_type, 'item_id' => $purchase->item_id],
@@ -1051,10 +1051,10 @@ class PaymentController extends Controller
             \App\Models\Transaction::create([
                 'tx_id' => 'aff_' . $txId,
                 'user_id' => $affiliate->user_id, // Commission goes to affiliate owner
-                'quiz_master_id' => null,
+                'quiz-master_id' => null,
                 'quiz_id' => null,
                 'amount' => $amount,
-                'quiz_master_share' => $commissionAmount,
+                'quiz-master_share' => $commissionAmount,
                 'platform_share' => 0,
                 'gateway' => 'mpesa',
                 'meta' => [
