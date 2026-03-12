@@ -31,11 +31,11 @@ class SettleQuizMasterShares extends Command
         $dryRun = $this->option('dry-run');
         $userId = $this->option('user-id');
 
-        $this->info('🔄 Starting Quiz Master Settlement Process...');
+        $this->info('Starting Quiz Master Settlement Process...');
         $this->newLine();
 
         if ($dryRun) {
-            $this->warn('⚠️  DRY RUN MODE - No changes will be made');
+            $this->warn('DRY RUN MODE - No changes will be made');
             $this->newLine();
         }
 
@@ -57,8 +57,8 @@ class SettleQuizMasterShares extends Command
         $transactions = $query->get();
 
         if ($transactions->isEmpty()) {
-            $this->info('✅ No transactions found that need settlement.');
-            return Command::SUCCESS;
+            $this->info('No transactions found that need settlement.');
+            return 0;
         }
 
         $this->warn("Found {$transactions->count()} transactions that need settlement");
@@ -70,13 +70,13 @@ class SettleQuizMasterShares extends Command
         foreach ($transactions as $transaction) {
             $quiz = $transaction->quiz;
             if (!$quiz) {
-                $this->warn("⚠️  Transaction #{$transaction->id} has no associated quiz - skipping");
+                $this->warn("Transaction #{$transaction->id} has no associated quiz - skipping");
                 continue;
             }
 
             $quizMasterId = $quiz->user_id;
             if (!$quizMasterId) {
-                $this->warn("⚠️  Quiz #{$quiz->id} has no user_id - skipping");
+                $this->warn("Quiz #{$quiz->id} has no user_id - skipping");
                 continue;
             }
 
@@ -102,17 +102,17 @@ class SettleQuizMasterShares extends Command
         $this->newLine();
 
         if ($dryRun) {
-            $this->info('✅ Dry run completed. Run without --dry-run to apply changes.');
-            return Command::SUCCESS;
+            $this->info('Dry run completed. Run without --dry-run to apply changes.');
+            return 0;
         }
 
         if (!$this->confirm('Do you want to proceed with settlement?')) {
             $this->info('Cancelled.');
-            return Command::SUCCESS;
+            return 0;
         }
 
         $this->newLine();
-        $this->info('💳 Processing settlement...');
+        $this->info('Processing settlement...');
 
         DB::beginTransaction();
 
@@ -128,10 +128,12 @@ class SettleQuizMasterShares extends Command
                 $quizMasterId = $quiz->user_id;
                 $amount = $transaction->{'quiz-master_share'};
 
-                // Update transaction to set quiz-master_id
-                $transaction->update([
-                    'quiz-master_id' => $quizMasterId,
-                ]);
+                // Update transaction to set quiz-master_id using DB query
+                DB::table('transactions')
+                    ->where('id', $transaction->id)
+                    ->update([
+                        'quiz-master_id' => $quizMasterId,
+                    ]);
 
                 // Credit wallet
                 $wallet = Wallet::firstOrCreate(
@@ -152,15 +154,15 @@ class SettleQuizMasterShares extends Command
             DB::commit();
 
             $this->newLine();
-            $this->info("✅ Settlement completed successfully!");
+            $this->info("Settlement completed successfully!");
             $this->info("Settled {$settledCount} transactions");
             $this->info("Total amount distributed: KES {$totalToSettle}");
 
-            return Command::SUCCESS;
+            return 0;
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error("❌ Settlement failed: {$e->getMessage()}");
-            return Command::FAILURE;
+            $this->error("Settlement failed: {$e->getMessage()}");
+            return 1;
         }
     }
 }
