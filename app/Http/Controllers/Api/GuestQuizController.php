@@ -135,6 +135,7 @@ class GuestQuizController extends Controller
 
         // Calculate score
         $scoringResult = $this->calculateScore($validated['answers'], $questions);
+        $detailedResults = $this->formatResultsWithExplanations($scoringResult['results'] ?? [], $questions);
 
         $price = $this->resolveQuizOneOffPrice($quiz);
         $requiresPayment = ((bool) $quiz->is_paid) || ($price > 0);
@@ -187,7 +188,7 @@ class GuestQuizController extends Controller
             // Do not expose detailed per-question marking before purchase.
             $result['results'] = [];
         } else {
-            $result['results'] = $scoringResult['results'] ?? [];
+            $result['results'] = $detailedResults;
         }
 
         return response()->json([
@@ -321,8 +322,22 @@ class GuestQuizController extends Controller
             'price' => $price,
             'requires_payment' => $requiresPayment,
             'locked' => !$isUnlocked,
-            'results' => $isUnlocked ? ($attempt->results ?? []) : [],
+            'results' => [],
         ];
+
+        if ($isUnlocked) {
+            $stored = $attempt->results ?? [];
+            $storedFirst = is_array($stored) && count($stored) ? $stored[0] : null;
+            $alreadyDetailed = is_array($storedFirst) && (array_key_exists('question_body', $storedFirst) || array_key_exists('is_correct', $storedFirst));
+
+            if ($alreadyDetailed) {
+                $payload['results'] = $stored;
+            } else {
+                // Backward-compatible: older records stored minimal results (question_id/correct/marks)
+                $questions = $attempt->quiz->questions()->get();
+                $payload['results'] = $this->formatResultsWithExplanations(is_array($stored) ? $stored : [], $questions);
+            }
+        }
 
         return response()->json([
             'ok' => true,
