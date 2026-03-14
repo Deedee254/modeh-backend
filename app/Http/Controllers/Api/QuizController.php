@@ -464,11 +464,11 @@ class QuizController extends Controller
             // Fix: allow users to see ALL approved/published quizzes by default if no 'mine' filter is present
             if (!$user->is_admin && $request->boolean('mine')) {
                 // When viewing own quizzes, show all statuses (draft, published, scheduled, etc.)
-                $query->where('created_by', $user->id);
+                $query->where('user_id', $user->id);
             } else if (!$user->is_admin) {
                 // By default for non-admins, show their own OR any approved/published ones
                 $query->where(function ($q) use ($user) {
-                    $q->where('created_by', $user->id)
+                    $q->where('user_id', $user->id)
                         ->orWhere(function ($sq) {
                             $sq->where('is_approved', true)->where('visibility', 'published');
                         });

@@ -75,6 +75,7 @@ class QuizMasterController extends Controller
 
             $data = [
                 'id' => $user->id,
+                'quiz_master_id' => $profile->id,
                 'name' => $user->name,
                 'avatar' => $user->avatar,
                 'headline' => $profile->headline ?: 'An experienced quiz master',
@@ -121,13 +122,13 @@ class QuizMasterController extends Controller
 
             // Include followers count
             $data['followers_count'] = DB::table('quiz_master_follows')
-                ->where('quiz_master_id', $user->id)
+                ->where('quiz_master_id', $profile->id)
                 ->count();
 
             // Add is_following for authenticated users
             if ($currentUserId) {
                 $data['is_following'] = DB::table('quiz_master_follows')
-                    ->where('quiz_master_id', $user->id)
+                    ->where('quiz_master_id', $profile->id)
                     ->where('user_id', $currentUserId)
                     ->exists();
             }
@@ -169,6 +170,7 @@ class QuizMasterController extends Controller
 
         $data = [
             'id' => $user->id,
+            'quiz_master_id' => $profile->id,
             'name' => $user->name,
             'avatar' => $user->avatar,
             'headline' => $profile->headline ?? 'An experienced quiz master',
@@ -207,7 +209,7 @@ class QuizMasterController extends Controller
         // Add is_following for authenticated users
         if ($request->user()) {
             $data['is_following'] = DB::table('quiz_master_follows')
-                ->where('quiz_master_id', $user->id)
+                ->where('quiz_master_id', $profile->id)
                 ->where('user_id', $request->user()->id)
                 ->exists();
         }

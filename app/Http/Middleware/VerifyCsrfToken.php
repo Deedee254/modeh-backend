@@ -48,6 +48,12 @@ class VerifyCsrfToken extends BaseVerifier
         
         // Quiz attempts (may be marked without CSRF)
         'api/quiz-attempts/*/mark',
+
+        // Interactions (token-auth via Sanctum Bearer tokens; CSRF not required)
+        'api/quizzes/*/like',
+        'api/quizzes/*/unlike',
+        'api/quiz-masters/*/follow',
+        'api/quiz-masters/*/unfollow',
         
         // Admin routes (separate from API)
         'admin/login',
