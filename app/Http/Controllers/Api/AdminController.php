@@ -229,7 +229,30 @@ class AdminController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
-        $query = User::where('role', 'quiz-master');
+        $stats = Transaction::query()
+            ->selectRaw("`quiz-master_id` as quiz_master_id")
+            ->selectRaw("SUM(CASE WHEN status IN ('confirmed','completed') THEN `quiz-master_share` ELSE 0 END) as total_earnings")
+            ->selectRaw("SUM(CASE WHEN status IN ('confirmed','completed') THEN 1 ELSE 0 END) as transaction_count")
+            ->groupBy('quiz_master_id');
+
+        $query = User::query()
+            ->where('role', 'quiz-master')
+            ->leftJoin('wallets', 'wallets.user_id', '=', 'users.id')
+            ->leftJoinSub($stats, 'tx_stats', function ($join) {
+                $join->on('tx_stats.quiz_master_id', '=', 'users.id');
+            })
+            ->select([
+                'users.id',
+                'users.name',
+                'users.email',
+                'users.avatar_url',
+                'users.created_at',
+                'wallets.available as wallet_available',
+                'wallets.withdrawn_pending as wallet_withdrawn_pending',
+                'wallets.lifetime_earned as wallet_lifetime_earned',
+                'tx_stats.total_earnings as total_earnings',
+                'tx_stats.transaction_count as transaction_count',
+            ]);
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -244,33 +267,32 @@ class AdminController extends Controller
         $page = (int) $request->input('page', 1);
 
         $quizMasters = $query
-            ->orderBy('created_at', 'desc')
+            ->orderBy('users.created_at', 'desc')
             ->offset(($page - 1) * $perPage)
             ->limit($perPage)
             ->get()
             ->map(function ($user) {
-                // Get stats for this quiz master
-                $totalEarnings = (float) Transaction::where('quiz-master_id', $user->id)
-                    ->where('status', 'confirmed')
-                    ->sum('quiz-master_share');
-
-                $transactionCount = Transaction::where('quiz-master_id', $user->id)
-                    ->where('status', 'confirmed')
-                    ->count();
-
                 return [
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
                     'avatar_url' => $user->avatar_url,
-                    'total_earnings' => $totalEarnings,
-                    'transaction_count' => $transactionCount,
+                    'wallet' => [
+                        'available' => (float) ($user->wallet_available ?? 0),
+                        'withdrawn_pending' => (float) ($user->wallet_withdrawn_pending ?? 0),
+                        'lifetime_earned' => (float) ($user->wallet_lifetime_earned ?? 0),
+                    ],
+                    'total_earnings' => (float) ($user->total_earnings ?? 0),
+                    'transaction_count' => (int) ($user->transaction_count ?? 0),
                     'created_at' => $user->created_at,
                 ];
             });
 
         return response()->json([
             'ok' => true,
+            // For frontend consistency: return in `users` like other list endpoints
+            'users' => $quizMasters,
+            // Backwards compatible alias
             'quiz_masters' => $quizMasters,
             'total' => $total,
             'page' => $page,
@@ -576,6 +598,8 @@ class AdminController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
+        // Force role filter to quizee (the `users` endpoint already supports `role`)
+        $request->merge(['role' => 'quizee']);
         return $this->users($request);
     }
 

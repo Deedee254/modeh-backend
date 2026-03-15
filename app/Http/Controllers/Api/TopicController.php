@@ -12,6 +12,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
+use App\Models\User;
+use App\Notifications\ResourceRejected;
 
 class TopicController extends Controller
 {
@@ -296,6 +299,43 @@ class TopicController extends Controller
         }
 
         $topic->is_approved = true;
+        $topic->save();
+
+        // Notify owner if possible
+        try {
+            $ownerId = $topic->created_by ?? $topic->user_id ?? null;
+            if ($ownerId) {
+                $owner = User::find($ownerId);
+                if ($owner) {
+                    $owner->notify(new ResourceRejected('topic', $topic, $request->get('reason') ?? null, $user));
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Failed to notify owner after topic rejection', ['topic_id' => $topic->id, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json(['topic' => $topic]);
+    }
+
+    // Admin rejects a topic
+    public function reject(Request $request, Topic $topic)
+    {
+        $user = $request->user();
+        if (!method_exists($user, 'isAdmin') && !$user->is_admin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $topic->is_approved = false;
+        if (Schema::hasColumn('topics', 'approval_requested_at')) {
+            $topic->approval_requested_at = null;
+        }
+        if (Schema::hasColumn('topics', 'reject_reason')) {
+            $topic->reject_reason = $request->get('reason') ?? null;
+        }
+        if (Schema::hasColumn('topics', 'rejected_at')) {
+            $topic->rejected_at = now();
+        }
+
         $topic->save();
 
         return response()->json(['topic' => $topic]);

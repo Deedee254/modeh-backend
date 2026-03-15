@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
+use App\Models\User;
+use App\Notifications\ResourceRejected;
 
 class QuizController extends Controller
 {
@@ -976,6 +978,45 @@ class QuizController extends Controller
 
         $quiz->is_approved = true;
         $quiz->save();
+
+        return response()->json(['quiz' => $quiz]);
+    }
+
+    // Admin rejects a quiz
+    public function reject(Request $request, Quiz $quiz)
+    {
+        $user = $request->user();
+        if (!method_exists($user, 'isAdmin') && !$user->is_admin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $quiz->is_approved = false;
+        // Clear approval request timestamp when rejecting
+        if (Schema::hasColumn('quizzes', 'approval_requested_at')) {
+            $quiz->approval_requested_at = null;
+        }
+        // Store optional reason if column exists
+        if (Schema::hasColumn('quizzes', 'reject_reason')) {
+            $quiz->reject_reason = $request->get('reason') ?? null;
+        }
+        if (Schema::hasColumn('quizzes', 'rejected_at')) {
+            $quiz->rejected_at = now();
+        }
+
+        $quiz->save();
+
+        // Notify owner if possible
+        try {
+            $ownerId = $quiz->created_by ?? $quiz->user_id ?? null;
+            if ($ownerId) {
+                $owner = User::find($ownerId);
+                if ($owner) {
+                    $owner->notify(new ResourceRejected('quiz', $quiz, $request->get('reason') ?? null, $user));
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to notify owner after quiz rejection', ['quiz_id' => $quiz->id, 'error' => $e->getMessage()]);
+        }
 
         return response()->json(['quiz' => $quiz]);
     }

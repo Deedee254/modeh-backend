@@ -14,6 +14,15 @@ use Illuminate\Support\Facades\DB;
 
 class AffiliateController extends Controller
 {
+    private function requireAdmin()
+    {
+        $user = auth()->user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+        return null;
+    }
+
     public function me(Request $request)
     {
         $user = $request->user();
@@ -239,6 +248,8 @@ class AffiliateController extends Controller
      */
     public function adminIndex(Request $request)
     {
+        if ($resp = $this->requireAdmin()) return $resp;
+
         try {
             $affiliates = Affiliate::with(['user'])
                 ->withCount('referrals')
@@ -278,6 +289,8 @@ class AffiliateController extends Controller
      */
     public function adminReferrals(Request $request)
     {
+        if ($resp = $this->requireAdmin()) return $resp;
+
         try {
             $query = AffiliateReferral::with(['affiliate.user', 'user']);
 
@@ -333,6 +346,8 @@ class AffiliateController extends Controller
      */
     public function adminClicks(Request $request)
     {
+        if ($resp = $this->requireAdmin()) return $resp;
+
         try {
             $query = AffiliateLinkClick::with(['affiliate.user']);
 
@@ -380,6 +395,8 @@ class AffiliateController extends Controller
      */
     public function adminMetrics(Request $request)
     {
+        if ($resp = $this->requireAdmin()) return $resp;
+
         try {
             $totalAffiliates = Affiliate::count();
             $totalReferrals = AffiliateReferral::count();
@@ -415,6 +432,8 @@ class AffiliateController extends Controller
      */
     public function settlePayouts(): \Illuminate\Http\JsonResponse
     {
+        if ($resp = $this->requireAdmin()) return $resp;
+
         try {
             return DB::transaction(function () {
                 $settledCount = 0;
@@ -497,6 +516,8 @@ class AffiliateController extends Controller
      */
     public function pendingPayouts(): \Illuminate\Http\JsonResponse
     {
+        if ($resp = $this->requireAdmin()) return $resp;
+
         try {
             $affiliates = Affiliate::where('status', 'active')
                 ->with(['user', 'referrals' => function ($query) {
@@ -546,6 +567,8 @@ class AffiliateController extends Controller
      */
     public function settleSingleAffiliate($affiliateId)
     {
+        if ($resp = $this->requireAdmin()) return $resp;
+
         try {
             DB::transaction(function () use ($affiliateId) {
                 $affiliate = Affiliate::findOrFail($affiliateId);
@@ -602,5 +625,38 @@ class AffiliateController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * ADMIN METHODS - Update affiliate commission rate (percentage)
+     */
+    public function updateCommissionRate(Request $request, $affiliateId): \Illuminate\Http\JsonResponse
+    {
+        if ($resp = $this->requireAdmin()) return $resp;
+
+        $validated = $request->validate([
+            'commission_rate' => 'required|numeric|min:0|max:100',
+        ]);
+
+        $affiliate = Affiliate::with(['user'])->findOrFail($affiliateId);
+        $affiliate->commission_rate = (float) $validated['commission_rate'];
+        $affiliate->save();
+
+        return response()->json([
+            'ok' => true,
+            'data' => [
+                'id' => $affiliate->id,
+                'user_id' => $affiliate->user_id,
+                'referral_code' => $affiliate->referral_code,
+                'commission_rate' => (float) $affiliate->commission_rate,
+                'total_earnings' => (float) ($affiliate->total_earnings ?? 0),
+                'status' => $affiliate->status ?? 'active',
+                'user' => $affiliate->user ? [
+                    'id' => $affiliate->user->id,
+                    'name' => $affiliate->user->name,
+                    'email' => $affiliate->user->email,
+                ] : null,
+            ],
+        ]);
     }
 }

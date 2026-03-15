@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
+use App\Models\User;
+use App\Notifications\ResourceRejected;
 
 class QuestionController extends Controller
 {
@@ -1079,6 +1081,46 @@ class QuestionController extends Controller
         $question->save();
 
     return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
+    }
+
+    /**
+     * Admin rejects a question
+     */
+    public function reject(Request $request, Question $question)
+    {
+        $user = $request->user();
+        $isAdmin = method_exists($user, 'isAdmin') ? $user->isAdmin() : (($user->role ?? '') === 'admin');
+        if (!$isAdmin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $question->is_approved = false;
+        if (Schema::hasColumn('questions', 'approval_requested_at')) {
+            $question->approval_requested_at = null;
+        }
+        if (Schema::hasColumn('questions', 'reject_reason')) {
+            $question->reject_reason = $request->get('reason') ?? null;
+        }
+        if (Schema::hasColumn('questions', 'rejected_at')) {
+            $question->rejected_at = now();
+        }
+
+        $question->save();
+
+        // Notify owner if possible
+        try {
+            $ownerId = $question->created_by ?? $question->user_id ?? null;
+            if ($ownerId) {
+                $owner = User::find($ownerId);
+                if ($owner) {
+                    $owner->notify(new ResourceRejected('question', $question, $request->get('reason') ?? null, $user));
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to notify owner after question rejection', ['question_id' => $question->id, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
     }
 
     /**

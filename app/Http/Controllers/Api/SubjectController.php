@@ -12,6 +12,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
+use App\Models\User;
+use App\Notifications\ResourceRejected;
 
 class SubjectController extends Controller
 {
@@ -186,6 +189,43 @@ class SubjectController extends Controller
         }
 
         $subject->is_approved = true;
+        $subject->save();
+
+        // Notify owner if possible
+        try {
+            $ownerId = $subject->created_by ?? $subject->user_id ?? null;
+            if ($ownerId) {
+                $owner = User::find($ownerId);
+                if ($owner) {
+                    $owner->notify(new ResourceRejected('subject', $subject, $request->get('reason') ?? null, $user));
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Failed to notify owner after subject rejection', ['subject_id' => $subject->id, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json(['subject' => $subject]);
+    }
+
+    // Admin rejects a subject
+    public function reject(Request $request, Subject $subject)
+    {
+        $user = $request->user();
+        if (!method_exists($user, 'isAdmin') && !$user->is_admin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $subject->is_approved = false;
+        if (Schema::hasColumn('subjects', 'approval_requested_at')) {
+            $subject->approval_requested_at = null;
+        }
+        if (Schema::hasColumn('subjects', 'reject_reason')) {
+            $subject->reject_reason = $request->get('reason') ?? null;
+        }
+        if (Schema::hasColumn('subjects', 'rejected_at')) {
+            $subject->rejected_at = now();
+        }
+
         $subject->save();
 
         return response()->json(['subject' => $subject]);

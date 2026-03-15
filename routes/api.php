@@ -239,6 +239,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::patch('/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizController::class, 'update']);
     // Admin approve quiz
     Route::post('/quizzes/{quiz}/approve', [\App\Http\Controllers\Api\QuizController::class, 'approve']);
+    // Admin reject quiz
+    Route::post('/quizzes/{quiz}/reject', [\App\Http\Controllers\Api\QuizController::class, 'reject']);
     // Mark quiz as institutional (for members of institutions)
     Route::post('/quizzes/{quiz}/institutional', [\App\Http\Controllers\Api\QuizController::class, 'markInstitutional']);
 
@@ -280,6 +282,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Subjects
     Route::post('/subjects', [\App\Http\Controllers\Api\SubjectController::class, 'store']);
     Route::post('/subjects/{subject}/approve', [\App\Http\Controllers\Api\SubjectController::class, 'approve']);
+    Route::post('/subjects/{subject}/reject', [\App\Http\Controllers\Api\SubjectController::class, 'reject']);
     Route::post('/subjects/{subject}/upload-icon', [\App\Http\Controllers\Api\SubjectController::class, 'uploadIcon']);
 
     // Grades (create/update/delete)
@@ -290,6 +293,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Topics
     Route::post('/topics', [\App\Http\Controllers\Api\TopicController::class, 'store']);
     Route::post('/topics/{topic}/approve', [\App\Http\Controllers\Api\TopicController::class, 'approve']);
+    Route::post('/topics/{topic}/reject', [\App\Http\Controllers\Api\TopicController::class, 'reject']);
     Route::post('/topics/{topic}/upload-image', [\App\Http\Controllers\Api\TopicController::class, 'uploadImage']);
 
     // Levels (create/update/delete)
@@ -311,6 +315,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::patch('/quizzes/{quiz}/questions', [\App\Http\Controllers\Api\QuestionController::class, 'bulkUpdateForQuiz']);
     // Admin approve question
     Route::post('/questions/{question}/approve', [\App\Http\Controllers\Api\QuestionController::class, 'approve']);
+    // Admin reject question
+    Route::post('/questions/{question}/reject', [\App\Http\Controllers\Api\QuestionController::class, 'reject']);
     Route::post('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'update']);
     // Support PATCH for updates (clients may use PATCH) and allow deleting questions
     Route::patch('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'update']);
@@ -382,29 +388,38 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/admin/metrics', [\App\Http\Controllers\Api\AdminController::class, 'metrics']);
         Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminController::class, 'transactions']);
-        Route::get('/admin/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
-        Route::get('/admin/quiz-masters', [\App\Http\Controllers\Api\AdminController::class, 'quizMasters']);
-        Route::get('/admin/withdrawals', [\App\Http\Controllers\Api\AdminController::class, 'withdrawals']);
-        Route::post('/admin/withdrawals/{id}/approve', [\App\Http\Controllers\Api\AdminController::class, 'approveWithdrawal']);
-        Route::post('/admin/withdrawals/{id}/reject', [\App\Http\Controllers\Api\AdminController::class, 'rejectWithdrawal']);
-        Route::post('/admin/transactions/settle', [\App\Http\Controllers\Api\AdminController::class, 'settlePending']);
+	        Route::get('/admin/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
+	        Route::get('/admin/quiz-masters', [\App\Http\Controllers\Api\AdminController::class, 'quizMasters']);
+	        Route::get('/admin/quiz-masters/analytics', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'analytics']);
+	        Route::get('/admin/quiz-masters/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'insights']);
+	        Route::get('/admin/quiz-masters/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'userInsights']);
+	        Route::get('/admin/withdrawals', [\App\Http\Controllers\Api\AdminController::class, 'withdrawals']);
+	        Route::post('/admin/withdrawals/{id}/approve', [\App\Http\Controllers\Api\AdminController::class, 'approveWithdrawal']);
+	        Route::post('/admin/withdrawals/{id}/reject', [\App\Http\Controllers\Api\AdminController::class, 'rejectWithdrawal']);
+	        Route::post('/admin/transactions/settle', [\App\Http\Controllers\Api\AdminController::class, 'settlePending']);
 
         // Admin Settings, Quizees, and Tournaments
-        Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
-        Route::post('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
-        Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
-        Route::get('/admin/quizees', [\App\Http\Controllers\Api\AdminController::class, 'quizees']);
-        Route::get('/admin/tournaments', [\App\Http\Controllers\Api\AdminController::class, 'tournaments']);
-        Route::get('/admin/tournaments/{id}/participants', [\App\Http\Controllers\Api\AdminController::class, 'tournamentParticipants']);
-
-        // Affiliate Management Routes
-        Route::get('/admin/affiliates', [\App\Http\Controllers\Api\AffiliateController::class, 'adminIndex']);
-        Route::get('/admin/affiliate-referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'adminReferrals']);
-        Route::get('/admin/affiliate-clicks', [\App\Http\Controllers\Api\AffiliateController::class, 'adminClicks']);
+	        Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
+	        Route::post('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
+	        Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
+	        Route::get('/admin/quizees', [\App\Http\Controllers\Api\AdminController::class, 'quizees']);
+	        Route::get('/admin/quizees/analytics', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'analytics']);
+	        Route::get('/admin/quizees/insights', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'insights']);
+	        Route::get('/admin/quizees/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'userInsights']);
+	        Route::get('/admin/tournaments', [\App\Http\Controllers\Api\AdminController::class, 'tournaments']);
+	        Route::get('/admin/tournaments/{id}/participants', [\App\Http\Controllers\Api\AdminController::class, 'tournamentParticipants']);
+	        Route::get('/admin/battles', [\App\Http\Controllers\Api\AdminBattleController::class, 'index']);
+	        Route::get('/admin/daily-challenges/analytics', [\App\Http\Controllers\Api\AdminDailyChallengeAnalyticsController::class, 'analytics']);
+	
+	        // Affiliate Management Routes
+	        Route::get('/admin/affiliates', [\App\Http\Controllers\Api\AffiliateController::class, 'adminIndex']);
+	        Route::get('/admin/affiliate-referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'adminReferrals']);
+	        Route::get('/admin/affiliate-clicks', [\App\Http\Controllers\Api\AffiliateController::class, 'adminClicks']);
         Route::get('/admin/affiliate-metrics', [\App\Http\Controllers\Api\AffiliateController::class, 'adminMetrics']);
         Route::get('/admin/affiliate-payouts/pending', [\App\Http\Controllers\Api\AffiliateController::class, 'pendingPayouts']);
         Route::post('/admin/affiliate-payouts/settle', [\App\Http\Controllers\Api\AffiliateController::class, 'settlePayouts']);
         Route::post('/admin/affiliates/{affiliateId}/settle-payout', [\App\Http\Controllers\Api\AffiliateController::class, 'settleSingleAffiliate']);
+        Route::patch('/admin/affiliates/{affiliateId}/commission-rate', [\App\Http\Controllers\Api\AffiliateController::class, 'updateCommissionRate']);
 
         // Institution Management Routes
         Route::get('/admin/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'index']);
