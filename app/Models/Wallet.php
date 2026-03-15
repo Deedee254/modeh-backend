@@ -13,8 +13,10 @@ class Wallet extends Model
         'user_id',
         'wallet_type',
         'available',
-        'pending',
+        'withdrawn_pending',
+        'settled',
         'lifetime_earned',
+        'earned_this_month',
         'total_withdrawn',
         'earned_from_quizzes',
         'earned_from_affiliates',
@@ -27,8 +29,10 @@ class Wallet extends Model
 
     protected $casts = [
         'available' => 'decimal:2',
-        'pending' => 'decimal:2',
+        'withdrawn_pending' => 'decimal:2',
+        'settled' => 'decimal:2',
         'lifetime_earned' => 'decimal:2',
+        'earned_this_month' => 'decimal:2',
         'total_withdrawn' => 'decimal:2',
         'earned_from_quizzes' => 'decimal:2',
         'earned_from_affiliates' => 'decimal:2',
@@ -56,12 +60,72 @@ class Wallet extends Model
         return $this->hasMany(Transaction::class, 'wallet_id');
     }
 
+    public function pendingPayments()
+    {
+        return $this->hasMany(PendingQuizPayment::class, 'quiz_master_id');
+    }
+
     /**
-     * Get total balance (available + pending)
+     * Get total balance (available + withdrawn_pending)
      */
     public function getTotalBalanceAttribute(): string
     {
-        return bcadd($this->available ?? 0, $this->pending ?? 0, 2);
+        return bcadd($this->available ?? 0, $this->withdrawn_pending ?? 0, 2);
+    }
+
+    /**
+     * Get pending payments summary for quiz master
+     */
+    public function getPendingPaymentsSummary(): array
+    {
+        $pending = $this->pendingPayments()
+            ->where('status', 'pending')
+            ->get();
+
+        return [
+            'count' => $pending->count(),
+            'total' => (float)$pending->sum('amount'),
+            'details' => $pending,
+        ];
+    }
+
+    /**
+     * Get overdue payments
+     */
+    public function getOverduePayments()
+    {
+        return $this->pendingPayments()
+            ->where('status', 'overdue')
+            ->get();
+    }
+
+    /**
+     * Request withdrawal (move available to withdrawn_pending)
+     */
+    public function requestWithdrawal(float $amount): void
+    {
+        if ($amount > $this->available) {
+            throw new \Exception('Insufficient available balance');
+        }
+
+        $this->available = bcsub($this->available, $amount, 2);
+        $this->withdrawn_pending = bcadd($this->withdrawn_pending, $amount, 2);
+        $this->save();
+    }
+
+    /**
+     * Confirm settlement (move withdrawn_pending to settled)
+     */
+    public function confirmSettlement(float $amount): void
+    {
+        if ($amount > $this->withdrawn_pending) {
+            throw new \Exception('Invalid settlement amount');
+        }
+
+        $this->withdrawn_pending = bcsub($this->withdrawn_pending, $amount, 2);
+        $this->settled = bcadd($this->settled, $amount, 2);
+        $this->total_withdrawn = bcadd($this->total_withdrawn, $amount, 2);
+        $this->save();
     }
 
     /**

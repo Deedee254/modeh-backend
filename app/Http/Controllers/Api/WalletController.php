@@ -17,7 +17,44 @@ class WalletController extends Controller
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
-        $wallet = Wallet::firstOrCreate(['user_id' => $user->id], ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
+        
+        // Initialize wallet with new balance states
+        $wallet = Wallet::firstOrCreate(
+            ['user_id' => $user->id], 
+            [
+                'available' => 0, 
+                'withdrawn_pending' => 0, 
+                'settled' => 0,
+                'earned_this_month' => 0,
+                'lifetime_earned' => 0
+            ]
+        );
+        
+        // Check and send due reminders (API-driven, 24hr logic)
+        if ($user->role === 'quiz-master') {
+            try {
+                app(\App\Services\ReminderService::class)->checkAndSendDueReminders();
+            } catch (\Throwable $e) {
+                // Log but don't fail the response
+                \Log::warning('Failed to check reminders', ['error' => $e->getMessage()]);
+            }
+        }
+        
+        // Include pending payments summary for quizee
+        if ($user->role === 'quizee') {
+            $pendingPaymentsSummary = \App\Models\PendingQuizPayment::where('quizee_id', $user->id)
+                ->where('status', '!=', 'paid')
+                ->select(['id', 'quiz_id', 'quiz_master_id', 'amount', 'status', 'payment_due_at', 'created_at'])
+                ->with(['quiz:id,title,slug', 'quizMaster:id,name,email'])
+                ->get();
+            
+            return response()->json([
+                'ok' => true, 
+                'wallet' => $wallet,
+                'pending_payments' => $pendingPaymentsSummary
+            ]);
+        }
+        
         return response()->json(['ok' => true, 'wallet' => $wallet]);
     }
 
@@ -486,4 +523,273 @@ class WalletController extends Controller
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Get quiz master's pending payments (unpaid quizzes from quizees)
+     * GET /api/my/unpaid-quizzes
+     */
+    public function myUnpaidQuizzes(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || $user->role !== 'quiz-master') {
+            return response()->json(['ok' => false, 'message' => 'Only quiz masters can view unpaid quizzes'], 403);
+        }
+
+        $query = \App\Models\PendingQuizPayment::where('quiz_master_id', $user->id)
+            ->where('status', '!=', 'paid');
+
+        // Filter by status
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Filter by payment_due_at (overdue only)
+        if ($request->boolean('overdue')) {
+            $query->where('payment_due_at', '<', now());
+        }
+
+        $perPage = (int)$request->input('per_page', 20);
+        $perPage = $perPage > 0 && $perPage <= 100 ? $perPage : 20;
+
+        $payments = $query->with(['quizee:id,name,email', 'quiz:id,title,slug', 'quizAttempt:id,score,max_score'])
+            ->orderBy('payment_due_at', 'asc')
+            ->paginate($perPage);
+
+        return response()->json([
+            'ok' => true,
+            'unpaid_quizzes' => $payments
+        ]);
+    }
+
+    /**
+     * Get admin view of all pending payments (for settlement/recovery)
+     * GET /api/admin/pending-payments
+     */
+    public function adminPendingPayments(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $query = \App\Models\PendingQuizPayment::query();
+
+        // Filter by status
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Filter by payment_due_at (overdue only)
+        if ($request->boolean('overdue')) {
+            $query->where('payment_due_at', '<', now());
+        }
+
+        // Filter by quiz master
+        if ($request->filled('quiz_master_id')) {
+            $query->where('quiz_master_id', $request->quiz_master_id);
+        }
+
+        // Filter by quizee
+        if ($request->filled('quizee_id')) {
+            $query->where('quizee_id', $request->quizee_id);
+        }
+
+        $perPage = (int)$request->input('per_page', 20);
+        $perPage = $perPage > 0 && $perPage <= 100 ? $perPage : 20;
+
+        $payments = $query->with([
+            'quizee:id,name,email',
+            'quizMaster:id,name,email',
+            'quiz:id,title,slug',
+            'quizAttempt:id,score,max_score'
+        ])
+        ->orderBy('payment_due_at', 'asc')
+        ->paginate($perPage);
+
+        // Add summary stats
+        $stats = [
+            'total_pending' => (float) \App\Models\PendingQuizPayment::where('status', 'pending')->sum('amount'),
+            'total_overdue' => (float) \App\Models\PendingQuizPayment::where('status', 'overdue')
+                ->orWhere(function ($q) {
+                    $q->where('status', 'pending')->where('payment_due_at', '<', now());
+                })
+                ->sum('amount'),
+            'count_pending' => \App\Models\PendingQuizPayment::where('status', 'pending')->count(),
+            'count_overdue' => \App\Models\PendingQuizPayment::where('status', 'overdue')
+                ->orWhere(function ($q) {
+                    $q->where('status', 'pending')->where('payment_due_at', '<', now());
+                })
+                ->count(),
+        ];
+
+        return response()->json([
+            'ok' => true,
+            'pending_payments' => $payments,
+            'stats' => $stats
+        ]);
+    }
+
+    /**
+     * Quiz master sends reminder to quizee about pending payment
+     * POST /api/pending-payments/{id}/send-reminder
+     */
+    public function sendPendingPaymentReminder(Request $request, $pendingPaymentId)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $payment = \App\Models\PendingQuizPayment::findOrFail($pendingPaymentId);
+
+        // Only quiz master or admin can send reminders
+        if ($user->id !== $payment->quiz_master_id && !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        try {
+            // Send custom reminder message from quiz master
+            $message = $request->input('message', null);
+            
+            app(\App\Services\ReminderService::class)->sendQuizMasterReminder(
+                $payment,
+                $message
+            );
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Reminder sent to quizee'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to send reminder',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Admin sends message to user via inbox/chat
+     * POST /api/admin/chat/send
+     */
+    public function adminSendChatMessage(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'recipient_id' => 'required|exists:users,id',
+            'subject' => 'required|string|max:255',
+            'message' => 'required|string',
+            'priority' => 'sometimes|in:low,medium,high',
+        ]);
+
+        try {
+            $recipientId = $request->input('recipient_id');
+            $recipient = \App\Models\User::findOrFail($recipientId);
+
+            // Create notification entry for inbox message
+            DB::table('notifications')->insert([
+                'id' => \Illuminate\Support\Str::uuid(),
+                'type' => 'App\Notifications\AdminMessage',
+                'notifiable_type' => 'App\Models\User',
+                'notifiable_id' => $recipientId,
+                'data' => json_encode([
+                    'subject' => $request->input('subject'),
+                    'message' => $request->input('message'),
+                    'priority' => $request->input('priority', 'medium'),
+                    'from_admin' => $user->name,
+                ]),
+                'read_at' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Message sent successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to send message',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Process payment and handle auto-settlement for earned funds
+     * POST /api/checkout/process-payment
+     */
+    public function processPayment(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $request->validate([
+            'quiz_id' => 'required|exists:quizzes,id',
+            'quiz_attempt_id' => 'required|exists:quiz_attempts,id',
+            'quiz_master_id' => 'required|exists:users,id',
+            'amount' => 'required|numeric|min:0.01',
+            'payment_status' => 'required|in:paid,pending',
+        ]);
+
+        try {
+            return DB::transaction(function () use ($request, $user) {
+                $quizMasterId = $request->input('quiz_master_id');
+                $amount = (float) $request->input('amount');
+                $paymentStatus = $request->input('payment_status');
+                $quizId = $request->input('quiz_id');
+                $quizAttemptId = $request->input('quiz_attempt_id');
+
+                // Auto-settle: if paid, create transaction and credit available balance immediately
+                if ($paymentStatus === 'paid') {
+                    // Create transaction
+                    $result = app(\App\Services\TransactionService::class)->processPaidQuizPayment(
+                        quizMasterId: $quizMasterId,
+                        quizeeId: $user->id,
+                        quizId: $quizId,
+                        quizAttemptId: $quizAttemptId,
+                        amount: $amount
+                    );
+
+                    return response()->json([
+                        'ok' => true,
+                        'message' => 'Payment processed successfully',
+                        'result' => $result,
+                        'status' => 'completed'
+                    ]);
+                } else {
+                    // Payment pending: create pending payment record for recovery
+                    $pendingPayment = app(\App\Services\TransactionService::class)->createPendingPayment(
+                        quizMasterId: $quizMasterId,
+                        quizeeId: $user->id,
+                        quizId: $quizId,
+                        quizAttemptId: $quizAttemptId,
+                        amount: $amount
+                    );
+
+                    return response()->json([
+                        'ok' => true,
+                        'message' => 'Payment pending - will be reminded',
+                        'pending_payment' => $pendingPayment,
+                        'status' => 'pending'
+                    ]);
+                }
+            });
+        } catch (\Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to process payment',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
+

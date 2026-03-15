@@ -158,6 +158,130 @@ class TransactionService
     }
 
     /**
+     * Process a PAID quiz payment - credits quiz master immediately
+     */
+    public static function processPaidQuizPayment(
+        int $quizMasterId,
+        int $quizeeId,
+        int $quizId,
+        int $quizAttemptId,
+        float $amount,
+        ?string $referralCode = null,
+        float $qmCommissionRate = 60
+    ): array {
+        return DB::transaction(function () use (
+            $quizMasterId,
+            $quizeeId,
+            $quizId,
+            $quizAttemptId,
+            $amount,
+            $referralCode,
+            $qmCommissionRate
+        ) {
+            $distribution = [];
+            $remaining = $amount;
+
+            // Affiliate commission
+            $affiliateShare = 0;
+            if ($referralCode) {
+                $affiliate = \App\Models\Affiliate::where('referral_code', $referralCode)->first();
+                if ($affiliate) {
+                    $affiliateShare = bcmul($amount, $affiliate->commission_rate / 100, 2);
+                    $remaining = bcsub($remaining, $affiliateShare, 2);
+
+                    $affWallet = Wallet::firstOrCreate(['user_id' => $affiliate->user_id]);
+                    $affWallet->available = bcadd($affWallet->available ?? 0, $affiliateShare, 2);
+                    $affWallet->earned_from_affiliates = bcadd($affWallet->earned_from_affiliates ?? 0, $affiliateShare, 2);
+                    $affWallet->save();
+                }
+            }
+
+            // Quiz Master Share - AUTO-SETTLED (goes directly to available)
+            $qmShare = bcmul($remaining, $qmCommissionRate / 100, 2);
+            $platformShare = bcsub($remaining, $qmShare, 2);
+
+            $qmWallet = Wallet::firstOrCreate(['user_id' => $quizMasterId]);
+            $qmWallet->available = bcadd($qmWallet->available ?? 0, $qmShare, 2);
+            $qmWallet->earned_this_month = bcadd($qmWallet->earned_this_month ?? 0, $qmShare, 2);
+            $qmWallet->lifetime_earned = bcadd($qmWallet->lifetime_earned ?? 0, $qmShare, 2);
+            $qmWallet->earned_from_quizzes = bcadd($qmWallet->earned_from_quizzes ?? 0, $qmShare, 2);
+            $qmWallet->save();
+
+            // Log transaction
+            Transaction::create([
+                'user_id' => $quizeeId,
+                'quiz_id' => $quizId,
+                'quiz_attempt_id' => $quizAttemptId,
+                'amount' => $amount,
+                'quiz_master_share' => $qmShare,
+                'platform_share' => $platformShare,
+                'affiliate_share' => $affiliateShare,
+                'type' => 'quiz_completion_payment',
+                'payment_status' => 'paid',
+                'status' => 'completed',
+                'description' => "Quiz payment received from quizee",
+            ]);
+
+            event(new \App\Events\WalletUpdated($qmWallet->toArray(), $quizMasterId));
+
+            return [
+                'success' => true,
+                'quiz_master_earned' => (float)$qmShare,
+                'platform_earned' => (float)$platformShare,
+                'affiliate_earned' => (float)$affiliateShare,
+            ];
+        });
+    }
+
+    /**
+     * Create pending payment record (unpaid quiz)
+     */
+    public static function createPendingPayment(
+        int $quizMasterId,
+        int $quizeeId,
+        int $quizId,
+        int $quizAttemptId,
+        float $amount,
+        int $paymentDaysUntilDue = 7
+    ): \App\Models\PendingQuizPayment {
+        return DB::transaction(function () use (
+            $quizMasterId,
+            $quizeeId,
+            $quizId,
+            $quizAttemptId,
+            $amount,
+            $paymentDaysUntilDue
+        ) {
+            $pending = \App\Models\PendingQuizPayment::create([
+                'quiz_master_id' => $quizMasterId,
+                'quizee_id' => $quizeeId,
+                'quiz_id' => $quizId,
+                'quiz_attempt_id' => $quizAttemptId,
+                'amount' => $amount,
+                'status' => 'pending',
+                'attempt_at' => now(),
+                'payment_due_at' => now()->addDays($paymentDaysUntilDue),
+                'recovery_status' => 'active',
+            ]);
+
+            // Log as pending payment transaction
+            Transaction::create([
+                'user_id' => $quizMasterId,
+                'quiz_id' => $quizId,
+                'quiz_attempt_id' => $quizAttemptId,
+                'pending_payment_id' => $pending->id,
+                'amount' => $amount,
+                'type' => 'pending_quiz_payment',
+                'payment_status' => 'pending_payment',
+                'status' => 'pending',
+                'description' => "Pending payment from quizee for quiz",
+            ]);
+
+            return $pending;
+        });
+    }
+
+    /**
      * Get transaction flow for a specific payment (shows debit and all credits)
      */
     public static function getPaymentFlow($mainTransactionId): array

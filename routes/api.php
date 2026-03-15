@@ -416,6 +416,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/wallet/transaction-flow/{transactionId}', [\App\Http\Controllers\Api\WalletController::class, 'transactionFlow']);
         Route::get('/wallet/transaction-history', [\App\Http\Controllers\Api\WalletController::class, 'transactionHistory']);
         Route::get('/wallet/platform-summary', [\App\Http\Controllers\Api\WalletController::class, 'platformSummary']);
+        
+        // NEW: Admin payment recovery - view pending payments and send messages
+        Route::get('/admin/pending-payments', [\App\Http\Controllers\Api\WalletController::class, 'adminPendingPayments']);
+        Route::post('/admin/chat/send', [\App\Http\Controllers\Api\WalletController::class, 'adminSendChatMessage']);
     });
 
     // Wallet (quiz-master)
@@ -425,6 +429,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/wallet/withdrawals', [\App\Http\Controllers\Api\WalletController::class, 'myWithdrawals']);
     // Admin: settle pending funds into available for a quiz-master
     Route::post('/wallet/settle/{quizMasterId}', [\App\Http\Controllers\Api\WalletController::class, 'settlePending']);
+    
+    // NEW: Pending payments endpoints (payment recovery system)
+    Route::get('/my/unpaid-quizzes', [\App\Http\Controllers\Api\WalletController::class, 'myUnpaidQuizzes']);
+    Route::post('/pending-payments/{id}/send-reminder', [\App\Http\Controllers\Api\WalletController::class, 'sendPendingPaymentReminder']);
+    
+    // NEW: Process payment (auto-settlement or pending tracking)
+    Route::post('/checkout/process-payment', [\App\Http\Controllers\Api\WalletController::class, 'processPayment']);
 
     // quizee rewards endpoint (points, vouchers, next threshold)
     Route::get('/rewards/my', [\App\Http\Controllers\Api\WalletController::class, 'rewardsMy']);
