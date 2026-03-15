@@ -389,6 +389,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/admin/withdrawals/{id}/reject', [\App\Http\Controllers\Api\AdminController::class, 'rejectWithdrawal']);
         Route::post('/admin/transactions/settle', [\App\Http\Controllers\Api\AdminController::class, 'settlePending']);
 
+        // Admin Settings, Quizees, and Tournaments
+        Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
+        Route::post('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
+        Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
+        Route::get('/admin/quizees', [\App\Http\Controllers\Api\AdminController::class, 'quizees']);
+        Route::get('/admin/tournaments', [\App\Http\Controllers\Api\AdminController::class, 'tournaments']);
+        Route::get('/admin/tournaments/{id}/participants', [\App\Http\Controllers\Api\AdminController::class, 'tournamentParticipants']);
+
         // Affiliate Management Routes
         Route::get('/admin/affiliates', [\App\Http\Controllers\Api\AffiliateController::class, 'adminIndex']);
         Route::get('/admin/affiliate-referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'adminReferrals']);

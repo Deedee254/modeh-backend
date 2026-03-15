@@ -446,4 +446,258 @@ class AdminController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get/update global settings for approvals, payment revenue share, and quiz prices
+     */
+    public function settings(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        // GET settings
+        if ($request->method() === 'GET') {
+            $mpesaSetting = PaymentSetting::where('gateway', 'mpesa')->first();
+            if (!$mpesaSetting) {
+                $mpesaSetting = new PaymentSetting();
+                $mpesaSetting->gateway = 'mpesa';
+                $mpesaSetting->revenue_share = 60.0;
+                $mpesaSetting->is_active = true;
+            }
+
+            $approvalsEnabled = config('features.quiz_approvals_enabled', true);
+
+            return response()->json([
+                'ok' => true,
+                'settings' => [
+                    'revenue_share' => (float) ($mpesaSetting->revenue_share ?? 60.0),
+                    'approvals_enabled' => (boolean) $approvalsEnabled,
+                    'mpesa_active' => (boolean) ($mpesaSetting->is_active ?? true),
+                    'default_quiz_price' => (float) config('features.default_quiz_price', 10.0),
+                    'default_quiz_time_limit' => (integer) config('features.default_quiz_time_limit', 30),
+                ],
+            ]);
+        }
+
+        // UPDATE settings
+        if ($request->method() === 'POST' || $request->method() === 'PUT') {
+            $validated = $request->validate([
+                'revenue_share' => 'sometimes|numeric|min:0|max:100',
+                'approvals_enabled' => 'sometimes|boolean',
+                'mpesa_active' => 'sometimes|boolean',
+                'default_quiz_price' => 'sometimes|numeric|min:0',
+                'default_quiz_time_limit' => 'sometimes|integer|min:5|max:300',
+            ]);
+
+            if (isset($validated['revenue_share'])) {
+                $setting = PaymentSetting::where('gateway', 'mpesa')->first();
+                if ($setting) {
+                    $setting->update(['revenue_share' => $validated['revenue_share']]);
+                } else {
+                    PaymentSetting::create([
+                        'gateway' => 'mpesa',
+                        'revenue_share' => $validated['revenue_share'],
+                        'is_active' => true,
+                    ]);
+                }
+            }
+
+            if (isset($validated['approvals_enabled'])) {
+                config(['features.quiz_approvals_enabled' => $validated['approvals_enabled']]);
+                DB::table('settings')->updateOrInsert(
+                    ['key' => 'quiz_approvals_enabled'],
+                    ['value' => json_encode($validated['approvals_enabled'])]
+                );
+            }
+
+            if (isset($validated['mpesa_active'])) {
+                $setting = PaymentSetting::where('gateway', 'mpesa')->first();
+                if ($setting) {
+                    $setting->update(['is_active' => $validated['mpesa_active']]);
+                }
+            }
+
+            if (isset($validated['default_quiz_price'])) {
+                DB::table('settings')->updateOrInsert(
+                    ['key' => 'default_quiz_price'],
+                    ['value' => json_encode($validated['default_quiz_price'])]
+                );
+            }
+
+            if (isset($validated['default_quiz_time_limit'])) {
+                DB::table('settings')->updateOrInsert(
+                    ['key' => 'default_quiz_time_limit'],
+                    ['value' => json_encode($validated['default_quiz_time_limit'])]
+                );
+            }
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Settings updated successfully',
+                'settings' => [
+                    'revenue_share' => (float) ($validated['revenue_share'] ?? 60.0),
+                    'approvals_enabled' => (boolean) ($validated['approvals_enabled'] ?? true),
+                    'mpesa_active' => (boolean) ($validated['mpesa_active'] ?? true),
+                    'default_quiz_price' => (float) ($validated['default_quiz_price'] ?? 10.0),
+                    'default_quiz_time_limit' => (integer) ($validated['default_quiz_time_limit'] ?? 30),
+                ],
+            ]);
+        }
+    }
+
+    /**
+     * Get quizees (same as users endpoint but filtered for quizee role)
+     */
+    public function quizees(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        return $this->users($request);
+    }
+
+    /**
+     * Get tournaments with participant details
+     */
+    public function tournaments(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $query = \App\Models\Tournament::query();
+
+        // Filter by status
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Search by name
+        if ($request->filled('search')) {
+            $query->where('name', 'like', '%' . $request->input('search') . '%');
+        }
+
+        // Pagination
+        $page = $request->input('page', 1);
+        $limit = $request->input('limit', 15);
+
+        $total = $query->count();
+        $tournaments = $query->orderBy('start_date', 'desc')
+            ->skip(($page - 1) * $limit)
+            ->take($limit)
+            ->with(['subject', 'topic', 'grade', 'createdBy'])
+            ->get()
+            ->map(function ($tournament) {
+                return [
+                    'id' => $tournament->id,
+                    'name' => $tournament->name,
+                    'description' => $tournament->description,
+                    'status' => $tournament->status,
+                    'start_date' => $tournament->start_date,
+                    'end_date' => $tournament->end_date,
+                    'prize_pool' => (float) $tournament->prize_pool,
+                    'entry_fee' => (float) $tournament->entry_fee,
+                    'max_participants' => $tournament->max_participants,
+                    'participant_count' => $tournament->participants->count(),
+                    'subject' => $tournament->subject?->name,
+                    'topic' => $tournament->topic?->name,
+                    'grade' => $tournament->grade?->name,
+                    'created_by' => $tournament->createdBy?->name,
+                ];
+            });
+
+        return response()->json([
+            'ok' => true,
+            'tournaments' => $tournaments,
+            'page' => $page,
+            'limit' => $limit,
+            'total' => $total,
+        ]);
+    }
+
+    /**
+     * Get tournament participants with scores
+     */
+    public function tournamentParticipants(Request $request, $tournamentId)
+    {
+        $user = auth()->user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $tournament = \App\Models\Tournament::findOrFail($tournamentId);
+
+        $query = $tournament->participants()
+            ->with(['user', 'attempts'])
+            ->orderBy('rank', 'asc');
+
+        // Filter by status
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Search by user name or email
+        if ($request->filled('search')) {
+            $searchTerm = $request->input('search');
+            $query->whereHas('user', function ($q) use ($searchTerm) {
+                $q->where('name', 'like', '%' . $searchTerm . '%')
+                  ->orWhere('email', 'like', '%' . $searchTerm . '%');
+            });
+        }
+
+        // Pagination
+        $page = $request->input('page', 1);
+        $limit = $request->input('limit', 50);
+
+        $total = $query->count();
+        $participants = $query->skip(($page - 1) * $limit)
+            ->take($limit)
+            ->get()
+            ->map(function ($participant) {
+                $attempts = $participant->attempts ?? [];
+                $bestScore = $attempts->max('score') ?? 0;
+                $attemptCount = count($attempts);
+
+                return [
+                    'id' => $participant->id,
+                    'user_id' => $participant->user_id,
+                    'user_name' => $participant->user->name,
+                    'user_email' => $participant->user->email,
+                    'status' => $participant->status,
+                    'rank' => $participant->rank,
+                    'score' => (float) $participant->score,
+                    'best_score' => (float) $bestScore,
+                    'attempt_count' => $attemptCount,
+                    'attempts' => $attempts->map(function ($attempt) {
+                        return [
+                            'id' => $attempt->id,
+                            'score' => (float) $attempt->score,
+                            'correct_answers' => $attempt->correct_answers,
+                            'total_questions' => $attempt->total_questions,
+                            'duration_seconds' => $attempt->duration_seconds,
+                            'created_at' => $attempt->created_at,
+                        ];
+                    })->values(),
+                    'joined_at' => $participant->created_at,
+                ];
+            });
+
+        return response()->json([
+            'ok' => true,
+            'tournament' => [
+                'id' => $tournament->id,
+                'name' => $tournament->name,
+                'status' => $tournament->status,
+            ],
+            'participants' => $participants,
+            'page' => $page,
+            'limit' => $limit,
+            'total' => $total,
+        ]);
+    }
 }
