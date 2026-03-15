@@ -19,8 +19,8 @@ return new class extends Migration
             $table->enum('status', ['pending', 'paid', 'overdue', 'cancelled'])->default('pending');
             $table->enum('reminder_status', ['not_sent', 'sent_1', 'sent_2', 'sent_3'])->default('not_sent');
 
-            $table->timestamp('attempt_at');
-            $table->timestamp('payment_due_at');
+            $table->timestamp('attempt_at')->useCurrent();
+            $table->timestamp('payment_due_at')->useCurrent();
             $table->timestamp('first_reminder_at')->nullable();
             $table->timestamp('last_reminder_at')->nullable();
             $table->timestamp('paid_at')->nullable();
