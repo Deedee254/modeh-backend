@@ -198,10 +198,16 @@ class TransactionService
                 default => 'Unknown'
             };
 
+            $typeLabel = match($credit->type) {
+                Transaction::TYPE_AFFILIATE_PAYOUT => 'Affiliate Payout',
+                Transaction::TYPE_QUIZ_MASTER_PAYOUT => 'Quiz Master Payout',
+                default => ucfirst(str_replace('_', ' ', $credit->type ?? 'transaction'))
+            };
+
             $flow[] = [
                 'order' => $order++,
                 'type' => 'CREDIT',
-                'category' => $credit->getTypeLabel(),
+                'category' => $typeLabel,
                 'description' => $credit->description,
                 'amount' => $credit->amount,
                 'recipient' => $recipient,
