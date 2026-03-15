@@ -89,7 +89,10 @@ class AdminController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
-        $query = Transaction::query();
+        $query = Transaction::query()->with([
+            'user:id,name,email,phone',
+            'quizMaster:id,name,email,phone',
+        ]);
 
         // Apply filters
         if ($request->filled('from')) {
@@ -122,11 +125,27 @@ class AdminController extends Controller
             ->limit($perPage)
             ->get()
             ->map(function ($tx) {
+                $payer = $tx->user ? [
+                    'id' => $tx->user->id,
+                    'name' => $tx->user->name,
+                    'email' => $tx->user->email,
+                    'phone' => $tx->user->phone,
+                ] : null;
+
+                $quizMaster = $tx->quizMaster ? [
+                    'id' => $tx->quizMaster->id,
+                    'name' => $tx->quizMaster->name,
+                    'email' => $tx->quizMaster->email,
+                    'phone' => $tx->quizMaster->phone,
+                ] : null;
+
                 return [
                     'id' => $tx->id,
                     'tx_id' => $tx->tx_id,
                     'user_id' => $tx->user_id,
+                    'payer' => $payer,
                     'quiz-master_id' => $tx->{'quiz-master_id'},
+                    'quiz_master' => $quizMaster,
                     'quiz_id' => $tx->quiz_id,
                     'amount' => (float) $tx->amount,
                     'platform_share' => (float) $tx->platform_share,
