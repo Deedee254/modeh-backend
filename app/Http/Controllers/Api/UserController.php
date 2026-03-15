@@ -213,7 +213,8 @@ class UserController extends Controller
         // Load relationships for full response
         $user->loadMissing(['quizeeProfile', 'quizMasterProfile', 'affiliate', 'institutions']);
 
-        return UserResource::make($user);
+        // Return the updated user data wrapped in a response object
+        return response()->json(['user' => UserResource::make($user)->toArray($request)]);
     }
 
     public function changePassword(Request $request)
