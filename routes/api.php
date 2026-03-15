@@ -378,6 +378,46 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/admin/subscriptions/assign/{user}', [\App\Http\Controllers\Api\AdminSubscriptionController::class, 'assign']);
     });
 
+    // Admin Frontend Dashboard API
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::get('/admin/metrics', [\App\Http\Controllers\Api\AdminController::class, 'metrics']);
+        Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminController::class, 'transactions']);
+        Route::get('/admin/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
+        Route::get('/admin/quiz-masters', [\App\Http\Controllers\Api\AdminController::class, 'quizMasters']);
+        Route::get('/admin/withdrawals', [\App\Http\Controllers\Api\AdminController::class, 'withdrawals']);
+        Route::post('/admin/withdrawals/{id}/approve', [\App\Http\Controllers\Api\AdminController::class, 'approveWithdrawal']);
+        Route::post('/admin/withdrawals/{id}/reject', [\App\Http\Controllers\Api\AdminController::class, 'rejectWithdrawal']);
+        Route::post('/admin/transactions/settle', [\App\Http\Controllers\Api\AdminController::class, 'settlePending']);
+
+        // Affiliate Management Routes
+        Route::get('/admin/affiliates', [\App\Http\Controllers\Api\AffiliateController::class, 'adminIndex']);
+        Route::get('/admin/affiliate-referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'adminReferrals']);
+        Route::get('/admin/affiliate-clicks', [\App\Http\Controllers\Api\AffiliateController::class, 'adminClicks']);
+        Route::get('/admin/affiliate-metrics', [\App\Http\Controllers\Api\AffiliateController::class, 'adminMetrics']);
+        Route::get('/admin/affiliate-payouts/pending', [\App\Http\Controllers\Api\AffiliateController::class, 'pendingPayouts']);
+        Route::post('/admin/affiliate-payouts/settle', [\App\Http\Controllers\Api\AffiliateController::class, 'settlePayouts']);
+        Route::post('/admin/affiliates/{affiliateId}/settle-payout', [\App\Http\Controllers\Api\AffiliateController::class, 'settleSingleAffiliate']);
+
+        // Institution Management Routes
+        Route::get('/admin/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'index']);
+        Route::get('/admin/institution-requests', [\App\Http\Controllers\Api\InstitutionController::class, 'requests']);
+        Route::post('/admin/institution-requests/{id}/approve', [\App\Http\Controllers\Api\InstitutionController::class, 'approveRequest']);
+        Route::post('/admin/institution-requests/{id}/reject', [\App\Http\Controllers\Api\InstitutionController::class, 'rejectRequest']);
+        Route::get('/admin/institution-metrics', [\App\Http\Controllers\Api\InstitutionController::class, 'adminMetrics']);
+
+        // Public institution members endpoint (accessible to authenticated users)
+        Route::get('/institutions/{id}/members', [\App\Http\Controllers\Api\InstitutionController::class, 'members']);
+
+        // Wallet & Finance Routes
+        Route::get('/wallet/metrics', [\App\Http\Controllers\Api\WalletController::class, 'adminMetrics']);
+        Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'adminTransactions']);
+        Route::get('/wallet/pending-settlements', [\App\Http\Controllers\Api\WalletController::class, 'pendingSettlements']);
+        Route::post('/wallet/settle/{userId}', [\App\Http\Controllers\Api\WalletController::class, 'settleSingleUser']);
+        Route::get('/wallet/transaction-flow/{transactionId}', [\App\Http\Controllers\Api\WalletController::class, 'transactionFlow']);
+        Route::get('/wallet/transaction-history', [\App\Http\Controllers\Api\WalletController::class, 'transactionHistory']);
+        Route::get('/wallet/platform-summary', [\App\Http\Controllers\Api\WalletController::class, 'platformSummary']);
+    });
+
     // Wallet (quiz-master)
     Route::get('/wallet', [\App\Http\Controllers\Api\WalletController::class, 'mine']);
     Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'transactions']);

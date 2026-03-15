@@ -14,6 +14,7 @@ use App\Models\GuestUnlockToken;
 use App\Models\GuestQuizAttempt;
 use App\Services\MpesaService;
 use App\Services\WalletService;
+use App\Services\TransactionService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,10 @@ use Illuminate\Support\Str;
 
 class PaymentController extends Controller
 {
-    public function __construct(private WalletService $walletService) {}
+    public function __construct(
+        private WalletService $walletService,
+        private TransactionService $transactionService
+    ) {}
 
     // Initiate an Mpesa STK Push
     public function initiateMpesa(Request $request, Subscription $subscription)
@@ -434,6 +438,7 @@ class PaymentController extends Controller
             match ($purchase->item_type) {
                 'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
                 'battle' => $this->createTransactionForBattle($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+                'tournament' => $this->createTransactionForTournament($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
                 default => $this->createGenericTransaction($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
             };
         }
@@ -750,27 +755,46 @@ class PaymentController extends Controller
             }
         }
 
-        // Create transaction
-        $transaction = \App\Models\Transaction::create([
-            'tx_id' => $txId,
-            'user_id' => $sub->user_id,
-            'quiz-master_id' => $quizMasterId,
-            'quiz_id' => $quizId,
-            'amount' => $amount,
-            'quiz-master_share' => $quizMasterShare,
-            'platform_share' => $platformShare,
-            'gateway' => 'mpesa',
-            'meta' => $meta,
-            'status' => 'confirmed',
-        ]);
+        // Use TransactionService for atomic payment distribution
+        try {
+            // Get affiliate referral if user is referred
+            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $sub->user_id)->first();
+            $referralCode = $affiliateReferral?->affiliate?->code;
 
-        Log::info('[Payment] Transaction created', [
-            'transaction_id' => $transaction->id,
-            'tx' => $txId,
-            'amount' => $amount,
-            'quiz-master_share' => $quizMasterShare,
-            'platform_share' => $platformShare,
-        ]);
+            // Get quiz-master commission rate from payment settings (default 60%)
+            $paymentSetting = PaymentSetting::first();
+            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+
+            $packageName = $sub->package->name ?? 'Package';
+            $result = $this->transactionService->processPayment([
+                'user_id' => $sub->user_id,
+                'amount' => $amount,
+                'referral_code' => $referralCode,
+                'quiz_id' => $quizId,
+                'quiz_master_id' => $quizMasterId,
+                'qm_commission_rate' => $qmCommissionRate,
+                'gateway' => $mpesaService->gateway ?? 'mpesa',
+                'tx_id' => $txId,
+                'description' => "Subscription payment: {$packageName}",
+            ]);
+
+            Log::info('[Payment] Subscription payment processed via TransactionService', [
+                'subscription_id' => $sub->id,
+                'user_id' => $sub->user_id,
+                'main_transaction_id' => $result['main_transaction_id'] ?? null,
+                'amount' => $amount,
+                'is_renewal' => $isRenewal,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Payment] Failed to process subscription payment via TransactionService', [
+                'subscription_id' => $sub->id,
+                'user_id' => $sub->user_id,
+                'amount' => $amount,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
 
         // Notify and broadcast subscription update
         try {
@@ -788,29 +812,6 @@ class PaymentController extends Controller
                 'user_id' => $sub->user_id,
                 'error' => $e->getMessage(),
             ]);
-        }
-
-        // Credit quiz-master wallet
-        if ($quizMasterId) {
-            try {
-                $this->creditWallet($quizMasterId, $quizMasterShare);
-                Log::info('[Payment] Quiz master wallet credited', [
-                    'quiz-master_id' => $quizMasterId,
-                    'amount' => $quizMasterShare,
-                    'tx' => $txId,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('[Payment] Quiz master wallet credit failed', [
-                    'quiz-master_id' => $quizMasterId,
-                    'amount' => $quizMasterShare,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        // Handle affiliate commission if user was referred (only for new subscriptions, not renewals)
-        if (!$isRenewal) {
-            $this->handleAffiliateCommission($sub->user_id, $amount, $txId);
         }
 
         // Create invoice and send email notification
@@ -873,21 +874,42 @@ class PaymentController extends Controller
             $quizMasterId = $quiz->user_id ?? null;
         }
 
-        \App\Models\Transaction::create([
-            'tx_id' => $txId,
-            'user_id' => $purchase->user_id,
-            'quiz-master_id' => $quizMasterId,
-            'quiz_id' => $purchase->item_id,
-            'amount' => $amount,
-            'quiz-master_share' => $quizMasterShare,
-            'platform_share' => $platformShare,
-            'gateway' => 'mpesa',
-            'meta' => ['one_off' => true, 'item_type' => 'quiz', 'item_id' => $purchase->item_id],
-            'status' => 'confirmed',
-        ]);
+        // Use TransactionService for atomic payment distribution
+        try {
+            // Get affiliate referral if user is referred
+            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first();
+            $referralCode = $affiliateReferral?->affiliate?->code;
 
-        if ($quizMasterId) {
-            $this->creditWallet($quizMasterId, $quizMasterShare);
+            // Get quiz-master commission rate from payment settings (default 60%)
+            $paymentSetting = PaymentSetting::first();
+            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+
+            $result = $this->transactionService->processPayment([
+                'user_id' => $purchase->user_id,
+                'amount' => $amount,
+                'referral_code' => $referralCode,
+                'quiz_id' => $purchase->item_id,
+                'quiz_master_id' => $quizMasterId,
+                'qm_commission_rate' => $qmCommissionRate,
+                'gateway' => $purchase->gateway ?? 'mpesa',
+                'tx_id' => $txId,
+                'description' => 'One-off quiz purchase',
+            ]);
+
+            Log::info('[Payment] One-off quiz purchase processed via TransactionService', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'quiz_id' => $purchase->item_id,
+                'main_transaction_id' => $result['main_transaction_id'] ?? null,
+                'amount' => $amount,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Payment] Failed to process one-off quiz purchase', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
         }
 
         // Mark quiz attempt as paid if one was specified in the purchase
@@ -903,9 +925,6 @@ class PaymentController extends Controller
                 ]);
             }
         }
-
-        // Handle affiliate commission if user was referred
-        $this->handleAffiliateCommission($purchase->user_id, $amount, $txId);
     }
 
     /**
@@ -918,31 +937,114 @@ class PaymentController extends Controller
             return;
         }
 
-        $questionOwners = $this->distributeQuizMasterShare($battle, $totalQuizMasterShare);
-        if (empty($questionOwners)) {
-            return;
-        }
+        try {
+            // Get affiliate referral if user is referred
+            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first();
+            $referralCode = $affiliateReferral?->affiliate?->code;
 
-        // Create transaction per owner
-        foreach ($questionOwners as $ownerId => $ownerShare) {
-            \App\Models\Transaction::create([
-                'tx_id' => $txId,
+            // Get quiz-master commission rate from payment settings (default 60%)
+            $paymentSetting = PaymentSetting::first();
+            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+
+            // Process base payment through TransactionService
+            $result = $this->transactionService->processPayment([
                 'user_id' => $purchase->user_id,
-                'quiz-master_id' => $ownerId,
-                'quiz_id' => null,
                 'amount' => $amount,
-                'quiz-master_share' => $ownerShare,
-                'platform_share' => round($platformShare * ($ownerShare / max(0.0001, $totalQuizMasterShare)), 2),
-                'gateway' => 'mpesa',
-                'meta' => ['one_off' => true, 'item_type' => 'battle', 'item_id' => $purchase->item_id, 'question_owner_breakdown' => array_keys($questionOwners)],
-                'status' => 'confirmed',
+                'referral_code' => $referralCode,
+                'qm_commission_rate' => $qmCommissionRate,
+                'gateway' => $purchase->gateway ?? 'mpesa',
+                'tx_id' => $txId,
+                'description' => 'One-off battle purchase',
             ]);
 
-            $this->creditWallet($ownerId, $ownerShare);
-        }
+            // Now distribute quiz-master shares to question owners
+            $questionOwners = $this->distributeQuizMasterShare($battle, $totalQuizMasterShare);
+            if (!empty($questionOwners)) {
+                foreach ($questionOwners as $ownerId => $ownerShare) {
+                    // Credit each question owner from the quiz-master share pool
+                    $this->creditWallet($ownerId, $ownerShare);
+                    
+                    Log::info('[Payment] Battle question owner credited', [
+                        'owner_id' => $ownerId,
+                        'amount' => $ownerShare,
+                        'purchase_id' => $purchase->id,
+                    ]);
+                }
+            }
 
-        // Handle affiliate commission if user was referred
-        $this->handleAffiliateCommission($purchase->user_id, $amount, $txId);
+            Log::info('[Payment] Battle purchase processed via TransactionService', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'battle_id' => $purchase->item_id,
+                'amount' => $amount,
+                'question_owners' => count($questionOwners),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Payment] Failed to process battle purchase', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Create transaction for tournament entry fee payment.
+     * Tournament creator (organizer) is the "quiz master" who receives the entry fee commission.
+     */
+    private function createTransactionForTournament(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $quizMasterShare, float $platformShare)
+    {
+        try {
+            // Get tournament to find creator/organizer
+            $tournament = \App\Models\Tournament::find($purchase->item_id);
+            if (!$tournament) {
+                Log::warning('[Payment] Tournament not found for entry fee payment', [
+                    'purchase_id' => $purchase->id,
+                    'tournament_id' => $purchase->item_id,
+                ]);
+                // Fall back to generic handler
+                return $this->createGenericTransaction($purchase, $txId, $amount, $quizMasterShare, $platformShare);
+            }
+
+            // Get affiliate referral if user is referred
+            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first();
+            $referralCode = $affiliateReferral?->affiliate?->referral_code;
+
+            // Get quiz-master commission rate from payment settings (default 60%)
+            $paymentSetting = PaymentSetting::first();
+            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+
+            // Process payment through TransactionService
+            // Tournament creator is the "quiz master" who receives commission
+            $result = $this->transactionService->processPayment([
+                'user_id' => $purchase->user_id,
+                'amount' => $amount,
+                'referral_code' => $referralCode,
+                'quiz_master_id' => $tournament->created_by, // Tournament creator is the "quiz master"
+                'quiz_id' => null,
+                'qm_commission_rate' => $qmCommissionRate,
+                'gateway' => $purchase->gateway ?? 'mpesa',
+                'tx_id' => $txId,
+                'description' => "Tournament entry fee for \"{$tournament->name}\"",
+            ]);
+
+            Log::info('[Payment] Tournament entry fee processed via TransactionService', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'tournament_id' => $purchase->item_id,
+                'tournament_creator_id' => $tournament->created_by,
+                'amount' => $amount,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Payment] Failed to process tournament entry fee', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'tournament_id' => $purchase->item_id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -950,21 +1052,40 @@ class PaymentController extends Controller
      */
     private function createGenericTransaction(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $quizMasterShare, float $platformShare)
     {
-        \App\Models\Transaction::create([
-            'tx_id' => $txId,
-            'user_id' => $purchase->user_id,
-            'quiz-master_id' => null,
-            'quiz_id' => null,
-            'amount' => $amount,
-            'quiz-master_share' => $quizMasterShare,
-            'platform_share' => $platformShare,
-            'gateway' => 'mpesa',
-            'meta' => ['one_off' => true, 'item_type' => $purchase->item_type, 'item_id' => $purchase->item_id],
-            'status' => 'confirmed',
-        ]);
+        try {
+            // Get affiliate referral if user is referred
+            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first();
+            $referralCode = $affiliateReferral?->affiliate?->code;
 
-        // Handle affiliate commission if user was referred
-        $this->handleAffiliateCommission($purchase->user_id, $amount, $txId);
+            // Get quiz-master commission rate from payment settings (default 60%)
+            $paymentSetting = PaymentSetting::first();
+            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+
+            // Process payment through TransactionService
+            $result = $this->transactionService->processPayment([
+                'user_id' => $purchase->user_id,
+                'amount' => $amount,
+                'referral_code' => $referralCode,
+                'qm_commission_rate' => $qmCommissionRate,
+                'gateway' => $purchase->gateway ?? 'mpesa',
+                'tx_id' => $txId,
+                'description' => "One-off {$purchase->item_type} purchase",
+            ]);
+
+            Log::info('[Payment] Generic one-off purchase processed via TransactionService', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'item_type' => $purchase->item_type,
+                'amount' => $amount,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Payment] Failed to process generic one-off purchase', [
+                'purchase_id' => $purchase->id,
+                'item_type' => $purchase->item_type,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
     }
 
     /**

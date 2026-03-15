@@ -10,12 +10,18 @@ use Illuminate\Support\Facades\Log;
 /**
  * WalletService handles all wallet operations for quiz masters and creators.
  *
- * Earning Flow:
- * 1. Transaction created when payment received (quiz, battle, subscription, tournament)
- * 2. Quiz master share calculated and stored in transactions.quiz_master_share
- * 3. creditWallet() called to add to wallet.pending
- * 4. Admin settles pending -> available via settlePending()
- * 5. User withdraws available balance
+ * Comprehensive Wallet Architecture:
+ * - Platform Wallet (user_id=0): Receives all incoming money, distributes to others
+ * - Admin Wallet: Net earnings after all payouts  
+ * - Quiz Master Wallet: Earnings from quizzes and affiliates
+ * - Quizee Wallet: Earnings from affiliates, tournaments, battles, subscriptions
+ *
+ * Multi-Source Earnings:
+ * 1. Quiz Completion: Quiz Master + Affiliate get shares, platform keeps remainder
+ * 2. Tournament Winnings: Direct credit to quizee
+ * 3. Battle Rewards: Direct credit to quizee  
+ * 4. Subscription Revenue: Credited to platform wallet
+ * 5. Affiliate Commissions: Direct credit to affiliate wallet
  *
  * Balance States:
  * - pending: Awaiting admin settlement (quiz/battle/subscription earnings)
@@ -323,6 +329,280 @@ class WalletService
             'lifetime_earned' => (float)$wallet->lifetime_earned,
             'total_from_transactions' => $totalEarnings,
             'difference' => $totalEarnings - (float)$wallet->lifetime_earned, // Should be 0 or very small
+        ];
+    }
+
+    /**
+     * MULTI-EARNING FLOW METHODS
+     * ===========================
+     */
+
+    /**
+     * Process quiz completion with full payout distribution.
+     * Flow: Money in → Affiliate gets share → Quiz Master gets share → Platform keeps remainder
+     *
+     * @param int $quizMasterId Creator of the quiz
+     * @param float $amount Total amount from quizee payment
+     * @param string|null $referralCode Affiliate referral code (optional)
+     * @param int|null $quizId Quiz ID reference
+     * @param float $qmCommissionRate QM commission percentage (default 60%)
+     * @return array Distribution summary
+     */
+    public static function processQuizPayout(
+        int $quizMasterId,
+        float $amount,
+        ?string $referralCode = null,
+        ?int $quizId = null,
+        float $qmCommissionRate = 60
+    ): array {
+        return DB::transaction(function () use (
+            $quizMasterId,
+            $amount,
+            $referralCode,
+            $quizId,
+            $qmCommissionRate
+        ) {
+            $distribution = [];
+            $remaining = $amount;
+
+            // 1. Get/Create platform wallet (user_id = 0) - receives all money
+            $platformWallet = Wallet::firstOrCreate(
+                ['user_id' => 0, 'wallet_type' => Wallet::TYPE_PLATFORM],
+                ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+            );
+
+            $platformWallet->available = bcadd($platformWallet->available, $amount, 2);
+            $platformWallet->lifetime_earned = bcadd($platformWallet->lifetime_earned, $amount, 2);
+            $platformWallet->save();
+
+            $distribution['platform_debit'] = [
+                'amount' => (float)$amount,
+                'type' => 'platform_debit',
+                'description' => 'Quiz payment received',
+            ];
+
+            // 2. Pay affiliate first if referral code exists (deduct from platform share)
+            $affiliateShare = 0;
+            if ($referralCode) {
+                $affiliate = \App\Models\Affiliate::where('referral_code', $referralCode)->first();
+                if ($affiliate) {
+                    $affiliateShare = bcmul($amount, bcdiv($affiliate->commission_rate, 100, 4), 2);
+                    $remaining = bcsub($remaining, $affiliateShare, 2);
+
+                    $affiliateWallet = Wallet::firstOrCreate(
+                        ['user_id' => $affiliate->user_id, 'wallet_type' => Wallet::TYPE_QUIZEE],
+                        ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+                    );
+
+                    $affiliateWallet->recordEarning(
+                        'affiliates',
+                        $affiliateShare,
+                        "Affiliate commission from quiz (code: {$referralCode})"
+                    );
+
+                    $distribution['affiliate_credit'] = [
+                        'user_id' => $affiliate->user_id,
+                        'amount' => (float)$affiliateShare,
+                        'type' => 'affiliate_payout',
+                        'description' => "Affiliate commission ({$affiliate->commission_rate}% of " . number_format($amount, 2) . ")",
+                    ];
+
+                    Log::info('Affiliate paid from quiz', [
+                        'affiliate_id' => $affiliate->id,
+                        'amount' => $affiliateShare,
+                        'quiz_id' => $quizId,
+                    ]);
+                }
+            }
+
+            // 3. Pay quiz master from remaining (60% of what's left after affiliate)
+            $qmShare = bcmul($remaining, bcdiv($qmCommissionRate, 100, 4), 2);
+            $remaining = bcsub($remaining, $qmShare, 2);
+
+            $qmWallet = Wallet::firstOrCreate(
+                ['user_id' => $quizMasterId, 'wallet_type' => Wallet::TYPE_QUIZ_MASTER],
+                ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+            );
+
+            $qmWallet->recordEarning(
+                'quizzes',
+                $qmShare,
+                "Quiz earnings from quiz #$quizId"
+            );
+
+            $distribution['qm_credit'] = [
+                'user_id' => $quizMasterId,
+                'amount' => (float)$qmShare,
+                'type' => 'quiz_master_payout',
+                'description' => "Quiz master commission ({$qmCommissionRate}% of remaining " . number_format($qmShare + $remaining, 2) . ")",
+            ];
+
+            Log::info('Quiz master paid', [
+                'quiz_master_id' => $quizMasterId,
+                'amount' => $qmShare,
+                'quiz_id' => $quizId,
+            ]);
+
+            // 4. Platform keeps remainder
+            $platformShare = $remaining;
+            $distribution['platform_credit'] = [
+                'amount' => (float)$platformShare,
+                'type' => 'platform_credit',
+                'description' => 'Platform operating fund',
+                'percentage' => round(($platformShare / $amount) * 100, 2),
+            ];
+
+            // 5. Create audit transaction
+            $mainTx = Transaction::create([
+                'quiz_master_id' => $quizMasterId,
+                'quiz_id' => $quizId,
+                'amount' => $amount,
+                'affiliate_share' => $affiliateShare,
+                'quiz_master_share' => $qmShare,
+                'platform_share' => $platformShare,
+                'type' => Transaction::TYPE_PAYMENT,
+                'status' => Transaction::STATUS_COMPLETED,
+                'description' => "Quiz completion payout (Quiz #$quizId)",
+                'balance_after' => $platformWallet->available,
+                'meta' => [
+                    'distribution_breakdown' => $distribution,
+                    'referral_code' => $referralCode,
+                    'qm_commission_rate' => $qmCommissionRate,
+                ],
+            ]);
+
+            Log::info('Quiz payout processed', [
+                'transaction_id' => $mainTx->id,
+                'quiz_id' => $quizId,
+                'total' => $amount,
+                'affiliate_share' => $affiliateShare,
+                'qm_share' => $qmShare,
+                'platform_share' => $platformShare,
+            ]);
+
+            return [
+                'success' => true,
+                'transaction_id' => $mainTx->id,
+                'distribution' => $distribution,
+                'summary' => [
+                    'total_in' => (float)$amount,
+                    'affiliate_share' => (float)$affiliateShare,
+                    'quiz_master_share' => (float)$qmShare,
+                    'platform_share' => (float)$platformShare,
+                ],
+            ];
+        });
+    }
+
+    /**
+     * Record tournament winnings for quizee
+     */
+    public static function recordTournamentWinning(
+        int $quizeeId,
+        float $amount,
+        ?int $tournamentId = null,
+        string $description = ''
+    ): Wallet {
+        $wallet = Wallet::firstOrCreate(
+            ['user_id' => $quizeeId, 'wallet_type' => Wallet::TYPE_QUIZEE],
+            ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+        );
+
+        $wallet->recordEarning(
+            'tournaments',
+            $amount,
+            $description ?: "Tournament winning (Tournament #$tournamentId)"
+        );
+
+        return $wallet;
+    }
+
+    /**
+     * Record battle reward for quizee  
+     */
+    public static function recordBattleReward(
+        int $quizeeId,
+        float $amount,
+        ?int $battleId = null,
+        string $description = ''
+    ): Wallet {
+        $wallet = Wallet::firstOrCreate(
+            ['user_id' => $quizeeId, 'wallet_type' => Wallet::TYPE_QUIZEE],
+            ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+        );
+
+        $wallet->recordEarning(
+            'battles',
+            $amount,
+            $description ?: "Battle reward (Battle #$battleId)"
+        );
+
+        return $wallet;
+    }
+
+    /**
+     * Record subscription payment
+     */
+    public static function recordSubscriptionPayment(
+        float $amount,
+        string $planName,
+        string $description = ''
+    ): array {
+        return DB::transaction(function () use ($amount, $planName, $description) {
+            // Platform receives subscription payment
+            $platformWallet = Wallet::firstOrCreate(
+                ['user_id' => 0, 'wallet_type' => Wallet::TYPE_PLATFORM],
+                ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+            );
+
+            $platformWallet->recordEarning(
+                'subscriptions',
+                $amount,
+                $description ?: "Subscription payment for {$planName}"
+            );
+
+            return [
+                'success' => true,
+                'platform_credited' => (float)$amount,
+                'plan' => $planName,
+            ];
+        });
+    }
+
+    /**
+     * Get admin financial overview with all wallet summaries
+     */
+    public static function getAdminFinancialOverview(): array
+    {
+        $platformWallet = Wallet::where('wallet_type', Wallet::TYPE_PLATFORM)->first();
+        $adminWallet = Wallet::where('wallet_type', Wallet::TYPE_ADMIN)->first();
+
+        $paymentTxs = Transaction::where('type', Transaction::TYPE_PAYMENT)->sum('amount') ?? 0;
+        $affiliatePayouts = Transaction::where('type', Transaction::TYPE_AFFILIATE_PAYOUT)
+            ->sum('amount') ?? 0;
+        $qmPayouts = Transaction::where('type', Transaction::TYPE_QUIZ_MASTER_PAYOUT)
+            ->sum('amount') ?? 0;
+
+        $last30Days = Transaction::where('created_at', '>=', now()->subDays(30))
+            ->sum('amount') ?? 0;
+
+        return [
+            'platform_wallet' => $platformWallet?->getSummary() ?? [],
+            'admin_wallet' => $adminWallet?->getSummary() ?? [],
+            'revenue' => [
+                'all_time_payments' => (float)$paymentTxs,
+                'last_30_days' => (float)$last30Days,
+            ],
+            'payouts' => [
+                'affiliates_total' => (float)$affiliatePayouts,
+                'quiz_masters_total' => (float)$qmPayouts,
+                'total_distributed' => (float)bcadd($affiliatePayouts, $qmPayouts, 2),
+            ],
+            'platform_profit' => (float)bcsub(
+                $paymentTxs,
+                bcadd($affiliatePayouts, $qmPayouts, 2),
+                2
+            ),
         ];
     }
 }
