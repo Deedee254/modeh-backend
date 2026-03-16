@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class DashboardAnalyticsController extends Controller
 {
@@ -25,15 +27,46 @@ class DashboardAnalyticsController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Get quizzes owned by this quiz master
-        $quizzes = Quiz::where('user_id', $user->id)->pluck('id');
+        // Count total questions created by this quiz master (used on the dashboard hero).
+        // Prefer `created_by` when present; fall back to `user_id` if needed.
+        $questionsCountQuery = Question::query();
+        if (Schema::hasTable('questions') && Schema::hasColumn('questions', 'created_by')) {
+            $questionsCountQuery->where('created_by', $user->id);
+        } elseif (Schema::hasTable('questions') && Schema::hasColumn('questions', 'user_id')) {
+            $questionsCountQuery->where('user_id', $user->id);
+        } else {
+            // Unknown schema: avoid failing the endpoint.
+            $questionsCountQuery->whereRaw('1 = 0');
+        }
+        $totalQuestions = (int) $questionsCountQuery->count();
+
+        // Get quizzes owned by this quiz master. Some legacy rows may have `created_by` populated instead of `user_id`.
+        $ownedQuizzesQuery = Quiz::query()->where(function ($q) use ($user) {
+            $q->where('user_id', $user->id)->orWhere('created_by', $user->id);
+        });
+
+        $quizzes = $ownedQuizzesQuery->pluck('id');
+        $totalQuizzes = (int) $quizzes->count();
+
+        // Published quizzes = approved AND visible to quizees as published
+        $publishedQuizzes = (int) (clone $ownedQuizzesQuery)
+            ->where('is_approved', true)
+            ->where('visibility', 'published')
+            ->count();
+
         if ($quizzes->isEmpty()) {
             return response()->json([
                 'stats' => [
                     'totalQuizzes' => 0,
+                    'publishedQuizzes' => 0,
+                    'totalQuestions' => $totalQuestions,
                     'totalAttempts' => 0,
                     'avgScore' => 0,
-                    'completionRate' => 0
+                    'completionRate' => 0,
+                    'totalQuizzesTrend' => null,
+                    'totalAttemptsTrend' => null,
+                    'avgScoreTrend' => null,
+                    'completionRateTrend' => null,
                 ],
                 'series' => [],
                 'distribution' => $this->emptyDistribution(),
@@ -42,7 +75,6 @@ class DashboardAnalyticsController extends Controller
         }
 
         // Basic stats
-        $totalQuizzes = $quizzes->count();
         $attempts = QuizAttempt::whereIn('quiz_id', $quizzes);
         $totalAttempts = $attempts->count();
         $avgScore = round($attempts->whereNotNull('score')->avg('score') ?? 0, 1);
@@ -125,6 +157,8 @@ class DashboardAnalyticsController extends Controller
         return response()->json([
             'stats' => [
                 'totalQuizzes' => $totalQuizzes,
+                'publishedQuizzes' => $publishedQuizzes,
+                'totalQuestions' => $totalQuestions,
                 'totalAttempts' => $totalAttempts,
                 'avgScore' => $avgScore,
                 'completionRate' => $completionRate,

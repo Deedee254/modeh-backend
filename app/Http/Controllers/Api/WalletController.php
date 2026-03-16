@@ -231,7 +231,7 @@ class WalletController extends Controller
 
         return response()->json([
             'ok' => true,
-            'metrics' => [
+            'data' => [
                 'platform_balance' => (float)$platformBalance,
                 'total_revenue' => (float)$totalRevenue,
                 'pending_settlements' => (float)$pendingSettlements,
@@ -321,6 +321,54 @@ class WalletController extends Controller
             'ok' => true,
             'settlements' => $settlements
         ]);
+    }
+
+    // Admin: Settle ALL pending funds at once
+    public function settleAllPending(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !isset($user->is_admin) || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        try {
+            DB::transaction(function () {
+                // Get all wallets with pending > 0
+                $wallets = Wallet::where('pending', '>', 0)->lockForUpdate()->get();
+                
+                foreach ($wallets as $wallet) {
+                    if ($wallet->pending > 0) {
+                        $pending = (float)$wallet->pending;
+                        
+                        // Move from pending -> available
+                        $wallet->pending = 0;
+                        $wallet->available = bcadd($wallet->available, $pending, 2);
+                        $wallet->save();
+
+                        // Create transaction record
+                        Transaction::create([
+                            'user_id' => $wallet->user_id,
+                            'quiz-master_id' => $wallet->user_id,
+                            'amount' => $pending,
+                            'status' => 'settlement',
+                            'meta' => [
+                                'type' => 'admin_bulk_settlement',
+                                'settled_at' => now(),
+                            ]
+                        ]);
+
+                        // Broadcast wallet update
+                        try {
+                            event(new \App\Events\WalletUpdated($wallet->toArray(), $wallet->user_id));
+                        } catch (\Throwable $_) { }
+                    }
+                }
+            });
+
+            return response()->json(['ok' => true, 'message' => 'All pending settlements completed']);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'message' => 'Failed to settle pending funds'], 500);
+        }
     }
 
     // Admin: Settle funds for a specific user

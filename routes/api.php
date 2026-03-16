@@ -393,6 +393,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 	        Route::get('/admin/quiz-masters/analytics', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'analytics']);
 	        Route::get('/admin/quiz-masters/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'insights']);
 	        Route::get('/admin/quiz-masters/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'userInsights']);
+	        Route::get('/admin/quizzes/analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
+	        Route::get('/admin/quizzes/slug/{slug}/insights', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'insightsBySlug']);
 	        Route::get('/admin/withdrawals', [\App\Http\Controllers\Api\AdminController::class, 'withdrawals']);
 	        Route::post('/admin/withdrawals/{id}/approve', [\App\Http\Controllers\Api\AdminController::class, 'approveWithdrawal']);
 	        Route::post('/admin/withdrawals/{id}/reject', [\App\Http\Controllers\Api\AdminController::class, 'rejectWithdrawal']);
@@ -406,9 +408,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
 	        Route::get('/admin/quizees/analytics', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'analytics']);
 	        Route::get('/admin/quizees/insights', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'insights']);
 	        Route::get('/admin/quizees/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'userInsights']);
+	        Route::get('/admin/tournaments/analytics', [\App\Http\Controllers\Api\AdminTournamentAnalyticsController::class, 'analytics']);
+	        Route::get('/admin/tournaments/{id}/insights', [\App\Http\Controllers\Api\AdminTournamentAnalyticsController::class, 'insights']);
 	        Route::get('/admin/tournaments', [\App\Http\Controllers\Api\AdminController::class, 'tournaments']);
 	        Route::get('/admin/tournaments/{id}/participants', [\App\Http\Controllers\Api\AdminController::class, 'tournamentParticipants']);
 	        Route::get('/admin/battles', [\App\Http\Controllers\Api\AdminBattleController::class, 'index']);
+	        Route::get('/admin/battles/{id}', [\App\Http\Controllers\Api\AdminBattleController::class, 'show']);
 	        Route::get('/admin/daily-challenges/analytics', [\App\Http\Controllers\Api\AdminDailyChallengeAnalyticsController::class, 'analytics']);
 	
 	        // Affiliate Management Routes
@@ -435,6 +440,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/wallet/metrics', [\App\Http\Controllers\Api\WalletController::class, 'adminMetrics']);
         Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'adminTransactions']);
         Route::get('/wallet/pending-settlements', [\App\Http\Controllers\Api\WalletController::class, 'pendingSettlements']);
+        Route::post('/wallet/settle', [\App\Http\Controllers\Api\WalletController::class, 'settleAllPending']);
         Route::post('/wallet/settle/{userId}', [\App\Http\Controllers\Api\WalletController::class, 'settleSingleUser']);
         Route::get('/wallet/transaction-flow/{transactionId}', [\App\Http\Controllers\Api\WalletController::class, 'transactionFlow']);
         Route::get('/wallet/transaction-history', [\App\Http\Controllers\Api\WalletController::class, 'transactionHistory']);
