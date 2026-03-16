@@ -304,10 +304,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Question import (parse CSV/Excel files)
     Route::post('/questions/import/parse', [\App\Http\Controllers\Api\QuestionImportController::class, 'parse']);
 
-    // Question bank
-    Route::get('/questions', [\App\Http\Controllers\Api\QuestionController::class, 'index']);
-    // Public question bank endpoint (global bank queries)
-    Route::get('/question-bank', [\App\Http\Controllers\Api\QuestionController::class, 'bank']);
+	    // Question bank
+	    Route::get('/questions', [\App\Http\Controllers\Api\QuestionController::class, 'index']);
+	    Route::get('/questions/summary', [\App\Http\Controllers\Api\QuestionController::class, 'summary']);
+	    // Public question bank endpoint (global bank queries)
+	    Route::get('/question-bank', [\App\Http\Controllers\Api\QuestionController::class, 'bank']);
     Route::post('/questions', [\App\Http\Controllers\Api\QuestionController::class, 'store']);
     Route::get('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'show']);
     // Per-quiz question endpoints (used by quiz-master UI)

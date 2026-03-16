@@ -62,13 +62,105 @@ class WalletController extends Controller
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
-        $q = Transaction::query()->where('quiz-master_id', $user->id)->orderBy('created_at', 'desc');
+
+        // Quiz-master wallet view should only expose quiz-master amounts.
+        // Do not return platform_share/affiliate_share to quiz-masters.
+        $visibleTypes = [
+            Transaction::TYPE_QUIZ_MASTER_PAYOUT,
+            Transaction::TYPE_WITHDRAWAL,
+            Transaction::TYPE_SETTLEMENT,
+            Transaction::TYPE_REFUND,
+            // Include payment as a fallback for older records that may not have
+            // a corresponding quiz_master_payout entry; we will sanitize/dedupe below.
+            Transaction::TYPE_PAYMENT,
+        ];
+
+        $q = Transaction::query()
+            ->with(['quiz:id,title,slug'])
+            ->where('quiz-master_id', $user->id)
+            ->whereIn('type', $visibleTypes)
+            ->orderBy('created_at', 'desc');
+
         if ($request->filled('quiz_id')) $q->where('quiz_id', $request->quiz_id);
         if ($request->filled('from')) $q->where('created_at', '>=', $request->from);
         if ($request->filled('to')) $q->where('created_at', '<=', $request->to);
         $perPage = (int)$request->input('per_page', 20);
         $perPage = $perPage > 0 ? $perPage : 20;
         $txs = $q->paginate($perPage);
+
+        $collection = $txs->getCollection();
+
+        // If we have a dedicated quiz_master_payout for a payment, hide the payment row
+        // (quiz masters should see their earnings, not the full payment breakdown).
+        $payoutRefs = $collection
+            ->filter(fn ($t) => ($t->type ?? null) === Transaction::TYPE_QUIZ_MASTER_PAYOUT)
+            ->map(fn ($t) => $t->reference_id ?? $t->tx_id)
+            ->filter()
+            ->unique();
+
+        $sanitized = $collection
+            ->reject(function ($t) use ($payoutRefs) {
+                if (($t->type ?? null) !== Transaction::TYPE_PAYMENT) return false;
+                $ref = $t->reference_id ?? $t->tx_id;
+                if (!$ref) return false;
+                return $payoutRefs->contains($ref);
+            })
+            ->map(function ($t) {
+                $type = (string)($t->type ?? '');
+
+                // Pull quiz-master share without exposing platform numbers.
+                $qmShare = 0.0;
+                try {
+                    $qmShare = (float)($t->{'quiz-master_share'} ?? 0);
+                } catch (\Throwable $e) {
+                    $qmShare = 0.0;
+                }
+
+                $amount = (float)($t->amount ?? 0);
+                $direction = 'credit';
+
+                if ($type === Transaction::TYPE_WITHDRAWAL) {
+                    $direction = 'debit';
+                } elseif ($type === Transaction::TYPE_PAYMENT) {
+                    // For payment rows (fallback), show only quiz-master share when present.
+                    if ($qmShare > 0) $amount = $qmShare;
+                }
+
+                $meta = $t->meta;
+                if (is_array($meta)) {
+                    foreach ([
+                        'platform_share', 'platformShare', 'platform', 'platform_fee',
+                        'affiliate_share', 'affiliateShare', 'affiliate',
+                        'shares', // may include platform share breakdown
+                    ] as $k) {
+                        if (array_key_exists($k, $meta)) unset($meta[$k]);
+                    }
+                }
+
+                return [
+                    'id' => $t->id,
+                    'created_at' => $t->created_at,
+                    'status' => $t->status,
+                    'type' => $type,
+                    'description' => $t->description,
+                    'reference_id' => $t->reference_id ?? $t->tx_id,
+                    'gateway' => $t->gateway,
+                    'quiz_id' => $t->quiz_id,
+                    'quiz' => $t->quiz ? [
+                        'id' => $t->quiz->id,
+                        'title' => $t->quiz->title,
+                        'slug' => $t->quiz->slug,
+                    ] : null,
+                    'tx_id' => $t->tx_id,
+                    'amount' => (float)$amount,
+                    'direction' => $direction,
+                    'balance_after' => $t->balance_after !== null ? (float)$t->balance_after : null,
+                    'meta' => $meta,
+                ];
+            });
+
+        $txs->setCollection($sanitized);
+
         return response()->json(['ok' => true, 'transactions' => $txs]);
     }
 
@@ -840,4 +932,3 @@ class WalletController extends Controller
         }
     }
 }
-

@@ -930,59 +930,113 @@ class PaymentController extends Controller
     /**
      * Create transaction for battle one-off purchase with distributed quiz-master shares.
      */
-    private function createTransactionForBattle(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $totalQuizMasterShare, float $platformShare)
-    {
-        $battle = \App\Models\Battle::with('questions')->find($purchase->item_id);
-        if (!$battle) {
-            return;
-        }
+	    private function createTransactionForBattle(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $totalQuizMasterShare, float $platformShare)
+	    {
+	        $battle = \App\Models\Battle::with('questions')->find($purchase->item_id);
+	        if (!$battle) {
+	            return;
+	        }
 
-        try {
-            // Get affiliate referral if user is referred
-            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first();
-            $referralCode = $affiliateReferral?->affiliate?->code;
+	        try {
+	            $questionCount = $battle->questions?->count() ?? 0;
 
-            // Get quiz-master commission rate from payment settings (default 60%)
-            $paymentSetting = PaymentSetting::first();
-            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+	            // Split the quiz-master share pool across question owners (multiple owners supported).
+	            // Any unassigned amount (questions with no owner / rounding) goes back to platform.
+	            $split = $this->splitBattleQuestionOwnerShares($battle, $totalQuizMasterShare);
+	            $owners = $split['owners'];
+	            $unassigned = $split['unassigned'];
 
-            // Process base payment through TransactionService
-            $result = $this->transactionService->processPayment([
-                'user_id' => $purchase->user_id,
-                'amount' => $amount,
-                'referral_code' => $referralCode,
-                'qm_commission_rate' => $qmCommissionRate,
-                'gateway' => $purchase->gateway ?? 'mpesa',
-                'tx_id' => $txId,
-                'description' => 'One-off battle purchase',
-            ]);
+	            \DB::transaction(function () use ($purchase, $txId, $amount, $platformShare, $totalQuizMasterShare, $battle, $questionCount, $owners, $unassigned) {
+	                // Audit transaction (platform-level). Not tied to a specific quiz master.
+	                \App\Models\Transaction::create([
+	                    'tx_id' => $txId,
+	                    'user_id' => $purchase->user_id,
+	                    'quiz-master_id' => null,
+	                    'quiz_id' => null,
+	                    'amount' => $amount,
+	                    'affiliate_share' => 0,
+	                    'quiz-master_share' => $totalQuizMasterShare,
+	                    'platform_share' => round($platformShare + $unassigned, 2),
+	                    'gateway' => $purchase->gateway ?? 'mpesa',
+	                    'type' => \App\Models\Transaction::TYPE_PAYMENT,
+	                    'status' => \App\Models\Transaction::STATUS_COMPLETED,
+	                    'description' => 'One-off battle purchase',
+	                    'reference_id' => $txId,
+	                    'meta' => [
+	                        'battle_id' => $battle->id,
+	                        'total_questions' => $questionCount,
+	                        'question_owner_count' => count($owners),
+	                        'unassigned_to_platform' => (float) $unassigned,
+	                    ],
+	                ]);
 
-            // Now distribute quiz-master shares to question owners
-            $questionOwners = $this->distributeQuizMasterShare($battle, $totalQuizMasterShare);
-            if (!empty($questionOwners)) {
-                foreach ($questionOwners as $ownerId => $ownerShare) {
-                    // Credit each question owner from the quiz-master share pool
-                    $this->creditWallet($ownerId, $ownerShare);
-                    
-                    Log::info('[Payment] Battle question owner credited', [
-                        'owner_id' => $ownerId,
-                        'amount' => $ownerShare,
-                        'purchase_id' => $purchase->id,
-                    ]);
-                }
-            }
+	                foreach ($owners as $ownerId => $info) {
+	                    $share = (float) ($info['share'] ?? 0);
+	                    if ($share <= 0) continue;
 
-            Log::info('[Payment] Battle purchase processed via TransactionService', [
-                'purchase_id' => $purchase->id,
-                'user_id' => $purchase->user_id,
-                'battle_id' => $purchase->item_id,
-                'amount' => $amount,
-                'question_owners' => count($questionOwners),
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('[Payment] Failed to process battle purchase', [
-                'purchase_id' => $purchase->id,
-                'user_id' => $purchase->user_id,
+	                    $wallet = \App\Models\Wallet::firstOrCreate(
+	                        ['user_id' => (int) $ownerId],
+	                        ['available' => 0, 'withdrawn_pending' => 0, 'settled' => 0, 'earned_this_month' => 0, 'lifetime_earned' => 0]
+	                    );
+
+	                    $wallet->available = bcadd((string) ($wallet->available ?? 0), (string) $share, 2);
+	                    $wallet->earned_this_month = bcadd((string) ($wallet->earned_this_month ?? 0), (string) $share, 2);
+	                    $wallet->lifetime_earned = bcadd((string) ($wallet->lifetime_earned ?? 0), (string) $share, 2);
+	                    $wallet->earned_from_battles = bcadd((string) ($wallet->earned_from_battles ?? 0), (string) $share, 2);
+	                    $wallet->save();
+
+	                    // Payout transaction visible to the question owner
+	                    \App\Models\Transaction::create([
+	                        'tx_id' => "{$txId}-battle-qm-{$ownerId}",
+	                        'user_id' => $purchase->user_id,
+	                        'quiz-master_id' => (int) $ownerId,
+	                        'quiz_id' => null,
+	                        'amount' => $share,
+	                        'quiz-master_share' => $share,
+	                        'platform_share' => 0,
+	                        'affiliate_share' => 0,
+	                        'gateway' => $purchase->gateway ?? 'mpesa',
+	                        'type' => \App\Models\Transaction::TYPE_QUIZ_MASTER_PAYOUT,
+	                        'status' => \App\Models\Transaction::STATUS_COMPLETED,
+	                        'description' => "Battle question earnings (Battle #{$battle->id})",
+	                        'reference_id' => $txId,
+	                        'balance_after' => (float) ($wallet->available ?? null),
+	                        'meta' => [
+	                            'battle_id' => $battle->id,
+	                            'total_questions' => $questionCount,
+	                            'question_count' => (int) ($info['question_count'] ?? 0),
+	                            'question_ids' => array_values($info['question_ids'] ?? []),
+	                        ],
+	                    ]);
+
+	                    try {
+	                        event(new \App\Events\WalletUpdated($wallet->toArray(), (int) $ownerId));
+	                    } catch (\Throwable $_) {
+	                    }
+
+	                    Log::info('[Payment] Battle question owner credited', [
+	                        'owner_id' => (int) $ownerId,
+	                        'amount' => $share,
+	                        'purchase_id' => $purchase->id,
+	                        'battle_id' => $battle->id,
+	                        'question_count' => (int) ($info['question_count'] ?? 0),
+	                    ]);
+	                }
+	            });
+
+	            Log::info('[Payment] Battle purchase processed (question-owner split)', [
+	                'purchase_id' => $purchase->id,
+	                'user_id' => $purchase->user_id,
+	                'battle_id' => $purchase->item_id,
+	                'amount' => $amount,
+	                'total_questions' => $questionCount,
+	                'question_owner_count' => count($owners),
+	                'unassigned_to_platform' => (float) $unassigned,
+	            ]);
+	        } catch (\Throwable $e) {
+	            Log::error('[Payment] Failed to process battle purchase', [
+	                'purchase_id' => $purchase->id,
+	                'user_id' => $purchase->user_id,
                 'error' => $e->getMessage(),
             ]);
             throw $e;
@@ -1088,44 +1142,54 @@ class PaymentController extends Controller
         }
     }
 
-    /**
-     * Distribute quiz-master share across question owners for a battle.
-     * Returns array of [owner_id => share_amount].
-     */
-    private function distributeQuizMasterShare(\App\Models\Battle $battle, float $totalShare): array
-    {
-        $questions = $battle->questions;
-        if ($questions->isEmpty()) {
-            return [];
-        }
+	    /**
+	     * Split the quiz-master share pool across battle question owners.
+	     *
+	     * - Multiple question owners supported.
+	     * - Split is proportional to number of owned questions (equal weight per question).
+	     * - Any unassigned amount (questions without owner and rounding) is returned so it can go to platform.
+	     *
+	     * @return array{owners: array<int,array{share: float, question_count: int, question_ids: array<int,int>}>, unassigned: float}
+	     */
+	    private function splitBattleQuestionOwnerShares(\App\Models\Battle $battle, float $totalShare): array
+	    {
+	        $questions = $battle->questions;
+	        if ($questions->isEmpty()) {
+	            return ['owners' => [], 'unassigned' => round($totalShare, 2)];
+	        }
 
-        $questionOwners = [];
-        $perQuestion = $totalShare / $questions->count();
+	        $totalQuestions = $questions->count();
+	        if ($totalQuestions <= 0) {
+	            return ['owners' => [], 'unassigned' => round($totalShare, 2)];
+	        }
 
-        foreach ($questions as $question) {
-            $owner = $question->created_by ?? null;
-            if (!$owner) {
-                continue;
-            }
+	        $owners = [];
+	        $perQuestion = $totalShare / $totalQuestions;
 
-            if (!isset($questionOwners[$owner])) {
-                $questionOwners[$owner] = 0;
-            }
-            $questionOwners[$owner] = round($questionOwners[$owner] + $perQuestion, 2);
-        }
+	        foreach ($questions as $question) {
+	            $ownerId = $question->created_by ?? null;
+	            if (!$ownerId) continue;
 
-        // Fix rounding errors
-        if (!empty($questionOwners)) {
-            $assigned = array_sum($questionOwners);
-            $diff = round($totalShare - $assigned, 2);
-            if ($diff !== 0.0) {
-                $firstOwner = array_key_first($questionOwners);
-                $questionOwners[$firstOwner] = round($questionOwners[$firstOwner] + $diff, 2);
-            }
-        }
+	            $ownerId = (int) $ownerId;
+	            if (!isset($owners[$ownerId])) {
+	                $owners[$ownerId] = [
+	                    'share' => 0.0,
+	                    'question_count' => 0,
+	                    'question_ids' => [],
+	                ];
+	            }
 
-        return $questionOwners;
-    }
+	            $owners[$ownerId]['share'] = round(((float) $owners[$ownerId]['share']) + $perQuestion, 2);
+	            $owners[$ownerId]['question_count'] = (int) $owners[$ownerId]['question_count'] + 1;
+	            $owners[$ownerId]['question_ids'][] = (int) $question->id;
+	        }
+
+	        $assigned = 0.0;
+	        foreach ($owners as $row) $assigned += (float) ($row['share'] ?? 0);
+	        $unassigned = round($totalShare - $assigned, 2);
+
+	        return ['owners' => $owners, 'unassigned' => $unassigned];
+	    }
 
     /**
      * Credit a user's wallet with the given amount.

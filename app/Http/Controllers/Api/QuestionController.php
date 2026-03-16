@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use App\Models\User;
 use App\Notifications\ResourceRejected;
 
@@ -21,8 +22,8 @@ class QuestionController extends Controller
         $this->middleware('auth:sanctum');
     }
 
-    public function index(Request $request)
-    {
+	    public function index(Request $request)
+	    {
         // Return questions. By default return questions created by user unless
         // the request explicitly asks for banked/random questions (used by
         // battles/daily-challenge). When `for_battle=1` or `random=1` or
@@ -68,12 +69,64 @@ class QuestionController extends Controller
         // Return all matching questions (frontend will handle pagination)
     $results = $query->get();
     // Return canonical API resource shape
-    return response()->json(['questions' => \App\Http\Resources\QuestionResource::collection($results)]);
-    }
+	    return response()->json(['questions' => \App\Http\Resources\QuestionResource::collection($results)]);
+	    }
 
-    /**
-     * Public question bank endpoint: returns global banked/random questions
-     * with optional filters. This keeps quiz-master listing (`index`) separate.
+	    /**
+	     * Lightweight question summaries for UI (e.g. wallet transaction drilldowns).
+	     * Only returns questions owned by the current user unless admin.
+	     *
+	     * GET /api/questions/summary?ids=1,2,3
+	     */
+	    public function summary(Request $request)
+	    {
+	        $user = $request->user();
+	        $raw = $request->input('ids', '');
+
+	        $ids = [];
+	        if (is_array($raw)) {
+	            $ids = $raw;
+	        } elseif (is_string($raw)) {
+	            $ids = array_filter(array_map('trim', explode(',', $raw)));
+	        }
+
+	        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn ($v) => $v > 0)));
+	        if (empty($ids)) {
+	            return response()->json(['ok' => true, 'questions' => []]);
+	        }
+	        if (count($ids) > 200) {
+	            return response()->json(['ok' => false, 'message' => 'Too many ids (max 200)'], 422);
+	        }
+
+	        $isAdmin = isset($user->is_admin) && $user->is_admin;
+
+	        $q = Question::query()->whereIn('id', $ids);
+	        if (!$isAdmin) {
+	            $q->where('created_by', $user->id);
+	        }
+
+	        $questions = $q
+	            ->select(['id', 'created_by', 'quiz_id', 'type', 'body', 'marks'])
+	            ->get()
+	            ->map(function ($question) {
+	                $body = is_string($question->body) ? $question->body : '';
+	                $plain = trim(strip_tags($body));
+	                return [
+	                    'id' => $question->id,
+	                    'quiz_id' => $question->quiz_id,
+	                    'type' => $question->type,
+	                    'marks' => $question->marks,
+	                    'body_preview' => Str::limit($plain, 160, '…'),
+	                ];
+	            })
+	            ->values();
+
+	        return response()->json(['ok' => true, 'questions' => $questions]);
+	    }
+
+	    /**
+	     * Public question bank endpoint: returns global banked/random questions
+	     * with optional filters. This keeps quiz-master listing (`index`) separate.
      */
     public function bank(Request $request)
     {
