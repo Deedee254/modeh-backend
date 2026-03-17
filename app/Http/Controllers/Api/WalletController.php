@@ -18,17 +18,33 @@ class WalletController extends Controller
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
         
+        $walletType = $user->role === 'quizee'
+            ? Wallet::TYPE_QUIZEE
+            : ($user->role === 'quiz-master' ? Wallet::TYPE_QUIZ_MASTER : null);
+
         // Initialize wallet with new balance states
         $wallet = Wallet::firstOrCreate(
             ['user_id' => $user->id], 
             [
+                'wallet_type' => $walletType,
                 'available' => 0, 
+                'pending' => 0,
                 'withdrawn_pending' => 0, 
                 'settled' => 0,
                 'earned_this_month' => 0,
-                'lifetime_earned' => 0
+                'lifetime_earned' => 0,
+                'earned_from_quizzes' => 0,
+                'earned_from_affiliates' => 0,
+                'earned_from_tournaments' => 0,
+                'earned_from_battles' => 0,
+                'earned_from_subscriptions' => 0,
             ]
         );
+
+        if ($walletType && $wallet->wallet_type !== $walletType) {
+            $wallet->wallet_type = $walletType;
+            $wallet->save();
+        }
         
         // Check and send due reminders (API-driven, 24hr logic)
         if ($user->role === 'quiz-master') {
@@ -47,11 +63,27 @@ class WalletController extends Controller
                 ->select(['id', 'quiz_id', 'quiz_master_id', 'amount', 'status', 'payment_due_at', 'created_at'])
                 ->with(['quiz:id,title,slug', 'quizMaster:id,name,email'])
                 ->get();
+
+            $affiliate = $user->affiliate()->first();
+            $activeReferrals = $affiliate ? $affiliate->referrals()->where('status', 'active')->count() : 0;
+            $totalReferrals = $affiliate ? $affiliate->referrals()->count() : 0;
+            $conversionRate = $totalReferrals > 0 ? ($activeReferrals / $totalReferrals) * 100 : 0;
             
             return response()->json([
                 'ok' => true, 
                 'wallet' => $wallet,
-                'pending_payments' => $pendingPaymentsSummary
+                'pending_payments' => $pendingPaymentsSummary,
+                'earnings_breakdown' => $wallet->getEarningsBreakdown(),
+                'affiliate_stats' => [
+                    'has_affiliate_account' => (bool) $affiliate,
+                    'referral_code' => $affiliate?->referral_code,
+                    'commission_rate' => $affiliate ? (float) $affiliate->commission_rate : 0,
+                    'total_earned' => $affiliate ? (float) ($affiliate->total_earnings ?? 0) : 0,
+                    'pending_payouts' => $affiliate ? (float) ($affiliate->pending_payouts ?? 0) : 0,
+                    'active_referrals' => $activeReferrals,
+                    'total_referrals' => $totalReferrals,
+                    'conversion_rate' => round($conversionRate, 2),
+                ],
             ]);
         }
         

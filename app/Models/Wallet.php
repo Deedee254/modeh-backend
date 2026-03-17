@@ -13,6 +13,7 @@ class Wallet extends Model
         'user_id',
         'wallet_type',
         'available',
+        'pending',
         'withdrawn_pending',
         'settled',
         'lifetime_earned',
@@ -29,6 +30,7 @@ class Wallet extends Model
 
     protected $casts = [
         'available' => 'decimal:2',
+        'pending' => 'decimal:2',
         'withdrawn_pending' => 'decimal:2',
         'settled' => 'decimal:2',
         'lifetime_earned' => 'decimal:2',

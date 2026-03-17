@@ -9,6 +9,46 @@ use Illuminate\Support\Facades\DB;
 
 class AdminQuizMasterAnalyticsController extends Controller
 {
+    private function resolveQuizMasterUserId(string $identifier): ?int
+    {
+        $identifier = trim($identifier);
+        if ($identifier === '') return null;
+
+        if (ctype_digit($identifier)) {
+            $userId = (int) $identifier;
+            $exists = DB::table('users')
+                ->where('id', $userId)
+                ->where('role', 'quiz-master')
+                ->exists();
+
+            return $exists ? $userId : null;
+        }
+
+        $normalized = strtolower($identifier);
+        $slugLike = str_replace(' ', '-', $normalized);
+
+        $match = DB::table('users')
+            ->where('role', 'quiz-master')
+            ->where(function ($q) use ($identifier, $normalized, $slugLike) {
+                $q->whereRaw('LOWER(email) = ?', [$normalized])
+                    ->orWhereRaw('LOWER(name) = ?', [$normalized])
+                    ->orWhereRaw("LOWER(REPLACE(name, ' ', '-')) = ?", [$slugLike]);
+            })
+            ->select('id')
+            ->first();
+
+        if ($match) return (int) $match->id;
+
+        $fallback = DB::table('users')
+            ->where('role', 'quiz-master')
+            ->whereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE ?", ['%' . $slugLike . '%'])
+            ->orderBy('id')
+            ->select('id')
+            ->first();
+
+        return $fallback ? (int) $fallback->id : null;
+    }
+
     private function requireAdmin()
     {
         $user = auth()->user();
@@ -283,6 +323,9 @@ class AdminQuizMasterAnalyticsController extends Controller
         $query = DB::table('users as u')
             ->where('u.role', 'quiz-master')
             ->leftJoin('wallets as w', 'w.user_id', '=', 'u.id')
+            ->leftJoin('quiz_masters as qm', 'qm.user_id', '=', 'u.id')
+            ->leftJoin('grades as g', 'g.id', '=', 'qm.grade_id')
+            ->leftJoin('levels as l', 'l.id', '=', 'qm.level_id')
             ->leftJoinSub($txAll, 'txa', function ($join) {
                 $join->on('txa.user_id', '=', 'u.id');
             })
@@ -302,6 +345,7 @@ class AdminQuizMasterAnalyticsController extends Controller
                 $join->on('ta.user_id', '=', 'u.id');
             })
             ->selectRaw('u.id, u.name, u.email, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
+            ->selectRaw('g.name as grade_name, l.name as level_name')
             ->selectRaw('COALESCE(w.available,0) as wallet_available')
             ->selectRaw('COALESCE(w.withdrawn_pending,0) as wallet_withdrawn_pending')
             ->selectRaw('COALESCE(w.lifetime_earned,0) as wallet_lifetime_earned')
@@ -337,7 +381,10 @@ class AdminQuizMasterAnalyticsController extends Controller
                     'name' => $r->name,
                     'email' => $r->email,
                     'avatar' => $r->avatar,
+                    'avatar_url' => $r->avatar,
                     'created_at' => $r->created_at,
+                    'grade' => $r->grade_name,
+                    'level' => $r->level_name,
                     'wallet' => [
                         'available' => (float) ($r->wallet_available ?? 0),
                         'withdrawn_pending' => (float) ($r->wallet_withdrawn_pending ?? 0),
@@ -384,6 +431,11 @@ class AdminQuizMasterAnalyticsController extends Controller
     {
         if ($resp = $this->requireAdmin()) return $resp;
 
+        $resolvedUserId = $this->resolveQuizMasterUserId((string) $userId);
+        if (!$resolvedUserId) {
+            return response()->json(['ok' => false, 'message' => 'Not found'], 404);
+        }
+
         $validated = $request->validate([
             'from' => 'nullable|date',
             'to' => 'nullable|date',
@@ -393,7 +445,7 @@ class AdminQuizMasterAnalyticsController extends Controller
         $toTs = $to . ' 23:59:59';
 
         $user = DB::table('users as u')
-            ->where('u.id', (int) $userId)
+            ->where('u.id', $resolvedUserId)
             ->where('u.role', 'quiz-master')
             ->leftJoin('wallets as w', 'w.user_id', '=', 'u.id')
             ->leftJoin('quiz_masters as qm', 'qm.user_id', '=', 'u.id')
@@ -407,7 +459,7 @@ class AdminQuizMasterAnalyticsController extends Controller
         if (!$user) return response()->json(['ok' => false, 'message' => 'Not found'], 404);
 
         $quizzesAll = DB::table('quizzes as q')
-            ->whereRaw('IFNULL(q.created_by, q.user_id) = ?', [(int) $userId]);
+            ->whereRaw('IFNULL(q.created_by, q.user_id) = ?', [$resolvedUserId]);
         $quizzesRange = (clone $quizzesAll)->whereBetween('q.created_at', [$fromTs, $toTs]);
 
         $quizKpis = (clone $quizzesAll)
@@ -419,7 +471,7 @@ class AdminQuizMasterAnalyticsController extends Controller
 
         $attemptsQ = DB::table('quiz_attempts as a')
             ->join('quizzes as q', 'q.id', '=', 'a.quiz_id')
-            ->whereRaw('IFNULL(q.created_by, q.user_id) = ?', [(int) $userId]);
+            ->whereRaw('IFNULL(q.created_by, q.user_id) = ?', [$resolvedUserId]);
 
         $attemptsRange = (clone $attemptsQ)->whereBetween('a.created_at', [$fromTs, $toTs]);
         $attemptKpis = (clone $attemptsRange)
@@ -429,7 +481,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->first();
 
         $txAll = DB::table('transactions as t')
-            ->whereRaw("t.`quiz-master_id` = ?", [(int) $userId])
+            ->whereRaw("t.`quiz-master_id` = ?", [$resolvedUserId])
             ->whereIn('t.status', ['confirmed', 'completed']);
         $txRange = (clone $txAll)->whereBetween('t.created_at', [$fromTs, $toTs]);
         $earningsAll = (float) ((clone $txAll)->sum(DB::raw("COALESCE(t.`quiz-master_share`,0)")) ?? 0);
@@ -484,7 +536,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->leftJoin('topics as t', 't.id', '=', 'q.topic_id')
             ->leftJoin('grades as g', 'g.id', '=', 'q.grade_id')
             ->leftJoin('levels as l', 'l.id', '=', 'q.level_id')
-            ->whereRaw('IFNULL(q.created_by, q.user_id) = ?', [(int) $userId]);
+            ->whereRaw('IFNULL(q.created_by, q.user_id) = ?', [$resolvedUserId]);
 
         $topSubjects = (clone $taxonomy)
             ->selectRaw('q.subject_id as id, COALESCE(s.name, \"Unassigned\") as name, COUNT(*) as quizzes')
@@ -524,7 +576,7 @@ class AdminQuizMasterAnalyticsController extends Controller
 
         $topQuizzes = DB::table('quiz_attempts as a')
             ->join('quizzes as q', 'q.id', '=', 'a.quiz_id')
-            ->whereRaw('IFNULL(q.created_by, q.user_id) = ?', [(int) $userId])
+            ->whereRaw('IFNULL(q.created_by, q.user_id) = ?', [$resolvedUserId])
             ->whereBetween('a.created_at', [$fromTs, $toTs])
             ->selectRaw('a.quiz_id as quiz_id')
             ->selectRaw('MAX(q.title) as title')
