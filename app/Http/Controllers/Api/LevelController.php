@@ -125,8 +125,21 @@ class LevelController extends Controller
     }
 
     // OPTIMIZED: Strategy D - Individual item cache, Strategy B - Selective fields
-    public function show(Level $level)
+    public function show($levelParam)
     {
+        // Accept either numeric id or slug in the same route. This keeps the
+        // existing route `/api/levels/{level}` working for both id and slug.
+        // Resolve the Level model accordingly.
+        try {
+            if (is_numeric($levelParam)) {
+                $level = Level::findOrFail($levelParam);
+            } else {
+                $level = Level::where('slug', $levelParam)->firstOrFail();
+            }
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Level not found'], 404);
+        }
+
         $cacheKey = 'level_show_' . $level->id;
 
         $level = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function() use ($level) {
