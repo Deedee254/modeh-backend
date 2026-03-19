@@ -8,6 +8,7 @@ use App\Models\Wallet;
 use App\Models\Transaction;
 use App\Models\WithdrawalRequest;
 use App\Services\TransactionService;
+use App\Services\WalletService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -58,6 +59,9 @@ class WalletController extends Controller
             }
         }
         
+        // Gather wallet stats (reconciliation helpers)
+        $walletStats = app(WalletService::class)->getStats($user->id);
+
         // Include pending payments summary for quizee
         if ($user->role === 'quizee') {
             $pendingPaymentsSummary = \App\Models\PendingQuizPayment::where('quizee_id', $user->id)
@@ -72,8 +76,9 @@ class WalletController extends Controller
             $conversionRate = $totalReferrals > 0 ? ($activeReferrals / $totalReferrals) * 100 : 0;
             
             return response()->json([
-                'ok' => true, 
+                'ok' => true,
                 'wallet' => $wallet,
+                'wallet_stats' => $walletStats,
                 'pending_payments' => $pendingPaymentsSummary,
                 'earnings_breakdown' => $wallet->getEarningsBreakdown(),
                 'affiliate_stats' => [
@@ -89,7 +94,7 @@ class WalletController extends Controller
             ]);
         }
         
-        return response()->json(['ok' => true, 'wallet' => $wallet]);
+        return response()->json(['ok' => true, 'wallet' => $wallet, 'wallet_stats' => $walletStats]);
     }
 
     public function transactions(Request $request)

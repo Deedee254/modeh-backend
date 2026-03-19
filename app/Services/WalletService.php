@@ -321,15 +321,94 @@ class WalletService
         }
 
         $totalEarnings = $this->getTotalEarnings($userId);
-        $settled = (float)$wallet->available + (float)bcadd((string)$wallet->pending, (string)$wallet->available, 2) - (float)$wallet->available;
+        // Earned this calendar month (from confirmed transactions)
+        $startOfMonth = now()->startOfMonth();
+        $earnedThisMonth = (float) Transaction::where('quiz_master_id', $userId)
+            ->where('status', 'confirmed')
+            ->where('created_at', '>=', $startOfMonth)
+            ->sum('quiz_master_share');
+
+        // Reconciliation: compare recorded lifetime_earned with computed total from transactions
+        $difference = $totalEarnings - (float)$wallet->lifetime_earned;
+
+        // Monthly breakdown (last 6 months)
+        $monthly = $this->getMonthlyEarnings($userId, 6);
+        $topQuizzes = $this->getTopQuizzes($userId, 10);
 
         return [
             'available' => (float)$wallet->available,
             'pending' => (float)$wallet->pending,
             'lifetime_earned' => (float)$wallet->lifetime_earned,
+            'earned_this_month' => $earnedThisMonth,
+            'monthly_breakdown' => $monthly,
+            'top_quizzes' => $topQuizzes,
             'total_from_transactions' => $totalEarnings,
-            'difference' => $totalEarnings - (float)$wallet->lifetime_earned, // Should be 0 or very small
+            'difference' => $difference, // positive means DB lifetime_earned is behind transaction totals
         ];
+    }
+
+    /**
+     * Get monthly earnings for the past N months (including current month).
+     * Returns array of ['month' => 'YYYY-MM', 'label' => 'Mar 2026', 'amount' => float]
+     *
+     * @param int $userId
+     * @param int $months
+     * @return array
+     */
+    public function getMonthlyEarnings(int $userId, int $months = 6): array
+    {
+        $months = max(1, min(24, $months));
+        $results = [];
+
+        for ($i = $months - 1; $i >= 0; $i--) {
+            $start = now()->subMonths($i)->startOfMonth();
+            $end = now()->subMonths($i)->endOfMonth();
+
+            $sum = (float) Transaction::where('quiz_master_id', $userId)
+                ->where('status', 'confirmed')
+                ->whereBetween('created_at', [$start, $end])
+                ->sum('quiz_master_share');
+
+            $results[] = [
+                'month' => $start->format('Y-m'),
+                'label' => $start->format('M Y'),
+                'amount' => $sum,
+            ];
+        }
+
+        return $results;
+    }
+
+    /**
+     * Get top performing quizzes for a quiz-master by quiz_master_share sums.
+     * Returns array of ['quiz_id' => int, 'title' => string, 'amount' => float]
+     *
+     * @param int $userId
+     * @param int $limit
+     * @return array
+     */
+    public function getTopQuizzes(int $userId, int $limit = 10): array
+    {
+        $rows = Transaction::where('quiz_master_id', $userId)
+            ->where('status', 'confirmed')
+            ->whereNotNull('quiz_id')
+            ->selectRaw('quiz_id, SUM(quiz_master_share) as total')
+            ->groupBy('quiz_id')
+            ->orderByDesc('total')
+            ->limit($limit)
+            ->get();
+
+        $results = [];
+        foreach ($rows as $r) {
+            $quiz = \App\Models\Quiz::find($r->quiz_id);
+            $results[] = [
+                'quiz_id' => (int)$r->quiz_id,
+                'title' => $quiz?->title ?? 'Unknown',
+                'amount' => (float)$r->total,
+            ];
+        }
+
+        return $results;
     }
 
     /**
