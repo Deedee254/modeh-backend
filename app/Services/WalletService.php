@@ -367,7 +367,7 @@ class WalletService
 
             // 1. Get/Create platform wallet (user_id = 0) - receives all money
             $platformWallet = Wallet::firstOrCreate(
-                ['user_id' => 0, 'wallet_type' => Wallet::TYPE_PLATFORM],
+                ['user_id' => 0, 'type' => Wallet::TYPE_PLATFORM],
                 ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
             );
 
@@ -390,7 +390,7 @@ class WalletService
                     $remaining = bcsub($remaining, $affiliateShare, 2);
 
                     $affiliateWallet = Wallet::firstOrCreate(
-                        ['user_id' => $affiliate->user_id, 'wallet_type' => Wallet::TYPE_QUIZEE],
+                        ['user_id' => $affiliate->user_id, 'type' => Wallet::TYPE_QUIZEE],
                         ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
                     );
 
@@ -420,7 +420,7 @@ class WalletService
             $remaining = bcsub($remaining, $qmShare, 2);
 
             $qmWallet = Wallet::firstOrCreate(
-                ['user_id' => $quizMasterId, 'wallet_type' => Wallet::TYPE_QUIZ_MASTER],
+                ['user_id' => $quizMasterId, 'type' => Wallet::TYPE_QUIZ_MASTER],
                 ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
             );
 
@@ -504,7 +504,7 @@ class WalletService
         string $description = ''
     ): Wallet {
         $wallet = Wallet::firstOrCreate(
-            ['user_id' => $quizeeId, 'wallet_type' => Wallet::TYPE_QUIZEE],
+            ['user_id' => $quizeeId, 'type' => Wallet::TYPE_QUIZEE],
             ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
         );
 
@@ -527,7 +527,7 @@ class WalletService
         string $description = ''
     ): Wallet {
         $wallet = Wallet::firstOrCreate(
-            ['user_id' => $quizeeId, 'wallet_type' => Wallet::TYPE_QUIZEE],
+            ['user_id' => $quizeeId, 'type' => Wallet::TYPE_QUIZEE],
             ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
         );
 
@@ -551,7 +551,7 @@ class WalletService
         return DB::transaction(function () use ($amount, $planName, $description) {
             // Platform receives subscription payment
             $platformWallet = Wallet::firstOrCreate(
-                ['user_id' => 0, 'wallet_type' => Wallet::TYPE_PLATFORM],
+                ['user_id' => 0, 'type' => Wallet::TYPE_PLATFORM],
                 ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
             );
 
@@ -574,8 +574,8 @@ class WalletService
      */
     public static function getAdminFinancialOverview(): array
     {
-        $platformWallet = Wallet::where('wallet_type', Wallet::TYPE_PLATFORM)->first();
-        $adminWallet = Wallet::where('wallet_type', Wallet::TYPE_ADMIN)->first();
+        $platformWallet = Wallet::where('type', Wallet::TYPE_PLATFORM)->first();
+        $adminWallet = Wallet::where('type', Wallet::TYPE_ADMIN)->first();
 
         $paymentTxs = Transaction::where('type', Transaction::TYPE_PAYMENT)->sum('amount') ?? 0;
         $affiliatePayouts = Transaction::where('type', Transaction::TYPE_AFFILIATE_PAYOUT)

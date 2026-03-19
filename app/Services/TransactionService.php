@@ -99,6 +99,9 @@ class TransactionService
             );
             $qmWallet->pending = bcadd($qmWallet->pending, $quizMasterShare, 2);
             $qmWallet->lifetime_earned = bcadd($qmWallet->lifetime_earned, $quizMasterShare, 2);
+            // Track breakdowns for reporting
+            $qmWallet->earned_from_quizzes = bcadd($qmWallet->earned_from_quizzes ?? 0, $quizMasterShare, 2);
+            $qmWallet->earned_this_month = bcadd($qmWallet->earned_this_month ?? 0, $quizMasterShare, 2);
             $qmWallet->save();
 
             // Log quiz master payout transaction

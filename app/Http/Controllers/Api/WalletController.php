@@ -10,6 +10,7 @@ use App\Models\WithdrawalRequest;
 use App\Services\TransactionService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class WalletController extends Controller
 {
@@ -17,6 +18,7 @@ class WalletController extends Controller
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
+        /** @var \App\Models\User $user */
         
         $walletType = $user->role === 'quizee'
             ? Wallet::TYPE_QUIZEE
@@ -26,7 +28,7 @@ class WalletController extends Controller
         $wallet = Wallet::firstOrCreate(
             ['user_id' => $user->id], 
             [
-                'wallet_type' => $walletType,
+                'type' => $walletType,
                 'available' => 0, 
                 'pending' => 0,
                 'withdrawn_pending' => 0, 
@@ -41,8 +43,8 @@ class WalletController extends Controller
             ]
         );
 
-        if ($walletType && $wallet->wallet_type !== $walletType) {
-            $wallet->wallet_type = $walletType;
+        if ($walletType && $wallet->type !== $walletType) {
+            $wallet->type = $walletType;
             $wallet->save();
         }
         
@@ -52,7 +54,7 @@ class WalletController extends Controller
                 app(\App\Services\ReminderService::class)->checkAndSendDueReminders();
             } catch (\Throwable $e) {
                 // Log but don't fail the response
-                \Log::warning('Failed to check reminders', ['error' => $e->getMessage()]);
+                Log::warning('Failed to check reminders', ['error' => $e->getMessage()]);
             }
         }
         

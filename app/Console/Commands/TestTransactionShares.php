@@ -152,6 +152,7 @@ class TestTransactionShares extends Command
             ]);
 
             $this->line("Transaction created successfully!");
+            /** @var \App\Models\Transaction $transaction */
             $this->line("Transaction ID: {$transaction->id}");
             $this->line("TX Reference: {$txId}");
         } catch (\Exception $e) {
@@ -166,6 +167,13 @@ class TestTransactionShares extends Command
         try {
             $quizMasterWallet->increment('available', $quizMasterShare);
             $quizMasterWallet->increment('lifetime_earned', $quizMasterShare);
+            // Also update earnings breakdown fields so UI shows correct figures
+            try {
+                $quizMasterWallet->increment('earned_from_quizzes', $quizMasterShare);
+                $quizMasterWallet->increment('earned_this_month', $quizMasterShare);
+            } catch (\Throwable $_) {
+                // Ignore if columns don't exist in older schemas
+            }
             $this->line("Wallet credited successfully!");
         } catch (\Exception $e) {
             $this->error("Failed to credit wallet: {$e->getMessage()}");

@@ -11,7 +11,7 @@ class Wallet extends Model
 
     protected $fillable = [
         'user_id',
-        'wallet_type',
+        'type',
         'available',
         'pending',
         'withdrawn_pending',
@@ -135,7 +135,7 @@ class Wallet extends Model
      */
     public function isActive(): bool
     {
-        return $this->user_id && $this->wallet_type && in_array($this->wallet_type, [
+        return $this->user_id && $this->type && in_array($this->type, [
             self::TYPE_PLATFORM,
             self::TYPE_ADMIN,
             self::TYPE_QUIZ_MASTER,
@@ -186,9 +186,9 @@ class Wallet extends Model
                 'status' => Transaction::STATUS_COMPLETED,
                 'description' => $description ?: "Earning from {$source}",
                 'meta' => [
-                    'source' => $source,
-                    'wallet_type' => $this->wallet_type,
-                ],
+                        'source' => $source,
+                        'type' => $this->type,
+                    ],
             ]);
         }
 
@@ -239,7 +239,7 @@ class Wallet extends Model
     {
         return [
             'user_id' => $this->user_id,
-            'wallet_type' => $this->wallet_type,
+            'type' => $this->type,
             'available' => (float)($this->available ?? 0),
             'pending' => (float)($this->pending ?? 0),
             'total_balance' => (float)bcadd($this->available ?? 0, $this->pending ?? 0, 2),
