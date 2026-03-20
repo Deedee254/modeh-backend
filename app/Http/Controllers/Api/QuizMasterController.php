@@ -173,6 +173,8 @@ class QuizMasterController extends Controller
             'quiz_master_id' => $profile->id,
             'name' => $user->name,
             'avatar' => $user->avatar,
+            'avatar_url' => $user->avatar_url,
+            'social_avatar' => $user->social_avatar,
             'headline' => $profile->headline ?? 'An experienced quiz master',
             'bio' => $profile->bio,
             'institution' => $profile->institution ?? 'Independent Educator',
@@ -205,6 +207,37 @@ class QuizMasterController extends Controller
                 ];
             }),
         ];
+
+        // Include wallet summary (publicly visible aggregated earnings only)
+        try {
+            $wallet = \App\Models\Wallet::firstOrCreate(['user_id' => $user->id], [
+                'type' => \App\Models\Wallet::TYPE_QUIZ_MASTER,
+                'available' => 0,
+                'pending' => 0,
+                'withdrawn_pending' => 0,
+                'settled' => 0,
+                'earned_this_month' => 0,
+                'lifetime_earned' => 0,
+            ]);
+
+            $data['wallet'] = [
+                'available' => (float) $wallet->available,
+                'pending' => (float) $wallet->pending,
+                'lifetime_earned' => (float) $wallet->lifetime_earned,
+                'earned_from_quizzes' => (float) ($wallet->earned_from_quizzes ?? 0),
+            ];
+            // Also expose a simple top-level total earnings field for UIs
+            $data['total_earnings'] = (float) $wallet->lifetime_earned;
+        } catch (\Throwable $e) {
+            // Don't fail the profile response on wallet lookup errors
+            $data['wallet'] = null;
+            $data['total_earnings'] = 0;
+        }
+
+        // Include followers count
+        $data['followers_count'] = DB::table('quiz_master_follows')
+            ->where('quiz_master_id', $profile->id)
+            ->count();
 
         // Add is_following for authenticated users
         if ($request->user()) {

@@ -75,12 +75,22 @@ class WalletController extends Controller
             $totalReferrals = $affiliate ? $affiliate->referrals()->count() : 0;
             $conversionRate = $totalReferrals > 0 ? ($activeReferrals / $totalReferrals) * 100 : 0;
             
+            // Safely get earnings breakdown
+            $earningsBreakdown = [];
+            try {
+                if (method_exists($wallet, 'getEarningsBreakdown')) {
+                    $earningsBreakdown = $wallet->getEarningsBreakdown();
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Failed to get earnings breakdown', ['error' => $e->getMessage()]);
+            }
+
             return response()->json([
                 'ok' => true,
                 'wallet' => $wallet,
                 'wallet_stats' => $walletStats,
                 'pending_payments' => $pendingPaymentsSummary,
-                'earnings_breakdown' => $wallet->getEarningsBreakdown(),
+                'earnings_breakdown' => $earningsBreakdown,
                 'affiliate_stats' => [
                     'has_affiliate_account' => (bool) $affiliate,
                     'referral_code' => $affiliate?->referral_code,
@@ -116,7 +126,7 @@ class WalletController extends Controller
 
         $q = Transaction::query()
             ->with(['quiz:id,title,slug'])
-            ->where('quiz-master_id', $user->id)
+            ->where('quiz_master_id', $user->id)
             ->whereIn('type', $visibleTypes)
             ->orderBy('created_at', 'desc');
 
@@ -222,7 +232,7 @@ class WalletController extends Controller
 
                 // create withdrawal request
                 $wr = WithdrawalRequest::create([
-                    'quiz-master_id' => $user->id,
+                    'quiz_master_id' => $user->id,
                     'amount' => $amount,
                     'method' => $request->input('method', 'mpesa'),
                     'status' => 'pending',
@@ -250,7 +260,7 @@ class WalletController extends Controller
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
-        $list = WithdrawalRequest::where('quiz-master_id', $user->id)->orderBy('created_at', 'desc')->get();
+        $list = WithdrawalRequest::where('quiz_master_id', $user->id)->orderBy('created_at', 'desc')->get();
         return response()->json(['ok' => true, 'withdrawals' => $list]);
     }
 
@@ -266,7 +276,7 @@ class WalletController extends Controller
         );
         
         // Get transactions (rewards earned)
-        $transactions = Transaction::where('quiz-master_id', $user->id)
+        $transactions = Transaction::where('quiz_master_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();
         
