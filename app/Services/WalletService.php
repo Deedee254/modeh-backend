@@ -241,7 +241,7 @@ class WalletService
     public function getTotalEarnings(int $userId): float
     {
         $total = Transaction::where('quiz_master_id', $userId)
-            ->where('status', 'confirmed')
+            ->where('status', Transaction::STATUS_COMPLETED)
             ->sum('quiz_master_share');
 
         return (float)($total ?? 0);
@@ -256,7 +256,7 @@ class WalletService
     public function getEarningsBreakdown(int $userId): array
     {
         $breakdown = Transaction::where('quiz_master_id', $userId)
-            ->where('status', 'confirmed')
+            ->where('status', Transaction::STATUS_COMPLETED)
             ->selectRaw('
                 CASE 
                     WHEN meta->"$.item_type" = "quiz" THEN "Quiz"
@@ -284,7 +284,7 @@ class WalletService
     public function getRecentTransactions(int $userId, int $limit = 20): array
     {
         return Transaction::where('quiz_master_id', $userId)
-            ->where('status', 'confirmed')
+            ->where('status', Transaction::STATUS_COMPLETED)
             ->orderBy('created_at', 'desc')
             ->limit($limit)
             ->get()
