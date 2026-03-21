@@ -144,7 +144,7 @@ class TestTransactionShares extends Command
                 'quiz-master_share' => $quizMasterShare,
                 'platform_share' => $platformShare,
                 'gateway' => 'mpesa',
-                'status' => 'confirmed',
+                'status' => Transaction::STATUS_COMPLETED,
                 'meta' => [
                     'test' => true,
                     'test_timestamp' => now()->toIso8601String(),
@@ -199,7 +199,7 @@ class TestTransactionShares extends Command
                 ['Total Amount', $amount, $verifyTx->amount, $verifyTx->amount === $amount ? '✓' : '✗'],
                 ['Quiz-Master Share', $quizMasterShare, $verifyTx->{'quiz-master_share'}, $verifyTx->{'quiz-master_share'} === $quizMasterShare ? '✓' : '✗'],
                 ['Platform Share', $platformShare, $verifyTx->platform_share, $verifyTx->platform_share === $platformShare ? '✓' : '✗'],
-                ['Status', 'confirmed', $verifyTx->status, $verifyTx->status === 'confirmed' ? '✓' : '✗'],
+                ['Status', Transaction::STATUS_COMPLETED, $verifyTx->status, $verifyTx->status === Transaction::STATUS_COMPLETED ? '✓' : '✗'],
             ]
         );
         $this->newLine();

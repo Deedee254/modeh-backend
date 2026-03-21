@@ -282,15 +282,15 @@ class AdminQuizMasterAnalyticsController extends Controller
 
         $txAll = DB::table('transactions as t')
             ->selectRaw("t.`quiz-master_id` as user_id")
-            ->selectRaw("SUM(CASE WHEN t.status IN ('confirmed','completed') THEN COALESCE(t.`quiz-master_share`,0) ELSE 0 END) as lifetime_earnings")
-            ->selectRaw("SUM(CASE WHEN t.status IN ('confirmed','completed') THEN 1 ELSE 0 END) as lifetime_transactions")
+            ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN COALESCE(t.`quiz-master_share`,0) ELSE 0 END) as lifetime_earnings")
+            ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as lifetime_transactions")
             ->groupBy(DB::raw("t.`quiz-master_id`"));
 
         $txRange = DB::table('transactions as t')
             ->whereBetween('t.created_at', [$fromTs, $toTs])
             ->selectRaw("t.`quiz-master_id` as user_id")
-            ->selectRaw("SUM(CASE WHEN t.status IN ('confirmed','completed') THEN COALESCE(t.`quiz-master_share`,0) ELSE 0 END) as earnings_in_range")
-            ->selectRaw("SUM(CASE WHEN t.status IN ('confirmed','completed') THEN 1 ELSE 0 END) as transactions_in_range")
+            ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN COALESCE(t.`quiz-master_share`,0) ELSE 0 END) as earnings_in_range")
+            ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as transactions_in_range")
             ->groupBy(DB::raw("t.`quiz-master_id`"));
 
         $quizAll = DB::table('quizzes as q')

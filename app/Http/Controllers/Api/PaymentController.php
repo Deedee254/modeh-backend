@@ -490,6 +490,14 @@ class PaymentController extends Controller
             // Don't fail the payment if invoice generation fails
         }
 
+        // Mark purchase as completed after all transaction processing succeeds
+        $purchase->update(['status' => 'completed']);
+        Log::info('[Payment] One-off purchase marked as completed', [
+            'purchase_id' => $purchase->id,
+            'item_type' => $purchase->item_type,
+            'item_id' => $purchase->item_id,
+        ]);
+
         return response()->json(['ok' => true]);
     }
 

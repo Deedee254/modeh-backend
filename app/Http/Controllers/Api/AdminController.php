@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Models\WithdrawalRequest;
 use App\Models\PaymentSetting;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AdminController extends Controller
 {
@@ -28,11 +30,11 @@ class AdminController extends Controller
         $today = now();
 
         // Total revenue from all transactions
-        $totalRevenue = (float) Transaction::where('status', 'confirmed')->sum('amount');
+        $totalRevenue = (float) Transaction::where('status', Transaction::STATUS_COMPLETED)->sum('amount');
 
         // Sum platform and QM shares
-        $platformShare = (float) Transaction::where('status', 'confirmed')->sum('platform_share');
-        $quizMasterShare = (float) Transaction::where('status', 'confirmed')->sum('quiz-master_share');
+        $platformShare = (float) Transaction::where('status', Transaction::STATUS_COMPLETED)->sum('platform_share');
+        $quizMasterShare = (float) Transaction::where('status', Transaction::STATUS_COMPLETED)->sum('quiz-master_share');
 
         // Count users by role
         $totalUsers = User::count();
@@ -231,8 +233,8 @@ class AdminController extends Controller
 
         $stats = Transaction::query()
             ->selectRaw("`quiz-master_id` as quiz_master_id")
-            ->selectRaw("SUM(CASE WHEN status IN ('confirmed','completed') THEN `quiz-master_share` ELSE 0 END) as total_earnings")
-            ->selectRaw("SUM(CASE WHEN status IN ('confirmed','completed') THEN 1 ELSE 0 END) as transaction_count")
+            ->selectRaw("SUM(CASE WHEN status = 'completed' THEN `quiz-master_share` ELSE 0 END) as total_earnings")
+            ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as transaction_count")
             ->groupBy('quiz_master_id');
 
         $query = User::query()
@@ -373,6 +375,7 @@ class AdminController extends Controller
 
     /**
      * Reject a withdrawal request
+     * Refunds the amount back to quiz master's available balance
      */
     public function rejectWithdrawal(Request $request, $withdrawalId)
     {
@@ -393,16 +396,104 @@ class AdminController extends Controller
             return response()->json(['ok' => false, 'message' => 'Withdrawal not found'], 404);
         }
 
-        DB::table('withdrawal_requests')
-            ->where('id', $withdrawalId)
-            ->update([
-                'status' => 'rejected',
-                'rejected_at' => now(),
-                'rejection_reason' => $request->input('reason'),
-                'updated_at' => now(),
-            ]);
+        if ($withdrawal->status !== 'pending') {
+            return response()->json(['ok' => false, 'message' => 'Can only reject pending withdrawals'], 400);
+        }
 
-        return response()->json(['ok' => true, 'message' => 'Withdrawal rejected']);
+        try {
+            DB::transaction(function () use ($withdrawalId, $withdrawal, $request) {
+                // Refund the amount back to available balance (not lifetime_earned)
+                Wallet::where('user_id', $withdrawal->{'quiz-master_id'})
+                    ->increment('available', $withdrawal->amount);
+                
+                // Update withdrawal status to rejected
+                DB::table('withdrawal_requests')
+                    ->where('id', $withdrawalId)
+                    ->update([
+                        'status' => 'rejected',
+                        'rejected_at' => now(),
+                        'rejection_reason' => $request->input('reason'),
+                        'updated_at' => now(),
+                    ]);
+            });
+            
+            Log::info('[Withdrawal] Request rejected and refunded', [
+                'withdrawal_id' => $withdrawalId,
+                'quiz_master_id' => $withdrawal->{'quiz-master_id'},
+                'amount' => $withdrawal->amount,
+                'reason' => $request->input('reason'),
+                'admin_id' => auth()->id(),
+            ]);
+            
+            return response()->json(['ok' => true, 'message' => 'Withdrawal rejected and refunded']);
+        } catch (\Throwable $e) {
+            Log::error('[Withdrawal] Failed to reject and refund', [
+                'withdrawal_id' => $withdrawalId,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json(['ok' => false, 'message' => 'Failed to reject withdrawal'], 500);
+        }
+    }
+
+    /**
+     * Mark withdrawal as paid after admin has sent the money outside the system
+     * Updates status, paid_at, and processed_by_admin_id
+     */
+    public function markWithdrawalAsPaid(Request $request, $withdrawalId)
+    {
+        $user = auth()->user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'transaction_id' => 'nullable|string|max:255', // Optional reference ID for the actual payment
+        ]);
+
+        $withdrawal = WithdrawalRequest::find($withdrawalId);
+
+        if (!$withdrawal) {
+            return response()->json(['ok' => false, 'message' => 'Withdrawal not found'], 404);
+        }
+
+        if ($withdrawal->status !== 'approved') {
+            return response()->json(['ok' => false, 'message' => 'Only approved withdrawals can be marked as paid'], 400);
+        }
+
+        try {
+            $withdrawal->update([
+                'status' => 'paid',
+                'paid_at' => now(),
+                'processed_by_admin_id' => $user->id,
+            ]);
+            
+            // If meta exists, store the transaction_id like M-PESA ref
+            if ($request->filled('transaction_id')) {
+                $meta = $withdrawal->meta ?? [];
+                $meta['payment_transaction_id'] = $request->input('transaction_id');
+                $withdrawal->update(['meta' => $meta]);
+            }
+            
+            Log::info('[Withdrawal] Marked as paid', [
+                'withdrawal_id' => $withdrawalId,
+                'quiz_master_id' => $withdrawal->{'quiz-master_id'},
+                'amount' => $withdrawal->amount,
+                'transaction_id' => $request->input('transaction_id'),
+                'admin_id' => $user->id,
+            ]);
+            
+            return response()->json([
+                'ok' => true,
+                'message' => 'Withdrawal marked as paid',
+                'withdrawal' => $withdrawal,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Withdrawal] Failed to mark as paid', [
+                'withdrawal_id' => $withdrawalId,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json(['ok' => false, 'message' => 'Failed to mark withdrawal as paid'], 500);
+        }
     }
 
     /**

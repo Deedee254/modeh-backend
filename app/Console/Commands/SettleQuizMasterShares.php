@@ -41,7 +41,7 @@ class SettleQuizMasterShares extends Command
 
         // Find transactions where quiz-master_id is NULL but should have been credited
         $query = Transaction::whereNotNull('quiz_id')
-            ->where('status', 'confirmed')
+            ->where('status', Transaction::STATUS_COMPLETED)
             ->where('quiz-master_share', '>', 0);
 
         // Check for NULL quiz-master_id
