@@ -240,9 +240,9 @@ class WalletService
      */
     public function getTotalEarnings(int $userId): float
     {
-        $total = Transaction::where('quiz_master_id', $userId)
+        $total = Transaction::where('quiz-master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
-            ->sum('quiz_master_share');
+            ->sum('quiz-master_share');
 
         return (float)($total ?? 0);
     }
@@ -255,17 +255,17 @@ class WalletService
      */
     public function getEarningsBreakdown(int $userId): array
     {
-        $breakdown = Transaction::where('quiz_master_id', $userId)
+        $breakdown = Transaction::where('quiz-master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
             ->selectRaw('
                 CASE 
-                    WHEN meta->"$.item_type" = "quiz" THEN "Quiz"
-                    WHEN meta->"$.item_type" = "battle" THEN "Battle"
-                    WHEN meta->"$.item_type" = "tournament" THEN "Tournament"
+                    WHEN meta->>"$.item_type" = "quiz" THEN "Quiz"
+                    WHEN meta->>"$.item_type" = "battle" THEN "Battle"
+                    WHEN meta->>"$.item_type" = "tournament" THEN "Tournament"
                     ELSE "Subscription"
                 END as type,
                 COUNT(*) as count,
-                SUM(quiz_master_share) as total
+                SUM(`quiz-master_share`) as total
             ')
             ->groupBy('type')
             ->get()
@@ -283,7 +283,7 @@ class WalletService
      */
     public function getRecentTransactions(int $userId, int $limit = 20): array
     {
-        return Transaction::where('quiz_master_id', $userId)
+        return Transaction::where('quiz-master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
             ->orderBy('created_at', 'desc')
             ->limit($limit)
@@ -323,10 +323,10 @@ class WalletService
         $totalEarnings = $this->getTotalEarnings($userId);
         // Earned this calendar month (from completed transactions)
         $startOfMonth = now()->startOfMonth();
-        $earnedThisMonth = (float) Transaction::where('quiz_master_id', $userId)
+        $earnedThisMonth = (float) Transaction::where('quiz-master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
             ->where('created_at', '>=', $startOfMonth)
-            ->sum('quiz_master_share');
+            ->sum('quiz-master_share');
 
         // Reconciliation: compare recorded lifetime_earned with computed total from transactions
         $difference = $totalEarnings - (float)$wallet->lifetime_earned;
@@ -364,10 +364,10 @@ class WalletService
             $start = now()->subMonths($i)->startOfMonth();
             $end = now()->subMonths($i)->endOfMonth();
 
-                $sum = (float) Transaction::where('quiz_master_id', $userId)
+                $sum = (float) Transaction::where('quiz-master_id', $userId)
                 ->where('status', Transaction::STATUS_COMPLETED)
                 ->whereBetween('created_at', [$start, $end])
-                ->sum('quiz_master_share');
+                ->sum('quiz-master_share');
 
             $results[] = [
                 'month' => $start->format('Y-m'),
@@ -389,10 +389,10 @@ class WalletService
      */
     public function getTopQuizzes(int $userId, int $limit = 10): array
     {
-        $rows = Transaction::where('quiz_master_id', $userId)
+        $rows = Transaction::where('quiz-master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
             ->whereNotNull('quiz_id')
-            ->selectRaw('quiz_id, SUM(quiz_master_share) as total')
+            ->selectRaw('quiz_id, SUM(`quiz-master_share`) as total')
             ->groupBy('quiz_id')
             ->orderByDesc('total')
             ->limit($limit)
