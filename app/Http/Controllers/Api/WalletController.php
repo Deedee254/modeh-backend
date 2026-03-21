@@ -62,6 +62,14 @@ class WalletController extends Controller
         // Gather wallet stats (reconciliation helpers)
         $walletStats = app(WalletService::class)->getStats($user->id);
 
+        // Reconcile wallet with calculated stats for quiz-masters
+        // This ensures the wallet reflects actual earnings from completed transactions
+        if ($user->role === 'quiz-master' && !empty($walletStats)) {
+            $wallet->lifetime_earned = $walletStats['total_from_transactions'];
+            $wallet->earned_this_month = $walletStats['earned_this_month'];
+            $wallet->save();
+        }
+
         // Include pending payments summary for quizee
         if ($user->role === 'quizee') {
             $pendingPaymentsSummary = \App\Models\PendingQuizPayment::where('quizee_id', $user->id)
@@ -126,7 +134,7 @@ class WalletController extends Controller
 
         $q = Transaction::query()
             ->with(['quiz:id,title,slug'])
-            ->where('quiz_master_id', $user->id)
+            ->where('quiz-master_id', $user->id)
             ->whereIn('type', $visibleTypes)
             ->orderBy('created_at', 'desc');
 

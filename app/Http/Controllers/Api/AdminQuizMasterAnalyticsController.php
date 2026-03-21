@@ -117,7 +117,7 @@ class AdminQuizMasterAnalyticsController extends Controller
                 $join->on('u.id', '=', DB::raw('t.`quiz-master_id`'));
             })
             ->where('u.role', 'quiz-master')
-            ->whereIn('t.status', ['confirmed', 'completed'])
+            ->where('t.status', 'completed')
             ->whereBetween('t.created_at', [$fromTs, $toTs]);
 
         $earnings = (float) ((clone $earningsQ)->sum(DB::raw('COALESCE(t.`quiz-master_share`,0)')) ?? 0);
@@ -190,7 +190,7 @@ class AdminQuizMasterAnalyticsController extends Controller
                 $join->on('u.id', '=', DB::raw('t.`quiz-master_id`'));
             })
             ->where('u.role', 'quiz-master')
-            ->whereIn('t.status', ['confirmed', 'completed'])
+            ->where('t.status', 'completed')
             ->selectRaw('t.`quiz-master_id` as user_id')
             ->selectRaw('MAX(u.name) as name')
             ->selectRaw('MAX(u.email) as email')
@@ -482,7 +482,7 @@ class AdminQuizMasterAnalyticsController extends Controller
 
         $txAll = DB::table('transactions as t')
             ->whereRaw("t.`quiz-master_id` = ?", [$resolvedUserId])
-            ->whereIn('t.status', ['confirmed', 'completed']);
+            ->where('t.status', 'completed');
         $txRange = (clone $txAll)->whereBetween('t.created_at', [$fromTs, $toTs]);
         $earningsAll = (float) ((clone $txAll)->sum(DB::raw("COALESCE(t.`quiz-master_share`,0)")) ?? 0);
         $earningsRange = (float) ((clone $txRange)->sum(DB::raw("COALESCE(t.`quiz-master_share`,0)")) ?? 0);

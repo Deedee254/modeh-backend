@@ -394,6 +394,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 	        Route::get('/admin/quiz-masters/analytics', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'analytics']);
 	        Route::get('/admin/quiz-masters/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'insights']);
 	        Route::get('/admin/quiz-masters/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'userInsights']);
+	        Route::get('/admin/quiz-analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
 	        Route::get('/admin/quizzes/analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
 	        Route::get('/admin/quizzes/slug/{slug}/insights', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'insightsBySlug']);
 	        Route::get('/admin/withdrawals', [\App\Http\Controllers\Api\AdminController::class, 'withdrawals']);
