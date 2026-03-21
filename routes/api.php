@@ -437,18 +437,19 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/institutions/{id}/members', [\App\Http\Controllers\Api\InstitutionController::class, 'members']);
 
         // Wallet & Finance Routes
-        Route::get('/wallet/metrics', [\App\Http\Controllers\Api\WalletController::class, 'adminMetrics']);
-        Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'adminTransactions']);
-        Route::get('/wallet/pending-settlements', [\App\Http\Controllers\Api\WalletController::class, 'pendingSettlements']);
-        Route::post('/wallet/settle', [\App\Http\Controllers\Api\WalletController::class, 'settleAllPending']);
-        Route::post('/wallet/settle/{userId}', [\App\Http\Controllers\Api\WalletController::class, 'settleSingleUser']);
-        Route::get('/wallet/transaction-flow/{transactionId}', [\App\Http\Controllers\Api\WalletController::class, 'transactionFlow']);
-        Route::get('/wallet/transaction-history', [\App\Http\Controllers\Api\WalletController::class, 'transactionHistory']);
-        Route::get('/wallet/platform-summary', [\App\Http\Controllers\Api\WalletController::class, 'platformSummary']);
+        Route::get('/admin/wallet/metrics', [\App\Http\Controllers\Api\WalletController::class, 'adminMetrics']);
+        Route::get('/admin/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'adminTransactions']);
+        Route::get('/admin/wallet/pending-settlements', [\App\Http\Controllers\Api\WalletController::class, 'pendingSettlements']);
+        Route::post('/admin/wallet/settle', [\App\Http\Controllers\Api\WalletController::class, 'settleAllPending']);
+        Route::post('/admin/wallet/settle/{userId}', [\App\Http\Controllers\Api\WalletController::class, 'settleSingleUser']);
+        Route::get('/admin/wallet/transaction-flow/{transactionId}', [\App\Http\Controllers\Api\WalletController::class, 'transactionFlow']);
+        Route::get('/admin/wallet/transaction-history', [\App\Http\Controllers\Api\WalletController::class, 'transactionHistory']);
+        Route::get('/admin/wallet/platform-summary', [\App\Http\Controllers\Api\WalletController::class, 'platformSummary']);
         
         // NEW: Admin payment recovery - view pending payments and send messages
         Route::get('/admin/pending-payments', [\App\Http\Controllers\Api\WalletController::class, 'adminPendingPayments']);
         Route::post('/admin/chat/send', [\App\Http\Controllers\Api\WalletController::class, 'adminSendChatMessage']);
+        Route::post('/admin/broadcast', [\App\Http\Controllers\Api\WalletController::class, 'adminBroadcast']);
     });
 
     // Wallet (quiz-master)

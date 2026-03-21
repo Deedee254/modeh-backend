@@ -7,11 +7,13 @@ use Illuminate\Http\Request;
 use App\Models\Wallet;
 use App\Models\Transaction;
 use App\Models\WithdrawalRequest;
+use App\Models\User;
 use App\Services\TransactionService;
 use App\Services\WalletService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class WalletController extends Controller
 {
@@ -414,7 +416,12 @@ class WalletController extends Controller
 
         // Filter by type if provided
         if ($request->filled('type')) {
-            $query->where('status', $request->type);
+            $query->where('type', $request->type);
+        }
+
+        // Filter by status if provided
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
         }
 
         // Filter by date range if provided
@@ -863,6 +870,202 @@ class WalletController extends Controller
                 'message' => 'Failed to send reminder',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+
+    /**
+     * Admin broadcasts a notification to a filtered set of users.
+     * POST /api/admin/broadcast
+     */
+    public function adminBroadcast(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'message' => 'required|string',
+            'targets' => 'required|array',
+            'targets.type' => 'required|string|in:all,quizees,quizee-masters,taxonomy,quiz-attempts',
+            'targets.level' => 'nullable',
+            'targets.grade' => 'nullable',
+            'targets.subject' => 'nullable',
+            'targets.quiz_id' => 'nullable',
+        ]);
+
+        try {
+            $recipientIds = $this->resolveBroadcastRecipientIds($validated['targets'], (int) $user->id);
+
+            if (empty($recipientIds)) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'No recipients matched the selected criteria.',
+                    'recipients_count' => 0,
+                ], 422);
+            }
+
+            $now = now();
+            $rows = [];
+            foreach ($recipientIds as $recipientId) {
+                $rows[] = [
+                    'id' => (string) Str::uuid(),
+                    'type' => 'App\Notifications\AdminBroadcast',
+                    'notifiable_type' => 'App\Models\User',
+                    'notifiable_id' => $recipientId,
+                    'data' => json_encode([
+                        'title' => $validated['title'],
+                        'message' => $validated['message'],
+                        'from_admin' => $user->name,
+                        'targets' => $validated['targets'],
+                    ]),
+                    'read_at' => null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            foreach (array_chunk($rows, 500) as $chunk) {
+                DB::table('notifications')->insert($chunk);
+            }
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Broadcast sent successfully',
+                'recipients_count' => count($recipientIds),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Admin broadcast failed', [
+                'admin_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to send broadcast',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function resolveBroadcastRecipientIds(array $targets, int $senderId): array
+    {
+        $type = $targets['type'] ?? 'all';
+        $query = User::query()->where('id', '!=', $senderId);
+
+        if ($type === 'all') {
+            $query->whereIn('role', ['quizee', 'quiz-master']);
+        } elseif ($type === 'quizees') {
+            $query->where('role', 'quizee');
+        } elseif ($type === 'quizee-masters') {
+            $query->where('role', 'quiz-master');
+        } elseif ($type === 'quiz-attempts') {
+            $quizId = $this->resolveQuizId($targets['quiz_id'] ?? null);
+            if (!$quizId) {
+                return [];
+            }
+            $query->whereHas('quizAttempts', function ($attempts) use ($quizId) {
+                $attempts->where('quiz_id', $quizId);
+            });
+        } elseif ($type === 'taxonomy') {
+            $levelIds = $this->resolveTaxonomyIds(\App\Models\Level::query(), $targets['level'] ?? null);
+            $gradeIds = $this->resolveTaxonomyIds(\App\Models\Grade::query(), $targets['grade'] ?? null);
+            $subjectIds = $this->resolveTaxonomyIds(\App\Models\Subject::query(), $targets['subject'] ?? null);
+
+            if (empty($levelIds) && empty($gradeIds) && empty($subjectIds)) {
+                return [];
+            }
+
+            $query->where(function ($userQuery) use ($levelIds, $gradeIds, $subjectIds) {
+                $userQuery
+                    ->where(function ($quizeeQuery) use ($levelIds, $gradeIds, $subjectIds) {
+                        $quizeeQuery->where('role', 'quizee')
+                            ->whereHas('quizeeProfile', function ($profileQuery) use ($levelIds, $gradeIds, $subjectIds) {
+                                $this->applyTaxonomyFilters($profileQuery, $levelIds, $gradeIds, $subjectIds);
+                            });
+                    })
+                    ->orWhere(function ($masterQuery) use ($levelIds, $gradeIds, $subjectIds) {
+                        $masterQuery->where('role', 'quiz-master')
+                            ->whereHas('quizMasterProfile', function ($profileQuery) use ($levelIds, $gradeIds, $subjectIds) {
+                                $this->applyTaxonomyFilters($profileQuery, $levelIds, $gradeIds, $subjectIds);
+                            });
+                    });
+            });
+        }
+
+        return $query->distinct()->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    private function resolveQuizId($rawQuiz): ?int
+    {
+        if ($rawQuiz === null || $rawQuiz === '') {
+            return null;
+        }
+
+        if (is_numeric($rawQuiz)) {
+            return \App\Models\Quiz::whereKey((int) $rawQuiz)->value('id');
+        }
+
+        $value = trim((string) $rawQuiz);
+        return \App\Models\Quiz::query()
+            ->where('slug', $value)
+            ->orWhere('title', 'like', '%' . $value . '%')
+            ->value('id');
+    }
+
+    private function resolveTaxonomyIds($query, $rawValue): array
+    {
+        if ($rawValue === null || $rawValue === '') {
+            return [];
+        }
+
+        if (is_array($rawValue)) {
+            $values = array_values(array_filter($rawValue, fn ($value) => $value !== null && $value !== ''));
+        } else {
+            $values = [trim((string) $rawValue)];
+        }
+
+        $ids = [];
+        foreach ($values as $value) {
+            if ($value === '') {
+                continue;
+            }
+
+            $resolved = $query->getModel()::query()
+                ->when(is_numeric($value), fn ($q) => $q->orWhere('id', (int) $value))
+                ->when(method_exists($query->getModel(), 'getRouteKeyName') || \Schema::hasColumn($query->getModel()->getTable(), 'slug'), fn ($q) => $q->orWhere('slug', $value))
+                ->orWhere('name', $value)
+                ->pluck('id')
+                ->all();
+
+            if (empty($resolved) && preg_match('/(\d+)/', (string) $value, $matches)) {
+                $resolved = array_merge($resolved, $query->getModel()::query()->where('id', (int) $matches[1])->pluck('id')->all());
+            }
+
+            $ids = array_merge($ids, $resolved);
+        }
+
+        return array_values(array_unique(array_map('intval', $ids)));
+    }
+
+    private function applyTaxonomyFilters($profileQuery, array $levelIds, array $gradeIds, array $subjectIds): void
+    {
+        if (!empty($levelIds)) {
+            $profileQuery->whereIn('level_id', $levelIds);
+        }
+
+        if (!empty($gradeIds)) {
+            $profileQuery->whereIn('grade_id', $gradeIds);
+        }
+
+        if (!empty($subjectIds)) {
+            $profileQuery->where(function ($subjectQuery) use ($subjectIds) {
+                foreach ($subjectIds as $subjectId) {
+                    $subjectQuery->orWhereJsonContains('subjects', $subjectId);
+                }
+            });
         }
     }
 

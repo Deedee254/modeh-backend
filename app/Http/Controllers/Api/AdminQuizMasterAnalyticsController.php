@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class AdminQuizMasterAnalyticsController extends Controller
 {
@@ -51,7 +52,7 @@ class AdminQuizMasterAnalyticsController extends Controller
 
     private function requireAdmin()
     {
-        $user = auth()->user();
+        $user = Auth::user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -222,7 +223,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->selectRaw('MAX(u.email) as email')
             ->selectRaw('MAX(COALESCE(u.avatar_url, u.social_avatar)) as avatar')
             ->selectRaw('COUNT(*) as quizzes')
-            ->groupBy('user_id')
+            ->groupBy(DB::raw('IFNULL(q.created_by, q.user_id)'))
             ->orderByDesc('quizzes')
             ->limit(10)
             ->get()
@@ -299,13 +300,13 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->selectRaw('SUM(CASE WHEN q.is_approved = 1 THEN 1 ELSE 0 END) as approved_quizzes')
             ->selectRaw('SUM(CASE WHEN q.is_draft = 1 THEN 1 ELSE 0 END) as draft_quizzes')
             ->selectRaw('SUM(CASE WHEN q.is_paid = 1 THEN 1 ELSE 0 END) as paid_quizzes')
-            ->groupBy('user_id');
+            ->groupBy(DB::raw('IFNULL(q.created_by, q.user_id)'));
 
         $quizRange = DB::table('quizzes as q')
             ->whereBetween('q.created_at', [$fromTs, $toTs])
             ->selectRaw('IFNULL(q.created_by, q.user_id) as user_id')
             ->selectRaw('COUNT(*) as quizzes_in_range')
-            ->groupBy('user_id');
+            ->groupBy(DB::raw('IFNULL(q.created_by, q.user_id)'));
 
         $attemptRange = DB::table('quiz_attempts as a')
             ->join('quizzes as q', 'q.id', '=', 'a.quiz_id')
@@ -313,7 +314,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->selectRaw('IFNULL(q.created_by, q.user_id) as user_id')
             ->selectRaw('COUNT(*) as attempts_in_range')
             ->selectRaw('AVG(a.score) as avg_score_in_range')
-            ->groupBy('user_id');
+            ->groupBy(DB::raw('IFNULL(q.created_by, q.user_id)'));
 
         $topicsAll = DB::table('topics')
             ->whereNotNull('created_by')
@@ -344,7 +345,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->leftJoinSub($topicsAll, 'ta', function ($join) {
                 $join->on('ta.user_id', '=', 'u.id');
             })
-            ->selectRaw('u.id, u.name, u.email, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
+            ->selectRaw('u.id, u.slug, u.name, u.email, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
             ->selectRaw('g.name as grade_name, l.name as level_name')
             ->selectRaw('COALESCE(w.available,0) as wallet_available')
             ->selectRaw('COALESCE(w.withdrawn_pending,0) as wallet_withdrawn_pending')
@@ -378,6 +379,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->map(function ($r) {
                 return [
                     'id' => (int) $r->id,
+                    'slug' => $r->slug ?? null,
                     'name' => $r->name,
                     'email' => $r->email,
                     'avatar' => $r->avatar,
