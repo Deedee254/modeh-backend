@@ -109,6 +109,10 @@ class AdminController extends Controller
             $type = $request->input('type');
             $query->whereJsonContains('meta->item_type', $type);
         }
+        
+        if ($request->filled('tx_type')) {
+            $query->where('type', $request->input('tx_type'));
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
@@ -149,6 +153,7 @@ class AdminController extends Controller
                     'quiz-master_id' => $tx->{'quiz-master_id'},
                     'quiz_master' => $quizMaster,
                     'quiz_id' => $tx->quiz_id,
+                    'type' => $tx->type,
                     'amount' => (float) $tx->amount,
                     'platform_share' => (float) $tx->platform_share,
                     'quiz-master_share' => (float) $tx->{'quiz-master_share'},
