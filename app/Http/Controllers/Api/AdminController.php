@@ -240,7 +240,7 @@ class AdminController extends Controller
             ->selectRaw("`quiz-master_id` as quiz_master_id")
             ->selectRaw("SUM(CASE WHEN status = 'completed' THEN `quiz-master_share` ELSE 0 END) as total_earnings")
             ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as transaction_count")
-            ->groupBy('quiz_master_id');
+            ->groupBy(DB::raw('`quiz-master_id`'));
 
         $query = User::query()
             ->where('role', 'quiz-master')

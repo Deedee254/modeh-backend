@@ -9,6 +9,8 @@ class Transaction extends Model
 {
     use HasFactory;
 
+    
+
     protected $fillable = [
         'tx_id',
         'user_id',
@@ -58,6 +60,7 @@ class Transaction extends Model
     {
         return $this->belongsTo(User::class, 'quiz-master_id');
     }
+    
 
     public function user()
     {

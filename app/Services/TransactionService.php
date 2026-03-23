@@ -216,7 +216,7 @@ class TransactionService
                 'quiz_id' => $quizId,
                 'quiz_attempt_id' => $quizAttemptId,
                 'amount' => $amount,
-                'quiz_master_share' => $qmShare,
+                'quiz-master_share' => $qmShare,
                 'platform_share' => $platformShare,
                 'affiliate_share' => $affiliateShare,
                 'type' => 'quiz_completion_payment',
@@ -321,7 +321,7 @@ class TransactionService
         foreach ($credits as $credit) {
             $recipient = match($credit->type) {
                 Transaction::TYPE_AFFILIATE_PAYOUT => 'Affiliate (' . ($credit->meta['referral_code'] ?? 'N/A') . ')',
-                Transaction::TYPE_QUIZ_MASTER_PAYOUT => $credit->quizMaster?->name ?? 'Quiz Master #' . $credit->quiz_master_id,
+                Transaction::TYPE_QUIZ_MASTER_PAYOUT => $credit->quizMaster?->name ?? 'Quiz Master #' . $credit->{'quiz-master_id'},
                 default => 'Unknown'
             };
 

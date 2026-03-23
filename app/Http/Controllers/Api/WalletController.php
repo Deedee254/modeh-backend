@@ -242,7 +242,7 @@ class WalletController extends Controller
 
                 // create withdrawal request
                 $wr = WithdrawalRequest::create([
-                    'quiz_master_id' => $user->id,
+                    'quiz-master_id' => $user->id,
                     'amount' => $amount,
                     'method' => $request->input('method', 'mpesa'),
                     'status' => 'pending',
@@ -270,7 +270,7 @@ class WalletController extends Controller
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
-        $list = WithdrawalRequest::where('quiz_master_id', $user->id)->orderBy('created_at', 'desc')->get();
+        $list = WithdrawalRequest::where('quiz-master_id', $user->id)->orderBy('created_at', 'desc')->get();
         return response()->json(['ok' => true, 'withdrawals' => $list]);
     }
 
@@ -286,7 +286,7 @@ class WalletController extends Controller
         );
         
         // Get transactions (rewards earned)
-        $transactions = Transaction::where('quiz_master_id', $user->id)
+        $transactions = Transaction::where('quiz-master_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();
         

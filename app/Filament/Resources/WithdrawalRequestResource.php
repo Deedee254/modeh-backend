@@ -50,7 +50,7 @@ class WithdrawalRequestResource extends Resource
                         $record->processed_by_admin_id = $user->id ?? null;
                         $record->save();
                     });
-                    try { event(new \App\Events\WithdrawalRequestUpdated($record->quiz_master_id, $record->toArray())); } catch (\Throwable $_) {}
+                    try { event(new \App\Events\WithdrawalRequestUpdated($record->{'quiz-master_id'}, $record->toArray())); } catch (\Throwable $_) {}
                 }),
             Action::make('reject_refund')
                 ->label('Reject + Refund')
@@ -63,16 +63,16 @@ class WithdrawalRequestResource extends Resource
                         $record->status = 'rejected';
                         $record->save();
 
-                        $w = \App\Models\Wallet::where('user_id', $record->quiz_master_id)->lockForUpdate()->first();
+                        $w = \App\Models\Wallet::where('user_id', $record->{'quiz-master_id'})->lockForUpdate()->first();
                         if (!$w) {
-                            $w = \App\Models\Wallet::create(['user_id' => $record->quiz_master_id, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
+                            $w = \App\Models\Wallet::create(['user_id' => $record->{'quiz-master_id'}, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
                         }
                         $w->available = bcadd($w->available, $record->amount, 2);
                         $w->save();
                         $wallet = $w;
                     });
-                    try { event(new \App\Events\WithdrawalRequestUpdated($record->quiz_master_id, $record->toArray())); } catch (\Throwable $_) {}
-                    if ($wallet) { try { event(new \App\Events\WalletUpdated($wallet->toArray(), $record->quiz_master_id)); } catch (\Throwable $_) {} }
+                    try { event(new \App\Events\WithdrawalRequestUpdated($record->{'quiz-master_id'}, $record->toArray())); } catch (\Throwable $_) {}
+                    if ($wallet) { try { event(new \App\Events\WalletUpdated($wallet->toArray(), $record->{'quiz-master_id'})); } catch (\Throwable $_) {} }
                 }),
             Action::make('mark_paid')
                 ->label('Mark as Paid')
@@ -86,7 +86,7 @@ class WithdrawalRequestResource extends Resource
                         $record->processed_by_admin_id = $user->id ?? null;
                         $record->save();
                     });
-                    try { event(new \App\Events\WithdrawalRequestUpdated($record->quiz_master_id, $record->toArray())); } catch (\Throwable $_) {}
+                    try { event(new \App\Events\WithdrawalRequestUpdated($record->{'quiz-master_id'}, $record->toArray())); } catch (\Throwable $_) {}
                 }),
         ]);
     }

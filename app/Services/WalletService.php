@@ -533,11 +533,11 @@ class WalletService
 
             // 5. Create audit transaction
             $mainTx = Transaction::create([
-                'quiz_master_id' => $quizMasterId,
+                'quiz-master_id' => $quizMasterId,
                 'quiz_id' => $quizId,
                 'amount' => $amount,
                 'affiliate_share' => $affiliateShare,
-                'quiz_master_share' => $qmShare,
+                'quiz-master_share' => $qmShare,
                 'platform_share' => $platformShare,
                 'type' => Transaction::TYPE_PAYMENT,
                 'status' => Transaction::STATUS_COMPLETED,
