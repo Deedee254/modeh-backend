@@ -82,7 +82,9 @@ class QuizAccessService
         }
 
         // Paid public quiz
-        $price = (float) ($quiz->one_off_price ?? self::getDefaultQuizPrice());
+        $price = !is_null($quiz->one_off_price) && (float) $quiz->one_off_price > 0
+            ? (float) $quiz->one_off_price
+            : self::getDefaultQuizPrice();
         return [
             'can_access' => true,
             'is_free' => false,
@@ -202,3 +204,4 @@ class QuizAccessService
         }
     }
 }
+

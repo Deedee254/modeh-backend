@@ -567,7 +567,7 @@ class GuestQuizController extends Controller
 
     private function resolveQuizOneOffPrice(Quiz $quiz): float
     {
-        if (!is_null($quiz->one_off_price)) {
+        if (!is_null($quiz->one_off_price) && (float) $quiz->one_off_price > 0) {
             return (float) $quiz->one_off_price;
         }
 
@@ -579,3 +579,5 @@ class GuestQuizController extends Controller
         }
     }
 }
+
+

@@ -190,7 +190,7 @@ class Quiz extends Model
         }
 
         // User needs to pay one-off price; use per-quiz price or fall back to global default
-        if ($this->one_off_price !== null) {
+        if ($this->one_off_price !== null && (float) $this->one_off_price > 0) {
             return (float) $this->one_off_price;
         }
 
@@ -241,3 +241,5 @@ class Quiz extends Model
         return $qs;
     }
 }
+
+

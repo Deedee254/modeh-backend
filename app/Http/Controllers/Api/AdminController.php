@@ -605,6 +605,36 @@ class AdminController extends Controller
             }
 
             $approvalsEnabled = config('features.quiz_approvals_enabled', true);
+            $defaultQuizPrice = 0.0;
+
+            try {
+                $pricing = \App\Models\PricingSetting::singleton();
+                $defaultQuizPrice = (float) ($pricing->default_quiz_one_off_price ?? 0);
+            } catch (\Throwable $e) {
+                $defaultQuizPrice = 0.0;
+            }
+
+            if ($defaultQuizPrice <= 0) {
+                $legacyQuizPrice = DB::table('settings')->where('key', 'default_quiz_price')->value('value');
+                if (!is_null($legacyQuizPrice)) {
+                    $decodedLegacyQuizPrice = json_decode($legacyQuizPrice, true);
+                    $defaultQuizPrice = (float) ($decodedLegacyQuizPrice ?? $legacyQuizPrice);
+
+                    if ($defaultQuizPrice > 0) {
+                        try {
+                            $pricing = \App\Models\PricingSetting::singleton();
+                            $pricing->default_quiz_one_off_price = $defaultQuizPrice;
+                            $pricing->save();
+                        } catch (\Throwable $e) {
+                            // Keep serving the legacy value even if backfill fails.
+                        }
+                    }
+                }
+            }
+
+            if ($defaultQuizPrice <= 0) {
+                $defaultQuizPrice = (float) config('features.default_quiz_price', 10.0);
+            }
 
             return response()->json([
                 'ok' => true,
@@ -612,7 +642,7 @@ class AdminController extends Controller
                     'revenue_share' => (float) ($mpesaSetting->revenue_share ?? 60.0),
                     'approvals_enabled' => (boolean) $approvalsEnabled,
                     'mpesa_active' => (boolean) ($mpesaSetting->is_active ?? true),
-                    'default_quiz_price' => (float) config('features.default_quiz_price', 10.0),
+                    'default_quiz_price' => $defaultQuizPrice,
                     'default_quiz_time_limit' => (integer) config('features.default_quiz_time_limit', 30),
                 ],
             ]);
@@ -657,6 +687,10 @@ class AdminController extends Controller
             }
 
             if (isset($validated['default_quiz_price'])) {
+                $pricing = \App\Models\PricingSetting::singleton();
+                $pricing->default_quiz_one_off_price = (float) $validated['default_quiz_price'];
+                $pricing->save();
+
                 DB::table('settings')->updateOrInsert(
                     ['key' => 'default_quiz_price'],
                     ['value' => json_encode($validated['default_quiz_price'])]
@@ -840,3 +874,5 @@ class AdminController extends Controller
         ]);
     }
 }
+
+
