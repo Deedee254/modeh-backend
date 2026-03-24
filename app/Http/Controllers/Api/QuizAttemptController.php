@@ -307,6 +307,15 @@ class QuizAttemptController extends Controller
                 'questions_count' => count($questions),
                 'marks' => $totalMarks, // Ensure specific total marks are included
                 'is_paid' => (bool) $quiz->is_paid,
+                'one_off_price' => $quiz->one_off_price ?? null,
+                'default_quiz_one_off_price' => (function () use ($quiz) {
+                    try {
+                        $setting = \App\Models\PricingSetting::singleton();
+                        return (float) ($setting->default_quiz_one_off_price ?? 0);
+                    } catch (\Throwable $_) {
+                        return 0.0;
+                    }
+                })(),
                 'price' => $this->resolveQuizOneOffPrice($quiz),
                 // liked status
                 'liked' => $liked,

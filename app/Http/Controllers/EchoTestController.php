@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Events\TestEchoEvent;
+use App\Services\Websockets;
 
 class EchoTestController extends Controller
 {
@@ -72,5 +73,44 @@ class EchoTestController extends Controller
             'user_id' => Auth::id(),
             'timestamp' => now()->toIso8601String(),
         ]);
+    }
+
+    /**
+     * Send a generic broadcast using the Websockets service
+     */
+    public function sendGenericBroadcast(Request $request)
+    {
+        $validated = $request->validate([
+            'channel' => 'required|string',
+            'data' => 'nullable|array',
+            'private' => 'nullable|boolean',
+            'presence' => 'nullable|boolean',
+        ]);
+
+        $channel = $validated['channel'];
+        $data = $validated['data'] ?? [
+            'message' => 'Generic broadcast from server',
+            'timestamp' => now()->toIso8601String(),
+            'user_id' => Auth::id(),
+        ];
+
+        $isPrivate = $validated['private'] ?? false;
+        $isPresence = $validated['presence'] ?? false;
+
+        try {
+            Websockets::broadcast($channel, $data, $isPrivate, $isPresence);
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Generic broadcast sent',
+                'channel' => $channel,
+                'data' => $data,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to send generic broadcast: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

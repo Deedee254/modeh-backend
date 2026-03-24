@@ -87,6 +87,15 @@ class GuestQuizController extends Controller
                 'shuffle_questions' => (bool) $quiz->shuffle_questions,
                 'shuffle_answers' => (bool) $quiz->shuffle_answers,
                 'is_paid' => (bool) $quiz->is_paid,
+                'one_off_price' => $quiz->one_off_price ?? null,
+                'default_quiz_one_off_price' => (function () use ($quiz) {
+                    try {
+                        $setting = \App\Models\PricingSetting::singleton();
+                        return (float) ($setting->default_quiz_one_off_price ?? 0);
+                    } catch (\Throwable $_) {
+                        return 0.0;
+                    }
+                })(),
                 'price' => $this->resolveQuizOneOffPrice($quiz),
                 'questions' => $questions,
             ],
@@ -320,6 +329,15 @@ class GuestQuizController extends Controller
             'time_taken' => $attempt->time_taken,
             'attempted_at' => optional($attempt->created_at)->toIso8601String(),
             'price' => $price,
+            'one_off_price' => $attempt->quiz->one_off_price ?? null,
+            'default_quiz_one_off_price' => (function () use ($attempt) {
+                try {
+                    $setting = \App\Models\PricingSetting::singleton();
+                    return (float) ($setting->default_quiz_one_off_price ?? 0);
+                } catch (\Throwable $_) {
+                    return 0.0;
+                }
+            })(),
             'requires_payment' => $requiresPayment,
             'locked' => !$isUnlocked,
             'results' => [],

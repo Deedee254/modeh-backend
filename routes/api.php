@@ -559,6 +559,7 @@ Route::post('/echo/heartbeat', [\App\Http\Controllers\Api\EchoHeartbeatControlle
 Route::prefix('echo-test')->group(function () {
     Route::get('/status', [\App\Http\Controllers\EchoTestController::class, 'getStatus']);
     Route::post('/send', [\App\Http\Controllers\EchoTestController::class, 'sendTestMessage']);
+    Route::post('/send-generic', [\App\Http\Controllers\EchoTestController::class, 'sendGenericBroadcast'])->middleware('auth:sanctum');
 });
 
 // Broadcasting auth endpoint - moved to API routes for consistency with other API endpoints
@@ -590,8 +591,12 @@ Route::post('/broadcasting/auth', function (Request $request) {
         // Generate auth signature correctly using Pusher's HMAC method.
         // For private channels: signature = HMAC_SHA256(secret, "{socket_id}:{channel_name}")
         // For presence channels: signature = HMAC_SHA256(secret, "{socket_id}:{channel_name}:{channel_data}")
-        $pusherKey = config('broadcasting.connections.pusher.key');
-        $pusherSecret = config('broadcasting.connections.pusher.secret');
+        // Read credentials from the active broadcasting connection so drivers
+        // like Reverb (Pusher-compatible) work when set as default.
+        $activeConn = config('broadcasting.default', env('BROADCAST_DRIVER'));
+        $connConfig = config("broadcasting.connections.{$activeConn}", []);
+        $pusherKey = $connConfig['key'] ?? $connConfig['app_key'] ?? null;
+        $pusherSecret = $connConfig['secret'] ?? $connConfig['app_secret'] ?? null;
 
         if (!$pusherKey || !$pusherSecret) {
             return response()->json(['error' => 'Broadcasting not configured'], 500);
