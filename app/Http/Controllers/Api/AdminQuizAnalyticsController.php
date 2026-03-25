@@ -6,16 +6,32 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 class AdminQuizAnalyticsController extends Controller
 {
     private function requireAdmin()
     {
-        $user = auth()->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        // Try default auth user (session) then sanctum token user
+        $user = auth()->user() ?? auth('sanctum')->user();
+
+        // Allow explicit admin role
+        if ($user && ($user->is_admin ?? false)) {
+            return null;
         }
-        return null;
+
+        // Allow users authorized to access Filament/admin panels
+        try {
+            if (Gate::allows('viewFilament')) {
+                return null;
+            }
+        } catch (\Throwable $_) {
+            // ignore gate errors
+        }
+
+        Log::info('[AdminQuizAnalytics] requireAdmin failed', ['user_id' => $user?->id ?? null, 'role' => $user?->role ?? null]);
+        return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
     }
 
     public function analytics(Request $request)

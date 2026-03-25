@@ -7,21 +7,41 @@ use App\Models\Quiz;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 class AdminQuizInsightsController extends Controller
 {
     private function requireAdmin()
     {
-        $user = auth()->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        // Try default auth user (session) then sanctum token user
+        $user = auth()->user() ?? auth('sanctum')->user();
+
+        // Allow explicit admin role
+        if ($user && ($user->is_admin ?? false)) {
+            return null;
         }
-        return null;
+
+        // Allow users authorized to access Filament/admin panels
+        try {
+            if (Gate::allows('viewFilament')) {
+                return null;
+            }
+        } catch (\Throwable $_) {
+            // ignore gate errors
+        }
+
+        Log::info('[AdminQuizInsights] requireAdmin failed', ['user_id' => $user?->id ?? null, 'role' => $user?->role ?? null]);
+        return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
     }
 
     public function insightsBySlug(Request $request, string $slug)
     {
         if ($resp = $this->requireAdmin()) return $resp;
+
+        // Ensure the current auth user used by policy checks matches the one we validated
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if ($user) auth()->setUser($user);
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -44,8 +64,16 @@ class AdminQuizInsightsController extends Controller
             return response()->json(['ok' => false, 'message' => 'Quiz not found'], 404);
         }
 
-        // Also enforce the same policy used by QuizAnalyticsController (admin will pass).
-        $this->authorize('viewAnalytics', $quiz);
+        // Also enforce the same policy used by QuizAnalyticsController
+        $user = auth()->user() ?? auth('sanctum')->user();
+        try {
+            if ($user && !\Illuminate\Support\Facades\Gate::forUser($user)->allows('viewAnalytics', $quiz)) {
+                return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+            }
+        } catch (\Throwable $_) {
+            // If policy check fails unexpectedly, deny access
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
 
         $to = isset($validated['to']) ? Carbon::parse($validated['to'])->toDateString() : now()->toDateString();
         $from = isset($validated['from']) ? Carbon::parse($validated['from'])->toDateString() : Carbon::parse($to)->subDays(29)->toDateString();

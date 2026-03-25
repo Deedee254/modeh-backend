@@ -397,9 +397,20 @@ class AdminQuizeeAnalyticsController extends Controller
         $fromTs = $from . ' 00:00:00';
         $toTs = $to . ' 23:59:59';
 
+        // Allow $userId to be numeric ID or an identifying string (email or name)
         $user = DB::table('users as u')
-            ->where('u.id', (int) $userId)
-            ->where('u.role', 'quizee')
+            ->where('u.role', 'quizee');
+
+        if (ctype_digit(strval($userId))) {
+            $user = $user->where('u.id', (int) $userId);
+        } else {
+                        $user = $user->where(function ($q) use ($userId) {
+                                $q->where('u.email', $userId)
+                                    ->orWhere('u.name', $userId);
+                        });
+        }
+
+        $user = $user
             ->leftJoin('quizees as q', 'q.user_id', '=', 'u.id')
             ->leftJoin('grades as g', 'g.id', '=', 'q.grade_id')
             ->leftJoin('levels as l', 'l.id', '=', 'q.level_id')
