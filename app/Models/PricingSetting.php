@@ -36,6 +36,12 @@ class PricingSetting extends Model
      */
     public static function singleton()
     {
-        return static::firstOrCreate([], []);
+        // Prefer the most recently updated pricing setting (admin may create multiple records).
+        // If none exists, create an empty record.
+        $record = static::orderByDesc('updated_at')->first();
+        if ($record) {
+            return $record;
+        }
+        return static::create([]);
     }
 }

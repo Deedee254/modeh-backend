@@ -763,9 +763,17 @@ class AdminController extends Controller
         $tournaments = $query->orderBy('start_date', 'desc')
             ->skip(($page - 1) * $limit)
             ->take($limit)
-            ->with(['subject', 'topic', 'grade', 'createdBy'])
+            ->with([
+                'subject:id,name',
+                'topic:id,name',
+                'grade:id,name',
+                'creator:id,name',
+            ])
+            ->withCount('participants')
             ->get()
             ->map(function ($tournament) {
+                $participantCount = (int) ($tournament->participants_count ?? 0);
+
                 return [
                     'id' => $tournament->id,
                     'name' => $tournament->name,
@@ -773,14 +781,15 @@ class AdminController extends Controller
                     'status' => $tournament->status,
                     'start_date' => $tournament->start_date,
                     'end_date' => $tournament->end_date,
-                    'prize_pool' => (float) $tournament->prize_pool,
-                    'entry_fee' => (float) $tournament->entry_fee,
+                    'prize_pool' => (float) ($tournament->prize_pool ?? 0),
+                    'entry_fee' => (float) ($tournament->entry_fee ?? 0),
                     'max_participants' => $tournament->max_participants,
-                    'participant_count' => $tournament->participants->count(),
+                    'participant_count' => $participantCount,
+                    'participants_count' => $participantCount,
                     'subject' => $tournament->subject?->name,
                     'topic' => $tournament->topic?->name,
                     'grade' => $tournament->grade?->name,
-                    'created_by' => $tournament->createdBy?->name,
+                    'created_by' => $tournament->creator?->name,
                 ];
             });
 
@@ -874,5 +883,6 @@ class AdminController extends Controller
         ]);
     }
 }
+
 
 
