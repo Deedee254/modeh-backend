@@ -589,9 +589,13 @@ class AdminController extends Controller
      */
     public function settings(Request $request)
     {
-        $user = auth()->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        // Allow public GET of settings (read-only) so clients can read defaults.
+        // Require admin only for updates (POST/PUT).
+        if ($request->method() !== 'GET') {
+            $user = auth()->user();
+            if (!$user || !$user->is_admin) {
+                return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+            }
         }
 
         // GET settings

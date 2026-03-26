@@ -161,6 +161,9 @@ Route::post('/invitations/claim', [\App\Http\Controllers\Api\InvitationControlle
 // Accept tokens via query param for frontend landing pages
 Route::get('/invitations/validate', [\App\Http\Controllers\Api\InvitationController::class, 'validateToken']);
 
+// Public GET for admin settings (read-only defaults) so frontend can load platform defaults without auth
+Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
+
 Route::middleware(['auth:sanctum'])->group(function () {
     // Institution creation (authenticated users become institution-manager)
     Route::post('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'store']);
