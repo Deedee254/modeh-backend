@@ -23,7 +23,7 @@ class MpesaService
             'till_number' => null,
             'passkey' => null,
             'callback_url' => null,
-        ], $config);
+        ], config('services.mpesa', []), $config);
         
         // Trim whitespace from string config values
         foreach (['consumer_key', 'consumer_secret', 'shortcode', 'till_number', 'passkey', 'callback_url'] as $key) {

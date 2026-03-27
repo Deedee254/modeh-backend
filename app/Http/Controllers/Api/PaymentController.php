@@ -783,6 +783,8 @@ class PaymentController extends Controller
                 'qm_commission_rate' => $qmCommissionRate,
                 'gateway' => $mpesaService->gateway ?? 'mpesa',
                 'tx_id' => $txId,
+                'item_id' => $sub->package_id,
+                'item_type' => 'subscription',
                 'description' => "Subscription payment: {$packageName}",
             ]);
 
@@ -901,6 +903,10 @@ class PaymentController extends Controller
                 'qm_commission_rate' => $qmCommissionRate,
                 'gateway' => $purchase->gateway ?? 'mpesa',
                 'tx_id' => $txId,
+                'attempt_id' => $purchase->meta['attempt_id'] ?? null,
+                'purchase_id' => $purchase->id,
+                'item_id' => $purchase->item_id,
+                'item_type' => 'quiz',
                 'description' => 'One-off quiz purchase',
             ]);
 
@@ -1087,6 +1093,9 @@ class PaymentController extends Controller
                 'quiz_id' => null,
                 'qm_commission_rate' => $qmCommissionRate,
                 'gateway' => $purchase->gateway ?? 'mpesa',
+                'purchase_id' => $purchase->id,
+                'item_id' => $purchase->item_id,
+                'item_type' => 'tournament',
                 'tx_id' => $txId,
                 'description' => "Tournament entry fee for \"{$tournament->name}\"",
             ]);
@@ -1131,6 +1140,10 @@ class PaymentController extends Controller
                 'qm_commission_rate' => $qmCommissionRate,
                 'gateway' => $purchase->gateway ?? 'mpesa',
                 'tx_id' => $txId,
+                'attempt_id' => $purchase->meta['attempt_id'] ?? null,
+                'purchase_id' => $purchase->id,
+                'item_id' => $purchase->item_id,
+                'item_type' => $purchase->item_type,
                 'description' => "One-off {$purchase->item_type} purchase",
             ]);
 

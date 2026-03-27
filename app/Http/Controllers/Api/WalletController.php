@@ -8,6 +8,7 @@ use App\Models\Wallet;
 use App\Models\Transaction;
 use App\Models\WithdrawalRequest;
 use App\Models\User;
+use App\Models\Quiz;
 use App\Services\TransactionService;
 use App\Services\WalletService;
 use Illuminate\Support\Facades\Auth;
@@ -414,17 +415,14 @@ class WalletController extends Controller
 
         $query = Transaction::query();
 
-        // Filter by type if provided
         if ($request->filled('type')) {
             $query->where('type', $request->type);
         }
 
-        // Filter by status if provided
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        // Filter by date range if provided
         if ($request->filled('from')) {
             $query->where('created_at', '>=', $request->from);
         }
@@ -432,7 +430,6 @@ class WalletController extends Controller
             $query->where('created_at', '<=', $request->to);
         }
 
-        // Pagination
         $perPage = (int)$request->input('per_page', 20);
         $perPage = $perPage > 0 ? $perPage : 20;
 
@@ -440,12 +437,67 @@ class WalletController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate($perPage);
 
+        $transactions->getCollection()->transform(function ($tx) {
+            $meta = is_array($tx->meta) ? $tx->meta : [];
+            $resolvedType = $tx->type
+                ?? ($meta['type'] ?? null)
+                ?? (($tx->quiz_master_share ?? 0) > 0 || ($tx->platform_share ?? 0) > 0 ? Transaction::TYPE_PAYMENT : null)
+                ?? 'unknown';
+
+            $resolvedQuiz = $tx->quiz;
+            if (!$resolvedQuiz && ($meta['item_type'] ?? null) === 'quiz' && !empty($meta['item_id'])) {
+                $resolvedQuiz = Quiz::find($meta['item_id']);
+            }
+
+            $resolvedQuizMaster = $tx->quizMaster;
+            if (!$resolvedQuizMaster && $resolvedQuiz?->user_id) {
+                $resolvedQuizMaster = User::find($resolvedQuiz->user_id);
+            }
+
+            return [
+                'id' => $tx->id,
+                'tx_id' => $tx->tx_id,
+                'type' => $resolvedType,
+                'raw_type' => $tx->type,
+                'amount' => (float) ($tx->amount ?? 0),
+                'status' => $tx->status,
+                'description' => $tx->description,
+                'balance_after' => $tx->balance_after !== null ? (float) $tx->balance_after : null,
+                'gateway' => $tx->gateway,
+                'platform_share' => (float) ($tx->platform_share ?? 0),
+                'quiz_master_share' => (float) ($tx->quiz_master_share ?? 0),
+                'affiliate_share' => (float) ($tx->affiliate_share ?? 0),
+                'meta' => $meta,
+                'user' => $tx->user ? [
+                    'id' => $tx->user->id,
+                    'name' => $tx->user->name,
+                    'email' => $tx->user->email,
+                ] : null,
+                'quiz' => $resolvedQuiz ? [
+                    'id' => $resolvedQuiz->id,
+                    'title' => $resolvedQuiz->title,
+                    'slug' => $resolvedQuiz->slug,
+                ] : null,
+                'quiz_master' => $resolvedQuizMaster ? [
+                    'id' => $resolvedQuizMaster->id,
+                    'name' => $resolvedQuizMaster->name,
+                    'email' => $resolvedQuizMaster->email,
+                ] : null,
+                'quiz-master_id' => $resolvedQuizMaster?->id ?? $tx->{'quiz-master_id'},
+                'resolved' => [
+                    'type' => $resolvedType,
+                    'quiz_master_source' => $tx->quizMaster ? 'transaction' : ($resolvedQuizMaster ? 'quiz_owner' : null),
+                    'quiz_source' => $tx->quiz ? 'transaction' : ($resolvedQuiz ? 'meta.item_id' : null),
+                ],
+                'created_at' => $tx->created_at,
+            ];
+        });
+
         return response()->json([
             'ok' => true,
             'transactions' => $transactions
         ]);
     }
-
     // Admin: Pending settlements for quiz masters
     public function pendingSettlements(Request $request)
     {
@@ -506,7 +558,9 @@ class WalletController extends Controller
                             'user_id' => $wallet->user_id,
                             'quiz-master_id' => $wallet->user_id,
                             'amount' => $pending,
-                            'status' => 'settlement',
+                            'type' => Transaction::TYPE_SETTLEMENT,
+                            'status' => Transaction::STATUS_COMPLETED,
+                            'description' => 'Admin bulk settlement',
                             'meta' => [
                                 'type' => 'admin_bulk_settlement',
                                 'settled_at' => now(),
@@ -567,7 +621,9 @@ class WalletController extends Controller
                     'user_id' => $userId,
                     'quiz-master_id' => $userId,
                     'amount' => $toSettle,
-                    'status' => 'settlement',
+                    'type' => Transaction::TYPE_SETTLEMENT,
+                    'status' => Transaction::STATUS_COMPLETED,
+                    'description' => 'Admin settlement',
                     'meta' => [
                         'type' => 'admin_settlement',
                         'settled_at' => now(),
@@ -636,9 +692,19 @@ class WalletController extends Controller
         }
 
         try {
-            $query = Transaction::where('type', Transaction::TYPE_PAYMENT);
+            $query = Transaction::query()
+                ->where(function ($q) {
+                    $q->where('type', Transaction::TYPE_PAYMENT)
+                      ->orWhere(function ($nested) {
+                          $nested->whereNull('type')
+                              ->where(function ($shares) {
+                                  $shares->where('platform_share', '>', 0)
+                                      ->orWhere('quiz-master_share', '>', 0)
+                                      ->orWhere('affiliate_share', '>', 0);
+                              });
+                      });
+                });
 
-            // Date filters
             if ($request->filled('from')) {
                 $query->where('created_at', '>=', $request->from);
             }
@@ -646,12 +712,10 @@ class WalletController extends Controller
                 $query->where('created_at', '<=', $request->to);
             }
 
-            // Status filter
             if ($request->filled('status')) {
                 $query->where('status', $request->status);
             }
 
-            // Search by tx_id or quiz name
             if ($request->filled('search')) {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
@@ -669,33 +733,56 @@ class WalletController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->paginate($perPage);
 
-            // Add flow summary to each transaction
             $transactions->getCollection()->transform(function ($tx) {
+                $meta = is_array($tx->meta) ? $tx->meta : [];
+                $resolvedType = $tx->type
+                    ?? ($meta['type'] ?? null)
+                    ?? (($tx->quiz_master_share ?? 0) > 0 || ($tx->platform_share ?? 0) > 0 ? Transaction::TYPE_PAYMENT : null)
+                    ?? 'unknown';
+
+                $resolvedQuiz = $tx->quiz;
+                if (!$resolvedQuiz && ($meta['item_type'] ?? null) === 'quiz' && !empty($meta['item_id'])) {
+                    $resolvedQuiz = Quiz::find($meta['item_id']);
+                }
+
+                $resolvedQuizMaster = $tx->quizMaster;
+                if (!$resolvedQuizMaster && $resolvedQuiz?->user_id) {
+                    $resolvedQuizMaster = User::find($resolvedQuiz->user_id);
+                }
+
                 return [
                     'id' => $tx->id,
                     'tx_id' => $tx->tx_id,
-                    'amount' => (float)$tx->amount,
-                    'affiliate_share' => (float)($tx->affiliate_share ?? 0),
-                    'quiz_master_share' => (float)($tx->quiz_master_share ?? 0),
-                    'platform_share' => (float)($tx->platform_share ?? 0),
+                    'type' => $resolvedType,
+                    'raw_type' => $tx->type,
+                    'amount' => (float) $tx->amount,
+                    'affiliate_share' => (float) ($tx->affiliate_share ?? 0),
+                    'quiz_master_share' => (float) ($tx->quiz_master_share ?? 0),
+                    'platform_share' => (float) ($tx->platform_share ?? 0),
                     'status' => $tx->status,
                     'gateway' => $tx->gateway,
                     'quiz' => [
-                        'id' => $tx->quiz?->id,
-                        'title' => $tx->quiz?->title,
+                        'id' => $resolvedQuiz?->id,
+                        'title' => $resolvedQuiz?->title,
                     ],
                     'quiz_master' => [
-                        'id' => $tx->quizMaster?->id,
-                        'name' => $tx->quizMaster?->name,
-                        'email' => $tx->quizMaster?->email,
+                        'id' => $resolvedQuizMaster?->id,
+                        'name' => $resolvedQuizMaster?->name,
+                        'email' => $resolvedQuizMaster?->email,
                     ],
+                    'quiz-master_id' => $resolvedQuizMaster?->id ?? $tx->{'quiz-master_id'},
                     'user' => [
                         'id' => $tx->user?->id,
                         'name' => $tx->user?->name,
                         'email' => $tx->user?->email,
                     ],
                     'created_at' => $tx->created_at,
-                    'meta' => $tx->meta,
+                    'meta' => $meta,
+                    'resolved' => [
+                        'type' => $resolvedType,
+                        'quiz_master_source' => $tx->quizMaster ? 'transaction' : ($resolvedQuizMaster ? 'quiz_owner' : null),
+                        'quiz_source' => $tx->quiz ? 'transaction' : ($resolvedQuiz ? 'meta.item_id' : null),
+                    ],
                 ];
             });
 
@@ -707,7 +794,6 @@ class WalletController extends Controller
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
         }
     }
-
     // Admin: Get platform financial summary
     public function platformSummary()
     {
@@ -1192,3 +1278,7 @@ class WalletController extends Controller
         }
     }
 }
+
+
+
+
