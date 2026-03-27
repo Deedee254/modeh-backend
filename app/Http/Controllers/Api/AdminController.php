@@ -618,28 +618,6 @@ class AdminController extends Controller
                 $defaultQuizPrice = 0.0;
             }
 
-            if ($defaultQuizPrice <= 0) {
-                $legacyQuizPrice = DB::table('settings')->where('key', 'default_quiz_price')->value('value');
-                if (!is_null($legacyQuizPrice)) {
-                    $decodedLegacyQuizPrice = json_decode($legacyQuizPrice, true);
-                    $defaultQuizPrice = (float) ($decodedLegacyQuizPrice ?? $legacyQuizPrice);
-
-                    if ($defaultQuizPrice > 0) {
-                        try {
-                            $pricing = \App\Models\PricingSetting::singleton();
-                            $pricing->default_quiz_one_off_price = $defaultQuizPrice;
-                            $pricing->save();
-                        } catch (\Throwable $e) {
-                            // Keep serving the legacy value even if backfill fails.
-                        }
-                    }
-                }
-            }
-
-            if ($defaultQuizPrice <= 0) {
-                $defaultQuizPrice = (float) config('features.default_quiz_price', 10.0);
-            }
-
             return response()->json([
                 'ok' => true,
                 'settings' => [
@@ -694,11 +672,6 @@ class AdminController extends Controller
                 $pricing = \App\Models\PricingSetting::singleton();
                 $pricing->default_quiz_one_off_price = (float) $validated['default_quiz_price'];
                 $pricing->save();
-
-                DB::table('settings')->updateOrInsert(
-                    ['key' => 'default_quiz_price'],
-                    ['value' => json_encode($validated['default_quiz_price'])]
-                );
             }
 
             if (isset($validated['default_quiz_time_limit'])) {
@@ -715,7 +688,7 @@ class AdminController extends Controller
                     'revenue_share' => (float) ($validated['revenue_share'] ?? 60.0),
                     'approvals_enabled' => (boolean) ($validated['approvals_enabled'] ?? true),
                     'mpesa_active' => (boolean) ($validated['mpesa_active'] ?? true),
-                    'default_quiz_price' => (float) ($validated['default_quiz_price'] ?? 10.0),
+                    'default_quiz_price' => (float) ($validated['default_quiz_price'] ?? ($pricing->default_quiz_one_off_price ?? 0)),
                     'default_quiz_time_limit' => (integer) ($validated['default_quiz_time_limit'] ?? 30),
                 ],
             ]);
