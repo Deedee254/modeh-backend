@@ -508,7 +508,25 @@ class AuthController extends Controller
 
         // Attempt to authenticate with persistent login (remember = true)
         if (! Auth::attempt($credentials, true)) {
-            Log::warning('Login attempt failed', ['email' => $credentials['email'], 'ip' => $request->ip()]);
+            // Detailed local-only diagnostics to help debug frequent login failures.
+            try {
+                $user = \App\Models\User::where('email', $credentials['email'])->first();
+                if ($user) {
+                    $passwordMatches = \Illuminate\Support\Facades\Hash::check($credentials['password'], $user->password);
+                    Log::warning('Login attempt failed - user exists', [
+                        'email' => $credentials['email'],
+                        'ip' => $request->ip(),
+                        'user_id' => $user->id,
+                        'password_matches' => $passwordMatches,
+                        'session_id' => $request->session()->getId(),
+                    ]);
+                } else {
+                    Log::warning('Login attempt failed - user not found', ['email' => $credentials['email'], 'ip' => $request->ip(), 'session_id' => $request->session()->getId()]);
+                }
+            } catch (\Throwable $e) {
+                Log::error('Error during login diagnostic logging', ['error' => $e->getMessage()]);
+            }
+
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 

@@ -45,6 +45,8 @@ Route::bind('grade', function ($value) {
     return \App\Models\Grade::where('slug', $value)->firstOrFail();
 });
 
+// [Debug routes removed]
+
 // Registration routes must use 'web' middleware to establish session cookies for authentication
 // This ensures Auth::login() and session state are available during registration
 Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->middleware('web', 'throttle:5,1');
@@ -185,6 +187,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Institution member management endpoints
     Route::post('/institutions/{institution}/assignment/revoke', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'revokeAssignment']);
+    // Public institution members endpoint (accessible to authenticated users)
+    Route::get('/institutions/{id}/members', [\App\Http\Controllers\Api\InstitutionController::class, 'members']);
     // Direct invitations
     Route::post('/institutions/{institution}/members/invite', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'invite']);
     // Generate an invite token (no email sent) so frontend can compose and send the invite link
@@ -389,7 +393,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 
     // Admin Frontend Dashboard API
-    Route::middleware(['auth:sanctum'])->group(function () {
+    Route::middleware(['can:viewFilament'])->group(function () {
         Route::get('/admin/metrics', [\App\Http\Controllers\Api\AdminController::class, 'metrics']);
         Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminController::class, 'transactions']);
 	        Route::get('/admin/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
@@ -399,7 +403,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 	        Route::get('/admin/quiz-masters/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'userInsights']);
 	        Route::get('/admin/quiz-analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
 	        Route::get('/admin/quizzes/analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
-	        Route::get('/admin/quizzes/slug/{slug}/insights', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'insightsBySlug']);
+	        Route::get('/admin/quizzes/{slug}', [\App\Http\Controllers\Api\QuizController::class, 'show']);
+	        Route::get('/admin/quizzes/{slug}/insights', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'insightsBySlug']);
 	        Route::get('/admin/withdrawals', [\App\Http\Controllers\Api\AdminController::class, 'withdrawals']);
 	        Route::post('/admin/withdrawals/{id}/approve', [\App\Http\Controllers\Api\AdminController::class, 'approveWithdrawal']);
 	        Route::post('/admin/withdrawals/{id}/reject', [\App\Http\Controllers\Api\AdminController::class, 'rejectWithdrawal']);
@@ -435,9 +440,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/admin/institution-requests/{id}/approve', [\App\Http\Controllers\Api\InstitutionController::class, 'approveRequest']);
         Route::post('/admin/institution-requests/{id}/reject', [\App\Http\Controllers\Api\InstitutionController::class, 'rejectRequest']);
         Route::get('/admin/institution-metrics', [\App\Http\Controllers\Api\InstitutionController::class, 'adminMetrics']);
-
-        // Public institution members endpoint (accessible to authenticated users)
-        Route::get('/institutions/{id}/members', [\App\Http\Controllers\Api\InstitutionController::class, 'members']);
 
         // Wallet & Finance Routes
         Route::get('/admin/wallet/metrics', [\App\Http\Controllers\Api\WalletController::class, 'adminMetrics']);

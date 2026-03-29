@@ -131,10 +131,15 @@ class LevelController extends Controller
         // existing route `/api/levels/{level}` working for both id and slug.
         // Resolve the Level model accordingly.
         try {
-            if (is_numeric($levelParam)) {
-                $level = Level::findOrFail($levelParam);
+            // If the route binding already resolved a Level instance, use it.
+            if ($levelParam instanceof Level) {
+                $level = $levelParam;
             } else {
-                $level = Level::where('slug', $levelParam)->firstOrFail();
+                if (is_numeric($levelParam)) {
+                    $level = Level::findOrFail($levelParam);
+                } else {
+                    $level = Level::where('slug', $levelParam)->firstOrFail();
+                }
             }
         } catch (\Exception $e) {
             return response()->json(['message' => 'Level not found'], 404);
