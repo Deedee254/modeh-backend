@@ -45,7 +45,7 @@ class QuizResource extends JsonResource
             ],
             'is_paid' => $this->is_paid,
             'one_off_price' => $this->one_off_price,
-            'default_quiz_one_off_price' => $this->getDefaultQuizPrice(),
+            'price' => $this->resolveQuizOneOffPrice(),
             'timer_seconds' => $this->timer_seconds,
             'per_question_seconds' => $this->per_question_seconds,
             'use_per_question_timer' => $this->use_per_question_timer,
@@ -104,6 +104,24 @@ class QuizResource extends JsonResource
             return (float) ($setting->default_quiz_one_off_price ?? 0) ?: null;
         } catch (\Throwable $e) {
             return null;
+        }
+    }
+
+    /**
+     * Resolve the final one-off price for this quiz.
+     * Returns a float (0.0 if no price configured).
+     */
+    private function resolveQuizOneOffPrice(): float
+    {
+        if (!is_null($this->one_off_price) && (float) $this->one_off_price > 0) {
+            return (float) $this->one_off_price;
+        }
+
+        try {
+            $setting = \App\Models\PricingSetting::singleton();
+            return (float) ($setting->default_quiz_one_off_price ?? 0);
+        } catch (\Throwable $e) {
+            return 0.0;
         }
     }
 }
