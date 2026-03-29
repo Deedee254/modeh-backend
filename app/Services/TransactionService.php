@@ -41,6 +41,13 @@ class TransactionService
             $affiliateShare = 0;
             $quizMasterShare = 0;
             $platformShare = $amount;
+            $platformWallet = Wallet::firstOrCreate(
+                ['user_id' => 0, 'type' => Wallet::TYPE_PLATFORM],
+                ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+            );
+            if (!$platformWallet->type) {
+                $platformWallet->type = Wallet::TYPE_PLATFORM;
+            }
 
             if ($referralCode) {
                 $affiliate = \App\Models\Affiliate::where('referral_code', $referralCode)->first();
@@ -146,6 +153,10 @@ class TransactionService
                 ]);
             }
 
+            $platformWallet->available = bcadd((string) ($platformWallet->available ?? 0), (string) $platformShare, 2);
+            $platformWallet->lifetime_earned = bcadd((string) ($platformWallet->lifetime_earned ?? 0), (string) $platformShare, 2);
+            $platformWallet->save();
+
             $mainTransaction = Transaction::create([
                 'tx_id' => $txId,
                 'user_id' => $userId,
@@ -160,7 +171,7 @@ class TransactionService
                 'status' => Transaction::STATUS_COMPLETED,
                 'description' => $paymentData['description'] ?? 'Payment received',
                 'reference_id' => $txId,
-                'balance_after' => $platformShare,
+                'balance_after' => (float) ($platformWallet->available ?? 0),
                 'meta' => [
                     'affiliate_share' => (float) $affiliateShare,
                     'qm_share' => (float) $quizMasterShare,
@@ -422,4 +433,7 @@ class TransactionService
         ];
     }
 }
+
+
+
 

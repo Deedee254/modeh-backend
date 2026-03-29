@@ -770,8 +770,7 @@ class PaymentController extends Controller
             $referralCode = $affiliateReferral?->affiliate?->code;
 
             // Get quiz-master commission rate from payment settings (default 60%)
-            $paymentSetting = PaymentSetting::first();
-            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+            $qmCommissionRate = 100.0 - $this->getPlatformSharePercentage();
 
             $packageName = $sub->package->name ?? 'Package';
             $result = $this->transactionService->processPayment([
@@ -891,8 +890,7 @@ class PaymentController extends Controller
             $referralCode = $affiliateReferral?->affiliate?->code;
 
             // Get quiz-master commission rate from payment settings (default 60%)
-            $paymentSetting = PaymentSetting::first();
-            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+            $qmCommissionRate = 100.0 - $this->getPlatformSharePercentage();
 
             $result = $this->transactionService->processPayment([
                 'user_id' => $purchase->user_id,
@@ -1080,8 +1078,7 @@ class PaymentController extends Controller
             $referralCode = $affiliateReferral?->affiliate?->referral_code;
 
             // Get quiz-master commission rate from payment settings (default 60%)
-            $paymentSetting = PaymentSetting::first();
-            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+            $qmCommissionRate = 100.0 - $this->getPlatformSharePercentage();
 
             // Process payment through TransactionService
             // Tournament creator is the "quiz master" who receives commission
@@ -1129,8 +1126,7 @@ class PaymentController extends Controller
             $referralCode = $affiliateReferral?->affiliate?->code;
 
             // Get quiz-master commission rate from payment settings (default 60%)
-            $paymentSetting = PaymentSetting::first();
-            $qmCommissionRate = $paymentSetting?->revenue_share ?? 60;
+            $qmCommissionRate = 100.0 - $this->getPlatformSharePercentage();
 
             // Process payment through TransactionService
             $result = $this->transactionService->processPayment([
@@ -1470,3 +1466,5 @@ class PaymentController extends Controller
     }
 
 }
+
+
