@@ -42,9 +42,12 @@ use App\Policies\QuizPolicy;
         Gate::policy(Quiz::class, QuizPolicy::class);
         Gate::policy(Tournament::class, TournamentPolicy::class);
         Gate::define('viewFilament', function ($user = null) {
-            // Only allow authenticated admin users to access Filament.
-            // Filament will automatically redirect unauthenticated users to /admin/login.
-            return $user && $user->role === 'admin';
+            // Keep admin API + panel access aligned with the rest of the app's admin checks.
+            return (bool) ($user && (
+                (($user->role ?? null) === 'admin')
+                || (method_exists($user, 'isAdmin') && $user->isAdmin())
+                || ($user->is_admin ?? false)
+            ));
         });
 
         // Register observers to broadcast gamification events
