@@ -272,10 +272,6 @@ class TestTransactionShares extends Command
      */
     private function getPlatformSharePercentage(): float
     {
-        $setting = \App\Models\PaymentSetting::where('gateway', 'mpesa')->first();
-        if ($setting && $setting->revenue_share !== null) {
-            return (float) $setting->revenue_share;
-        }
-        return 60.0; // default: 60% to platform
+        return \App\Models\PaymentSetting::platformRevenueSharePercent();
     }
 }

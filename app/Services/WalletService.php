@@ -424,7 +424,6 @@ class WalletService
      * @param float $amount Total amount from quizee payment
      * @param string|null $referralCode Affiliate referral code (optional)
      * @param int|null $quizId Quiz ID reference
-     * @param float $qmCommissionRate QM commission percentage (default 60%)
      * @return array Distribution summary
      */
     public static function processQuizPayout(
@@ -432,15 +431,14 @@ class WalletService
         float $amount,
         ?string $referralCode = null,
         ?int $quizId = null,
-        float $qmCommissionRate = 60
     ): array {
         return DB::transaction(function () use (
             $quizMasterId,
             $amount,
             $referralCode,
             $quizId,
-            $qmCommissionRate
         ) {
+            $qmCommissionRate = \App\Models\PaymentSetting::quizMasterRevenueSharePercent();
             $distribution = [];
             $remaining = $amount;
 
@@ -494,7 +492,7 @@ class WalletService
                 }
             }
 
-            // 3. Pay quiz master from remaining (60% of what's left after affiliate)
+            // 3. Pay quiz master: configured quiz-master share % of gross (after affiliate), from payment_settings
             $qmShare = bcmul($remaining, bcdiv($qmCommissionRate, 100, 4), 2);
             $remaining = bcsub($remaining, $qmShare, 2);
 

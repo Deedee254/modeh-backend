@@ -432,16 +432,13 @@ class PaymentController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        // Guest purchases do not produce user-linked transactions/invoices.
-        if ($purchase->user_id) {
-            // Dispatch based on item type
-            match ($purchase->item_type) {
-                'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-                'battle' => $this->createTransactionForBattle($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-                'tournament' => $this->createTransactionForTournament($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-                default => $this->createGenericTransaction($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-            };
-        }
+        // Revenue split (platform vs quiz master, etc.) always runs; invoices stay user-linked only below.
+        match ($purchase->item_type) {
+            'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+            'battle' => $this->createTransactionForBattle($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+            'tournament' => $this->createTransactionForTournament($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+            default => $this->createGenericTransaction($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+        };
 
         // Update tournament participant if applicable
         if ($purchase->item_type === 'tournament') {
@@ -767,10 +764,7 @@ class PaymentController extends Controller
         try {
             // Get affiliate referral if user is referred
             $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $sub->user_id)->first();
-            $referralCode = $affiliateReferral?->affiliate?->code;
-
-            // Get quiz-master commission rate from payment settings (default 60%)
-            $qmCommissionRate = 100.0 - $this->getPlatformSharePercentage();
+            $referralCode = $affiliateReferral?->affiliate?->referral_code;
 
             $packageName = $sub->package->name ?? 'Package';
             $result = $this->transactionService->processPayment([
@@ -779,7 +773,6 @@ class PaymentController extends Controller
                 'referral_code' => $referralCode,
                 'quiz_id' => $quizId,
                 'quiz_master_id' => $quizMasterId,
-                'qm_commission_rate' => $qmCommissionRate,
                 'gateway' => $mpesaService->gateway ?? 'mpesa',
                 'tx_id' => $txId,
                 'item_id' => $sub->package_id,
@@ -880,17 +873,16 @@ class PaymentController extends Controller
         $quizMasterId = null;
         $quiz = \App\Models\Quiz::find($purchase->item_id);
         if ($quiz) {
-            $quizMasterId = $quiz->user_id ?? null;
+            $quizMasterId = $quiz->user_id ?? $quiz->created_by;
         }
 
         // Use TransactionService for atomic payment distribution
         try {
-            // Get affiliate referral if user is referred
-            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first();
-            $referralCode = $affiliateReferral?->affiliate?->code;
-
-            // Get quiz-master commission rate from payment settings (default 60%)
-            $qmCommissionRate = 100.0 - $this->getPlatformSharePercentage();
+            // Get affiliate referral if payer is a registered user and was referred
+            $affiliateReferral = $purchase->user_id
+                ? \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first()
+                : null;
+            $referralCode = $affiliateReferral?->affiliate?->referral_code;
 
             $result = $this->transactionService->processPayment([
                 'user_id' => $purchase->user_id,
@@ -898,7 +890,6 @@ class PaymentController extends Controller
                 'referral_code' => $referralCode,
                 'quiz_id' => $purchase->item_id,
                 'quiz_master_id' => $quizMasterId,
-                'qm_commission_rate' => $qmCommissionRate,
                 'gateway' => $purchase->gateway ?? 'mpesa',
                 'tx_id' => $txId,
                 'attempt_id' => $purchase->meta['attempt_id'] ?? null,
@@ -959,6 +950,15 @@ class PaymentController extends Controller
 	            $unassigned = $split['unassigned'];
 
 	            \DB::transaction(function () use ($purchase, $txId, $amount, $platformShare, $totalQuizMasterShare, $battle, $questionCount, $owners, $unassigned) {
+	                $platformWallet = \App\Models\Wallet::firstOrCreate(
+	                    ['user_id' => 0, 'type' => \App\Models\Wallet::TYPE_PLATFORM],
+	                    ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+	                );
+	                $platformCredit = round((float) $platformShare + (float) $unassigned, 2);
+	                $platformWallet->available = bcadd((string) ($platformWallet->available ?? 0), (string) $platformCredit, 2);
+	                $platformWallet->lifetime_earned = bcadd((string) ($platformWallet->lifetime_earned ?? 0), (string) $platformCredit, 2);
+	                $platformWallet->save();
+
 	                // Audit transaction (platform-level). Not tied to a specific quiz master.
 	                \App\Models\Transaction::create([
 	                    'tx_id' => $txId,
@@ -1073,12 +1073,10 @@ class PaymentController extends Controller
                 return $this->createGenericTransaction($purchase, $txId, $amount, $quizMasterShare, $platformShare);
             }
 
-            // Get affiliate referral if user is referred
-            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first();
+            $affiliateReferral = $purchase->user_id
+                ? \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first()
+                : null;
             $referralCode = $affiliateReferral?->affiliate?->referral_code;
-
-            // Get quiz-master commission rate from payment settings (default 60%)
-            $qmCommissionRate = 100.0 - $this->getPlatformSharePercentage();
 
             // Process payment through TransactionService
             // Tournament creator is the "quiz master" who receives commission
@@ -1088,7 +1086,6 @@ class PaymentController extends Controller
                 'referral_code' => $referralCode,
                 'quiz_master_id' => $tournament->created_by, // Tournament creator is the "quiz master"
                 'quiz_id' => null,
-                'qm_commission_rate' => $qmCommissionRate,
                 'gateway' => $purchase->gateway ?? 'mpesa',
                 'purchase_id' => $purchase->id,
                 'item_id' => $purchase->item_id,
@@ -1121,19 +1118,16 @@ class PaymentController extends Controller
     private function createGenericTransaction(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $quizMasterShare, float $platformShare)
     {
         try {
-            // Get affiliate referral if user is referred
-            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first();
-            $referralCode = $affiliateReferral?->affiliate?->code;
-
-            // Get quiz-master commission rate from payment settings (default 60%)
-            $qmCommissionRate = 100.0 - $this->getPlatformSharePercentage();
+            $affiliateReferral = $purchase->user_id
+                ? \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first()
+                : null;
+            $referralCode = $affiliateReferral?->affiliate?->referral_code;
 
             // Process payment through TransactionService
             $result = $this->transactionService->processPayment([
                 'user_id' => $purchase->user_id,
                 'amount' => $amount,
                 'referral_code' => $referralCode,
-                'qm_commission_rate' => $qmCommissionRate,
                 'gateway' => $purchase->gateway ?? 'mpesa',
                 'tx_id' => $txId,
                 'attempt_id' => $purchase->meta['attempt_id'] ?? null,
@@ -1329,11 +1323,7 @@ class PaymentController extends Controller
      */
     private function getPlatformSharePercentage(): float
     {
-        $setting = PaymentSetting::where('gateway', 'mpesa')->first();
-        if ($setting && $setting->revenue_share !== null) {
-            return (float) $setting->revenue_share;
-        }
-        return 60.0; // default: 60% to platform
+        return PaymentSetting::platformRevenueSharePercent();
     }
 
     /**

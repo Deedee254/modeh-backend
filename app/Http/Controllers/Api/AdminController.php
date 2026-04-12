@@ -59,8 +59,7 @@ class AdminController extends Controller
             ->where('status', 'pending')
             ->count();
 
-        // Get revenue share percentage
-        $revenueShare = (float) (PaymentSetting::where('gateway', 'mpesa')->first()?->revenue_share ?? 60.0);
+        $revenueShare = (float) PaymentSetting::platformRevenueSharePercent();
 
         return response()->json([
             'ok' => true,
@@ -600,13 +599,10 @@ class AdminController extends Controller
 
         // GET settings
         if ($request->method() === 'GET') {
-            $mpesaSetting = PaymentSetting::where('gateway', 'mpesa')->first();
-            if (!$mpesaSetting) {
-                $mpesaSetting = new PaymentSetting();
-                $mpesaSetting->gateway = 'mpesa';
-                $mpesaSetting->revenue_share = 60.0;
-                $mpesaSetting->is_active = true;
-            }
+            $mpesaSetting = PaymentSetting::query()->firstOrCreate(
+                ['gateway' => 'mpesa'],
+                ['revenue_share' => 0]
+            );
 
             $approvalsEnabled = config('features.quiz_approvals_enabled', true);
             $defaultQuizPrice = 0.0;
@@ -621,7 +617,7 @@ class AdminController extends Controller
             return response()->json([
                 'ok' => true,
                 'settings' => [
-                    'revenue_share' => (float) ($mpesaSetting->revenue_share ?? 60.0),
+                    'revenue_share' => (float) $mpesaSetting->revenue_share,
                     'approvals_enabled' => (boolean) $approvalsEnabled,
                     'mpesa_active' => (boolean) ($mpesaSetting->is_active ?? true),
                     'default_quiz_price' => $defaultQuizPrice,
@@ -648,7 +644,6 @@ class AdminController extends Controller
                     PaymentSetting::create([
                         'gateway' => 'mpesa',
                         'revenue_share' => $validated['revenue_share'],
-                        'is_active' => true,
                     ]);
                 }
             }
@@ -681,14 +676,21 @@ class AdminController extends Controller
                 );
             }
 
+            $mpesaForResponse = PaymentSetting::where('gateway', 'mpesa')->first();
+            $pricingSnapshot = null;
+            try {
+                $pricingSnapshot = \App\Models\PricingSetting::singleton();
+            } catch (\Throwable $e) {
+            }
+
             return response()->json([
                 'ok' => true,
                 'message' => 'Settings updated successfully',
                 'settings' => [
-                    'revenue_share' => (float) ($validated['revenue_share'] ?? 60.0),
+                    'revenue_share' => (float) ($validated['revenue_share'] ?? ($mpesaForResponse?->revenue_share ?? 0)),
                     'approvals_enabled' => (boolean) ($validated['approvals_enabled'] ?? true),
                     'mpesa_active' => (boolean) ($validated['mpesa_active'] ?? true),
-                    'default_quiz_price' => (float) ($validated['default_quiz_price'] ?? ($pricing->default_quiz_one_off_price ?? 0)),
+                    'default_quiz_price' => (float) ($validated['default_quiz_price'] ?? ($pricingSnapshot?->default_quiz_one_off_price ?? 0)),
                     'default_quiz_time_limit' => (integer) ($validated['default_quiz_time_limit'] ?? 30),
                 ],
             ]);

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Models\AffiliateReferral;
+use App\Models\PaymentSetting;
 use App\Models\Quiz;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -67,13 +68,15 @@ class TransactionService
                     $affiliateWallet->earned_from_affiliates = bcadd((string) ($affiliateWallet->earned_from_affiliates ?? 0), (string) $affiliateShare, 2);
                     $affiliateWallet->save();
 
-                    AffiliateReferral::create([
-                        'affiliate_id' => $affiliate->id,
-                        'user_id' => $userId,
-                        'type' => 'quiz_purchase',
-                        'earnings' => $affiliateShare,
-                        'status' => 'pending',
-                    ]);
+                    if ($userId) {
+                        AffiliateReferral::create([
+                            'affiliate_id' => $affiliate->id,
+                            'user_id' => $userId,
+                            'type' => 'quiz_purchase',
+                            'earnings' => $affiliateShare,
+                            'status' => 'pending',
+                        ]);
+                    }
 
                     Transaction::create([
                         'tx_id' => $txId ? "{$txId}-affiliate" : null,
@@ -101,7 +104,8 @@ class TransactionService
                 }
             }
 
-            $qmCommissionRate = (float) ($paymentData['qm_commission_rate'] ?? 60);
+            $platformPct = PaymentSetting::platformRevenueSharePercent();
+            $qmCommissionRate = PaymentSetting::quizMasterRevenueSharePercent();
             $qmWallet = null;
 
             if ($quizMasterId) {
@@ -144,6 +148,7 @@ class TransactionService
                     'balance_after' => $qmWallet->pending,
                     'meta' => [
                         'commission_rate' => $qmCommissionRate,
+                        'platform_revenue_share_pct' => $platformPct,
                         'source' => 'payment_distribution',
                         'item_type' => $itemType,
                         'item_id' => $itemId,
@@ -176,6 +181,7 @@ class TransactionService
                     'affiliate_share' => (float) $affiliateShare,
                     'qm_share' => (float) $quizMasterShare,
                     'platform_share' => (float) $platformShare,
+                    'platform_revenue_share_pct' => $platformPct,
                     'referral_code' => $referralCode,
                     'item_type' => $itemType,
                     'item_id' => $itemId,
@@ -210,7 +216,6 @@ class TransactionService
         int $quizAttemptId,
         float $amount,
         ?string $referralCode = null,
-        float $qmCommissionRate = 60
     ): array {
         return DB::transaction(function () use (
             $quizMasterId,
@@ -219,8 +224,8 @@ class TransactionService
             $quizAttemptId,
             $amount,
             $referralCode,
-            $qmCommissionRate
         ) {
+            $qmCommissionRate = PaymentSetting::quizMasterRevenueSharePercent();
             $distribution = [];
             $remaining = $amount;
 
