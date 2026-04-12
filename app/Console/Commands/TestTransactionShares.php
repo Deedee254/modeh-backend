@@ -138,7 +138,7 @@ class TestTransactionShares extends Command
             $transaction = Transaction::create([
                 'tx_id' => $txId,
                 'user_id' => auth()->id() ?? 1, // Use authenticated user or default to 1
-                'quiz-master_id' => $quizMasterId,
+                'quiz_master_id' => $quizMasterId,
                 'quiz_id' => $quiz->id,
                 'amount' => $amount,
                 'quiz-master_share' => $quizMasterShare,
@@ -193,13 +193,13 @@ class TestTransactionShares extends Command
         $this->table(
             ['Field', 'Expected', 'Actual', 'Status'],
             [
-                ['TX ID', $txId, $verifyTx->tx_id, $verifyTx->tx_id === $txId ? '✓' : '✗'],
-                ['Quiz-Master ID', $quizMasterId, $verifyTx->{'quiz-master_id'}, $verifyTx->{'quiz-master_id'} === $quizMasterId ? '✓' : '✗'],
-                ['Quiz ID', $quiz->id, $verifyTx->quiz_id, $verifyTx->quiz_id === $quiz->id ? '✓' : '✗'],
-                ['Total Amount', $amount, $verifyTx->amount, $verifyTx->amount === $amount ? '✓' : '✗'],
-                ['Quiz-Master Share', $quizMasterShare, $verifyTx->{'quiz-master_share'}, $verifyTx->{'quiz-master_share'} === $quizMasterShare ? '✓' : '✗'],
-                ['Platform Share', $platformShare, $verifyTx->platform_share, $verifyTx->platform_share === $platformShare ? '✓' : '✗'],
-                ['Status', Transaction::STATUS_COMPLETED, $verifyTx->status, $verifyTx->status === Transaction::STATUS_COMPLETED ? '✓' : '✗'],
+                ['TX ID', $txId, $verifyTx->tx_id, $verifyTx->tx_id === $txId ? 'âœ“' : 'âœ—'],
+                ['Quiz-Master ID', $quizMasterId, $verifyTx->{'quiz_master_id'}, $verifyTx->{'quiz_master_id'} === $quizMasterId ? 'âœ“' : 'âœ—'],
+                ['Quiz ID', $quiz->id, $verifyTx->quiz_id, $verifyTx->quiz_id === $quiz->id ? 'âœ“' : 'âœ—'],
+                ['Total Amount', $amount, $verifyTx->amount, $verifyTx->amount === $amount ? 'âœ“' : 'âœ—'],
+                ['Quiz-Master Share', $quizMasterShare, $verifyTx->{'quiz-master_share'}, $verifyTx->{'quiz-master_share'} === $quizMasterShare ? 'âœ“' : 'âœ—'],
+                ['Platform Share', $platformShare, $verifyTx->platform_share, $verifyTx->platform_share === $platformShare ? 'âœ“' : 'âœ—'],
+                ['Status', Transaction::STATUS_COMPLETED, $verifyTx->status, $verifyTx->status === Transaction::STATUS_COMPLETED ? 'âœ“' : 'âœ—'],
             ]
         );
         $this->newLine();
@@ -241,8 +241,8 @@ class TestTransactionShares extends Command
             ],
             [
                 'Transaction Column Names',
-                'Column names use hyphens (quiz-master_id)',
-                $verifyTx->{'quiz-master_id'} === $quizMasterId ? 'PASS' : 'FAIL',
+                'Column names use hyphens (quiz_master_id)',
+                $verifyTx->{'quiz_master_id'} === $quizMasterId ? 'PASS' : 'FAIL',
             ],
         ];
 
@@ -255,13 +255,13 @@ class TestTransactionShares extends Command
         $allPassed = collect($validations)->every(fn($v) => $v[2] === 'PASS');
         
         if ($allPassed) {
-            $this->info("✓ All tests PASSED!");
+            $this->info("âœ“ All tests PASSED!");
             $this->info("Quiz-Master {$quizMaster->name} has received KES {$quizMasterShare}");
             $this->info("Platform has received KES {$platformShare}");
             $this->info("Total distributed: KES {$amount}");
             return 0;
         } else {
-            $this->error("✗ Some tests FAILED!");
+            $this->error("âœ— Some tests FAILED!");
             $this->warn("Please review the results above.");
             return 1;
         }

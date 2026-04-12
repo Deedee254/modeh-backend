@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->string('tx_id')->nullable(); // external tx id
             $table->foreignId('user_id')->constrained()->onDelete('cascade'); // payer (quizee)
-            $table->foreignId('quiz-master_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('quiz_master_id')->nullable()->constrained('users')->onDelete('set null');
             $table->foreignId('quiz_id')->nullable()->constrained()->onDelete('set null');
             $table->decimal('amount', 12, 2);
             $table->decimal('quiz-master_share', 12, 2)->default(0);

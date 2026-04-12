@@ -603,7 +603,7 @@ class AffiliateController extends Controller
                 // Log the settlement transaction
                 \App\Models\Transaction::create([
                     'user_id' => $affiliate->user_id,
-                    'quiz-master_id' => $affiliate->user_id,
+                    'quiz_master_id' => $affiliate->user_id,
                     'amount' => $pendingEarnings,
                     'status' => 'settlement',
                     'meta' => [

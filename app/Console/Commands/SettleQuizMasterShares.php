@@ -39,14 +39,14 @@ class SettleQuizMasterShares extends Command
             $this->newLine();
         }
 
-        // Find transactions where quiz-master_id is NULL but should have been credited
+        // Find transactions where quiz_master_id is NULL but should have been credited
         $query = Transaction::whereNotNull('quiz_id')
             ->where('status', Transaction::STATUS_COMPLETED)
             ->where('quiz-master_share', '>', 0);
 
-        // Check for NULL quiz-master_id
+        // Check for NULL quiz_master_id
         $query->where(function ($q) {
-            $q->whereNull('quiz-master_id');
+            $q->whereNull('quiz_master_id');
         });
 
         if ($userId) {
@@ -88,7 +88,7 @@ class SettleQuizMasterShares extends Command
             }
             $settledByUser[$quizMasterId] += $amount;
 
-            $this->line("Transaction #{$transaction->id}: Quizee #{$transaction->user_id} → Quiz Master #{$quizMasterId} : KES {$amount}");
+            $this->line("Transaction #{$transaction->id}: Quizee #{$transaction->user_id} â†’ Quiz Master #{$quizMasterId} : KES {$amount}");
         }
 
         $this->newLine();
@@ -128,11 +128,11 @@ class SettleQuizMasterShares extends Command
                 $quizMasterId = $quiz->user_id;
                 $amount = $transaction->{'quiz-master_share'};
 
-                // Update transaction to set quiz-master_id using DB query
+                // Update transaction to set quiz_master_id using DB query
                 DB::table('transactions')
                     ->where('id', $transaction->id)
                     ->update([
-                        'quiz-master_id' => $quizMasterId,
+                        'quiz_master_id' => $quizMasterId,
                     ]);
 
                 // Credit wallet

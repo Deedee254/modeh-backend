@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace Database\Factories;
 
@@ -12,7 +12,7 @@ class WithdrawalRequestFactory extends Factory
     public function definition(): array
     {
         return [
-            'quiz-master_id' => null,
+            'quiz_master_id' => null,
             'amount' => 0,
             'method' => null,
             'status' => 'pending',

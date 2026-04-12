@@ -177,7 +177,7 @@ class ListQuizMasterQuizzes extends Command
     {
         $this->info('Step 5: Transaction Summary:');
         
-        $transactions = Transaction::where('quiz-master_id', $quizMaster->id)
+        $transactions = Transaction::where('quiz_master_id', $quizMaster->id)
             ->get();
 
         if ($transactions->isEmpty()) {

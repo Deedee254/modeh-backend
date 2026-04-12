@@ -149,7 +149,7 @@ class AdminController extends Controller
                     'tx_id' => $tx->tx_id,
                     'user_id' => $tx->user_id,
                     'payer' => $payer,
-                    'quiz-master_id' => $tx->{'quiz-master_id'},
+                    'quiz_master_id' => $tx->{'quiz_master_id'},
                     'quiz_master' => $quizMaster,
                     'quiz_id' => $tx->quiz_id,
                     'type' => $tx->type,
@@ -236,10 +236,10 @@ class AdminController extends Controller
         }
 
         $stats = Transaction::query()
-            ->selectRaw("`quiz-master_id` as quiz_master_id")
+            ->selectRaw("`quiz_master_id` as quiz_master_id")
             ->selectRaw("SUM(CASE WHEN status = 'completed' THEN `quiz-master_share` ELSE 0 END) as total_earnings")
             ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as transaction_count")
-            ->groupBy(DB::raw('`quiz-master_id`'));
+            ->groupBy(DB::raw('`quiz_master_id`'));
 
         $query = User::query()
             ->where('role', 'quiz-master')
@@ -317,7 +317,7 @@ class AdminController extends Controller
         }
 
         $query = DB::table('withdrawal_requests')
-            ->join('users', 'withdrawal_requests.quiz-master_id', '=', 'users.id')
+            ->join('users', 'withdrawal_requests.quiz_master_id', '=', 'users.id')
             ->select([
                 'withdrawal_requests.*',
                 'users.name',
@@ -407,7 +407,7 @@ class AdminController extends Controller
         try {
             DB::transaction(function () use ($withdrawalId, $withdrawal, $request) {
                 // Refund the amount back to available balance (not lifetime_earned)
-                Wallet::where('user_id', $withdrawal->{'quiz-master_id'})
+                Wallet::where('user_id', $withdrawal->{'quiz_master_id'})
                     ->increment('available', $withdrawal->amount);
                 
                 // Update withdrawal status to rejected
@@ -423,7 +423,7 @@ class AdminController extends Controller
             
             Log::info('[Withdrawal] Request rejected and refunded', [
                 'withdrawal_id' => $withdrawalId,
-                'quiz_master_id' => $withdrawal->{'quiz-master_id'},
+                'quiz_master_id' => $withdrawal->{'quiz_master_id'},
                 'amount' => $withdrawal->amount,
                 'reason' => $request->input('reason'),
                 'admin_id' => auth()->id(),
@@ -480,7 +480,7 @@ class AdminController extends Controller
             
             Log::info('[Withdrawal] Marked as paid', [
                 'withdrawal_id' => $withdrawalId,
-                'quiz_master_id' => $withdrawal->{'quiz-master_id'},
+                'quiz_master_id' => $withdrawal->{'quiz_master_id'},
                 'amount' => $withdrawal->amount,
                 'transaction_id' => $request->input('transaction_id'),
                 'admin_id' => $user->id,
@@ -502,7 +502,7 @@ class AdminController extends Controller
 
     /**
      * Settle (move) pending funds to available for all users or specific user
-     * Admin only - Moves funds from pending → available in wallet
+     * Admin only - Moves funds from pending â†’ available in wallet
      */
     public function settlePending(Request $request)
     {

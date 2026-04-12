@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('withdrawal_requests', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('quiz-master_id')->constrained('users')->onDelete('cascade');
+            $table->foreignId('quiz_master_id')->constrained('users')->onDelete('cascade');
             $table->decimal('amount', 12, 2);
             $table->string('method')->nullable(); // mpesa, bank, paypal
             $table->string('status')->default('pending'); // pending, approved, rejected, paid

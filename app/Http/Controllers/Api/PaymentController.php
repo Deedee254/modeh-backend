@@ -751,7 +751,7 @@ class PaymentController extends Controller
             $meta = array_merge($meta, $sub->gateway_meta ?? []);
         }
         $quizId = $meta['quiz_id'] ?? null;
-        $quizMasterId = $meta['quiz-master_id'] ?? null;
+        $quizMasterId = $meta['quiz_master_id'] ?? null;
 
         if (!$quizMasterId && $quizId) {
             $quiz = \App\Models\Quiz::find($quizId);
@@ -918,9 +918,58 @@ class PaymentController extends Controller
         // Mark quiz attempt as paid if one was specified in the purchase
         if (!empty($purchase->meta['attempt_id'])) {
             $attempt = \App\Models\QuizAttempt::find($purchase->meta['attempt_id']);
-            if ($attempt && $attempt->user_id === $purchase->user_id && $attempt->quiz_id === $purchase->item_id) {
+            if ($attempt && $attempt->user_id === $purchase->user_id && $attempt->quiz_id === $purchase->item_id && !$attempt->paid_for) {
                 $attempt->update(['paid_for' => true]);
-                Log::info('[Payment] Quiz attempt marked as paid', [
+                
+                // GRANT DEFERRED POINTS
+                if ($attempt->points_earned > 0) {
+                    $user = $purchase->user;
+                    if ($user && method_exists($user, 'increment')) {
+                        try {
+                            $user->increment('points', $attempt->points_earned);
+                            \Illuminate\Support\Facades\Cache::forget("user_me_{$user->id}");
+                        } catch (\Exception $e) {
+                            Log::warning('Could not increment user points on payment: ' . $e->getMessage());
+                        }
+                    }
+                }
+                
+                // GRANT DEFERRED ACHIEVEMENTS
+                try {
+                    $quiz = \App\Models\Quiz::find($purchase->item_id);
+                    $user = $purchase->user;
+                    if ($quiz && $user) {
+                        $achievementService = app(\App\Services\AchievementService::class);
+                        $previousAttempt = \App\Models\QuizAttempt::where('user_id', $user->id)
+                            ->where('quiz_id', $quiz->id)
+                            ->where('id', '!=', $attempt->id)
+                            ->orderByDesc('created_at')
+                            ->first();
+
+                        $totalQuestionsCount = $quiz->questions()->count() ?: 1;
+                        $answersCount = is_array($attempt->answers) ? count($attempt->answers) : 0;
+                        $scorePercentage = $score ?? 0;
+                        
+                        $achievementPayload = [
+                            'type' => 'quiz',
+                            'score' => $attempt->score ?? 0,
+                            'time' => $attempt->total_time_seconds ?? 0,
+                            'question_count' => $totalQuestionsCount,
+                            'attempt_id' => $attempt->id,
+                            'quiz_id' => $quiz->id,
+                            'subject_id' => $quiz->subject_id ?? null,
+                            'streak' => 0,
+                            'previous_score' => $previousAttempt ? $previousAttempt->score : null,
+                            'total' => 100 * ($answersCount / $totalQuestionsCount)
+                        ];
+                        
+                        $achievementService->checkAchievements($user, $achievementPayload);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to check deferred achievements on payment: ' . $e->getMessage());
+                }
+
+                Log::info('[Payment] Quiz attempt marked as paid and deferred rewards granted', [
                     'attempt_id' => $attempt->id,
                     'user_id' => $purchase->user_id,
                     'quiz_id' => $purchase->item_id,
@@ -963,7 +1012,7 @@ class PaymentController extends Controller
 	                \App\Models\Transaction::create([
 	                    'tx_id' => $txId,
 	                    'user_id' => $purchase->user_id,
-	                    'quiz-master_id' => null,
+	                    'quiz_master_id' => null,
 	                    'quiz_id' => null,
 	                    'amount' => $amount,
 	                    'affiliate_share' => 0,
@@ -1001,7 +1050,7 @@ class PaymentController extends Controller
 	                    \App\Models\Transaction::create([
 	                        'tx_id' => "{$txId}-battle-qm-{$ownerId}",
 	                        'user_id' => $purchase->user_id,
-	                        'quiz-master_id' => (int) $ownerId,
+	                        'quiz_master_id' => (int) $ownerId,
 	                        'quiz_id' => null,
 	                        'amount' => $share,
 	                        'quiz-master_share' => $share,
@@ -1247,7 +1296,7 @@ class PaymentController extends Controller
             \App\Models\Transaction::create([
                 'tx_id' => 'aff_' . $txId,
                 'user_id' => $affiliate->user_id, // Commission goes to affiliate owner
-                'quiz-master_id' => null,
+                'quiz_master_id' => null,
                 'quiz_id' => null,
                 'amount' => $amount,
                 'quiz-master_share' => $commissionAmount,

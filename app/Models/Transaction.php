@@ -14,7 +14,7 @@ class Transaction extends Model
     protected $fillable = [
         'tx_id',
         'user_id',
-        'quiz-master_id',
+        'quiz_master_id',
         'quiz_id',
         'amount',
         'quiz-master_share',
@@ -58,7 +58,7 @@ class Transaction extends Model
 
     public function quizMaster()
     {
-        return $this->belongsTo(User::class, 'quiz-master_id');
+        return $this->belongsTo(User::class, 'quiz_master_id');
     }
     
 

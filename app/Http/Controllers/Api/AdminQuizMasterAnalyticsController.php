@@ -115,7 +115,7 @@ class AdminQuizMasterAnalyticsController extends Controller
         // Earnings from transactions (quiz-master_share) in range
         $earningsQ = DB::table('transactions as t')
             ->join('users as u', function ($join) {
-                $join->on('u.id', '=', DB::raw('t.`quiz-master_id`'));
+                $join->on('u.id', '=', DB::raw('t.`quiz_master_id`'));
             })
             ->where('u.role', 'quiz-master')
             ->where('t.status', 'completed')
@@ -188,17 +188,17 @@ class AdminQuizMasterAnalyticsController extends Controller
 
         $topByEarnings = DB::table('transactions as t')
             ->join('users as u', function ($join) {
-                $join->on('u.id', '=', DB::raw('t.`quiz-master_id`'));
+                $join->on('u.id', '=', DB::raw('t.`quiz_master_id`'));
             })
             ->where('u.role', 'quiz-master')
             ->where('t.status', 'completed')
-            ->selectRaw('t.`quiz-master_id` as user_id')
+            ->selectRaw('t.`quiz_master_id` as user_id')
             ->selectRaw('MAX(u.name) as name')
             ->selectRaw('MAX(u.email) as email')
             ->selectRaw('MAX(COALESCE(u.avatar_url, u.social_avatar)) as avatar')
             ->selectRaw('SUM(COALESCE(t.`quiz-master_share`,0)) as earnings')
             ->selectRaw('COUNT(*) as tx')
-            ->groupBy(DB::raw('t.`quiz-master_id`'))
+            ->groupBy(DB::raw('t.`quiz_master_id`'))
             ->orderByDesc('earnings')
             ->limit(10)
             ->get()
@@ -282,17 +282,17 @@ class AdminQuizMasterAnalyticsController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
 
         $txAll = DB::table('transactions as t')
-            ->selectRaw("t.`quiz-master_id` as user_id")
+            ->selectRaw("t.`quiz_master_id` as user_id")
             ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN COALESCE(t.`quiz-master_share`,0) ELSE 0 END) as lifetime_earnings")
             ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as lifetime_transactions")
-            ->groupBy(DB::raw("t.`quiz-master_id`"));
+            ->groupBy(DB::raw("t.`quiz_master_id`"));
 
         $txRange = DB::table('transactions as t')
             ->whereBetween('t.created_at', [$fromTs, $toTs])
-            ->selectRaw("t.`quiz-master_id` as user_id")
+            ->selectRaw("t.`quiz_master_id` as user_id")
             ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN COALESCE(t.`quiz-master_share`,0) ELSE 0 END) as earnings_in_range")
             ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as transactions_in_range")
-            ->groupBy(DB::raw("t.`quiz-master_id`"));
+            ->groupBy(DB::raw("t.`quiz_master_id`"));
 
         $quizAll = DB::table('quizzes as q')
             ->selectRaw('IFNULL(q.created_by, q.user_id) as user_id')
@@ -483,7 +483,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->first();
 
         $txAll = DB::table('transactions as t')
-            ->whereRaw("t.`quiz-master_id` = ?", [$resolvedUserId])
+            ->whereRaw("t.`quiz_master_id` = ?", [$resolvedUserId])
             ->where('t.status', 'completed');
         $txRange = (clone $txAll)->whereBetween('t.created_at', [$fromTs, $toTs]);
         $earningsAll = (float) ((clone $txAll)->sum(DB::raw("COALESCE(t.`quiz-master_share`,0)")) ?? 0);

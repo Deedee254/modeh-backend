@@ -81,7 +81,7 @@ class TransactionService
                     Transaction::create([
                         'tx_id' => $txId ? "{$txId}-affiliate" : null,
                         'user_id' => $affiliate->user_id,
-                        'quiz-master_id' => $quizMasterId,
+                        'quiz_master_id' => $quizMasterId,
                         'quiz_id' => $quizId,
                         'amount' => $affiliateShare,
                         'affiliate_share' => $affiliateShare,
@@ -136,7 +136,7 @@ class TransactionService
                 Transaction::create([
                     'tx_id' => $txId ? "{$txId}-qm" : null,
                     'user_id' => $userId,
-                    'quiz-master_id' => $quizMasterId,
+                    'quiz_master_id' => $quizMasterId,
                     'quiz_id' => $quizId,
                     'amount' => $quizMasterShare,
                     'quiz-master_share' => $quizMasterShare,
@@ -165,7 +165,7 @@ class TransactionService
             $mainTransaction = Transaction::create([
                 'tx_id' => $txId,
                 'user_id' => $userId,
-                'quiz-master_id' => $quizMasterId,
+                'quiz_master_id' => $quizMasterId,
                 'quiz_id' => $quizId,
                 'amount' => $amount,
                 'affiliate_share' => $affiliateShare,
@@ -187,7 +187,7 @@ class TransactionService
                     'item_id' => $itemId,
                     'purchase_id' => $purchaseId,
                     'attempt_id' => $attemptId,
-                    'quiz-master_id' => $quizMasterId,
+                    'quiz_master_id' => $quizMasterId,
                 ],
             ]);
 
@@ -366,7 +366,7 @@ class TransactionService
         foreach ($credits as $credit) {
             $recipient = match($credit->type) {
                 Transaction::TYPE_AFFILIATE_PAYOUT => 'Affiliate (' . ($credit->meta['referral_code'] ?? 'N/A') . ')',
-                Transaction::TYPE_QUIZ_MASTER_PAYOUT => $credit->quizMaster?->name ?? 'Quiz Master #' . $credit->{'quiz-master_id'},
+                Transaction::TYPE_QUIZ_MASTER_PAYOUT => $credit->quizMaster?->name ?? 'Quiz Master #' . $credit->{'quiz_master_id'},
                 default => 'Unknown'
             };
 

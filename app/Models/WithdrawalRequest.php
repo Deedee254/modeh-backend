@@ -10,7 +10,7 @@ class WithdrawalRequest extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['quiz-master_id','amount','method','status','meta','processed_by_admin_id'];
+    protected $fillable = ['quiz_master_id','amount','method','status','meta','processed_by_admin_id'];
 
 
     protected $casts = [
@@ -23,7 +23,7 @@ class WithdrawalRequest extends Model
 
     public function quizMaster()
     {
-        return $this->belongsTo(User::class, 'quiz-master_id');
+        return $this->belongsTo(User::class, 'quiz_master_id');
     }
     
 }

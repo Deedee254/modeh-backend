@@ -240,7 +240,7 @@ class WalletService
      */
     public function getTotalEarnings(int $userId): float
     {
-        $total = Transaction::where('quiz-master_id', $userId)
+        $total = Transaction::where('quiz_master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
             ->sum('quiz-master_share');
 
@@ -255,7 +255,7 @@ class WalletService
      */
     public function getEarningsBreakdown(int $userId): array
     {
-        $breakdown = Transaction::where('quiz-master_id', $userId)
+        $breakdown = Transaction::where('quiz_master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
             ->selectRaw('
                 CASE 
@@ -283,7 +283,7 @@ class WalletService
      */
     public function getRecentTransactions(int $userId, int $limit = 20): array
     {
-        return Transaction::where('quiz-master_id', $userId)
+        return Transaction::where('quiz_master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
             ->orderBy('created_at', 'desc')
             ->limit($limit)
@@ -323,7 +323,7 @@ class WalletService
         $totalEarnings = $this->getTotalEarnings($userId);
         // Earned this calendar month (from completed transactions)
         $startOfMonth = now()->startOfMonth();
-        $earnedThisMonth = (float) Transaction::where('quiz-master_id', $userId)
+        $earnedThisMonth = (float) Transaction::where('quiz_master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
             ->where('created_at', '>=', $startOfMonth)
             ->sum('quiz-master_share');
@@ -364,7 +364,7 @@ class WalletService
             $start = now()->subMonths($i)->startOfMonth();
             $end = now()->subMonths($i)->endOfMonth();
 
-                $sum = (float) Transaction::where('quiz-master_id', $userId)
+                $sum = (float) Transaction::where('quiz_master_id', $userId)
                 ->where('status', Transaction::STATUS_COMPLETED)
                 ->whereBetween('created_at', [$start, $end])
                 ->sum('quiz-master_share');
@@ -389,7 +389,7 @@ class WalletService
      */
     public function getTopQuizzes(int $userId, int $limit = 10): array
     {
-        $rows = Transaction::where('quiz-master_id', $userId)
+        $rows = Transaction::where('quiz_master_id', $userId)
             ->where('status', Transaction::STATUS_COMPLETED)
             ->whereNotNull('quiz_id')
             ->selectRaw('quiz_id, SUM(`quiz-master_share`) as total')
@@ -418,7 +418,7 @@ class WalletService
 
     /**
      * Process quiz completion with full payout distribution.
-     * Flow: Money in → Affiliate gets share → Quiz Master gets share → Platform keeps remainder
+     * Flow: Money in â†’ Affiliate gets share â†’ Quiz Master gets share â†’ Platform keeps remainder
      *
      * @param int $quizMasterId Creator of the quiz
      * @param float $amount Total amount from quizee payment
@@ -531,7 +531,7 @@ class WalletService
 
             // 5. Create audit transaction
             $mainTx = Transaction::create([
-                'quiz-master_id' => $quizMasterId,
+                'quiz_master_id' => $quizMasterId,
                 'quiz_id' => $quizId,
                 'amount' => $amount,
                 'affiliate_share' => $affiliateShare,

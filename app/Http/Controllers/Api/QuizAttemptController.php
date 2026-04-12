@@ -553,8 +553,10 @@ class QuizAttemptController extends Controller
                     }
                 }
 
-                // persist points to user atomically; don't let missing column break the attempt
-                if ($attempt && method_exists($user, 'increment')) {
+                // persist points to user atomically; don't let missing column break the attempt.
+                // SECURITY FIX: Only award points if the user has paid or the quiz is free
+                $requiresPayment = (!$paidFor) && !($accessResult['is_free'] ?? false);
+                if (!$requiresPayment && $attempt && method_exists($user, 'increment')) {
                     try {
                         $user->increment('points', $pointsEarned);
                         // Clear cached /api/me payload so frontend sees updated points immediately
@@ -578,9 +580,11 @@ class QuizAttemptController extends Controller
             Cache::forget('user-stats:' . $user->id);
         }
 
-        // Check achievements only when marking occurred (not deferred)
+        $requiresPayment = (!$paidFor) && !($accessResult['is_free'] ?? false);
+
+        // Check achievements only when marking occurred (not deferred) and payment is cleared
         $awarded = [];
-        if ($attempt && !$defer) {
+        if ($attempt && !$defer && !$requiresPayment) {
             $achievementPayload = $this->buildAchievementPayload($attempt, $quiz, $score, $request);
 
             try {
@@ -598,17 +602,23 @@ class QuizAttemptController extends Controller
             return response()->json(['ok' => false, 'message' => 'Failed to persist attempt'], 500);
 	        }
 
+        // SECURITY FIX: Scrub exact correct/incorrect results if payment is required to prevent brute-forcing
+        if ($requiresPayment) {
+            $results = [];
+        }
+
 	        $refreshedUser = $user->fresh()->load('achievements');
 	        return response()->json([
 	            'ok' => true,
 	            'results' => $results,
 	            'score' => $defer ? null : $score,
 	            'attempt_id' => $attempt->id ?? null,
-	            'points_delta' => $attempt->points_earned ?? 0,
+	            // If payment required, don't show the points they would earn
+	            'points_delta' => $requiresPayment ? 0 : ($attempt->points_earned ?? 0),
 	            'deferred' => $defer,
 	            'awarded_achievements' => $awarded,
 	            'user' => $refreshedUser,
-	            'requires_payment' => (!$paidFor) && !($accessResult['is_free'] ?? false),
+	            'requires_payment' => $requiresPayment,
 	            'price' => $accessResult['price'] ?? null,
 	        ]);
 	    }

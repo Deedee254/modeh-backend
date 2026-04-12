@@ -137,7 +137,7 @@ class WalletController extends Controller
 
         $q = Transaction::query()
             ->with(['quiz:id,title,slug'])
-            ->where('quiz-master_id', $user->id)
+            ->where('quiz_master_id', $user->id)
             ->whereIn('type', $visibleTypes)
             ->orderBy('created_at', 'desc');
 
@@ -243,7 +243,7 @@ class WalletController extends Controller
 
                 // create withdrawal request
                 $wr = WithdrawalRequest::create([
-                    'quiz-master_id' => $user->id,
+                    'quiz_master_id' => $user->id,
                     'amount' => $amount,
                     'method' => $request->input('method', 'mpesa'),
                     'status' => 'pending',
@@ -271,7 +271,7 @@ class WalletController extends Controller
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false], 401);
-        $list = WithdrawalRequest::where('quiz-master_id', $user->id)->orderBy('created_at', 'desc')->get();
+        $list = WithdrawalRequest::where('quiz_master_id', $user->id)->orderBy('created_at', 'desc')->get();
         return response()->json(['ok' => true, 'withdrawals' => $list]);
     }
 
@@ -287,7 +287,7 @@ class WalletController extends Controller
         );
         
         // Get transactions (rewards earned)
-        $transactions = Transaction::where('quiz-master_id', $user->id)
+        $transactions = Transaction::where('quiz_master_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();
         
@@ -483,7 +483,7 @@ class WalletController extends Controller
                     'name' => $resolvedQuizMaster->name,
                     'email' => $resolvedQuizMaster->email,
                 ] : null,
-                'quiz-master_id' => $resolvedQuizMaster?->id ?? $tx->{'quiz-master_id'},
+                'quiz_master_id' => $resolvedQuizMaster?->id ?? $tx->{'quiz_master_id'},
                 'resolved' => [
                     'type' => $resolvedType,
                     'quiz_master_source' => $tx->quizMaster ? 'transaction' : ($resolvedQuizMaster ? 'quiz_owner' : null),
@@ -556,7 +556,7 @@ class WalletController extends Controller
                         // Create transaction record
                         Transaction::create([
                             'user_id' => $wallet->user_id,
-                            'quiz-master_id' => $wallet->user_id,
+                            'quiz_master_id' => $wallet->user_id,
                             'amount' => $pending,
                             'type' => Transaction::TYPE_SETTLEMENT,
                             'status' => Transaction::STATUS_COMPLETED,
@@ -619,7 +619,7 @@ class WalletController extends Controller
                 // Create transaction record for audit trail
                 Transaction::create([
                     'user_id' => $userId,
-                    'quiz-master_id' => $userId,
+                    'quiz_master_id' => $userId,
                     'amount' => $toSettle,
                     'type' => Transaction::TYPE_SETTLEMENT,
                     'status' => Transaction::STATUS_COMPLETED,
@@ -770,7 +770,7 @@ class WalletController extends Controller
                         'name' => $resolvedQuizMaster?->name,
                         'email' => $resolvedQuizMaster?->email,
                     ],
-                    'quiz-master_id' => $resolvedQuizMaster?->id ?? $tx->{'quiz-master_id'},
+                    'quiz_master_id' => $resolvedQuizMaster?->id ?? $tx->{'quiz_master_id'},
                     'user' => [
                         'id' => $tx->user?->id,
                         'name' => $tx->user?->name,
