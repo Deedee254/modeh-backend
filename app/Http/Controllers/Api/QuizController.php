@@ -462,17 +462,19 @@ class QuizController extends Controller
         if (!$user) {
             $query->where('is_approved', true)->where('visibility', 'published');
         } else {
-            // only my quizzes unless admin OR specifically searching for everyone's quizzes
-            // Fix: allow users to see ALL approved/published quizzes by default if no 'mine' filter is present
-            if (!$user->is_admin && $request->boolean('mine')) {
-                // When viewing own quizzes, show all statuses (draft, published, scheduled, etc.)
+            // Check if requesting only own quizzes (mine=1)
+            $requestingOwnQuizzesOnly = $request->boolean('mine') || $request->get('mine') === '1' || $request->get('mine') === 1;
+            
+            if ($requestingOwnQuizzesOnly) {
+                // When viewing own quizzes, show ALL quizzes created by this user (all statuses)
+                // This is the quiz-master dashboard view, so strict filtering by owner
                 // Some legacy rows may have `created_by` populated instead of `user_id`.
                 $query->where(function ($q) use ($user) {
                     $q->where('user_id', $user->id)
                         ->orWhere('created_by', $user->id);
                 });
             } else if (!$user->is_admin) {
-                // By default for non-admins, show their own OR any approved/published ones
+                // By default for non-admins (not requesting own), show their own OR any approved/published ones
                 $query->where(function ($q) use ($user) {
                     $q->where(function ($mq) use ($user) {
                         $mq->where('user_id', $user->id)
@@ -483,6 +485,7 @@ class QuizController extends Controller
                         });
                 });
             }
+            // If admin and not requesting own quizzes, show ALL quizzes (no filter)
         }
 
         // filter by topic or approved (explicit query overrides defaults)
