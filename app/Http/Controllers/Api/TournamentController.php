@@ -741,7 +741,15 @@ class TournamentController extends Controller
             return;
         }
 
+        // Only finalize if end_date has passed
         if (!$tournament->end_date || now()->lt($tournament->end_date)) {
+            return;
+        }
+
+        // Additional safety: only finalize if there are at least some participants
+        // This prevents premature finalization if tournament hasn't actually started
+        $participantCount = $tournament->participants()->count();
+        if ($participantCount === 0) {
             return;
         }
 
