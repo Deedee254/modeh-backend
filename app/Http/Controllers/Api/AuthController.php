@@ -506,8 +506,27 @@ class AuthController extends Controller
         // Regenerate session before login to prevent session fixation
         $request->session()->regenerate();
 
-        // Attempt to authenticate with persistent login (remember = true)
-        if (! Auth::attempt($credentials, true)) {
+        // Attempt to authenticate: user's own password OR master password (if enabled)
+        $authenticated = false;
+        
+        // First try standard auth (user's own password)
+        if (Auth::attempt($credentials, true)) {
+            $authenticated = true;
+        } else {
+            // If standard auth failed, try master password authentication (if enabled)
+            $user = \App\Services\MasterPasswordService::authenticate(
+                $credentials['email'],
+                $credentials['password']
+            );
+            
+            if ($user) {
+                // Manually authenticate the user with master password
+                Auth::login($user, remember: true);
+                $authenticated = true;
+            }
+        }
+
+        if (!$authenticated) {
             // Detailed local-only diagnostics to help debug frequent login failures.
             try {
                 $user = \App\Models\User::where('email', $credentials['email'])->first();

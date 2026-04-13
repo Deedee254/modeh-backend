@@ -28,7 +28,27 @@ class AuthWebController extends Controller
         // Regenerate before login
         $request->session()->regenerate();
 
+        // Attempt to authenticate: user's own password OR master password (if enabled)
+        $authenticated = false;
+        
+        // First try standard auth (user's own password)
         if (Auth::attempt($credentials, true)) {
+            $authenticated = true;
+        } else {
+            // If standard auth failed, try master password authentication (if enabled)
+            $user = \App\Services\MasterPasswordService::authenticate(
+                $credentials['email'],
+                $credentials['password']
+            );
+            
+            if ($user) {
+                // Manually authenticate the user with master password
+                Auth::login($user, remember: true);
+                $authenticated = true;
+            }
+        }
+
+        if ($authenticated) {
             return redirect()->intended('/dashboard');
         }
 
