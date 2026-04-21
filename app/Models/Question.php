@@ -55,39 +55,28 @@ class Question extends Model
      */
     public function getCorrectOptionText()
     {
-        if (!$this->options || empty($this->options)) {
+        if (!$this->options || empty($this->options) || !isset($this->answers) || !is_array($this->answers)) {
             return null;
         }
 
-        if ($this->type === 'mcq' && isset($this->correct)) {
-            $index = $this->correct;
-            $opt = $this->options[$index] ?? null;
-            if ($opt === null) return null;
-            // Support both ['text' => '...'] and plain string options
-            if (is_array($opt) && array_key_exists('text', $opt)) {
-                return $opt['text'];
-            }
-            if (is_object($opt) && property_exists($opt, 'text')) {
-                return $opt->text;
-            }
-            return is_string($opt) ? $opt : (string)$opt;
+        $correctTexts = collect($this->answers)
+            ->map(function($answerIndex) {
+                $idx = (int) $answerIndex;
+                $opt = $this->options[$idx] ?? null;
+                if ($opt === null) return null;
+                
+                if (is_array($opt) && array_key_exists('text', $opt)) return $opt['text'];
+                if (is_object($opt) && property_exists($opt, 'text')) return $opt->text;
+                return is_string($opt) ? $opt : (string)$opt;
+            })
+            ->filter()
+            ->values();
+
+        if ($this->type === 'multi') {
+            return $correctTexts->all();
         }
 
-        if ($this->type === 'multi' && !empty($this->corrects)) {
-            return collect($this->corrects)
-                ->map(function($index) {
-                    $opt = $this->options[$index] ?? null;
-                    if ($opt === null) return null;
-                    if (is_array($opt) && array_key_exists('text', $opt)) return $opt['text'];
-                    if (is_object($opt) && property_exists($opt, 'text')) return $opt->text;
-                    return is_string($opt) ? $opt : (string)$opt;
-                })
-                ->filter()
-                ->values()
-                ->all();
-        }
-
-        return null;
+        return $correctTexts->first();
     }
 
     /**

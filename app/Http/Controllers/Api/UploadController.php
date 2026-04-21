@@ -56,6 +56,9 @@ class UploadController extends Controller
         $path = Storage::disk('public')->putFile($folder, $file);
         $url = Storage::url($path);
 
-        return response()->json(['url' => $url], 201);
+        return response()->json([
+            'url' => $url,
+            'path' => $path
+        ], 201);
     }
 }

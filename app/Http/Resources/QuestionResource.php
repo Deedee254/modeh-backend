@@ -19,10 +19,15 @@ class QuestionResource extends JsonResource
             $opts = array_values(array_map(function ($opt, $idx) {
                 if (is_array($opt)) {
                     $text = isset($opt['text']) ? (string) $opt['text'] : (isset($opt['option']) ? (string) $opt['option'] : '');
+                    $media = $opt['media'] ?? $opt['media_path'] ?? null;
+                    $mediaUrl = $media ? ((\Illuminate\Support\Str::startsWith($media, ['http://', 'https://', '/'])) ? $media : url('storage/' . $media)) : null;
                     return [
                         'option' => $text,
                         'text' => $text,
                         'is_correct' => !empty($opt['is_correct']),
+                        'media' => $media,
+                        'media_url' => $mediaUrl,
+                        'media_type' => $opt['media_type'] ?? null,
                     ];
                 }
                 $text = is_string($opt) ? $opt : (string) ($opt ?? '');
@@ -44,15 +49,16 @@ class QuestionResource extends JsonResource
         return [
             'id' => $this->id ?? null,
             'uid' => $this->uid ?? null,
-            // canonical frontend key for the question HTML/text
+            'type' => $this->type ?? 'mcq',
             'question' => $this->body ?? '',
             'text' => $this->body ?? '',
-            'marks' => isset($this->marks) ? $this->marks : null,
+            'marks' => isset($this->marks) ? (float) $this->marks : null,
             'difficulty' => isset($this->difficulty) ? (int) $this->difficulty : null,
             'options' => $opts,
             'answers' => $answers,
             'explanation' => $this->explanation ?? null,
             'media_path' => $this->media_path ?? null,
+            'media_url' => $this->media_path ? ((\Illuminate\Support\Str::startsWith($this->media_path, ['http://', 'https://', '/'])) ? $this->media_path : url('storage/' . $this->media_path)) : null,
             'media_type' => $this->media_type ?? null,
             'media_metadata' => $this->media_metadata ?? null,
             'youtube_url' => $this->youtube_url ?? null,

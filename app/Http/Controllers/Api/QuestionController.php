@@ -300,27 +300,32 @@ class QuestionController extends Controller
 
         $user = $request->user();
 
-        $mediaPath = null;
-        $mediaType = null;
-        $mediaMetadata = [];
+        $mediaPath = $request->get('media_path');
+        $mediaType = $request->get('media_type');
+        $mediaMetadata = is_array($request->get('media_metadata')) ? $request->get('media_metadata') : [];
 
-        // Handle media file upload
+        // If mediaPath was provided as a full URL, strip the storage prefix to store the relative path
+        if ($mediaPath && \Illuminate\Support\Str::startsWith($mediaPath, [url('/storage'), asset('/storage')])) {
+            $mediaPath = str_replace([url('/storage/'), asset('/storage/')], '', $mediaPath);
+        }
+
+        // Handle media file upload: if a new file is provided, it overrides pre-saved path
         if ($request->hasFile('media')) {
             $mediaFile = $request->file('media');
-            $mediaPath = Storage::disk('public')->putFile('question_media', $mediaFile);
-            $mediaPath = Storage::url($mediaPath);
+            $mPath = \Illuminate\Support\Facades\Storage::disk('public')->putFile('question_media', $mediaFile);
+            $mediaPath = $mPath;
 
             // Determine media type
             $mimeType = $mediaFile->getMimeType();
             if (strpos($mimeType, 'image/') === 0) {
                 $mediaType = 'image';
-                $mediaMetadata = MediaMetadataService::extractImageMetadata($mediaFile);
+                $mediaMetadata = \App\Services\MediaMetadataService::extractImageMetadata($mediaFile);
             } elseif (strpos($mimeType, 'audio/') === 0) {
                 $mediaType = 'audio';
-                $mediaMetadata = MediaMetadataService::extractAudioMetadata($mediaFile);
+                $mediaMetadata = \App\Services\MediaMetadataService::extractAudioMetadata($mediaFile);
             } elseif (strpos($mimeType, 'video/') === 0) {
                 $mediaType = 'video';
-                $mediaMetadata = MediaMetadataService::extractVideoMetadata($mediaFile);
+                $mediaMetadata = \App\Services\MediaMetadataService::extractVideoMetadata($mediaFile);
             }
         }
 
@@ -435,6 +440,9 @@ class QuestionController extends Controller
                 return [
                     'text' => $text,
                     'is_correct' => $isCorrect,
+                    'media' => $opt['media'] ?? null,
+                    'media_path' => $opt['media_path'] ?? null,
+                    'media_type' => $opt['media_type'] ?? null,
                 ];
             }, $options, array_keys($options)));
         } else {

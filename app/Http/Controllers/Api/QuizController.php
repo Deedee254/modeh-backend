@@ -169,7 +169,7 @@ class QuizController extends Controller
         if ($request->hasFile('cover')) {
             $file = $request->file('cover');
             $path = Storage::disk('public')->putFile('covers', $file);
-            $quiz->cover_image = Storage::url($path);
+            $quiz->cover_image = $path;
         }
     }
 
@@ -317,8 +317,15 @@ class QuizController extends Controller
         $options = $q['options'] ?? null;
         $answers = $q['answers'] ?? (isset($q['correct']) ? [$q['correct']] : null);
 
-        $mediaPath = null;
-        $mediaType = null;
+        // Support pre-uploaded media path or file in multipart request
+        $mediaPath = $q['media_path'] ?? null;
+        $mediaType = $q['media_type'] ?? null;
+
+        // If mediaPath was provided as a full URL, strip the storage prefix
+        if ($mediaPath && \Illuminate\Support\Str::startsWith($mediaPath, [url('/storage'), asset('/storage')])) {
+            $mediaPath = str_replace([url('/storage/'), asset('/storage/')], '', $mediaPath);
+        }
+
         $file = null;
         // prefer numeric index key
         if (is_array($mediaFiles) && array_key_exists($index, $mediaFiles) && $mediaFiles[$index]) {
@@ -331,7 +338,7 @@ class QuizController extends Controller
         // if we have a file, store it
         if ($file) {
             $mPath = Storage::disk('public')->putFile('question_media', $file);
-            $mediaPath = Storage::url($mPath);
+            $mediaPath = $mPath;
             $mediaType = $file->getClientMimeType();
         }
 
@@ -766,13 +773,12 @@ class QuizController extends Controller
 
     private function handleCoverUpload(Request $request): ?string
     {
-        $coverUrl = null;
+        $coverPath = null;
         if ($request->hasFile('cover')) {
             $file = $request->file('cover');
-            $path = Storage::disk('public')->putFile('covers', $file);
-            $coverUrl = Storage::url($path);
+            $coverPath = Storage::disk('public')->putFile('covers', $file);
         }
-        return $coverUrl;
+        return $coverPath;
     }
 
     private function createQuiz($user, $topic, Request $request, ?string $coverUrl)

@@ -880,6 +880,8 @@ class QuizAttemptController extends Controller
                 }
             }
 
+            $mediaUrl = $q->media_path ? ((\Illuminate\Support\Str::startsWith($q->media_path, ['http://', 'https://', '/'])) ? $q->media_path : \Storage::url($q->media_path)) : null;
+
             $details[] = [
                 'question_id' => $q->id,
                 'body' => $q->body,
@@ -890,6 +892,10 @@ class QuizAttemptController extends Controller
                 'marks' => (float) ($q->marks ?: 1),
                 'points_awarded' => $isCorrect ? (float) ($q->marks ?: 1) : 0.0,
                 'explanation' => $q->explanation ?? null,
+                'media_path' => $q->media_path,
+                'media_url' => $mediaUrl,
+                'media_type' => $q->media_type,
+                'youtube_url' => $q->youtube_url,
             ];
         }
 

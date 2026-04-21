@@ -145,7 +145,7 @@ class PaymentController extends Controller
         }
 
         // Log the incoming webhook for auditing (avoid logging sensitive PII)
-        Log::info('[Payment] MPESA callback received', [
+        Log::channel('payment')->info('[Payment] MPESA callback received', [
             'tx' => $checkoutId,
             'status' => $status,
             'result_code' => $payload['parsed_mpesa']['result_code'] ?? $resultCode,
@@ -313,7 +313,7 @@ class PaymentController extends Controller
         }
 
         if ($purchase) {
-            Log::info('[Payment] One-off purchase callback matched', [
+            Log::channel('payment')->info('[Payment] One-off purchase callback matched', [
                 'trace_id' => $traceId,
                 'purchase_id' => $purchase->id,
                 'tx' => $checkoutId,
@@ -341,7 +341,7 @@ class PaymentController extends Controller
             return $response;
         }
 
-        Log::info('[Payment] Subscription callback matched', [
+        Log::channel('payment')->info('[Payment] Subscription callback matched', [
             'trace_id' => $traceId,
             'subscription_id' => $sub->id,
             'user_id' => $sub->user_id,
@@ -381,7 +381,7 @@ class PaymentController extends Controller
     private function handleOneOffPurchase(\App\Models\OneOffPurchase $purchase, string $txId, string $status)
     {
         $traceId = $purchase->gateway_meta['trace_id'] ?? null;
-        Log::info('[Payment] One-off purchase processing', [
+        Log::channel('payment')->info('[Payment] One-off purchase processing', [
             'trace_id' => $traceId,
             'purchase_id' => $purchase->id,
             'user_id' => $purchase->user_id,
@@ -423,9 +423,6 @@ class PaymentController extends Controller
         $this->provisionInstitutionPackageFromPurchase($purchase, $txId);
 
         $amount = $purchase->amount ?? 0;
-        $platformSharePct = $this->getPlatformSharePercentage();
-        $totalQuizMasterShare = round(($amount * (100.0 - $platformSharePct)) / 100.0, 2);
-        $platformShare = round($amount - $totalQuizMasterShare, 2);
 
         // Prevent duplicate transactions
         if (\App\Models\Transaction::where('tx_id', $txId)->exists()) {
@@ -434,10 +431,10 @@ class PaymentController extends Controller
 
         // Revenue split (platform vs quiz master, etc.) always runs; invoices stay user-linked only below.
         match ($purchase->item_type) {
-            'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-            'battle' => $this->createTransactionForBattle($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-            'tournament' => $this->createTransactionForTournament($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
-            default => $this->createGenericTransaction($purchase, $txId, $amount, $totalQuizMasterShare, $platformShare),
+            'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount),
+            'battle' => $this->createTransactionForBattle($purchase, $txId, $amount),
+            'tournament' => $this->createTransactionForTournament($purchase, $txId, $amount),
+            default => $this->createGenericTransaction($purchase, $txId, $amount),
         };
 
         // Update tournament participant if applicable
@@ -696,7 +693,7 @@ class PaymentController extends Controller
         $days = $pkg->duration_days ?? 30;
         $isRenewal = $request->input('is_renewal', false);
 
-        Log::info('[Payment] Completing subscription activation', [
+        Log::channel('payment')->info('[Payment] Completing subscription activation', [
             'subscription_id' => $sub->id,
             'user_id' => $sub->user_id,
             'package_id' => $pkg->id,
@@ -740,10 +737,6 @@ class PaymentController extends Controller
         $sub->save();
 
         $amount = $pkg->price ?? 0;
-        $platformSharePct = $this->getPlatformSharePercentage();
-        $quizMasterPercent = 100.0 - $platformSharePct;
-        $quizMasterShare = round(($amount * $quizMasterPercent) / 100.0, 2);
-        $platformShare = round($amount - $quizMasterShare, 2);
 
         // Determine quiz-master and quiz IDs from meta
         $meta = $request->input('meta', []);
@@ -754,30 +747,51 @@ class PaymentController extends Controller
         $quizMasterId = $meta['quiz_master_id'] ?? null;
 
         if (!$quizMasterId && $quizId) {
-            $quiz = \App\Models\Quiz::find($quizId);
-            if ($quiz) {
-                $quizMasterId = $quiz->user_id ?? ($quiz->created_by ?? null);
+            $quizMasterId = \App\Models\Quiz::whereKey($quizId)->value('user_id')
+                ?? \App\Models\Quiz::whereKey($quizId)->value('created_by');
+        }
+
+        // Credit hearts if it's a heart-based package
+        if (property_exists($pkg, 'type') && $pkg->type === 'hearts') {
+            $user = $sub->user;
+            if ($user) {
+                $hearts = $pkg->features['hearts'] ?? 0;
+                if ($hearts > 0) {
+                    $user->increment('hearts', $hearts);
+                    Log::info('[Payment] Hearts credited to user', [
+                        'user_id' => $user->id,
+                        'hearts' => $hearts,
+                        'package_id' => $pkg->id,
+                    ]);
+                }
             }
         }
 
         // Use TransactionService for atomic payment distribution
         try {
             // Get affiliate referral if user is referred
-            $affiliateReferral = \App\Models\AffiliateReferral::where('user_id', $sub->user_id)->first();
+            $affiliateReferral = $sub->user_id
+                ? \App\Models\AffiliateReferral::where('user_id', $sub->user_id)->first()
+                : null;
             $referralCode = $affiliateReferral?->affiliate?->referral_code;
 
-            $packageName = $sub->package->name ?? 'Package';
+            $packageName = $pkg->name ?? 'Package';
             $result = $this->transactionService->processPayment([
                 'user_id' => $sub->user_id,
                 'amount' => $amount,
                 'referral_code' => $referralCode,
                 'quiz_id' => $quizId,
                 'quiz_master_id' => $quizMasterId,
-                'gateway' => $mpesaService->gateway ?? 'mpesa',
+                'gateway' => 'mpesa',
                 'tx_id' => $txId,
                 'item_id' => $sub->package_id,
                 'item_type' => 'subscription',
-                'description' => "Subscription payment: {$packageName}",
+                'description' => $isRenewal ? "Subscription renewal: {$packageName}" : "New subscription: {$packageName}",
+                'meta' => [
+                    'subscription_id' => $sub->id,
+                    'package_id' => $sub->package_id,
+                    'is_renewal' => $isRenewal,
+                ],
             ]);
 
             Log::info('[Payment] Subscription payment processed via TransactionService', [
@@ -793,9 +807,8 @@ class PaymentController extends Controller
                 'user_id' => $sub->user_id,
                 'amount' => $amount,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
-            throw $e;
+            // Still proceed as subscription itself is marked active above
         }
 
         // Notify and broadcast subscription update
@@ -868,7 +881,7 @@ class PaymentController extends Controller
     /**
      * Create transaction for quiz one-off purchase and credit quiz master.
      */
-    private function createTransactionForQuiz(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $quizMasterShare, float $platformShare)
+    private function createTransactionForQuiz(\App\Models\OneOffPurchase $purchase, string $txId, float $amount)
     {
         $quizMasterId = null;
         $quiz = \App\Models\Quiz::find($purchase->item_id);
@@ -899,7 +912,7 @@ class PaymentController extends Controller
                 'description' => 'One-off quiz purchase',
             ]);
 
-            Log::info('[Payment] One-off quiz purchase processed via TransactionService', [
+            Log::channel('payment')->info('[Payment] One-off quiz purchase processed via TransactionService', [
                 'purchase_id' => $purchase->id,
                 'user_id' => $purchase->user_id,
                 'quiz_id' => $purchase->item_id,
@@ -907,7 +920,7 @@ class PaymentController extends Controller
                 'amount' => $amount,
             ]);
         } catch (\Throwable $e) {
-            Log::error('[Payment] Failed to process one-off quiz purchase', [
+            Log::channel('payment')->error('[Payment] Failed to process one-off quiz purchase', [
                 'purchase_id' => $purchase->id,
                 'user_id' => $purchase->user_id,
                 'error' => $e->getMessage(),
@@ -982,12 +995,17 @@ class PaymentController extends Controller
     /**
      * Create transaction for battle one-off purchase with distributed quiz-master shares.
      */
-	    private function createTransactionForBattle(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $totalQuizMasterShare, float $platformShare)
+	    private function createTransactionForBattle(\App\Models\OneOffPurchase $purchase, string $txId, float $amount)
 	    {
 	        $battle = \App\Models\Battle::with('questions')->find($purchase->item_id);
 	        if (!$battle) {
 	            return;
 	        }
+            
+            // Calculate shares inside to remove fallbacks from the main flow
+            $platformPct = $this->getPlatformSharePercentage();
+            $totalQuizMasterShare = round(($amount * (100.0 - $platformPct)) / 100.0, 2);
+            $platformShare = round($amount - $totalQuizMasterShare, 2);
 
 	        try {
 	            $questionCount = $battle->questions?->count() ?? 0;
@@ -1040,7 +1058,7 @@ class PaymentController extends Controller
 	                        ['available' => 0, 'withdrawn_pending' => 0, 'settled' => 0, 'earned_this_month' => 0, 'lifetime_earned' => 0]
 	                    );
 
-	                    $wallet->available = bcadd((string) ($wallet->available ?? 0), (string) $share, 2);
+	                    $wallet->pending = bcadd((string) ($wallet->pending ?? 0), (string) $share, 2);
 	                    $wallet->earned_this_month = bcadd((string) ($wallet->earned_this_month ?? 0), (string) $share, 2);
 	                    $wallet->lifetime_earned = bcadd((string) ($wallet->lifetime_earned ?? 0), (string) $share, 2);
 	                    $wallet->earned_from_battles = bcadd((string) ($wallet->earned_from_battles ?? 0), (string) $share, 2);
@@ -1061,7 +1079,7 @@ class PaymentController extends Controller
 	                        'status' => \App\Models\Transaction::STATUS_COMPLETED,
 	                        'description' => "Battle question earnings (Battle #{$battle->id})",
 	                        'reference_id' => $txId,
-	                        'balance_after' => (float) ($wallet->available ?? null),
+	                        'balance_after' => (float) ($wallet->pending ?? null),
 	                        'meta' => [
 	                            'battle_id' => $battle->id,
 	                            'total_questions' => $questionCount,
@@ -1108,7 +1126,7 @@ class PaymentController extends Controller
      * Create transaction for tournament entry fee payment.
      * Tournament creator (organizer) is the "quiz master" who receives the entry fee commission.
      */
-    private function createTransactionForTournament(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $quizMasterShare, float $platformShare)
+    private function createTransactionForTournament(\App\Models\OneOffPurchase $purchase, string $txId, float $amount)
     {
         try {
             // Get tournament to find creator/organizer
@@ -1119,7 +1137,7 @@ class PaymentController extends Controller
                     'tournament_id' => $purchase->item_id,
                 ]);
                 // Fall back to generic handler
-                return $this->createGenericTransaction($purchase, $txId, $amount, $quizMasterShare, $platformShare);
+                return $this->createGenericTransaction($purchase, $txId, $amount);
             }
 
             $affiliateReferral = $purchase->user_id
@@ -1143,7 +1161,7 @@ class PaymentController extends Controller
                 'description' => "Tournament entry fee for \"{$tournament->name}\"",
             ]);
 
-            Log::info('[Payment] Tournament entry fee processed via TransactionService', [
+            Log::channel('payment')->info('[Payment] Tournament entry fee processed via TransactionService', [
                 'purchase_id' => $purchase->id,
                 'user_id' => $purchase->user_id,
                 'tournament_id' => $purchase->item_id,
@@ -1151,7 +1169,7 @@ class PaymentController extends Controller
                 'amount' => $amount,
             ]);
         } catch (\Throwable $e) {
-            Log::error('[Payment] Failed to process tournament entry fee', [
+            Log::channel('payment')->error('[Payment] Failed to process tournament entry fee', [
                 'purchase_id' => $purchase->id,
                 'user_id' => $purchase->user_id,
                 'tournament_id' => $purchase->item_id,
@@ -1164,7 +1182,7 @@ class PaymentController extends Controller
     /**
      * Create generic transaction for unknown item types.
      */
-    private function createGenericTransaction(\App\Models\OneOffPurchase $purchase, string $txId, float $amount, float $quizMasterShare, float $platformShare)
+    private function createGenericTransaction(\App\Models\OneOffPurchase $purchase, string $txId, float $amount)
     {
         try {
             $affiliateReferral = $purchase->user_id
@@ -1186,14 +1204,14 @@ class PaymentController extends Controller
                 'description' => "One-off {$purchase->item_type} purchase",
             ]);
 
-            Log::info('[Payment] Generic one-off purchase processed via TransactionService', [
+            Log::channel('payment')->info('[Payment] Generic one-off purchase processed via TransactionService', [
                 'purchase_id' => $purchase->id,
                 'user_id' => $purchase->user_id,
                 'item_type' => $purchase->item_type,
                 'amount' => $amount,
             ]);
         } catch (\Throwable $e) {
-            Log::error('[Payment] Failed to process generic one-off purchase', [
+            Log::channel('payment')->error('[Payment] Failed to process generic one-off purchase', [
                 'purchase_id' => $purchase->id,
                 'item_type' => $purchase->item_type,
                 'error' => $e->getMessage(),

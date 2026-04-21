@@ -191,15 +191,20 @@ class TransactionService
                 ],
             ]);
 
-            Log::info('Payment processed successfully', [
-                'transaction_id' => $mainTransaction->id,
-                'amount' => $amount,
-                'quiz_master_id' => $quizMasterId,
-                'affiliate_share' => $affiliateShare,
-                'qm_share' => $quizMasterShare,
-                'platform_share' => $platformShare,
+            Log::channel('payment')->info("Payment processed [{$txId}]: Gross KES {$amount}", [
+                'tx_id' => $txId,
                 'item_type' => $itemType,
                 'item_id' => $itemId,
+                'distribution' => [
+                    'affiliate' => (float)$affiliateShare,
+                    'quiz_master' => (float)$quizMasterShare,
+                    'platform' => (float)$platformShare,
+                ],
+                'wallets' => [
+                    'platform_new_balance' => (float)$platformWallet->available,
+                    'qm_id' => $quizMasterId,
+                    'qm_new_pending' => $qmWallet ? (float)$qmWallet->pending : null,
+                ]
             ]);
 
             return $mainTransaction;
@@ -238,22 +243,32 @@ class TransactionService
                     $remaining = bcsub($remaining, $affiliateShare, 2);
 
                     $affWallet = Wallet::firstOrCreate(['user_id' => $affiliate->user_id]);
-                    $affWallet->available = bcadd($affWallet->available ?? 0, $affiliateShare, 2);
+                    $affWallet->pending = bcadd($affWallet->pending ?? 0, $affiliateShare, 2);
+                    $affWallet->lifetime_earned = bcadd($affWallet->lifetime_earned ?? 0, $affiliateShare, 2);
                     $affWallet->earned_from_affiliates = bcadd($affWallet->earned_from_affiliates ?? 0, $affiliateShare, 2);
                     $affWallet->save();
                 }
             }
 
-            // Quiz Master Share - AUTO-SETTLED (goes directly to available)
+            // Quiz Master Share - Goes to PENDING (wait for settlement)
             $qmShare = bcmul($remaining, $qmCommissionRate / 100, 2);
             $platformShare = bcsub($remaining, $qmShare, 2);
 
-            $qmWallet = Wallet::firstOrCreate(['user_id' => $quizMasterId]);
-            $qmWallet->available = bcadd($qmWallet->available ?? 0, $qmShare, 2);
+            $qmWallet = Wallet::firstOrCreate(['user_id' => $quizMasterId], ['type' => Wallet::TYPE_QUIZ_MASTER]);
+            $qmWallet->pending = bcadd($qmWallet->pending ?? 0, $qmShare, 2);
             $qmWallet->earned_this_month = bcadd($qmWallet->earned_this_month ?? 0, $qmShare, 2);
             $qmWallet->lifetime_earned = bcadd($qmWallet->lifetime_earned ?? 0, $qmShare, 2);
             $qmWallet->earned_from_quizzes = bcadd($qmWallet->earned_from_quizzes ?? 0, $qmShare, 2);
             $qmWallet->save();
+
+            // Platform Share - Credited to platform wallet immediately (user_id = 0)
+            $platformWallet = Wallet::firstOrCreate(
+                ['user_id' => 0, 'type' => Wallet::TYPE_PLATFORM],
+                ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+            );
+            $platformWallet->available = bcadd($platformWallet->available ?? 0, $platformShare, 2);
+            $platformWallet->lifetime_earned = bcadd($platformWallet->lifetime_earned ?? 0, $platformShare, 2);
+            $platformWallet->save();
 
             // Log transaction
             Transaction::create([
@@ -271,6 +286,18 @@ class TransactionService
             ]);
 
             event(new \App\Events\WalletUpdated($qmWallet->toArray(), $quizMasterId));
+
+            Log::channel('payment')->info("Paid quiz payment processed: Gross KES {$amount}", [
+                'quizee_id' => $quizeeId,
+                'quiz_id' => $quizId,
+                'distribution' => [
+                    'affiliate' => (float)$affiliateShare,
+                    'quiz_master' => (float)$qmShare,
+                    'platform' => (float)$platformShare,
+                ],
+                'qm_new_pending' => (float)$qmWallet->pending,
+                'platform_new_available' => (float)$platformWallet->available,
+            ]);
 
             return [
                 'success' => true,

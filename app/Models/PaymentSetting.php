@@ -17,10 +17,13 @@ class PaymentSetting extends Model
      */
     public static function platformRevenueSharePercent(): float
     {
-        $setting = static::query()->firstOrCreate(
-            ['gateway' => 'mpesa'],
-            ['revenue_share' => 0]
-        );
+        $setting = static::query()->where('gateway', 'mpesa')->first();
+        if (!$setting) {
+             // If no setting exists, we must NOT fallback to 0% as it hides configuration errors.
+             // We can either return a safe system default (e.g. 20%) or throw.
+             // Given the user wants to "remove fallbacks", we will throw.
+             throw new \RuntimeException('Platform revenue share setting is missing for gateway "mpesa". Please configure it in Admin Settings.');
+        }
 
         if ($setting->revenue_share === null) {
             throw new \RuntimeException('Platform revenue share (payment_settings.revenue_share) is not set.');

@@ -148,78 +148,79 @@ class WalletController extends Controller
         $perPage = $perPage > 0 ? $perPage : 20;
         $txs = $q->paginate($perPage);
 
-        $collection = $txs->getCollection();
+        $items = $txs->items();
+        $payoutRefs = [];
+        foreach ($items as $item) {
+            if (($item->type ?? null) === Transaction::TYPE_QUIZ_MASTER_PAYOUT) {
+                $payoutRefs[] = $item->reference_id ?? $item->tx_id;
+            }
+        }
+        $payoutRefs = array_unique(array_filter($payoutRefs));
 
-        // If we have a dedicated quiz_master_payout for a payment, hide the payment row
-        // (quiz masters should see their earnings, not the full payment breakdown).
-        $payoutRefs = $collection
-            ->filter(fn ($t) => ($t->type ?? null) === Transaction::TYPE_QUIZ_MASTER_PAYOUT)
-            ->map(fn ($t) => $t->reference_id ?? $t->tx_id)
-            ->filter()
-            ->unique();
+        $sanitized = [];
+        foreach ($items as $item) {
+            $type = (string)($item->type ?? '');
+            
+            // If we have a dedicated quiz_master_payout for a payment, hide the payment row
+            if ($type === Transaction::TYPE_PAYMENT) {
+                $ref = $item->reference_id ?? $item->tx_id;
+                if ($ref && in_array($ref, $payoutRefs)) {
+                    continue;
+                }
+            }
 
-        $sanitized = $collection
-            ->reject(function ($t) use ($payoutRefs) {
-                if (($t->type ?? null) !== Transaction::TYPE_PAYMENT) return false;
-                $ref = $t->reference_id ?? $t->tx_id;
-                if (!$ref) return false;
-                return $payoutRefs->contains($ref);
-            })
-            ->map(function ($t) {
-                $type = (string)($t->type ?? '');
-
-                // Pull quiz-master share without exposing platform numbers.
+            // Pull quiz-master share without exposing platform numbers.
+            $qmShare = 0.0;
+            try {
+                $qmShare = (float)($item->{'quiz-master_share'} ?? 0);
+            } catch (\Throwable $e) {
                 $qmShare = 0.0;
-                try {
-                    $qmShare = (float)($t->{'quiz-master_share'} ?? 0);
-                } catch (\Throwable $e) {
-                    $qmShare = 0.0;
+            }
+
+            $amount = (float)($item->amount ?? 0);
+            $direction = 'credit';
+
+            if ($type === Transaction::TYPE_WITHDRAWAL) {
+                $direction = 'debit';
+            } elseif ($type === Transaction::TYPE_PAYMENT) {
+                // For payment rows (fallback), show only quiz-master share when present.
+                if ($qmShare > 0) $amount = $qmShare;
+            }
+
+            $meta = $item->meta;
+            if (is_array($meta)) {
+                foreach ([
+                    'platform_share', 'platformShare', 'platform', 'platform_fee',
+                    'affiliate_share', 'affiliateShare', 'affiliate',
+                    'shares', // may include platform share breakdown
+                ] as $k) {
+                    if (array_key_exists($k, $meta)) unset($meta[$k]);
                 }
+            }
 
-                $amount = (float)($t->amount ?? 0);
-                $direction = 'credit';
+            $sanitized[] = [
+                'id' => $item->id,
+                'created_at' => $item->created_at,
+                'status' => $item->status,
+                'type' => $type,
+                'description' => $item->description,
+                'reference_id' => $item->reference_id ?? $item->tx_id,
+                'gateway' => $item->gateway,
+                'quiz_id' => $item->quiz_id,
+                'quiz' => $item->quiz ? [
+                    'id' => $item->quiz->id,
+                    'title' => $item->quiz->title,
+                    'slug' => $item->quiz->slug,
+                ] : null,
+                'tx_id' => $item->tx_id,
+                'amount' => (float)$amount,
+                'direction' => $direction,
+                'balance_after' => $item->balance_after !== null ? (float)$item->balance_after : null,
+                'meta' => $meta,
+            ];
+        }
 
-                if ($type === Transaction::TYPE_WITHDRAWAL) {
-                    $direction = 'debit';
-                } elseif ($type === Transaction::TYPE_PAYMENT) {
-                    // For payment rows (fallback), show only quiz-master share when present.
-                    if ($qmShare > 0) $amount = $qmShare;
-                }
-
-                $meta = $t->meta;
-                if (is_array($meta)) {
-                    foreach ([
-                        'platform_share', 'platformShare', 'platform', 'platform_fee',
-                        'affiliate_share', 'affiliateShare', 'affiliate',
-                        'shares', // may include platform share breakdown
-                    ] as $k) {
-                        if (array_key_exists($k, $meta)) unset($meta[$k]);
-                    }
-                }
-
-                return [
-                    'id' => $t->id,
-                    'created_at' => $t->created_at,
-                    'status' => $t->status,
-                    'type' => $type,
-                    'description' => $t->description,
-                    'reference_id' => $t->reference_id ?? $t->tx_id,
-                    'gateway' => $t->gateway,
-                    'quiz_id' => $t->quiz_id,
-                    'quiz' => $t->quiz ? [
-                        'id' => $t->quiz->id,
-                        'title' => $t->quiz->title,
-                        'slug' => $t->quiz->slug,
-                    ] : null,
-                    'tx_id' => $t->tx_id,
-                    'amount' => (float)$amount,
-                    'direction' => $direction,
-                    'balance_after' => $t->balance_after !== null ? (float)$t->balance_after : null,
-                    'meta' => $meta,
-                ];
-            });
-
-        $txs->setCollection($sanitized);
+        $txs->setCollection(collect($sanitized));
 
         return response()->json(['ok' => true, 'transactions' => $txs]);
     }
@@ -238,7 +239,7 @@ class WalletController extends Controller
         try {
             DB::transaction(function () use (&$wr, $wallet, $amount, $request, $user) {
                 // debit available
-                $wallet->available = bcsub($wallet->available, $amount, 2);
+                $wallet->setAttribute('available', (string)bcsub((string)$wallet->available, (string)$amount, 2));
                 $wallet->save();
 
                 // create withdrawal request
@@ -260,9 +261,15 @@ class WalletController extends Controller
             if ($wr) {
                 event(new \App\Events\WithdrawalRequestUpdated($wr->toArray(), $user->id));
             }
-        } catch (\Throwable $e) {
-            // ignore broadcast errors
-        }
+        } catch (\Throwable $e) { }
+
+        Log::channel('payment')->info("Withdrawal request created: User {$user->id}, Amount KES {$amount}", [
+            'user_id' => $user->id,
+            'amount' => $amount,
+            'method' => $wr->method ?? 'unknown',
+            'status' => 'pending',
+            'new_available' => (float)$wallet->available
+        ]);
 
         return response()->json(['ok' => true, 'withdrawal' => $wr]);
     }
@@ -307,30 +314,31 @@ class WalletController extends Controller
 
         $amount = $request->input('amount', null); // optional amount to settle; if null settle full pending
 
+        $toSettle = 0;
         $wallet = null;
         try {
-            DB::transaction(function () use (&$wallet, $quizMasterId, $amount) {
+            DB::transaction(function () use (&$wallet, &$toSettle, $quizMasterId, $amount) {
                 // lock wallet row
                 $w = Wallet::where('user_id', $quizMasterId)->lockForUpdate()->first();
                 if (!$w) {
                     $w = Wallet::create(['user_id' => $quizMasterId, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
                 }
+                $pending = (string)$w->pending;
+                $toSettle = (string)($amount ?? $pending);
 
-                $pending = (float)$w->pending;
-                $toSettle = $amount !== null ? (float)$amount : $pending;
-                if ($toSettle <= 0) {
+                if (bccomp($toSettle, '0', 2) <= 0) {
                     // nothing to do
                     $wallet = $w;
                     return;
                 }
-                if ($toSettle > $pending) {
+                if (bccomp($toSettle, $pending, 2) > 0) {
                     // cap at pending
                     $toSettle = $pending;
                 }
 
                 // move from pending -> available
-                $w->pending = bcsub($w->pending, $toSettle, 2);
-                $w->available = bcadd($w->available, $toSettle, 2);
+                $w->setAttribute('pending', (string)bcsub($pending, $toSettle, 2));
+                $w->setAttribute('available', (string)bcadd((string)$w->available, $toSettle, 2));
                 $w->save();
 
                 $wallet = $w;
@@ -345,6 +353,14 @@ class WalletController extends Controller
                 event(new \App\Events\WalletUpdated($wallet->toArray(), $quizMasterId));
             }
         } catch (\Throwable $_) { }
+
+        Log::channel('payment')->info("Single user settlement: QM {$quizMasterId}, Settled KES {$toSettle}", [
+            'admin_id' => Auth::id(),
+            'quiz_master_id' => $quizMasterId,
+            'amount' => $toSettle,
+            'new_available' => $wallet ? (float)$wallet->available : null,
+            'new_pending' => $wallet ? (float)$wallet->pending : null
+        ]);
 
         return response()->json(['ok' => true, 'wallet' => $wallet]);
     }
@@ -381,6 +397,24 @@ class WalletController extends Controller
             ->where('amount', '<', 0)
             ->sum('amount') ?? 0;
 
+        // Breakdown by item type
+        $revenueBreakdown = Transaction::where('amount', '>', 0)
+            ->whereNotNull('meta->item_type')
+            ->selectRaw('JSON_UNQUOTE(JSON_EXTRACT(meta, "$.item_type")) as item_type, SUM(amount) as total')
+            ->groupBy('item_type')
+            ->get()
+            ->pluck('total', 'item_type')
+            ->toArray();
+
+        // Fund allocation breakdown
+        $qmAvailableTotal = Wallet::where('user_id', '!=', 0)
+            ->where('type', Wallet::TYPE_QUIZ_MASTER)
+            ->sum('available') ?? 0;
+            
+        $affiliateAvailableTotal = Wallet::where('type', Wallet::TYPE_QUIZEE)
+            ->where('user_id', '!=', 0)
+            ->sum('available') ?? 0;
+
         return response()->json([
             'ok' => true,
             'data' => [
@@ -392,15 +426,25 @@ class WalletController extends Controller
                 'cash_out_last_30' => (float)$cashOutLast30,
                 'net_flow_last_30' => (float)($cashInLast30 + $cashOutLast30),
                 'revenue_breakdown' => [
-                    'quizzes' => (float)($totalRevenue * 0.70),
-                    'subscriptions' => (float)($totalRevenue * 0.20),
-                    'affiliates' => (float)($totalRevenue * 0.10),
+                    'quizzes' => (float)($revenueBreakdown['quiz'] ?? 0),
+                    'subscriptions' => (float)($revenueBreakdown['subscription'] ?? 0) + (float)($revenueBreakdown['package'] ?? 0),
+                    'tournaments' => (float)($revenueBreakdown['tournament'] ?? 0),
+                    'battles' => (float)($revenueBreakdown['battle'] ?? 0),
+                    'other' => (float)max(0, $totalRevenue - (
+                        (float)($revenueBreakdown['quiz'] ?? 0) + 
+                        (float)($revenueBreakdown['subscription'] ?? 0) + 
+                        (float)($revenueBreakdown['package'] ?? 0) + 
+                        (float)($revenueBreakdown['tournament'] ?? 0) + 
+                        (float)($revenueBreakdown['battle'] ?? 0)
+                    ))
                 ],
                 'fund_allocation' => [
-                    'platform_ops' => (float)($platformBalance * 0.35),
-                    'quiz_master_wallets' => (float)($platformBalance * 0.40),
-                    'reserved' => (float)($platformBalance * 0.25),
-                ],
+                    'platform_ops' => (float)$platformBalance,
+                    'quiz_master_wallets' => (float)$qmAvailableTotal,
+                    'pending_settlements' => (float)$pendingSettlements,
+                    'affiliate_wallets' => (float)$affiliateAvailableTotal,
+                    'reserved' => (float)$affiliatePayoutsDue, // Using payouts due as a "reserved" concept
+                ]
             ]
         ]);
     }
@@ -542,15 +586,16 @@ class WalletController extends Controller
         try {
             DB::transaction(function () {
                 // Get all wallets with pending > 0
-                $wallets = Wallet::where('pending', '>', 0)->lockForUpdate()->get();
+                $wallets = Wallet::query()->where('pending', '>', 0)->lockForUpdate()->get();
                 
                 foreach ($wallets as $wallet) {
+                    /** @var Wallet $wallet */
                     if ($wallet->pending > 0) {
-                        $pending = (float)$wallet->pending;
+                        $pending = (string)$wallet->pending;
                         
                         // Move from pending -> available
-                        $wallet->pending = 0;
-                        $wallet->available = bcadd($wallet->available, $pending, 2);
+                        $wallet->setAttribute('pending', '0.00');
+                        $wallet->setAttribute('available', (string)bcadd((string)$wallet->available, $pending, 2));
                         $wallet->save();
 
                         // Create transaction record
@@ -567,10 +612,15 @@ class WalletController extends Controller
                             ]
                         ]);
 
-                        // Broadcast wallet update
                         try {
                             event(new \App\Events\WalletUpdated($wallet->toArray(), $wallet->user_id));
                         } catch (\Throwable $_) { }
+
+                        Log::channel('payment')->info("Bulk settlement: Processed user {$wallet->user_id}, amount KES {$pending}", [
+                            'user_id' => $wallet->user_id,
+                            'amount' => $pending,
+                            'new_available' => (float)$wallet->available
+                        ]);
                     }
                 }
             });
@@ -600,20 +650,20 @@ class WalletController extends Controller
                     $w = Wallet::create(['user_id' => $userId, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
                 }
 
-                $pending = (float)$w->pending;
-                $toSettle = $amount !== null ? (float)$amount : $pending;
+                $pending = (string)$w->pending;
+                $toSettle = (string)($amount ?? $pending);
                 
-                if ($toSettle <= 0) {
+                if (bccomp($toSettle, '0', 2) <= 0) {
                     $wallet = $w;
                     return;
                 }
-                if ($toSettle > $pending) {
+                if (bccomp($toSettle, $pending, 2) > 0) {
                     $toSettle = $pending;
                 }
 
                 // move from pending -> available
-                $w->pending = bcsub($w->pending, $toSettle, 2);
-                $w->available = bcadd($w->available, $toSettle, 2);
+                $w->setAttribute('pending', (string)bcsub($pending, $toSettle, 2));
+                $w->setAttribute('available', (string)bcadd((string)$w->available, $toSettle, 2));
                 $w->save();
 
                 // Create transaction record for audit trail
@@ -1091,11 +1141,11 @@ class WalletController extends Controller
         }
 
         if (is_numeric($rawQuiz)) {
-            return \App\Models\Quiz::whereKey((int) $rawQuiz)->value('id');
+            return Quiz::whereKey((int) $rawQuiz)->value('id');
         }
 
         $value = trim((string) $rawQuiz);
-        return \App\Models\Quiz::query()
+        return Quiz::query()
             ->where('slug', $value)
             ->orWhere('title', 'like', '%' . $value . '%')
             ->value('id');
@@ -1175,11 +1225,11 @@ class WalletController extends Controller
 
         try {
             $recipientId = $request->input('recipient_id');
-            $recipient = \App\Models\User::findOrFail($recipientId);
+            $recipient = User::findOrFail($recipientId);
 
             // Create notification entry for inbox message
             DB::table('notifications')->insert([
-                'id' => \Illuminate\Support\Str::uuid(),
+                'id' => Str::uuid(),
                 'type' => 'App\Notifications\AdminMessage',
                 'notifiable_type' => 'App\Models\User',
                 'notifiable_id' => $recipientId,
@@ -1237,7 +1287,7 @@ class WalletController extends Controller
                 // Auto-settle: if paid, create transaction and credit available balance immediately
                 if ($paymentStatus === 'paid') {
                     // Create transaction
-                    $result = app(\App\Services\TransactionService::class)->processPaidQuizPayment(
+                    $result = app(TransactionService::class)->processPaidQuizPayment(
                         quizMasterId: $quizMasterId,
                         quizeeId: $user->id,
                         quizId: $quizId,
@@ -1253,7 +1303,7 @@ class WalletController extends Controller
                     ]);
                 } else {
                     // Payment pending: create pending payment record for recovery
-                    $pendingPayment = app(\App\Services\TransactionService::class)->createPendingPayment(
+                    $pendingPayment = app(TransactionService::class)->createPendingPayment(
                         quizMasterId: $quizMasterId,
                         quizeeId: $user->id,
                         quizId: $quizId,

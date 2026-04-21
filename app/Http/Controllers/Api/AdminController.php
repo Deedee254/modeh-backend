@@ -421,7 +421,7 @@ class AdminController extends Controller
                     ]);
             });
             
-            Log::info('[Withdrawal] Request rejected and refunded', [
+            Log::channel('payment')->info("[Withdrawal] Request REJECTED and REFUNDED", [
                 'withdrawal_id' => $withdrawalId,
                 'quiz_master_id' => $withdrawal->{'quiz_master_id'},
                 'amount' => $withdrawal->amount,
@@ -478,11 +478,11 @@ class AdminController extends Controller
                 $withdrawal->update(['meta' => $meta]);
             }
             
-            Log::info('[Withdrawal] Marked as paid', [
+            Log::channel('payment')->info("[Withdrawal] Marked as PAID", [
                 'withdrawal_id' => $withdrawalId,
                 'quiz_master_id' => $withdrawal->{'quiz_master_id'},
                 'amount' => $withdrawal->amount,
-                'transaction_id' => $request->input('transaction_id'),
+                'external_tx_id' => $request->input('transaction_id'),
                 'admin_id' => $user->id,
             ]);
             
@@ -599,10 +599,8 @@ class AdminController extends Controller
 
         // GET settings
         if ($request->method() === 'GET') {
-            $mpesaSetting = PaymentSetting::query()->firstOrCreate(
-                ['gateway' => 'mpesa'],
-                ['revenue_share' => 0]
-            );
+            $mpesaSetting = PaymentSetting::where('gateway', 'mpesa')->first();
+            $revenueShare = $mpesaSetting ? (float) $mpesaSetting->revenue_share : null;
 
             $approvalsEnabled = config('features.quiz_approvals_enabled', true);
             $defaultQuizPrice = 0.0;
@@ -617,9 +615,9 @@ class AdminController extends Controller
             return response()->json([
                 'ok' => true,
                 'settings' => [
-                    'revenue_share' => (float) $mpesaSetting->revenue_share,
+                    'revenue_share' => $revenueShare,
                     'approvals_enabled' => (boolean) $approvalsEnabled,
-                    'mpesa_active' => (boolean) ($mpesaSetting->is_active ?? true),
+                    'mpesa_active' => $mpesaSetting ? (boolean) ($mpesaSetting->is_active ?? true) : true,
                     'default_quiz_price' => $defaultQuizPrice,
                     'default_quiz_time_limit' => (integer) config('features.default_quiz_time_limit', 30),
                 ],

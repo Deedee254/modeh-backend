@@ -36,7 +36,7 @@ class QuizResource extends JsonResource
             'description' => $this->description,
             'youtube_url' => $this->youtube_url,
             'video_url' => $this->video_url,
-            'cover_image' => $this->cover_image,
+            'cover_image' => $this->cover_image ? (\Illuminate\Support\Str::startsWith($this->cover_image, ['http://', 'https://', '/storage']) ? $this->cover_image : url('storage/' . $this->cover_image)) : null,
             'created_by' => [
                 'id' => $this->author?->id,
                 'name' => $this->author?->name,
