@@ -284,11 +284,23 @@ class QuizController extends Controller
         } catch (\Throwable $_) {
         }
 
+        // Get existing question IDs for this quiz to determine if we're updating or creating
+        $existingQuestionIds = $quiz->questions()->pluck('id')->toArray();
+        $incomingQuestionIds = [];
+
         // Support per-question file uploads: keys may be numeric index or question uid
         $mediaFiles = $request->file('question_media', []);
         foreach ($request->questions as $index => $q) {
             try {
-                $this->createQuestionForUpdate($quiz, $user, $q, $index, $mediaFiles, $topic);
+                // Check if this question has an ID (update) or is new (create)
+                $questionId = $q['id'] ?? null;
+                if ($questionId && in_array($questionId, $existingQuestionIds)) {
+                    $incomingQuestionIds[] = $questionId;
+                    $this->updateQuestionForUpdate($quiz, $user, $q, $index, $mediaFiles, $topic);
+                } else {
+                    // New question - create it
+                    $this->createQuestionForUpdate($quiz, $user, $q, $index, $mediaFiles, $topic);
+                }
             } catch (\Throwable $e) {
                 try {
                     Log::error('QuizController@update question failed', [
@@ -301,6 +313,12 @@ class QuizController extends Controller
                 } catch (\Throwable $_) {
                 }
             }
+        }
+
+        // Delete questions that were not in the incoming payload (user deleted them)
+        $questionsToDelete = array_diff($existingQuestionIds, $incomingQuestionIds);
+        if (!empty($questionsToDelete)) {
+            Question::whereIn('id', $questionsToDelete)->delete();
         }
 
         try {
@@ -408,6 +426,98 @@ class QuizController extends Controller
         }
     }
 
+    private function updateQuestionForUpdate(Quiz $quiz, $user, array $q, $index, array $mediaFiles, $topic): void
+    {
+        $questionId = $q['id'] ?? null;
+        if (!$questionId) {
+            return;
+        }
+
+        $question = Question::find($questionId);
+        if (!$question || $question->quiz_id !== $quiz->id) {
+            // Question doesn't exist or doesn't belong to this quiz, create it instead
+            $this->createQuestionForUpdate($quiz, $user, $q, $index, $mediaFiles, $topic);
+            return;
+        }
+
+        // Handle media upload if provided
+        $mediaPath = $question->media_path;
+        $mediaType = $question->media_type;
+        $file = null;
+
+        if (is_array($mediaFiles) && array_key_exists($index, $mediaFiles) && $mediaFiles[$index]) {
+            $file = $mediaFiles[$index];
+        } elseif (isset($q['uid']) && is_array($mediaFiles) && array_key_exists($q['uid'], $mediaFiles) && $mediaFiles[$q['uid']]) {
+            $file = $mediaFiles[$q['uid']];
+        }
+
+        if ($file) {
+            $mPath = Storage::disk('public')->putFile('question_media', $file);
+            $mediaPath = Storage::url($mPath);
+            $mediaType = $file->getClientMimeType();
+        }
+
+        // Update question fields
+        $qType = $q['type'] ?? $question->type;
+        $body = $q['body'] ?? ($q['text'] ?? $question->body);
+        $options = $q['options'] ?? $question->options;
+        $answers = $q['answers'] ?? (isset($q['correct']) ? [$q['correct']] : $question->answers);
+
+        $siteSettings = SiteSetting::current();
+        $siteAutoQuestions = $siteSettings ? (bool) $siteSettings->auto_approve_questions : true;
+        $questionIsApproved = $siteAutoQuestions || (($topic && $topic->subject) ? (bool) ($topic->subject->auto_approve ?? false) : $question->is_approved);
+
+        // Determine correct/corrects for MCQ/MULTI types
+        $qCorrect = null;
+        $qCorrects = [];
+        if (isset($q['correct']) && is_numeric($q['correct'])) {
+            $qCorrect = (int) $q['correct'];
+        } elseif (is_array($answers) && isset($answers[0]) && is_numeric($answers[0])) {
+            $qCorrect = (int) $answers[0];
+        }
+        if (isset($q['corrects']) && is_array($q['corrects'])) {
+            $qCorrects = array_values(array_filter(array_map(static function ($c) {
+                return is_numeric($c) ? (int) $c : null;
+            }, $q['corrects']), static fn($v) => $v !== null));
+        }
+
+        $updateData = [
+            'type' => $qType,
+            'body' => $body,
+            'explanation' => $q['explanation'] ?? $question->explanation,
+            'youtube_url' => $q['youtube_url'] ?? $question->youtube_url,
+            'media_metadata' => $q['media_metadata'] ?? $question->media_metadata,
+            'options' => $options,
+            'answers' => $answers,
+            'media_path' => $mediaPath,
+            'media_type' => $mediaType,
+            'difficulty' => $q['difficulty'] ?? $question->difficulty,
+            'marks' => $q['marks'] ?? $question->marks,
+            'is_approved' => $questionIsApproved,
+            'is_banked' => isset($q['is_banked']) ? (bool) $q['is_banked'] : $question->is_banked,
+        ];
+
+        if ($this->questionsTableHasColumn('correct')) {
+            $updateData['correct'] = $qCorrect;
+        }
+
+        if ($this->questionsTableHasColumn('corrects')) {
+            $updateData['corrects'] = $qCorrects;
+        }
+
+        $question->update($updateData);
+
+        try {
+            Log::info('QuizController@update question updated', [
+                'quiz_id' => $quiz->id,
+                'question_id' => $question->id,
+                'index' => $index,
+            ]);
+        } catch (\Throwable $_) {
+        }
+    }
+
+
     private function finalizeQuizUpdate(Quiz $quiz): void
     {
         $quiz->save();
@@ -469,17 +579,19 @@ class QuizController extends Controller
         if (!$user) {
             $query->where('is_approved', true)->where('visibility', 'published');
         } else {
-            // only my quizzes unless admin OR specifically searching for everyone's quizzes
-            // Fix: allow users to see ALL approved/published quizzes by default if no 'mine' filter is present
-            if (!$user->is_admin && $request->boolean('mine')) {
-                // When viewing own quizzes, show all statuses (draft, published, scheduled, etc.)
+            // Check if requesting only own quizzes (mine=1)
+            $requestingOwnQuizzesOnly = $request->boolean('mine') || $request->get('mine') === '1' || $request->get('mine') === 1;
+            
+            if ($requestingOwnQuizzesOnly) {
+                // When viewing own quizzes, show ALL quizzes created by this user (all statuses)
+                // This is the quiz-master dashboard view, so strict filtering by owner
                 // Some legacy rows may have `created_by` populated instead of `user_id`.
                 $query->where(function ($q) use ($user) {
                     $q->where('user_id', $user->id)
                         ->orWhere('created_by', $user->id);
                 });
             } else if (!$user->is_admin) {
-                // By default for non-admins, show their own OR any approved/published ones
+                // By default for non-admins (not requesting own), show their own OR any approved/published ones
                 $query->where(function ($q) use ($user) {
                     $q->where(function ($mq) use ($user) {
                         $mq->where('user_id', $user->id)
@@ -490,6 +602,7 @@ class QuizController extends Controller
                         });
                 });
             }
+            // If admin and not requesting own quizzes, show ALL quizzes (no filter)
         }
 
         // filter by topic or approved (explicit query overrides defaults)

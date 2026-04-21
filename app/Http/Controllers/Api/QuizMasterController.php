@@ -44,7 +44,7 @@ class QuizMasterController extends Controller
             
             $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes.topic'])->get();
         } else {
-            $quizMasters = $query->with(['quizMasterProfile.grade'])->paginate(12);
+            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes.topic'])->paginate(12);
         }
 
         // Get current user for following checks

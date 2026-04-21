@@ -130,7 +130,7 @@ class LeaderboardController extends Controller
             // Use the query's selected columns (avoid overriding with a columns list that
             // may not exist across different schema versions). This is more resilient
             // and avoids errors when migrations differ between environments.
-            $paginated = $query->paginate($perPage, ['*'], 'page', $page);
+            $paginated = $query->with('institutions')->paginate($perPage, ['*'], 'page', $page);
 
             // Normalize collection items to a stable shape expected by frontend
             $paginated->getCollection()->transform(function ($u) {
@@ -140,6 +140,7 @@ class LeaderboardController extends Controller
                     'avatar' => $u->avatar,
                     'points' => (int)($u->points ?? 0), // Force integer
                     'country' => $u->country ?? null,
+                    'institution_name' => $u->institutions?->first()?->name ?? null,
                 ];
             });
 
