@@ -176,6 +176,31 @@ class Quiz extends Model
     }
 
     /**
+     * Accessor for the effective one-off price of the quiz.
+     * Takes into account the quiz-specific price and the global default.
+     * Respects the is_paid status (returns 0 if not paid).
+     *
+     * @return float
+     */
+    public function getPriceAttribute(): float
+    {
+        if (!$this->is_paid) {
+            return 0.0;
+        }
+
+        if ($this->one_off_price !== null && (float) $this->one_off_price > 0) {
+            return (float) $this->one_off_price;
+        }
+
+        try {
+            $pricingSetting = PricingSetting::singleton();
+            return (float) ($pricingSetting->default_quiz_one_off_price ?? 0);
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+    }
+
+    /**
      * Get the price a user needs to pay for this quiz.
      * Returns null if free, or the amount they need to pay.
      * Tries per-quiz price first, then falls back to global default.
@@ -189,17 +214,7 @@ class Quiz extends Model
             return null;
         }
 
-        // User needs to pay one-off price; use per-quiz price or fall back to global default
-        if ($this->one_off_price !== null && (float) $this->one_off_price > 0) {
-            return (float) $this->one_off_price;
-        }
-
-        try {
-            $pricingSetting = PricingSetting::singleton();
-            return (float) ($pricingSetting->default_quiz_one_off_price ?? 0);
-        } catch (\Throwable $e) {
-            return 0;
-        }
+        return $this->price;
     }
 
     // Return questions optionally shuffled and with answers shuffled per settings

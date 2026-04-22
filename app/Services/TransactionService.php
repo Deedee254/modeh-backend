@@ -39,6 +39,15 @@ class TransactionService
                     ?? Quiz::query()->whereKey($quizId)->value('created_by');
             }
 
+            // If the owner is an admin, we treat it as platform-owned (no QM split).
+            // Admin-created content revenue belongs 100% to the platform wallet (user_id = 0).
+            if ($quizMasterId) {
+                $owner = User::find($quizMasterId);
+                if ($owner && $owner->isAdmin()) {
+                    $quizMasterId = null;
+                }
+            }
+
             $affiliateShare = 0;
             $quizMasterShare = 0;
             $platformShare = $amount;
@@ -230,6 +239,14 @@ class TransactionService
             $amount,
             $referralCode,
         ) {
+            // If owner is admin, treat as platform-owned
+            if ($quizMasterId) {
+                $owner = User::find($quizMasterId);
+                if ($owner && $owner->isAdmin()) {
+                    $quizMasterId = null;
+                }
+            }
+
             $qmCommissionRate = PaymentSetting::quizMasterRevenueSharePercent();
             $distribution = [];
             $remaining = $amount;
@@ -251,15 +268,18 @@ class TransactionService
             }
 
             // Quiz Master Share - Goes to PENDING (wait for settlement)
-            $qmShare = bcmul($remaining, $qmCommissionRate / 100, 2);
-            $platformShare = bcsub($remaining, $qmShare, 2);
+            $qmShare = 0;
+            if ($quizMasterId) {
+                $qmShare = bcmul($remaining, $qmCommissionRate / 100, 2);
 
-            $qmWallet = Wallet::firstOrCreate(['user_id' => $quizMasterId], ['type' => Wallet::TYPE_QUIZ_MASTER]);
-            $qmWallet->pending = bcadd($qmWallet->pending ?? 0, $qmShare, 2);
-            $qmWallet->earned_this_month = bcadd($qmWallet->earned_this_month ?? 0, $qmShare, 2);
-            $qmWallet->lifetime_earned = bcadd($qmWallet->lifetime_earned ?? 0, $qmShare, 2);
-            $qmWallet->earned_from_quizzes = bcadd($qmWallet->earned_from_quizzes ?? 0, $qmShare, 2);
-            $qmWallet->save();
+                $qmWallet = Wallet::firstOrCreate(['user_id' => $quizMasterId], ['type' => Wallet::TYPE_QUIZ_MASTER]);
+                $qmWallet->pending = bcadd($qmWallet->pending ?? 0, $qmShare, 2);
+                $qmWallet->earned_this_month = bcadd($qmWallet->earned_this_month ?? 0, $qmShare, 2);
+                $qmWallet->lifetime_earned = bcadd($qmWallet->lifetime_earned ?? 0, $qmShare, 2);
+                $qmWallet->earned_from_quizzes = bcadd($qmWallet->earned_from_quizzes ?? 0, $qmShare, 2);
+                $qmWallet->save();
+            }
+            $platformShare = bcsub($remaining, $qmShare, 2);
 
             // Platform Share - Credited to platform wallet immediately (user_id = 0)
             $platformWallet = Wallet::firstOrCreate(
@@ -285,7 +305,9 @@ class TransactionService
                 'description' => "Quiz payment received from quizee",
             ]);
 
-            event(new \App\Events\WalletUpdated($qmWallet->toArray(), $quizMasterId));
+            if ($quizMasterId && isset($qmWallet)) {
+                event(new \App\Events\WalletUpdated($qmWallet->toArray(), $quizMasterId));
+            }
 
             Log::channel('payment')->info("Paid quiz payment processed: Gross KES {$amount}", [
                 'quizee_id' => $quizeeId,
@@ -295,7 +317,7 @@ class TransactionService
                     'quiz_master' => (float)$qmShare,
                     'platform' => (float)$platformShare,
                 ],
-                'qm_new_pending' => (float)$qmWallet->pending,
+                'qm_new_pending' => isset($qmWallet) ? (float)$qmWallet->pending : 0,
                 'platform_new_available' => (float)$platformWallet->available,
             ]);
 

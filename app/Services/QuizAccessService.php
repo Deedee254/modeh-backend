@@ -81,10 +81,8 @@ class QuizAccessService
             ];
         }
 
-        // Paid public quiz
-        $price = !is_null($quiz->one_off_price) && (float) $quiz->one_off_price > 0
-            ? (float) $quiz->one_off_price
-            : self::getDefaultQuizPrice();
+        // Paid public quiz - Use the unified price accessor from the model
+        $price = $quiz->price;
         return [
             'can_access' => true,
             'is_free' => false,
@@ -204,4 +202,3 @@ class QuizAccessService
         }
     }
 }
-

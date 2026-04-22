@@ -27,19 +27,6 @@ class QuizAttemptController extends Controller
         $this->achievementService = $achievementService;
     }
 
-    private function resolveQuizOneOffPrice(Quiz $quiz): float
-    {
-        if (!is_null($quiz->one_off_price) && (float) $quiz->one_off_price > 0) {
-            return (float) $quiz->one_off_price;
-        }
-
-        try {
-            $setting = \App\Models\PricingSetting::singleton();
-            return (float) ($setting->default_quiz_one_off_price ?? 0);
-        } catch (\Throwable $e) {
-            return 0.0;
-        }
-    }
 
     /**
      * Build a map of option id/index => display text for a question's options
@@ -308,7 +295,7 @@ class QuizAttemptController extends Controller
                 'marks' => $totalMarks, // Ensure specific total marks are included
                 'is_paid' => (bool) $quiz->is_paid,
                 'one_off_price' => $quiz->one_off_price ?? null,
-                'price' => $this->resolveQuizOneOffPrice($quiz),
+                'price' => $quiz->price,
                 // liked status
                 'liked' => $liked,
                 // Creator info
@@ -694,7 +681,7 @@ class QuizAttemptController extends Controller
 	        // Enforce payment for paid quizzes before marking (prevents bypassing paywall).
 	        $quiz = $attempt->quiz()->first();
 	        if ($quiz) {
-	            $effectivePrice = $this->resolveQuizOneOffPrice($quiz);
+	            $effectivePrice = $quiz->price;
 	            $isLocked = ($attempt->paid_for === false) && ((bool) ($quiz->is_paid ?? false) || $effectivePrice > 0);
 	            if ($isLocked) {
 	                $existingPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
@@ -789,7 +776,7 @@ class QuizAttemptController extends Controller
 	        // Get the quiz early to check if it's free
 	        $quiz = $attempt->quiz()->with('questions')->first();
 	        if ($quiz) {
-	            $effectivePrice = $this->resolveQuizOneOffPrice($quiz);
+	            $effectivePrice = $quiz->price;
 	            $isLocked = ($attempt->paid_for === false) && ((bool) ($quiz->is_paid ?? false) || $effectivePrice > 0);
 	            if ($isLocked) {
 	                // If user already has a confirmed purchase, mark the attempt as paid and allow viewing.
@@ -1053,7 +1040,7 @@ class QuizAttemptController extends Controller
         // map attempts to a simple shape with payment and access info
         $data->getCollection()->transform(function ($a) {
             $quiz = $a->quiz;
-            $effectivePrice = $quiz ? $this->resolveQuizOneOffPrice($quiz) : 0.0;
+            $effectivePrice = $quiz ? $quiz->price : 0.0;
             $isPaidQuiz = (bool) ($quiz->is_paid ?? false);
 
             return [
@@ -1407,7 +1394,7 @@ class QuizAttemptController extends Controller
 
         // Determine if results are locked
         // Results are locked if: quiz is paid AND attempt hasn't been paid for yet
-        $effectivePrice = $this->resolveQuizOneOffPrice($quiz);
+        $effectivePrice = $quiz->price;
         $isLocked = ($attempt->paid_for === false) &&
                     ($quiz->is_paid || $effectivePrice > 0);
         

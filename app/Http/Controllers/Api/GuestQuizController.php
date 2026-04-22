@@ -96,7 +96,7 @@ class GuestQuizController extends Controller
                         return 0.0;
                     }
                 })(),
-                'price' => $this->resolveQuizOneOffPrice($quiz),
+                'price' => $quiz->price,
                 'questions' => $questions,
             ],
         ]);
@@ -146,7 +146,7 @@ class GuestQuizController extends Controller
         $scoringResult = $this->calculateScore($validated['answers'], $questions);
         $detailedResults = $this->formatResultsWithExplanations($scoringResult['results'] ?? [], $questions);
 
-        $price = $this->resolveQuizOneOffPrice($quiz);
+        $price = $quiz->price;
         $requiresPayment = ((bool) $quiz->is_paid) || ($price > 0);
         $isUnlocked = !$requiresPayment || OneOffPurchase::whereNull('user_id')
             ->where('guest_identifier', $validated['guest_identifier'])
@@ -283,7 +283,7 @@ class GuestQuizController extends Controller
 
         $guestIdentifier = (string) $request->query('guest_identifier', '');
         $unlockToken = (string) $request->query('unlock_token', '');
-        $price = $this->resolveQuizOneOffPrice($attempt->quiz);
+        $price = $attempt->quiz->price;
         $requiresPayment = ((bool) $attempt->quiz->is_paid) || ($price > 0);
         $isUnlocked = !$requiresPayment || !$attempt->is_locked;
 
@@ -565,19 +565,4 @@ class GuestQuizController extends Controller
         ];
     }
 
-    private function resolveQuizOneOffPrice(Quiz $quiz): float
-    {
-        if (!is_null($quiz->one_off_price) && (float) $quiz->one_off_price > 0) {
-            return (float) $quiz->one_off_price;
-        }
-
-        try {
-            $setting = \App\Models\PricingSetting::singleton();
-            return (float) ($setting->default_quiz_one_off_price ?? 0);
-        } catch (\Throwable $e) {
-            return 0.0;
-        }
-    }
 }
-
-
