@@ -29,7 +29,7 @@ class GuestQuizController extends Controller
      * @param  \App\Models\Quiz $quiz
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getQuestions(Quiz $quiz)
+    public function getQuestions(Request $request, Quiz $quiz)
     {
         // Guests can never take institutional quizzes.
         if ($quiz->is_institutional) {

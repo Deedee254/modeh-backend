@@ -42,9 +42,13 @@ class QuizMasterController extends Controller
                     ->orWhereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%" . implode("%", $slugParts) . "%"]);
             });
             
-            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes.topic'])->get();
+            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes' => function ($q) {
+                $q->where('is_approved', true)->where('visibility', 'published')->with('topic');
+            }])->get();
         } else {
-            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes.topic'])->paginate(12);
+            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes' => function ($q) {
+                $q->where('is_approved', true)->where('visibility', 'published')->with('topic');
+            }])->paginate(12);
         }
 
         // Get current user for following checks
@@ -153,7 +157,10 @@ class QuizMasterController extends Controller
     public function show(Request $request, string $id)
     {
         // Find the user and eager-load all necessary relationships.
-        $user = User::with(['quizMasterProfile', 'quizzes.topic'])->findOrFail($id);
+        // Only load approved+published quizzes on this public endpoint
+        $user = User::with(['quizMasterProfile', 'quizzes' => function ($q) {
+            $q->where('is_approved', true)->where('visibility', 'published')->with('topic');
+        }])->findOrFail($id);
 
         // Ensure the user has a quiz master profile.
         if (!$user->quizMasterProfile) {

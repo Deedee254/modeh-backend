@@ -80,9 +80,14 @@ class QuizMaster extends Model
         return $this->belongsTo(Institution::class, 'institution_id');
     }
 
+    /**
+     * Quizzes owned by this quiz master's user.
+     * Covers both `user_id` (canonical) and `created_by` (legacy) ownership columns.
+     */
     public function quizzes()
     {
-        return $this->hasMany(Quiz::class, 'user_id', 'user_id');
+        return $this->hasMany(Quiz::class, 'user_id', 'user_id')
+            ->orWhere('created_by', $this->user_id);
     }
 
     public function grade()

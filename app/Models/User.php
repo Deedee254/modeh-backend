@@ -183,9 +183,15 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         return $this->avatar_url ?? $this->social_avatar;
     }
 
+    /**
+     * Quizzes owned by this user.
+     * Covers both `user_id` (canonical) and `created_by` (legacy) columns
+     * so no quiz is missed regardless of which column was populated.
+     */
     public function quizzes()
     {
-        return $this->hasMany(Quiz::class);
+        return $this->hasMany(Quiz::class, 'user_id')
+            ->orWhere('created_by', $this->id);
     }
 
     /**

@@ -75,8 +75,10 @@ class QuizController extends Controller
     public function update(Request $request, Quiz $quiz)
     {
         $user = $request->user();
-        // Only allow owner or admin to update
-        if ($quiz->created_by && $quiz->created_by !== $user->id && !$user->is_admin) {
+        // Only allow owner or admin to update — check both user_id and created_by
+        $isOwner = ((int) ($quiz->user_id ?? 0) === (int) $user->id)
+                || ((int) ($quiz->created_by ?? 0) === (int) $user->id);
+        if (!$isOwner && !$user->is_admin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -1158,8 +1160,10 @@ class QuizController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
 
-        // Only allow owner or admin to update
-        if ($quiz->created_by && $quiz->created_by !== $user->id && !$user->is_admin) {
+        // Only allow owner or admin to update — check both user_id and created_by
+        $isOwner = ((int) ($quiz->user_id ?? 0) === (int) $user->id)
+                || ((int) ($quiz->created_by ?? 0) === (int) $user->id);
+        if (!$isOwner && !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 

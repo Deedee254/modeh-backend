@@ -115,8 +115,8 @@ class DashboardAnalyticsController extends Controller
             : 0;
 
         // Calculate trends (percentage change)
-        $currentQuizzes = Quiz::where('user_id', $user->id)->where('created_at', '>=', $thirtyDaysAgo)->count();
-        $previousQuizzes = Quiz::where('user_id', $user->id)->whereBetween('created_at', [$sixtyDaysAgo, $thirtyDaysAgo])->count();
+        $currentQuizzes = Quiz::where(function ($q) use ($user) { $q->where('user_id', $user->id)->orWhere('created_by', $user->id); })->where('created_at', '>=', $thirtyDaysAgo)->count();
+        $previousQuizzes = Quiz::where(function ($q) use ($user) { $q->where('user_id', $user->id)->orWhere('created_by', $user->id); })->whereBetween('created_at', [$sixtyDaysAgo, $thirtyDaysAgo])->count();
         
         $quizzesTrend = $previousQuizzes > 0
             ? round((($currentQuizzes - $previousQuizzes) / $previousQuizzes) * 100, 1)
