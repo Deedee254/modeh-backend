@@ -305,65 +305,7 @@ class WalletController extends Controller
         ]);
     }
 
-    // Admin: settle pending funds into available for a specific quiz-master
-    public function settlePending(Request $request, $quizMasterId)
-    {
-        $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false], 401);
-        if (!isset($user->is_admin) || !$user->is_admin) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
 
-        $amount = $request->input('amount', null); // optional amount to settle; if null settle full pending
-
-        $toSettle = 0;
-        $wallet = null;
-        try {
-            DB::transaction(function () use (&$wallet, &$toSettle, $quizMasterId, $amount) {
-                // lock wallet row
-                $w = Wallet::where('user_id', $quizMasterId)->lockForUpdate()->first();
-                if (!$w) {
-                    $w = Wallet::create(['user_id' => $quizMasterId, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
-                }
-                $pending = (string)$w->pending;
-                $toSettle = (string)($amount ?? $pending);
-
-                if (bccomp($toSettle, '0', 2) <= 0) {
-                    // nothing to do
-                    $wallet = $w;
-                    return;
-                }
-                if (bccomp($toSettle, $pending, 2) > 0) {
-                    // cap at pending
-                    $toSettle = $pending;
-                }
-
-                // move from pending -> available
-                $w->setAttribute('pending', (string)bcsub($pending, $toSettle, 2));
-                $w->setAttribute('available', (string)bcadd((string)$w->available, $toSettle, 2));
-                $w->save();
-
-                $wallet = $w;
-            });
-        } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'message' => 'Failed to settle pending funds'], 500);
-        }
-
-        // broadcast wallet update
-        try {
-            if ($wallet) {
-                event(new \App\Events\WalletUpdated($wallet->toArray(), $quizMasterId));
-            }
-        } catch (\Throwable $_) { }
-
-        Log::channel('payment')->info("Single user settlement: QM {$quizMasterId}, Settled KES {$toSettle}", [
-            'admin_id' => Auth::id(),
-            'quiz_master_id' => $quizMasterId,
-            'amount' => $toSettle,
-            'new_available' => $wallet ? (float)$wallet->available : null,
-            'new_pending' => $wallet ? (float)$wallet->pending : null
-        ]);
-
-        return response()->json(['ok' => true, 'wallet' => $wallet]);
-    }
 
     // Admin: Finance dashboard metrics
     public function adminMetrics()
@@ -374,19 +316,12 @@ class WalletController extends Controller
         }
 
         // Platform wallet balance
-        $platformWallet = Wallet::where('user_id', 0)->first();
+        $platformUserId = User::where('role', 'admin')->orderBy('id')->first()?->id ?? 0;
+        $platformWallet = Wallet::where('user_id', $platformUserId)->first();
         $platformBalance = $platformWallet ? (float)$platformWallet->available : 0;
 
         // Total revenue (all transactions)
         $totalRevenue = Transaction::sum('amount') ?? 0;
-
-        // Pending settlements for quiz masters (pending balance)
-        $pendingSettlements = Wallet::where('user_id', '!=', 0)
-            ->sum('pending') ?? 0;
-
-        // Affiliate payouts due (pending and active affiliate referrals)
-        $affiliatePayoutsDue = \App\Models\AffiliateReferral::where('status', 'pending')
-            ->sum('earnings') ?? 0;
 
         // Last 30 days cash flow
         $thirtyDaysAgo = now()->subDays(30);
@@ -407,12 +342,12 @@ class WalletController extends Controller
             ->toArray();
 
         // Fund allocation breakdown
-        $qmAvailableTotal = Wallet::where('user_id', '!=', 0)
+        $qmAvailableTotal = Wallet::where('user_id', '!=', $platformUserId)
             ->where('type', Wallet::TYPE_QUIZ_MASTER)
             ->sum('available') ?? 0;
             
         $affiliateAvailableTotal = Wallet::where('type', Wallet::TYPE_QUIZEE)
-            ->where('user_id', '!=', 0)
+            ->where('user_id', '!=', $platformUserId)
             ->sum('available') ?? 0;
 
         return response()->json([
@@ -420,8 +355,6 @@ class WalletController extends Controller
             'data' => [
                 'platform_balance' => (float)$platformBalance,
                 'total_revenue' => (float)$totalRevenue,
-                'pending_settlements' => (float)$pendingSettlements,
-                'affiliate_payouts_due' => (float)$affiliatePayoutsDue,
                 'cash_in_last_30' => (float)$cashInLast30,
                 'cash_out_last_30' => (float)$cashOutLast30,
                 'net_flow_last_30' => (float)($cashInLast30 + $cashOutLast30),
@@ -441,9 +374,7 @@ class WalletController extends Controller
                 'fund_allocation' => [
                     'platform_ops' => (float)$platformBalance,
                     'quiz_master_wallets' => (float)$qmAvailableTotal,
-                    'pending_settlements' => (float)$pendingSettlements,
                     'affiliate_wallets' => (float)$affiliateAvailableTotal,
-                    'reserved' => (float)$affiliatePayoutsDue, // Using payouts due as a "reserved" concept
                 ]
             ]
         ]);
@@ -542,159 +473,7 @@ class WalletController extends Controller
             'transactions' => $transactions
         ]);
     }
-    // Admin: Pending settlements for quiz masters
-    public function pendingSettlements(Request $request)
-    {
-        $user = Auth::user();
-        if (!$user || !isset($user->is_admin) || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
 
-        $query = Wallet::query()
-            ->where('pending', '>', 0)
-            ->where('user_id', '!=', 0);
-
-        // Optional: filter by user name if search provided
-        if ($request->filled('search')) {
-            $query->whereHas('user', function ($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->search . '%')
-                  ->orWhere('email', 'like', '%' . $request->search . '%');
-            });
-        }
-
-        $perPage = (int)$request->input('per_page', 20);
-        $perPage = $perPage > 0 ? $perPage : 20;
-
-        $settlements = $query->with('user')
-            ->orderBy('pending', 'desc')
-            ->paginate($perPage);
-
-        return response()->json([
-            'ok' => true,
-            'settlements' => $settlements
-        ]);
-    }
-
-    // Admin: Settle ALL pending funds at once
-    public function settleAllPending(Request $request)
-    {
-        $user = Auth::user();
-        if (!$user || !isset($user->is_admin) || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
-
-        try {
-            DB::transaction(function () {
-                // Get all wallets with pending > 0
-                $wallets = Wallet::query()->where('pending', '>', 0)->lockForUpdate()->get();
-                
-                foreach ($wallets as $wallet) {
-                    /** @var Wallet $wallet */
-                    if ($wallet->pending > 0) {
-                        $pending = (string)$wallet->pending;
-                        
-                        // Move from pending -> available
-                        $wallet->setAttribute('pending', '0.00');
-                        $wallet->setAttribute('available', (string)bcadd((string)$wallet->available, $pending, 2));
-                        $wallet->save();
-
-                        // Create transaction record
-                        Transaction::create([
-                            'user_id' => $wallet->user_id,
-                            'quiz_master_id' => $wallet->user_id,
-                            'amount' => $pending,
-                            'type' => Transaction::TYPE_SETTLEMENT,
-                            'status' => Transaction::STATUS_COMPLETED,
-                            'description' => 'Admin bulk settlement',
-                            'meta' => [
-                                'type' => 'admin_bulk_settlement',
-                                'settled_at' => now(),
-                            ]
-                        ]);
-
-                        try {
-                            event(new \App\Events\WalletUpdated($wallet->toArray(), $wallet->user_id));
-                        } catch (\Throwable $_) { }
-
-                        Log::channel('payment')->info("Bulk settlement: Processed user {$wallet->user_id}, amount KES {$pending}", [
-                            'user_id' => $wallet->user_id,
-                            'amount' => $pending,
-                            'new_available' => (float)$wallet->available
-                        ]);
-                    }
-                }
-            });
-
-            return response()->json(['ok' => true, 'message' => 'All pending settlements completed']);
-        } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'message' => 'Failed to settle pending funds'], 500);
-        }
-    }
-
-    // Admin: Settle funds for a specific user
-    public function settleSingleUser(Request $request, $userId)
-    {
-        $user = Auth::user();
-        if (!$user || !isset($user->is_admin) || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
-
-        $amount = $request->input('amount', null);
-
-        $wallet = null;
-        try {
-            DB::transaction(function () use (&$wallet, $userId, $amount) {
-                // lock wallet row
-                $w = Wallet::where('user_id', $userId)->lockForUpdate()->first();
-                if (!$w) {
-                    $w = Wallet::create(['user_id' => $userId, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
-                }
-
-                $pending = (string)$w->pending;
-                $toSettle = (string)($amount ?? $pending);
-                
-                if (bccomp($toSettle, '0', 2) <= 0) {
-                    $wallet = $w;
-                    return;
-                }
-                if (bccomp($toSettle, $pending, 2) > 0) {
-                    $toSettle = $pending;
-                }
-
-                // move from pending -> available
-                $w->setAttribute('pending', (string)bcsub($pending, $toSettle, 2));
-                $w->setAttribute('available', (string)bcadd((string)$w->available, $toSettle, 2));
-                $w->save();
-
-                // Create transaction record for audit trail
-                Transaction::create([
-                    'user_id' => $userId,
-                    'quiz_master_id' => $userId,
-                    'amount' => $toSettle,
-                    'type' => Transaction::TYPE_SETTLEMENT,
-                    'status' => Transaction::STATUS_COMPLETED,
-                    'description' => 'Admin settlement',
-                    'meta' => [
-                        'type' => 'admin_settlement',
-                        'settled_at' => now(),
-                    ]
-                ]);
-
-                $wallet = $w;
-            });
-        } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'message' => 'Failed to settle funds'], 500);
-        }
-
-        // broadcast wallet update
-        try {
-            if ($wallet) {
-                event(new \App\Events\WalletUpdated($wallet->toArray(), $userId));
-            }
-        } catch (\Throwable $_) { }
-
-        return response()->json(['ok' => true, 'wallet' => $wallet]);
-    }
 
     // Admin: Get transaction flow details (debit + all credits for a payment)
     public function transactionFlow($transactionId)

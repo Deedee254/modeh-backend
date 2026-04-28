@@ -55,8 +55,8 @@ class WalletService
                         ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
                     );
 
-                // Add to pending balance (awaiting settlement)
-                $wallet->pending = bcadd((string)$wallet->pending, (string)$amount, 2);
+                // Add to available balance (immediate payout)
+                $wallet->available = bcadd((string)$wallet->available, (string)$amount, 2);
                 // Track total earned over time
                 $wallet->lifetime_earned = bcadd((string)$wallet->lifetime_earned, (string)$amount, 2);
                 $wallet->save();
@@ -65,7 +65,7 @@ class WalletService
                 Log::info("Wallet credited", [
                     'user_id' => $userId,
                     'amount' => $amount,
-                    'new_pending' => $wallet->pending,
+                    'new_available' => $wallet->available,
                     'description' => $description,
                 ]);
 
@@ -84,70 +84,7 @@ class WalletService
         }
     }
 
-    /**
-     * Settle (move) pending balance to available for withdrawal.
-     * Only admins should call this after verifying transactions.
-     *
-     * @param int $userId
-     * @param float|null $amount If null, settle entire pending balance
-     * @return Wallet|null
-     */
-    public function settle(int $userId, ?float $amount = null): ?Wallet
-    {
-        try {
-            return DB::transaction(function () use ($userId, $amount) {
-                $wallet = Wallet::where('user_id', $userId)
-                    ->lockForUpdate()
-                    ->first();
 
-                if (!$wallet) {
-                    Log::warning("Wallet not found for settlement", ['user_id' => $userId]);
-                    return null;
-                }
-
-                // Default: settle entire pending balance
-                $settleAmount = $amount ?? $wallet->pending;
-
-                if ($settleAmount <= 0) {
-                    Log::warning("Settlement amount must be positive", ['user_id' => $userId, 'amount' => $settleAmount]);
-                    return null;
-                }
-
-                if ($settleAmount > $wallet->pending) {
-                    Log::warning("Settlement amount exceeds pending balance", [
-                        'user_id' => $userId,
-                        'requested' => $settleAmount,
-                        'pending' => $wallet->pending,
-                    ]);
-                    return null;
-                }
-
-                // Move from pending to available
-                $wallet->pending = bcsub((string)$wallet->pending, (string)$settleAmount, 2);
-                $wallet->available = bcadd((string)$wallet->available, (string)$settleAmount, 2);
-                $wallet->save();
-
-                Log::info("Wallet settled", [
-                    'user_id' => $userId,
-                    'amount' => $settleAmount,
-                    'new_available' => $wallet->available,
-                    'new_pending' => $wallet->pending,
-                ]);
-
-                // Broadcast update
-                event(new \App\Events\WalletUpdated($wallet->toArray(), $userId));
-
-                return $wallet;
-            });
-        } catch (\Throwable $e) {
-            Log::error("Wallet settlement failed", [
-                'user_id' => $userId,
-                'amount' => $amount,
-                'error' => $e->getMessage(),
-            ]);
-            return null;
-        }
-    }
 
     /**
      * Debit from available balance (for withdrawals).

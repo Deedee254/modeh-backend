@@ -110,23 +110,23 @@ class Wallet extends Model
             throw new \Exception('Insufficient available balance');
         }
 
-        $this->available = bcsub($this->available, $amount, 2);
-        $this->withdrawn_pending = bcadd($this->withdrawn_pending, $amount, 2);
+        $this->available = bcsub((string)$this->available, (string)$amount, 2); // @phpstan-ignore-line
+        $this->withdrawn_pending = bcadd((string)$this->withdrawn_pending, (string)$amount, 2); // @phpstan-ignore-line
         $this->save();
     }
 
     /**
-     * Confirm settlement (move withdrawn_pending to settled)
+     * Confirm withdrawal completion (move withdrawn_pending to settled)
      */
-    public function confirmSettlement(float $amount): void
+    public function confirmWithdrawal(float $amount): void
     {
         if ($amount > $this->withdrawn_pending) {
-            throw new \Exception('Invalid settlement amount');
+            throw new \Exception('Invalid withdrawal amount');
         }
 
-        $this->withdrawn_pending = bcsub($this->withdrawn_pending, $amount, 2);
-        $this->settled = bcadd($this->settled, $amount, 2);
-        $this->total_withdrawn = bcadd($this->total_withdrawn, $amount, 2);
+        $this->withdrawn_pending = bcsub((string)$this->withdrawn_pending, (string)$amount, 2); // @phpstan-ignore-line
+        $this->settled = bcadd((string)$this->settled, (string)$amount, 2); // @phpstan-ignore-line
+        $this->total_withdrawn = bcadd((string)$this->total_withdrawn, (string)$amount, 2); // @phpstan-ignore-line
         $this->save();
     }
 
@@ -173,9 +173,9 @@ class Wallet extends Model
         };
 
         if ($field) {
-            $this->$field = bcadd($this->{$field} ?? 0, $amount, 2); // @phpstan-ignore-line
-            $this->lifetime_earned = bcadd($this->lifetime_earned ?? 0, $amount, 2); // @phpstan-ignore-line
-            $this->pending = bcadd($this->pending ?? 0, $amount, 2); // @phpstan-ignore-line
+            $this->$field = bcadd((string)($this->{$field} ?? 0), (string)$amount, 2); // @phpstan-ignore-line
+            $this->lifetime_earned = bcadd((string)($this->lifetime_earned ?? 0), (string)$amount, 2); // @phpstan-ignore-line
+            $this->available = bcadd((string)($this->available ?? 0), (string)$amount, 2); // @phpstan-ignore-line
             $this->save();
 
             // Record transaction
@@ -217,20 +217,7 @@ class Wallet extends Model
         $this->save();
     }
 
-    /**
-     * Settle pending balance to available
-     */
-    public function settlePending(?float $amount = null): void
-    {
-        $toSettle = $amount ?? $this->pending;
-        if ($toSettle > 0) {
-            // @phpstan-ignore-next-line
-            $this->pending = bcsub($this->pending ?? 0, $toSettle, 2);
-            // @phpstan-ignore-next-line
-            $this->available = bcadd($this->available ?? 0, $toSettle, 2);
-            $this->save();
-        }
-    }
+
 
     /**
      * Get wallet summary for dashboard

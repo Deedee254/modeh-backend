@@ -429,9 +429,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 	        Route::get('/admin/affiliate-referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'adminReferrals']);
 	        Route::get('/admin/affiliate-clicks', [\App\Http\Controllers\Api\AffiliateController::class, 'adminClicks']);
         Route::get('/admin/affiliate-metrics', [\App\Http\Controllers\Api\AffiliateController::class, 'adminMetrics']);
-        Route::get('/admin/affiliate-payouts/pending', [\App\Http\Controllers\Api\AffiliateController::class, 'pendingPayouts']);
-        Route::post('/admin/affiliate-payouts/settle', [\App\Http\Controllers\Api\AffiliateController::class, 'settlePayouts']);
-        Route::post('/admin/affiliates/{affiliateId}/settle-payout', [\App\Http\Controllers\Api\AffiliateController::class, 'settleSingleAffiliate']);
+
         Route::patch('/admin/affiliates/{affiliateId}/commission-rate', [\App\Http\Controllers\Api\AffiliateController::class, 'updateCommissionRate']);
 
         // Institution Management Routes
@@ -444,9 +442,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Wallet & Finance Routes
         Route::get('/admin/wallet/metrics', [\App\Http\Controllers\Api\WalletController::class, 'adminMetrics']);
         Route::get('/admin/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'adminTransactions']);
-        Route::get('/admin/wallet/pending-settlements', [\App\Http\Controllers\Api\WalletController::class, 'pendingSettlements']);
-        Route::post('/admin/wallet/settle', [\App\Http\Controllers\Api\WalletController::class, 'settleAllPending']);
-        Route::post('/admin/wallet/settle/{userId}', [\App\Http\Controllers\Api\WalletController::class, 'settleSingleUser']);
         Route::get('/admin/wallet/transaction-flow/{transactionId}', [\App\Http\Controllers\Api\WalletController::class, 'transactionFlow']);
         Route::get('/admin/wallet/transaction-history', [\App\Http\Controllers\Api\WalletController::class, 'transactionHistory']);
         Route::get('/admin/wallet/platform-summary', [\App\Http\Controllers\Api\WalletController::class, 'platformSummary']);
@@ -462,8 +457,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'transactions']);
     Route::post('/wallet/withdraw', [\App\Http\Controllers\Api\WalletController::class, 'requestWithdrawal']);
     Route::get('/wallet/withdrawals', [\App\Http\Controllers\Api\WalletController::class, 'myWithdrawals']);
-    // Admin: settle pending funds into available for a quiz-master
-    Route::post('/wallet/settle/{quizMasterId}', [\App\Http\Controllers\Api\WalletController::class, 'settlePending']);
     
     // NEW: Pending payments endpoints (payment recovery system)
     Route::get('/my/unpaid-quizzes', [\App\Http\Controllers\Api\WalletController::class, 'myUnpaidQuizzes']);

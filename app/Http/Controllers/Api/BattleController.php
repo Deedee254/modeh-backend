@@ -106,7 +106,7 @@ class BattleController extends Controller
             ->get();
 
         // Build a simple players collection from initiator/opponent for frontend compatibility
-        $battles->each(function ($battle) {
+        $battles->each(function (Battle $battle) {
             $players = collect();
             if ($battle->initiator) $players->push($battle->initiator);
             // If opponent is set and not just the placeholder equal to initiator, include it

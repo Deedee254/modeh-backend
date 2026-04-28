@@ -36,6 +36,12 @@ class AdminController extends Controller
         $platformShare = (float) Transaction::where('status', Transaction::STATUS_COMPLETED)->sum('platform_share');
         $quizMasterShare = (float) Transaction::where('status', Transaction::STATUS_COMPLETED)->sum('quiz-master_share');
 
+        // Total Profit for this Admin (Available + Lifetime)
+        $adminId = User::where('role', 'admin')->orderBy('id')->first()?->id ?? 8;
+        $adminWallet = Wallet::where('user_id', $adminId)->first();
+        $adminProfit = (float) ($adminWallet?->available ?? 0);
+        $lifetimeProfit = (float) ($adminWallet?->lifetime_earned ?? 0);
+
         // Count users by role
         $totalUsers = User::count();
         $newUsersThisMonth = User::where('created_at', '>=', $thirtyDaysAgo)->count();
@@ -75,6 +81,8 @@ class AdminController extends Controller
                 'newQuizees' => $newQuizees,
                 'pendingWithdrawals' => $pendingWithdrawals,
                 'pendingWithdrawalCount' => $pendingWithdrawalCount,
+                'platformProfit' => $adminProfit,
+                'lifetimeProfit' => $lifetimeProfit,
             ],
             'revenueShare' => $revenueShare,
         ]);
@@ -500,88 +508,7 @@ class AdminController extends Controller
         }
     }
 
-    /**
-     * Settle (move) pending funds to available for all users or specific user
-     * Admin only - Moves funds from pending â†’ available in wallet
-     */
-    public function settlePending(Request $request)
-    {
-        $user = auth()->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
 
-        $walletService = new WalletService();
-
-        // If user_id is provided, settle only that user's pending balance
-        if ($request->filled('user_id')) {
-            $userId = $request->input('user_id');
-            $targetUser = User::find($userId);
-
-            if (!$targetUser) {
-                return response()->json(['ok' => false, 'message' => 'User not found'], 404);
-            }
-
-            $wallet = $walletService->settle($userId);
-
-            if (!$wallet) {
-                return response()->json([
-                    'ok' => false,
-                    'message' => 'Failed to settle pending funds'
-                ], 400);
-            }
-
-            return response()->json([
-                'ok' => true,
-                'message' => 'Pending funds settled successfully',
-                'wallet' => [
-                    'user_id' => $wallet->user_id,
-                    'available' => (float) $wallet->available,
-                    'pending' => (float) $wallet->pending,
-                    'lifetime_earned' => (float) $wallet->lifetime_earned,
-                ],
-            ]);
-        }
-
-        // Settle all pending balances for all users with pending funds
-        try {
-            $walletsWithPending = Wallet::where('pending', '>', 0)->get();
-
-            if ($walletsWithPending->isEmpty()) {
-                return response()->json([
-                    'ok' => true,
-                    'message' => 'No pending funds to settle',
-                    'count' => 0,
-                    'total_settled' => 0,
-                ]);
-            }
-
-            $totalSettled = 0;
-            $settledCount = 0;
-
-            foreach ($walletsWithPending as $wallet) {
-                $pendingAmount = $wallet->pending;
-                $settled = $walletService->settle($wallet->user_id);
-
-                if ($settled) {
-                    $totalSettled += $pendingAmount;
-                    $settledCount++;
-                }
-            }
-
-            return response()->json([
-                'ok' => true,
-                'message' => 'All pending funds settled successfully',
-                'count' => $settledCount,
-                'total_settled' => (float) $totalSettled,
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'ok' => false,
-                'message' => 'Error settling pending funds: ' . $e->getMessage()
-            ], 500);
-        }
-    }
 
     /**
      * Get/update global settings for approvals, payment revenue share, and quiz prices
@@ -601,6 +528,9 @@ class AdminController extends Controller
         if ($request->method() === 'GET') {
             $mpesaSetting = PaymentSetting::where('gateway', 'mpesa')->first();
             $revenueShare = $mpesaSetting ? (float) $mpesaSetting->revenue_share : null;
+
+            $siteSetting = \App\Models\SiteSetting::current();
+            $approvalsEnabled = $siteSetting ? (boolean) $siteSetting->auto_approve_quizzes : true;
 
             $defaultQuizPrice = 0.0;
             $defaultBattlePrice = 0.0;

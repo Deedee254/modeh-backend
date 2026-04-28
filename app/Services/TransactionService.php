@@ -9,6 +9,7 @@ use App\Models\PaymentSetting;
 use App\Models\Quiz;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Models\User;
 
 class TransactionService
 {
@@ -48,11 +49,14 @@ class TransactionService
                 }
             }
 
+            // Resolve the platform owner (first admin)
+            $platformUserId = User::where('role', 'admin')->orderBy('id')->first()?->id ?? 0;
+
             $affiliateShare = 0;
             $quizMasterShare = 0;
             $platformShare = $amount;
             $platformWallet = Wallet::firstOrCreate(
-                ['user_id' => 0, 'type' => Wallet::TYPE_PLATFORM],
+                ['user_id' => $platformUserId, 'type' => Wallet::TYPE_PLATFORM],
                 ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
             );
             if (!$platformWallet->type) {
@@ -72,7 +76,7 @@ class TransactionService
                     if (!$affiliateWallet->type) {
                         $affiliateWallet->type = Wallet::TYPE_QUIZEE;
                     }
-                    $affiliateWallet->pending = bcadd((string) ($affiliateWallet->pending ?? 0), (string) $affiliateShare, 2);
+                    $affiliateWallet->available = bcadd((string) ($affiliateWallet->available ?? 0), (string) $affiliateShare, 2);
                     $affiliateWallet->lifetime_earned = bcadd((string) ($affiliateWallet->lifetime_earned ?? 0), (string) $affiliateShare, 2);
                     $affiliateWallet->earned_from_affiliates = bcadd((string) ($affiliateWallet->earned_from_affiliates ?? 0), (string) $affiliateShare, 2);
                     $affiliateWallet->save();
@@ -83,7 +87,7 @@ class TransactionService
                             'user_id' => $userId,
                             'type' => 'quiz_purchase',
                             'earnings' => $affiliateShare,
-                            'status' => 'pending',
+                            'status' => 'completed',
                         ]);
                     }
 
@@ -99,7 +103,7 @@ class TransactionService
                         'status' => Transaction::STATUS_COMPLETED,
                         'description' => "Affiliate commission from payment (code: {$referralCode})",
                         'reference_id' => $txId,
-                        'balance_after' => $affiliateWallet->pending,
+                        'balance_after' => $affiliateWallet->available,
                         'meta' => [
                             'referral_code' => $referralCode,
                             'commission_rate' => (float) $affiliate->commission_rate,
@@ -129,7 +133,7 @@ class TransactionService
                     $qmWallet->type = Wallet::TYPE_QUIZ_MASTER;
                 }
 
-                $qmWallet->pending = bcadd((string) ($qmWallet->pending ?? 0), (string) $quizMasterShare, 2);
+                $qmWallet->available = bcadd((string) ($qmWallet->available ?? 0), (string) $quizMasterShare, 2);
                 $qmWallet->lifetime_earned = bcadd((string) ($qmWallet->lifetime_earned ?? 0), (string) $quizMasterShare, 2);
                 $qmWallet->earned_this_month = bcadd((string) ($qmWallet->earned_this_month ?? 0), (string) $quizMasterShare, 2);
 
@@ -154,7 +158,7 @@ class TransactionService
                     'status' => Transaction::STATUS_COMPLETED,
                     'description' => 'Quiz master commission from payment',
                     'reference_id' => $txId,
-                    'balance_after' => $qmWallet->pending,
+                    'balance_after' => $qmWallet->available,
                     'meta' => [
                         'commission_rate' => $qmCommissionRate,
                         'platform_revenue_share_pct' => $platformPct,
@@ -212,7 +216,7 @@ class TransactionService
                 'wallets' => [
                     'platform_new_balance' => (float)$platformWallet->available,
                     'qm_id' => $quizMasterId,
-                    'qm_new_pending' => $qmWallet ? (float)$qmWallet->pending : null,
+                    'qm_new_available' => $qmWallet ? (float)$qmWallet->available : null,
                 ]
             ]);
 
@@ -239,6 +243,9 @@ class TransactionService
             $amount,
             $referralCode,
         ) {
+            // Resolve the platform owner (first admin)
+            $platformUserId = User::where('role', 'admin')->orderBy('id')->first()?->id ?? 0;
+
             // If owner is admin, treat as platform-owned
             if ($quizMasterId) {
                 $owner = User::find($quizMasterId);
@@ -260,20 +267,20 @@ class TransactionService
                     $remaining = bcsub($remaining, $affiliateShare, 2);
 
                     $affWallet = Wallet::firstOrCreate(['user_id' => $affiliate->user_id]);
-                    $affWallet->pending = bcadd($affWallet->pending ?? 0, $affiliateShare, 2);
+                    $affWallet->available = bcadd($affWallet->available ?? 0, $affiliateShare, 2);
                     $affWallet->lifetime_earned = bcadd($affWallet->lifetime_earned ?? 0, $affiliateShare, 2);
                     $affWallet->earned_from_affiliates = bcadd($affWallet->earned_from_affiliates ?? 0, $affiliateShare, 2);
                     $affWallet->save();
                 }
             }
 
-            // Quiz Master Share - Goes to PENDING (wait for settlement)
+            // Quiz Master Share - Credited immediately (automated split)
             $qmShare = 0;
             if ($quizMasterId) {
                 $qmShare = bcmul($remaining, $qmCommissionRate / 100, 2);
 
                 $qmWallet = Wallet::firstOrCreate(['user_id' => $quizMasterId], ['type' => Wallet::TYPE_QUIZ_MASTER]);
-                $qmWallet->pending = bcadd($qmWallet->pending ?? 0, $qmShare, 2);
+                $qmWallet->available = bcadd($qmWallet->available ?? 0, $qmShare, 2);
                 $qmWallet->earned_this_month = bcadd($qmWallet->earned_this_month ?? 0, $qmShare, 2);
                 $qmWallet->lifetime_earned = bcadd($qmWallet->lifetime_earned ?? 0, $qmShare, 2);
                 $qmWallet->earned_from_quizzes = bcadd($qmWallet->earned_from_quizzes ?? 0, $qmShare, 2);
@@ -281,9 +288,9 @@ class TransactionService
             }
             $platformShare = bcsub($remaining, $qmShare, 2);
 
-            // Platform Share - Credited to platform wallet immediately (user_id = 0)
+            // Platform Share - Credited to platform wallet immediately
             $platformWallet = Wallet::firstOrCreate(
-                ['user_id' => 0, 'type' => Wallet::TYPE_PLATFORM],
+                ['user_id' => $platformUserId, 'type' => Wallet::TYPE_PLATFORM],
                 ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
             );
             $platformWallet->available = bcadd($platformWallet->available ?? 0, $platformShare, 2);
@@ -317,7 +324,7 @@ class TransactionService
                     'quiz_master' => (float)$qmShare,
                     'platform' => (float)$platformShare,
                 ],
-                'qm_new_pending' => isset($qmWallet) ? (float)$qmWallet->pending : 0,
+                'qm_new_available' => isset($qmWallet) ? (float)$qmWallet->available : 0,
                 'platform_new_available' => (float)$platformWallet->available,
             ]);
 
@@ -445,7 +452,8 @@ class TransactionService
      */
     public static function getPlatformSummary(): array
     {
-        $platformWallet = Wallet::where('user_id', 0)->first();
+        $platformUserId = User::where('role', 'admin')->orderBy('id')->first()?->id ?? 0;
+        $platformWallet = Wallet::where('user_id', $platformUserId)->first();
         
         $allTime = Transaction::where('type', Transaction::TYPE_PAYMENT)->sum('amount') ?? 0;
         $last30Days = Transaction::where('type', Transaction::TYPE_PAYMENT)
@@ -477,12 +485,8 @@ class TransactionService
                 'total_paid_out' => (float)bcadd($affiliatePayouts, $qmPayouts, 2),
             ],
             'pending' => [
-                'affiliate_settlements' => Transaction::where('type', Transaction::TYPE_AFFILIATE_PAYOUT)
-                    ->where('status', Transaction::STATUS_PENDING)
-                    ->sum('amount') ?? 0,
-                'qm_settlements' => Transaction::where('type', Transaction::TYPE_QUIZ_MASTER_PAYOUT)
-                    ->where('status', Transaction::STATUS_PENDING)
-                    ->sum('amount') ?? 0,
+                'affiliate_settlements' => 0,
+                'qm_settlements' => 0,
             ]
         ];
     }
