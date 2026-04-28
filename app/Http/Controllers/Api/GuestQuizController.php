@@ -12,8 +12,16 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
+use App\Services\QuestionMarkingService;
+
 class GuestQuizController extends Controller
 {
+    protected $markingService;
+
+    public function __construct(QuestionMarkingService $markingService)
+    {
+        $this->markingService = $markingService;
+    }
     /**
      * Get quiz questions for guest (excludes is_correct from options)
      * Only allow free quizzes
@@ -383,13 +391,14 @@ class GuestQuizController extends Controller
                 continue;
             }
 
+            $optionMap = $this->markingService->buildOptionMap($question);
             $formatted[] = [
                 'question_id' => $result['question_id'],
                 'question_body' => $question->body ?? $question->text ?? '',
                 'is_correct' => $result['correct'],
                 'marks_earned' => $result['marks'],
                 'explanation' => $question->explanation ?? null,
-                'correct_answer' => $this->formatAnswer($question->answers),
+                'correct_answer' => $this->formatAnswer($question->answers, $optionMap),
             ];
         }
 
@@ -400,87 +409,12 @@ class GuestQuizController extends Controller
      * Format answer for display
      *
      * @param  mixed  $answer
+     * @param  array  $optionMap
      * @return string
      */
-    private function formatAnswer($answer): string
+    private function formatAnswer($answer, array $optionMap = []): string
     {
-        if (is_array($answer)) {
-            return implode(', ', $answer);
-        }
-
-        if (is_string($answer)) {
-            $decoded = json_decode($answer, true);
-            if (is_array($decoded)) {
-                return implode(', ', $decoded);
-            }
-        }
-
-        return (string) $answer;
-    }
-
-    /**
-     * Build a map of option id/index => display text for a question's options
-     *
-     * @param  mixed $q Question model or object with options
-     * @return array
-     */
-    private function buildOptionMap($q): array
-    {
-        $optionMap = [];
-        if (is_array($q->options)) {
-            foreach ($q->options as $idx => $opt) {
-                if (is_array($opt)) {
-                    if (isset($opt['id'])) {
-                        $optionMap[(string) $opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
-                    }
-                    if (isset($opt['text']) || isset($opt['body'])) {
-                        $optionMap[(string) $idx] = $opt['text'] ?? $opt['body'] ?? null;
-                    }
-                }
-            }
-        }
-        return $optionMap;
-    }
-
-    /**
-     * Resolve a value (option id/index, object or text) to a human-readable text
-     */
-    private function toText($val, array $optionMap = []): string
-    {
-        if (is_array($val) && (isset($val['body']) || isset($val['text']))) {
-            return $val['text'] ?? $val['body'] ?? '';
-        }
-        if (!is_array($val)) {
-            $key = (string) $val;
-            if ($key !== '' && isset($optionMap[$key])) {
-                return $optionMap[$key];
-            }
-        }
-        return (string) $val;
-    }
-
-    /**
-     * Normalize a single value for comparison (lowercase, trimmed)
-     */
-    private function normalizeForCompare($val, array $optionMap = []): string
-    {
-        $text = $this->toText($val, $optionMap);
-        return strtolower(trim((string) $text));
-    }
-
-    /**
-     * Normalize an array of values for comparison: map -> trim/lower -> filter -> sort
-     */
-    private function normalizeArrayForCompare($arr, array $optionMap = []): array
-    {
-        $normalized = array_map(function ($v) use ($optionMap) {
-            return $this->normalizeForCompare($v, $optionMap);
-        }, $arr ?: []);
-        $normalized = array_filter($normalized, function ($v) {
-            return $v !== null && $v !== '';
-        });
-        sort($normalized);
-        return array_values($normalized);
+        return $this->markingService->formatExplanationAnswers($answer, $optionMap);
     }
 
     /**

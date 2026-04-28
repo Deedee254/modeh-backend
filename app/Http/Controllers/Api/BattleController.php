@@ -976,6 +976,15 @@ class BattleController extends Controller
                     $opponentPayload = null;
                 }
             }
+            $optionMap = $this->questionMarkingService->buildOptionMap($q);
+
+            if ($initiatorPayload && isset($initiatorPayload['selected'])) {
+                $initiatorPayload['selected_text'] = $this->questionMarkingService->formatExplanationAnswers($initiatorPayload['selected'], $optionMap);
+            }
+            if ($opponentPayload && isset($opponentPayload['selected'])) {
+                $opponentPayload['selected_text'] = $this->questionMarkingService->formatExplanationAnswers($opponentPayload['selected'], $optionMap);
+            }
+
             $questions[] = [
                 'question_id' => $qid,
                 'body' => $q->body,
@@ -983,6 +992,7 @@ class BattleController extends Controller
                 'initiator' => $initiatorPayload,
                 'opponent' => $opponentPayload,
                 'correct' => $correctAnswers,
+                'correct_text' => $this->questionMarkingService->formatExplanationAnswers($correctAnswers, $optionMap),
             ];
         }
 

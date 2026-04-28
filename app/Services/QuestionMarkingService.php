@@ -67,6 +67,30 @@ class QuestionMarkingService
     }
 
     /**
+     * Resolve a value or array of values to human-readable text labels.
+     * Useful for formatting result breakdowns.
+     */
+    public function resolveToText($val, array $optionMap = []): string|array
+    {
+        if (is_array($val)) {
+            return array_map(fn($v) => $this->toText($v, $optionMap), $val);
+        }
+        return $this->toText($val, $optionMap);
+    }
+
+    /**
+     * Formats an answer or list of answers into a comma-separated string of display texts.
+     */
+    public function formatExplanationAnswers($answers, array $optionMap = []): string
+    {
+        $resolved = $this->resolveToText($answers, $optionMap);
+        if (is_array($resolved)) {
+            return implode(', ', array_filter($resolved));
+        }
+        return (string)$resolved;
+    }
+
+    /**
      * Normalize an array of values for comparison: map -> trim/lower -> filter -> sort
      */
     public function normalizeArrayForCompare($arr, array $optionMap = []): array

@@ -125,6 +125,7 @@ class DailyChallengeController extends Controller
             if (!$question) return null;
 
             $userAnswer = $submission->answers[$questionId] ?? null;
+            $optionMap = $this->markingService->buildOptionMap($question);
 
             return [
                 'question_id' => $questionId,
@@ -132,7 +133,9 @@ class DailyChallengeController extends Controller
                 'question_type' => $question->type,
                 'options' => $question->options,
                 'user_answer' => $userAnswer,
+                'user_answer_text' => $this->markingService->formatExplanationAnswers($userAnswer, $optionMap),
                 'correct_answers' => $question->answers,
+                'correct_answers_text' => $this->markingService->formatExplanationAnswers($question->answers, $optionMap),
                 'is_correct' => $isCorrect,
                 'explanation' => $question->explanation,
             ];

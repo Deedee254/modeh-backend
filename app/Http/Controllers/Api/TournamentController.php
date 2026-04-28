@@ -483,6 +483,17 @@ class TournamentController extends Controller
             'duration_seconds' => $data['duration_seconds'] ?? null,
         ]);
 
+        // Resolve answer text for the response payload
+        $resolvedAnswers = [];
+        foreach ($answersToStore as $ans) {
+            $q = $questions->get($ans['question_id']);
+            if ($q) {
+                $optionMap = $this->markingService->buildOptionMap($q);
+                $ans['answer_text'] = $this->markingService->formatExplanationAnswers($ans['answer'], $optionMap);
+            }
+            $resolvedAnswers[] = $ans;
+        }
+
         $this->updateQualifyParticipantScore($tournament, $user, $attempt);
 
         $leaderboard = $this->buildQualifierLeaderboard($tournament);
@@ -499,7 +510,7 @@ class TournamentController extends Controller
 
         return response()->json([
             'message' => 'Tournament attempt recorded',
-            'attempt' => $attempt,
+            'attempt' => array_merge($attempt->toArray(), ['answers' => $resolvedAnswers]),
             'rank' => $rank,
             'attempts_used' => $attemptsUsed,
             'attempts_remaining' => max(0, self::SIMPLE_FLOW_MAX_ATTEMPTS - $attemptsUsed),

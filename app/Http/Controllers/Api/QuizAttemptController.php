@@ -18,13 +18,17 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 
 
+use App\Services\QuestionMarkingService;
+
 class QuizAttemptController extends Controller
 {
     protected $achievementService;
+    protected $markingService;
 
-    public function __construct(AchievementService $achievementService)
+    public function __construct(AchievementService $achievementService, QuestionMarkingService $markingService)
     {
         $this->achievementService = $achievementService;
+        $this->markingService = $markingService;
     }
 
 
@@ -1007,13 +1011,42 @@ class QuizAttemptController extends Controller
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
-        // Return the attempt answers and any stored details without revealing computed scores or other protected data
+        // Enforce eager loading of quiz questions to build the option map
+        $attempt->load(['quiz.questions']);
+        $quiz = $attempt->quiz;
+
+        $answers = $attempt->answers ?? [];
+        $resolvedAnswers = [];
+
+        if ($quiz && $quiz->questions) {
+            $questionMap = $quiz->questions->keyBy('id');
+            foreach ($answers as $ans) {
+                $qid = $ans['question_id'] ?? null;
+                $selected = $ans['selected'] ?? null;
+                $question = $questionMap->get($qid);
+
+                if ($question) {
+                    $optionMap = $this->markingService->buildOptionMap($question);
+                    $resolvedAnswers[] = [
+                        'question_id' => $qid,
+                        'selected' => $selected,
+                        'selected_text' => $this->markingService->formatExplanationAnswers($selected, $optionMap),
+                    ];
+                } else {
+                    $resolvedAnswers[] = $ans;
+                }
+            }
+        } else {
+            $resolvedAnswers = $answers;
+        }
+
+        // Return the attempt answers with resolved textual labels
         return response()->json([
             'ok' => true,
             'attempt' => [
                 'id' => $attempt->id,
                 'quiz_id' => $attempt->quiz_id,
-                'answers' => $attempt->answers ?? [],
+                'answers' => $resolvedAnswers,
                 'created_at' => $attempt->created_at,
             ]
         ]);
