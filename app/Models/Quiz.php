@@ -49,7 +49,7 @@ use Illuminate\Support\Facades\Auth;
  */
 class Quiz extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Traits\SeedableShuffle;
     
     protected $appends = ['price'];
 
@@ -219,27 +219,48 @@ class Quiz extends Model
         return $this->price;
     }
 
-    // Return questions optionally shuffled and with answers shuffled per settings
-    public function getPreparedQuestions()
+    /**
+     * Return questions optionally shuffled and with answers shuffled per settings.
+     * Supports a seed for deterministic shuffling.
+     */
+    public function getPreparedQuestions(string $seed = '')
     {
-        $qs = $this->questions()->where('is_approved', true)->get()->toArray();
-        if ($this->shuffle_questions) {
+        $questions = $this->questions()->where('is_approved', true)->get();
+        $qs = $questions->toArray();
+
+        if ($this->shuffle_questions && $seed !== '') {
+            $qs = $this->baseSeededShuffle($qs, $seed . '::questions');
+        } elseif ($this->shuffle_questions) {
             shuffle($qs);
         }
+
         if ($this->shuffle_answers) {
             foreach ($qs as &$q) {
                 if (!empty($q['options']) && is_array($q['options'])) {
-                    // shuffle options while keeping answers indices consistent - rebuild mapping
                     $opts = $q['options'];
-                    $order = array_keys($opts);
-                    shuffle($order);
-                    $newOpts = [];
-                    $indexMap = [];
-                    foreach ($order as $newIndex => $oldIndex) {
-                        $newOpts[] = $opts[$oldIndex];
-                        $indexMap[$oldIndex] = $newIndex;
+                    
+                    if ($seed !== '') {
+                        $shuffledOpts = $this->baseSeededShuffle($opts, $seed . '::q' . $q['id']);
+                        // Map old indices to new indices
+                        $indexMap = [];
+                        foreach ($opts as $oldIdx => $opt) {
+                            $newIdx = array_search($opt, $shuffledOpts);
+                            if ($newIdx !== false) $indexMap[$oldIdx] = $newIdx;
+                        }
+                        $q['options'] = $shuffledOpts;
+                    } else {
+                        // fallback to non-deterministic shuffle
+                        $order = array_keys($opts);
+                        shuffle($order);
+                        $newOpts = [];
+                        $indexMap = [];
+                        foreach ($order as $newIndex => $oldIndex) {
+                            $newOpts[] = $opts[$oldIndex];
+                            $indexMap[$oldIndex] = $newIndex;
+                        }
+                        $q['options'] = $newOpts;
                     }
-                    $q['options'] = $newOpts;
+
                     if (!empty($q['answers']) && is_array($q['answers'])) {
                         $newAnswers = [];
                         foreach ($q['answers'] as $ans) {
@@ -247,7 +268,6 @@ class Quiz extends Model
                                 $newAnswers[] = $indexMap[$ans];
                                 continue;
                             }
-                            // Preserve non-index answers (e.g. textual answers) instead of dropping them.
                             $newAnswers[] = $ans;
                         }
                         $q['answers'] = $newAnswers;
@@ -257,6 +277,7 @@ class Quiz extends Model
         }
         return $qs;
     }
+
 }
 
 

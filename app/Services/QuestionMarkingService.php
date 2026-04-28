@@ -6,23 +6,41 @@ namespace App\Services;
  * Shared service for marking questions across quizzes, battles, and daily challenges.
  * Encapsulates answer normalization, comparison, and scoring logic.
  */
+use App\Traits\SeedableShuffle;
+
 class QuestionMarkingService
 {
+    use SeedableShuffle;
     /**
      * Build a map of option IDs/indices to text values for normalization
      */
-    public function buildOptionMap($question): array
+    /**
+     * Build a map of option IDs/indices to text values for normalization
+     */
+    public function buildOptionMap($question, ?string $shuffleSeed = null): array
     {
         $optionMap = [];
-        $options = is_array($question->options) ? $question->options : json_decode($question->options, true) ?? [];
+        $options = $question->options;
+        if (is_string($options)) {
+            $options = json_decode($options, true) ?? [];
+        }
+        if (!is_array($options)) {
+            $options = [];
+        }
+
+        // Apply shuffling if a seed is provided
+        if ($shuffleSeed && $shuffleSeed !== '') {
+            $options = $this->seededShuffle($options, $shuffleSeed . '::' . $question->id);
+        }
 
         foreach ($options as $idx => $opt) {
             if (is_array($opt)) {
+                $text = $opt['text'] ?? $opt['body'] ?? $opt['option'] ?? null;
                 if (isset($opt['id'])) {
-                    $optionMap[(string)$opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
+                    $optionMap[(string)$opt['id']] = $text;
                 }
-                if (isset($opt['text']) || isset($opt['body'])) {
-                    $optionMap[(string)$idx] = $opt['text'] ?? $opt['body'] ?? null;
+                if ($text !== null) {
+                    $optionMap[(string)$idx] = $text;
                 }
             } else {
                 $optionMap[(string)$idx] = (string)$opt;
@@ -36,25 +54,26 @@ class QuestionMarkingService
      */
     public function toText($val, array $optionMap = []): string
     {
-        if (is_array($val) && (isset($val['body']) || isset($val['text']) || isset($val['option']))) {
-            return $val['text'] ?? $val['body'] ?? $val['option'] ?? '';
+        if (is_array($val)) {
+            return $val['text'] ?? $val['body'] ?? $val['option'] ?? (string)json_encode($val);
         }
-        if (!is_array($val)) {
-            $key = (string)$val;
-            if ($key !== '' && isset($optionMap[$key])) {
-                return $optionMap[$key];
-            }
-            // If submitted as normalized text, recover canonical option casing where possible.
-            $needle = strtolower(trim($key));
-            if ($needle !== '') {
-                foreach ($optionMap as $txt) {
-                    if (strtolower(trim((string) $txt)) === $needle) {
-                        return (string) $txt;
-                    }
+        
+        $key = (string)$val;
+        if ($key !== '' && isset($optionMap[$key])) {
+            return (string)$optionMap[$key];
+        }
+
+        // If submitted as normalized text, recover canonical option casing where possible.
+        $needle = strtolower(trim($key));
+        if ($needle !== '') {
+            foreach ($optionMap as $txt) {
+                if (strtolower(trim((string) $txt)) === $needle) {
+                    return (string) $txt;
                 }
             }
         }
-        return (string)$val;
+        
+        return $key;
     }
 
     /**
@@ -83,9 +102,11 @@ class QuestionMarkingService
      */
     public function formatExplanationAnswers($answers, array $optionMap = []): string
     {
+        if (is_null($answers) || $answers === '') return '';
+        
         $resolved = $this->resolveToText($answers, $optionMap);
         if (is_array($resolved)) {
-            return implode(', ', array_filter($resolved));
+            return implode(', ', array_filter($resolved, fn($v) => $v !== null && $v !== ''));
         }
         return (string)$resolved;
     }
@@ -107,8 +128,13 @@ class QuestionMarkingService
     /**
      * Check if user answer matches correct answer(s)
      */
-    public function isAnswerCorrect($userAnswer, $correctAnswers, $question): bool
+    public function isAnswerCorrect($userAnswer, $correctAnswers, $question, string $shuffleSeed = ''): bool
     {
+        // If shuffled, unmap the answer first
+        if ($shuffleSeed !== '') {
+            $userAnswer = $this->unmapShuffledAnswer($userAnswer, $question, $shuffleSeed);
+        }
+
         $optionMap = $this->buildOptionMap($question);
         $correctAnswersArray = is_array($correctAnswers) ? $correctAnswers : json_decode($correctAnswers, true) ?? [];
 
@@ -130,49 +156,129 @@ class QuestionMarkingService
      * @param array $answers The user's submitted answers (keyed by question_id or in quiz attempt format)
      * @param \Illuminate\Database\Eloquent\Collection $questions The questions to mark against
      * @param bool $isQuizAttemptFormat Whether answers are in quiz attempt format [{question_id: x, selected: y}]
+     * @param string $shuffleSeed Optional seed if answers were shuffled
      * @return array ['results' => array, 'correct_count' => int, 'score' => float]
      */
-    public function calculateScore(array $answers, $questions, bool $isQuizAttemptFormat = false): array
+    public function calculateScore(array $answers, $questions, bool $isQuizAttemptFormat = false, string $shuffleSeed = '', bool $skipUnmapping = false): array
     {
         $results = [];
         $correctCount = 0;
+        $earnedMarks = 0.0;
+        $totalPossibleMarks = 0.0;
         $questionMap = $questions->keyBy('id');
 
+        // First, build a map of ALL questions to calculate total possible marks
+        foreach ($questions as $q) {
+            $totalPossibleMarks += (float)($q->marks ?: 1);
+        }
+
         if ($isQuizAttemptFormat) {
-            // Quiz attempt format: [{question_id: x, selected: y}, ...]
             foreach ($answers as $a) {
                 $qid = intval($a['question_id'] ?? 0);
                 $selected = $a['selected'] ?? null;
                 $question = $questionMap->get($qid);
                 if (!$question) continue;
 
-                $correctAnswers = $question->answers ?? [];
-                $isCorrect = $this->isAnswerCorrect($selected, $correctAnswers, $question);
+                $weight = (float)($question->marks ?: 1);
+                $isCorrect = $this->isAnswerCorrect($selected, $question->answers, $question, $skipUnmapping ? '' : $shuffleSeed);
 
-                if ($isCorrect) $correctCount++;
-                $results[] = ['question_id' => $qid, 'correct' => $isCorrect];
+                if ($isCorrect) {
+                    $correctCount++;
+                    $earnedMarks += $weight;
+                }
+                $optionMap = $this->buildOptionMap($question, $shuffleSeed);
+                $results[] = [
+                    'question_id' => $qid, 
+                    'correct' => $isCorrect, 
+                    'selected' => $selected,
+                    'selected_text' => $this->formatExplanationAnswers($selected, $optionMap),
+                    'correct_text' => $this->formatExplanationAnswers($question->answers, $optionMap),
+                    'explanation' => $question->explanation ?? '',
+                    'marks' => $isCorrect ? $weight : 0.0
+                ];
             }
         } else {
-            // Direct format: {question_id: answer, ...}
             foreach ($answers as $questionId => $userAnswer) {
                 $question = $questionMap->get($questionId);
                 if (!$question) continue;
 
-                $correctAnswers = $question->answers ?? [];
-                $isCorrect = $this->isAnswerCorrect($userAnswer, $correctAnswers, $question);
+                $weight = (float)($question->marks ?: 1);
+                $isCorrect = $this->isAnswerCorrect($userAnswer, $question->answers, $question, $skipUnmapping ? '' : $shuffleSeed);
 
-                if ($isCorrect) $correctCount++;
-                $results[] = ['question_id' => $questionId, 'correct' => $isCorrect];
+                if ($isCorrect) {
+                    $correctCount++;
+                    $earnedMarks += $weight;
+                }
+                $optionMap = $this->buildOptionMap($question, $shuffleSeed);
+                $results[] = [
+                    'question_id' => $questionId, 
+                    'correct' => $isCorrect,
+                    'selected' => $userAnswer,
+                    'selected_text' => $this->formatExplanationAnswers($userAnswer, $optionMap),
+                    'correct_text' => $this->formatExplanationAnswers($question->answers, $optionMap),
+                    'explanation' => $question->explanation ?? '',
+                    'marks' => $isCorrect ? $weight : 0.0
+                ];
             }
         }
 
-        $attempted = max(1, count($answers));
-        $score = round($correctCount / $attempted * 100, 1);
+        $score = $totalPossibleMarks > 0 ? round(($earnedMarks / $totalPossibleMarks) * 100, 1) : 0.0;
 
         return [
             'results' => $results,
             'correct_count' => $correctCount,
+            'earned_marks' => $earnedMarks,
+            'total_possible_marks' => $totalPossibleMarks,
             'score' => $score,
         ];
     }
+
+    /**
+     * Reverses a shuffle based on a seed.
+     */
+    public function unmapShuffledAnswer(mixed $given, object $question, string $shuffleSeed): mixed
+    {
+        if (!$shuffleSeed || $shuffleSeed === '') {
+            return $given;
+        }
+
+        $options = $question->options;
+        if (is_string($options)) {
+            $options = json_decode($options, true) ?? [];
+        }
+        if (empty($options)) {
+            return $given;
+        }
+
+        $shuffled = $this->seededShuffle($options, $shuffleSeed . '::' . $question->id);
+        
+        if (is_array($given)) {
+            $mapped = [];
+            foreach ($given as $g) {
+                if (is_numeric($g) && isset($shuffled[(int)$g])) {
+                    $opt = $shuffled[(int)$g];
+                    $mapped[] = is_array($opt) ? ($opt['id'] ?? $opt['text'] ?? $opt['body'] ?? $opt) : $opt;
+                } else {
+                    $mapped[] = $g;
+                }
+            }
+            return $mapped;
+        }
+
+        if (is_numeric($given) && isset($shuffled[(int)$given])) {
+            $opt = $shuffled[(int)$given];
+            return is_array($opt) ? ($opt['id'] ?? $opt['text'] ?? $opt['body'] ?? $opt) : $opt;
+        }
+
+        return $given;
+    }
+
+    /**
+     * Deterministic shuffle using a seed.
+     */
+    public function seededShuffle(array $items, string $seed): array
+    {
+        return $this->baseSeededShuffle($items, $seed);
+    }
+
 }

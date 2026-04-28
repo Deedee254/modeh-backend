@@ -49,8 +49,24 @@ class DailyChallengeController extends Controller
             // Get or create today's cache for user's grade/level
             $cache = $this->dailyChallengeBaker->getOrBakeForGrade($quizee->grade, $quizee->level);
 
-            // Get the questions
+            // Prepare questions (apply shuffling if configured)
+            // Use a deterministic seed based on cache and user so we can re-resolve labels in history without a column
+            $shuffleSeed = (string)$request->input('shuffle_seed', md5($cache->id . '::' . $user->id));
+            // We use a simplified version of getPreparedQuestions logic here
             $questions = Question::whereIn('id', $cache->questions)->get();
+            $preparedQuestions = [];
+            foreach ($questions as $q) {
+                $optionMap = $this->markingService->buildOptionMap($q, $shuffleSeed);
+                $preparedQuestions[] = [
+                    'id' => $q->id,
+                    'type' => $q->type,
+                    'body' => $q->body,
+                    'options' => $q->options, // buildOptionMap internally handles shuffling if seed provided
+                    'media_path' => $q->media_path,
+                    'marks' => $q->marks ?? 1,
+                    'option_mode' => $q->option_mode,
+                ];
+            }
 
             // Check if user has already submitted today
             $existingSubmission = DailyChallengeSubmission::where('user_id', $user->id)
@@ -66,7 +82,8 @@ class DailyChallengeController extends Controller
                     'grade' => $quizee->grade,
                     'level' => $quizee->level,
                 ],
-                'questions' => $questions,
+                'questions' => $preparedQuestions,
+                'shuffle_seed' => $shuffleSeed,
                 'cache_id' => $cache->id,
                 'completion' => $existingSubmission,
             ]);
@@ -119,13 +136,15 @@ class DailyChallengeController extends Controller
         $cache = $submission->cache;
         $questions = Question::whereIn('id', $cache->questions)->get()->keyBy('id');
 
-        // Build detailed results with explanations
-        $results = collect($submission->is_correct)->map(function ($isCorrect, $questionId) use ($submission, $questions) {
+        // Build detailed results with explanations using the marking service
+        // Use deterministic seed so we can re-resolve labels correctly
+        $shuffleSeed = (string)$request->input('shuffle_seed', md5($submission->daily_challenge_cache_id . '::' . $user->id)); 
+        $results = collect($submission->is_correct)->map(function ($isCorrect, $questionId) use ($submission, $questions, $shuffleSeed) {
             $question = $questions->get($questionId);
             if (!$question) return null;
 
             $userAnswer = $submission->answers[$questionId] ?? null;
-            $optionMap = $this->markingService->buildOptionMap($question);
+            $optionMap = $this->markingService->buildOptionMap($question, $shuffleSeed);
 
             return [
                 'question_id' => $questionId,
@@ -172,6 +191,7 @@ class DailyChallengeController extends Controller
             'cache_id' => 'required|integer|exists:daily_challenges_cache,id',
             'answers' => 'required|array',
             'time_taken' => 'nullable|integer|min:0',
+            'shuffle_seed' => 'nullable|string',
         ]);
 
         // Get cache and verify it belongs to user's grade/level (security check)
@@ -191,7 +211,23 @@ class DailyChallengeController extends Controller
 
         // Get questions and calculate score server-side using shared marking service
         $questions = Question::whereIn('id', $cache->questions)->get();
-        $markingResult = $this->markingService->calculateScore($validated['answers'], $questions, false);
+        $shuffleSeed = $validated['shuffle_seed'] ?? md5($cache->id . '::' . $user->id);
+        
+        // Unmap shuffled answers before marking if seed provided
+        if ($shuffleSeed) {
+            $unmappedAnswers = [];
+            foreach ($validated['answers'] as $qid => $selected) {
+                $q = $questions->firstWhere('id', $qid);
+                if ($q) {
+                    $unmappedAnswers[$qid] = $this->markingService->unmapShuffledAnswer($selected, $q, $shuffleSeed);
+                } else {
+                    $unmappedAnswers[$qid] = $selected;
+                }
+            }
+            $markingResult = $this->markingService->calculateScore($unmappedAnswers, $questions, false, $shuffleSeed, true);
+        } else {
+            $markingResult = $this->markingService->calculateScore($validated['answers'], $questions, false);
+        }
 
         // Create submission record
         $submission = DailyChallengeSubmission::create([

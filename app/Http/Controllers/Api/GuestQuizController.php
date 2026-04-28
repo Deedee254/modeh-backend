@@ -43,37 +43,34 @@ class GuestQuizController extends Controller
         $quiz->load(['questions']);
 
         // Prepare questions (apply shuffling if configured)
-        $prepared = $quiz->getPreparedQuestions();
+        $shuffleSeed = (string)$request->input('shuffle_seed', bin2hex(random_bytes(4)));
+        $prepared = $quiz->getPreparedQuestions($shuffleSeed);
         $questions = [];
 
         foreach ($prepared as $q) {
             $questionData = [
-                'id' => isset($q['id']) ? $q['id'] : (isset($q->id) ? $q->id : null),
-                'type' => isset($q['type']) ? $q['type'] : (isset($q->type) ? $q->type : null),
-                'body' => isset($q['body']) ? $q['body'] : (isset($q->body) ? $q->body : (isset($q['text']) ? $q['text'] : '')),
-                'marks' => isset($q['marks']) ? $q['marks'] : (isset($q->marks) ? $q->marks : 1),
-                'media_path' => isset($q['media_path']) ? $q['media_path'] : (isset($q->media_path) ? $q->media_path : null),
-                'media' => isset($q['media']) ? $q['media'] : (isset($q->media) ? $q->media : null),
-                'youtube_url' => isset($q['youtube_url']) ? $q['youtube_url'] : (isset($q->youtube_url) ? $q->youtube_url : null),
-                'youtube' => isset($q['youtube']) ? $q['youtube'] : (isset($q->youtube) ? $q->youtube : null),
-                'option_mode' => isset($q['option_mode']) ? $q['option_mode'] : (isset($q->option_mode) ? $q->option_mode : null),
-                'is_approved' => isset($q['is_approved']) ? $q['is_approved'] : (isset($q->is_approved) ? $q->is_approved : null),
+                'id' => $q['id'] ?? null,
+                'type' => $q['type'] ?? 'mcq',
+                'body' => $q['body'] ?? $q['text'] ?? '',
+                'marks' => $q['marks'] ?? 1,
+                'media_path' => $q['media_path'] ?? null,
+                'youtube_url' => $q['youtube_url'] ?? null,
+                'option_mode' => $q['option_mode'] ?? null,
+                'is_approved' => $q['is_approved'] ?? true,
             ];
 
             // Include options WITHOUT the is_correct field to prevent cheating
-            $options = isset($q['options']) ? $q['options'] : (isset($q->options) ? $q->options : []);
+            $options = $q['options'] ?? [];
             $cleanedOptions = [];
 
             if (is_array($options)) {
                 foreach ($options as $opt) {
                     if (is_array($opt)) {
-                        // Remove is_correct from option
                         $cleanedOption = [
                             'id' => $opt['id'] ?? null,
-                            'text' => $opt['text'] ?? null,
-                            'body' => $opt['body'] ?? null,
+                            'text' => $opt['text'] ?? $opt['body'] ?? $opt['option'] ?? null,
                         ];
-                        $cleanedOptions[] = array_filter($cleanedOption); // Remove null values
+                        $cleanedOptions[] = array_filter($cleanedOption);
                     } else {
                         $cleanedOptions[] = $opt;
                     }
@@ -90,6 +87,7 @@ class GuestQuizController extends Controller
                 'title' => $quiz->title,
                 'description' => $quiz->description,
                 'timer_seconds' => $quiz->timer_seconds,
+                'shuffle_seed' => $shuffleSeed,
                 'per_question_seconds' => $quiz->per_question_seconds,
                 'use_per_question_timer' => (bool) $quiz->use_per_question_timer,
                 'shuffle_questions' => (bool) $quiz->shuffle_questions,
@@ -136,6 +134,7 @@ class GuestQuizController extends Controller
                 'answers.*.selected' => 'nullable',
                 'time_taken' => 'nullable|integer|min:0',
                 'guest_identifier' => 'required|string',
+                'shuffle_seed' => 'nullable|string',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             // Log validation errors for debugging
@@ -150,9 +149,9 @@ class GuestQuizController extends Controller
         // Load questions
         $questions = $quiz->questions()->get();
 
-        // Calculate score
-        $scoringResult = $this->calculateScore($validated['answers'], $questions);
-        $detailedResults = $this->formatResultsWithExplanations($scoringResult['results'] ?? [], $questions);
+        // Calculate score using service (handles answer unmapping internally if shuffle_seed is provided)
+        $shuffleSeed = $validated['shuffle_seed'] ?? null;
+        $scoringResult = $this->markingService->calculateScore($validated['answers'], $questions, true, (string)$shuffleSeed);
 
         $price = $quiz->price;
         $requiresPayment = ((bool) $quiz->is_paid) || ($price > 0);
@@ -205,7 +204,7 @@ class GuestQuizController extends Controller
             // Do not expose detailed per-question marking before purchase.
             $result['results'] = [];
         } else {
-            $result['results'] = $detailedResults;
+            $result['results'] = $scoringResult['results'] ?? [];
         }
 
         return response()->json([
@@ -231,51 +230,33 @@ class GuestQuizController extends Controller
             ], 403);
         }
 
-        $v = Validator::make($request->all(), [
+        $validated = $request->validate([
             'question_id' => 'required|integer',
             'selected' => 'nullable',
-            'guest_identifier' => 'nullable|string',
+            'shuffle_seed' => 'nullable|string',
         ]);
 
-        if ($v->fails()) {
-            return response()->json(['error' => 'Invalid input', 'errors' => $v->errors()], 422);
-        }
-
-        $questionId = (int) $request->get('question_id');
-        $selected = $request->get('selected');
-
-        $question = $quiz->questions()->where('id', $questionId)->first();
+        $question = $quiz->questions()->find($validated['question_id']);
         if (!$question) {
             return response()->json(['error' => 'Question not found'], 404);
         }
 
-        // Determine correct answers for question
-        if (is_array($question->answers)) {
-            $correctAnswers = $question->answers;
-        } elseif (is_string($question->answers) && $question->answers !== '') {
-            $decoded = json_decode($question->answers, true);
-            $correctAnswers = is_array($decoded) ? $decoded : [];
-        } else {
-            $correctAnswers = [];
+        $selected = $validated['selected'];
+        $shuffleSeed = $validated['shuffle_seed'] ?? '';
+
+        // Unmap if shuffled
+        if ($shuffleSeed !== '') {
+            $selected = $this->markingService->unmapShuffledAnswer($selected, $question, $shuffleSeed);
         }
 
-        $optionMap = $this->buildOptionMap($question);
-
-        $isCorrect = false;
-        if (is_array($selected)) {
-            $submitted = $this->normalizeArrayForCompare($selected, $optionMap);
-            $correctNorm = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
-            $isCorrect = ($submitted == $correctNorm);
-        } else {
-            $submitted = $this->normalizeForCompare($selected, $optionMap);
-            $correctNormArr = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
-            $isCorrect = in_array($submitted, $correctNormArr);
-        }
+        $isCorrect = $this->markingService->isAnswerCorrect($selected, $question->answers, $question);
+        $optionMap = $this->markingService->buildOptionMap($question);
 
         return response()->json([
             'correct' => (bool) $isCorrect,
             'explanation' => $question->explanation ?? null,
-            'correct_answer' => $this->formatAnswer($question->answers),
+            'provided' => $this->markingService->formatExplanationAnswers($selected, $optionMap),
+            'correct_answer' => $this->markingService->formatExplanationAnswers($question->answers, $optionMap),
         ]);
     }
 
@@ -386,19 +367,19 @@ class GuestQuizController extends Controller
 
         foreach ($results as $result) {
             $question = $questionMap->get($result['question_id']);
-
-            if (!$question) {
-                continue;
-            }
+            if (!$question) continue;
 
             $optionMap = $this->markingService->buildOptionMap($question);
+            $provided = $result['selected'] ?? null;
+            
             $formatted[] = [
                 'question_id' => $result['question_id'],
                 'question_body' => $question->body ?? $question->text ?? '',
-                'is_correct' => $result['correct'],
-                'marks_earned' => $result['marks'],
+                'is_correct' => $this->markingService->isAnswerCorrect($provided, $question->answers, $question),
+                'marks_earned' => $result['marks'] ?? (float)($question->marks ?: 1),
                 'explanation' => $question->explanation ?? null,
-                'correct_answer' => $this->formatAnswer($question->answers, $optionMap),
+                'provided' => $this->markingService->formatExplanationAnswers($provided, $optionMap),
+                'correct_answer' => $this->markingService->formatExplanationAnswers($question->answers, $optionMap),
             ];
         }
 

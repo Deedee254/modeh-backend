@@ -465,11 +465,12 @@ class BattleController extends Controller
                 ]);
 
                 if ($isCorrect && !$defer) $correct++;
+                $optionMap = $this->questionMarkingService->buildOptionMap($q);
                 $detailed[] = [
                     'question_id' => $qid,
                     'body' => $q->body,
-                    'selected' => $selected,
-                    'correct' => $correctAnswers,
+                    'selected' => $this->questionMarkingService->formatExplanationAnswers($selected, $optionMap),
+                    'correct' => $this->questionMarkingService->formatExplanationAnswers($q->answers, $optionMap),
                     'time_taken' => $timeTaken,
                     'correct_flag' => $defer ? null : $isCorrect,
                 ];
@@ -736,11 +737,12 @@ class BattleController extends Controller
                 ]);
 
                 if ($isCorrect) $correct++;
+                $optionMap = $this->questionMarkingService->buildOptionMap($q);
                 $detailed[] = [
                     'question_id' => $qid,
                     'body' => $q->body,
-                    'selected' => $selected,
-                    'correct' => $correctAnswers,
+                    'selected' => $this->questionMarkingService->formatExplanationAnswers($selected, $optionMap),
+                    'correct' => $this->questionMarkingService->formatExplanationAnswers($q->answers, $optionMap),
                     'time_taken' => $timeTaken,
                     'correct_flag' => $isCorrect,
                 ];

@@ -33,157 +33,11 @@ class QuizAttemptController extends Controller
 
 
     /**
-     * Build a map of option id/index => display text for a question's options
-     *
-     * @param  mixed $q Question model or object with options
-     * @return array
-     */
-    private function buildOptionMap($q)
-    {
-        $optionMap = [];
-        $options = $q->options;
-        if (is_string($options)) {
-            $decoded = json_decode($options, true);
-            $options = is_array($decoded) ? $decoded : [];
-        }
-
-        if (!is_array($options)) {
-            $options = [];
-        }
-
-        foreach ($options as $idx => $opt) {
-            if (is_array($opt)) {
-                $text = $opt['text'] ?? $opt['body'] ?? $opt['option'] ?? null;
-                if (isset($opt['id']) && $text !== null) {
-                    $optionMap[(string) $opt['id']] = $text;
-                }
-                if ($text !== null) {
-                    $optionMap[(string) $idx] = $text;
-                }
-            } elseif (is_string($opt) || is_numeric($opt)) {
-                $optionMap[(string) $idx] = (string) $opt;
-            }
-        }
-        return $optionMap;
-    }
-
-    /**
-     * Resolve a value (option id/index, object or text) to a human-readable text
-     */
-    private function toText($val, array $optionMap = [])
-    {
-        if (is_array($val) && (isset($val['body']) || isset($val['text']) || isset($val['option']))) {
-            return $val['text'] ?? $val['body'] ?? $val['option'] ?? '';
-        }
-        if (!is_array($val)) {
-            $key = (string) $val;
-            if ($key !== '' && isset($optionMap[$key])) {
-                return $optionMap[$key];
-            }
-            // If answer was normalized to text (e.g. lowercase), map it back to canonical option text.
-            $normalizedNeedle = strtolower(trim($key));
-            if ($normalizedNeedle !== '') {
-                foreach ($optionMap as $txt) {
-                    if (strtolower(trim((string) $txt)) === $normalizedNeedle) {
-                        return (string) $txt;
-                    }
-                }
-            }
-        }
-        return (string) $val;
-    }
-
-    /**
-     * Normalize a single value for comparison (lowercase, trimmed)
-     */
-    private function normalizeForCompare($val, array $optionMap = [])
-    {
-        $text = $this->toText($val, $optionMap);
-        return strtolower(trim((string) $text));
-    }
-
-    /**
-     * Normalize an array of values for comparison: map -> trim/lower -> filter -> sort
-     */
-    private function normalizeArrayForCompare($arr, array $optionMap = [])
-    {
-        $normalized = array_map(function ($v) use ($optionMap) {
-            return $this->normalizeForCompare($v, $optionMap);
-        }, $arr ?: []);
-        $normalized = array_filter($normalized, function ($v) {
-            return $v !== null && $v !== '';
-        });
-        sort($normalized);
-        return array_values($normalized);
-    }
-
-    /**
      * Calculate score and correctness for a given set of answers against a quiz's questions.
-     *
-     * @param array $answers The user's submitted answers.
-     * @param \Illuminate\Database\Eloquent\Collection $questions The collection of question models for the quiz.
-     * @return array An array containing ['results' => array, 'correct_count' => int, 'score' => float]
      */
     private function calculateScore(array $answers, $questions): array
     {
-        $results = [];
-        $correctCount = 0;
-        $earnedMarks = 0;
-        $totalPossibleMarks = 0;
-        $questionMap = $questions->keyBy('id');
-
-        foreach ($answers as $a) {
-            $qid = intval($a['question_id'] ?? 0);
-            $selected = $a['selected'] ?? null;
-            $q = $questionMap->get($qid);
-            if (!$q)
-                continue;
-
-            // Determine question weight (marks), default to 1 if not set
-            $weight = floatval($q->marks) ?: 1.0;
-            $totalPossibleMarks += $weight;
-
-            $isCorrect = false;
-            if (is_array($q->answers)) {
-                $correctAnswers = $q->answers;
-            } elseif (is_string($q->answers) && $q->answers !== '') {
-                $decoded = json_decode($q->answers, true);
-                $correctAnswers = is_array($decoded) ? $decoded : [];
-            } else {
-                $correctAnswers = [];
-            }
-
-            $optionMap = $this->buildOptionMap($q);
-
-            if (is_array($selected)) {
-                $submittedAnswers = $this->normalizeArrayForCompare($selected, $optionMap);
-                $correctAnswersNormalized = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
-                $isCorrect = $submittedAnswers == $correctAnswersNormalized;
-            } else {
-                $submittedAnswer = $this->normalizeForCompare($selected, $optionMap);
-                $correctAnswersNormalized = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
-                $isCorrect = in_array($submittedAnswer, $correctAnswersNormalized);
-            }
-
-            if ($isCorrect) {
-                $correctCount++;
-                $earnedMarks += $weight;
-            }
-            $results[] = ['question_id' => $qid, 'correct' => $isCorrect, 'marks' => $isCorrect ? $weight : 0];
-        }
-
-        // Add marks for unattempted questions to the total possible count
-        // (If strict scoring is needed relative to ALL questions in the quiz, not just answered ones)
-        // Usually score is (Earned / Total Quiz Marks) * 100.
-        // Re-iterate all quiz questions to get true Total Possible Marks
-        $totalQuizMarks = 0;
-        foreach ($questions as $q) {
-            $totalQuizMarks += (floatval($q->marks) ?: 1.0);
-        }
-
-        $score = $totalQuizMarks > 0 ? round(($earnedMarks / $totalQuizMarks) * 100, 1) : 0;
-
-        return ['results' => $results, 'correct_count' => $correctCount, 'score' => $score, 'earned_marks' => $earnedMarks, 'total_marks' => $totalQuizMarks];
+        return $this->markingService->calculateScore($answers, $questions, true);
     }
 
     /**
@@ -241,7 +95,8 @@ class QuizAttemptController extends Controller
         // Use the model helper to prepare questions so server-side shuffling of questions
         // and answers is applied when the quiz is configured to shuffle them.
         $quiz->load(['topic.subject', 'subject', 'grade.level', 'questions', 'author']);
-        $prepared = $quiz->getPreparedQuestions();
+        $shuffleSeed = (string)$request->input('shuffle_seed', bin2hex(random_bytes(4)));
+        $prepared = $quiz->getPreparedQuestions($shuffleSeed);
         $questions = [];
         foreach ($prepared as $q) {
             $questions[] = [
@@ -290,6 +145,7 @@ class QuizAttemptController extends Controller
                 'attempts_allowed' => $quiz->attempts_allowed,
                 'shuffle_questions' => (bool) $quiz->shuffle_questions,
                 'shuffle_answers' => (bool) $quiz->shuffle_answers,
+                'shuffle_seed' => $shuffleSeed,
                 // Expose multimedia fields publicly as requested
                 'youtube_url' => $quiz->youtube_url ?? null,
                 'video_url' => $quiz->video_url ?? null,
@@ -442,6 +298,7 @@ class QuizAttemptController extends Controller
             'total_time_seconds' => 'nullable|numeric',
             'started_at' => 'nullable|date',
             'attempt_id' => 'nullable|integer',
+            'shuffle_seed' => 'nullable|string',
         ]);
 
         $answers = $payload['answers'] ?? [];
@@ -450,10 +307,25 @@ class QuizAttemptController extends Controller
         $attemptId = $payload['attempt_id'] ?? null;
 
         // Eager load all questions for the quiz to avoid N+1 queries
-        $quizQuestions = $quiz->questions()->get();
-	        $scoringResult = $this->calculateScore($answers, $quizQuestions);
-	        $results = $scoringResult['results'];
-	        $score = $scoringResult['score'];
+        $quizQuestions = $quiz->questions;
+        $shuffleSeed = $payload['shuffle_seed'] ?? '';
+        
+        // Unmap shuffled answers before processing and persistence
+        if ($shuffleSeed !== '') {
+            foreach ($answers as &$a) {
+                if (isset($a['selected'])) {
+                    $q = $quizQuestions->firstWhere('id', $a['question_id']);
+                    if ($q) {
+                        $a['selected'] = $this->markingService->unmapShuffledAnswer($a['selected'], $q, $shuffleSeed);
+                    }
+                }
+            }
+        }
+
+        $scoringResult = $this->markingService->calculateScore($answers, $quizQuestions, true, $shuffleSeed, true);
+        $results = $scoringResult['results'];
+        $score = $scoringResult['score'];
+        $earnedMarks = $scoringResult['earned_marks'];
 	        $attempted = count($answers);
 
 	        // Allow submit to only persist answers and defer marking (score calculation, points, achievements)
@@ -719,7 +591,7 @@ class QuizAttemptController extends Controller
 	        // Recompute score from stored answers
 	        $answers = $attempt->answers ?? [];
 	        $quiz = $attempt->quiz()->with('questions')->first();
-	        $scoringResult = $this->calculateScore($answers, $quiz->questions);
+	        $scoringResult = $this->calculateScore($answers, $quiz->questions, true, (string)$request->input('shuffle_seed'), true);
 	        $score = $scoringResult['score'];
 	        $pointsEarned = $scoringResult['earned_marks'] ?? 0;
 
@@ -825,51 +697,10 @@ class QuizAttemptController extends Controller
                 }
             }
 
-            $answersValue = $q->answers;
-            if ($answersValue instanceof \Illuminate\Support\Collection) {
-                $answersValue = $answersValue->toArray();
-            } elseif ($answersValue instanceof \ArrayObject) {
-                $answersValue = $answersValue->getArrayCopy();
-            }
-
-            if (is_array($answersValue)) {
-                $correctAnswers = $answersValue;
-            } elseif (is_string($answersValue) && $answersValue !== '') {
-                $decoded = json_decode($answersValue, true);
-                $correctAnswers = is_array($decoded) ? $decoded : [];
-            } else {
-                $correctAnswers = [];
-            }
-
-            // Build option map and compute readable/provided values
-            $optionMap = $this->buildOptionMap($q);
-
-            $providedDisplay = is_array($provided)
-                ? array_map(function ($v) use ($optionMap) {
-                    return $this->toText($v, $optionMap);
-                }, $provided)
-                : $this->toText($provided, $optionMap);
-
-            // compute correctness using normalized comparisons
-            if (is_array($provided)) {
-                $submitted = $this->normalizeArrayForCompare($provided, $optionMap);
-                $correctNormalized = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
-                $isCorrect = $submitted == $correctNormalized;
-            } else {
-                $submitted = $this->normalizeForCompare($provided, $optionMap);
-                $correctNormalized = $this->normalizeArrayForCompare($correctAnswers, $optionMap);
-                $isCorrect = in_array($submitted, $correctNormalized);
-            }
-
-            // Map correct answer indices to their display text in the current options array
-            $correctAnswerTexts = [];
-            foreach ($correctAnswers as $correctIdx) {
-                // correctIdx might be an integer index or an option ID/text
-                $correctText = $this->toText($correctIdx, $optionMap);
-                if ($correctText !== '') {
-                    $correctAnswerTexts[] = $correctText;
-                }
-            }
+            $optionMap = $this->markingService->buildOptionMap($q);
+            $providedDisplay = $this->markingService->formatExplanationAnswers($provided, $optionMap);
+            $isCorrect = $this->markingService->isAnswerCorrect($provided, $q->answers, $q);
+            $correctDisplay = $this->markingService->formatExplanationAnswers($q->answers, $optionMap);
 
             $mediaUrl = $q->media_path ? ((\Illuminate\Support\Str::startsWith($q->media_path, ['http://', 'https://', '/'])) ? $q->media_path : \Storage::url($q->media_path)) : null;
 
@@ -879,7 +710,7 @@ class QuizAttemptController extends Controller
                 'options' => $q->options,
                 'provided' => $providedDisplay,
                 'correct' => $isCorrect,
-                'correct_answers' => $correctAnswerTexts,
+                'correct_answers' => $correctDisplay,
                 'marks' => (float) ($q->marks ?: 1),
                 'points_awarded' => $isCorrect ? (float) ($q->marks ?: 1) : 0.0,
                 'explanation' => $q->explanation ?? null,
@@ -1031,6 +862,8 @@ class QuizAttemptController extends Controller
                         'question_id' => $qid,
                         'selected' => $selected,
                         'selected_text' => $this->markingService->formatExplanationAnswers($selected, $optionMap),
+                        'correct_text' => $this->markingService->formatExplanationAnswers($question->answers, $optionMap),
+                        'is_correct' => $this->markingService->isAnswerCorrect($selected, $question->answers, $question),
                     ];
                 } else {
                     $resolvedAnswers[] = $ans;
