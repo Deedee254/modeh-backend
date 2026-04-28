@@ -29,6 +29,8 @@ class Battle extends Model
 {
     use HasFactory;
 
+    protected $appends = ['price'];
+
     protected static function booted()
     {
         static::creating(function ($model) {
@@ -95,6 +97,24 @@ class Battle extends Model
     {
         return $this->hasMany(BattleSubmission::class);
     }
+    /**
+     * Get the effective price of the battle.
+     * Falls back to the global default if no specific price is set.
+     */
+    public function getPriceAttribute(): float
+    {
+        if ($this->one_off_price !== null && (float) $this->one_off_price > 0) {
+            return (float) $this->one_off_price;
+        }
+
+        try {
+            $pricingSetting = PricingSetting::singleton();
+            return (float) ($pricingSetting->default_battle_one_off_price ?? 0);
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+    }
+
     public function getRouteKeyName()
     {
         return 'uuid';

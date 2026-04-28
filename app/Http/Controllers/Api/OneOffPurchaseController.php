@@ -216,7 +216,7 @@ class OneOffPurchaseController extends Controller
                 return $quiz ? $quiz->price : null;
             case 'battle':
                 $battle = Battle::find($itemId);
-                return $battle ? (float) ($battle->one_off_price ?? ($pricingSetting->default_battle_one_off_price ?? 0)) : null;
+                return $battle ? $battle->price : null;
             case 'tournament':
                 $tournament = Tournament::find($itemId);
                 return $tournament ? (float) ($tournament->entry_fee ?? 0) : null;

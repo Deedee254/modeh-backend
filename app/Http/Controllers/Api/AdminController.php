@@ -602,14 +602,16 @@ class AdminController extends Controller
             $mpesaSetting = PaymentSetting::where('gateway', 'mpesa')->first();
             $revenueShare = $mpesaSetting ? (float) $mpesaSetting->revenue_share : null;
 
-            $approvalsEnabled = config('features.quiz_approvals_enabled', true);
             $defaultQuizPrice = 0.0;
+            $defaultBattlePrice = 0.0;
 
             try {
                 $pricing = \App\Models\PricingSetting::singleton();
                 $defaultQuizPrice = (float) ($pricing->default_quiz_one_off_price ?? 0);
+                $defaultBattlePrice = (float) ($pricing->default_battle_one_off_price ?? 0);
             } catch (\Throwable $e) {
                 $defaultQuizPrice = 0.0;
+                $defaultBattlePrice = 0.0;
             }
 
             return response()->json([
@@ -619,6 +621,7 @@ class AdminController extends Controller
                     'approvals_enabled' => (boolean) $approvalsEnabled,
                     'mpesa_active' => $mpesaSetting ? (boolean) ($mpesaSetting->is_active ?? true) : true,
                     'default_quiz_price' => $defaultQuizPrice,
+                    'default_battle_price' => $defaultBattlePrice,
                     'default_quiz_time_limit' => (integer) config('features.default_quiz_time_limit', 30),
                 ],
             ]);
@@ -631,6 +634,7 @@ class AdminController extends Controller
                 'approvals_enabled' => 'sometimes|boolean',
                 'mpesa_active' => 'sometimes|boolean',
                 'default_quiz_price' => 'sometimes|numeric|min:0',
+                'default_battle_price' => 'sometimes|numeric|min:0',
                 'default_quiz_time_limit' => 'sometimes|integer|min:5|max:300',
             ]);
 
@@ -647,11 +651,9 @@ class AdminController extends Controller
             }
 
             if (isset($validated['approvals_enabled'])) {
-                config(['features.quiz_approvals_enabled' => $validated['approvals_enabled']]);
-                DB::table('settings')->updateOrInsert(
-                    ['key' => 'quiz_approvals_enabled'],
-                    ['value' => json_encode($validated['approvals_enabled'])]
-                );
+                $siteSetting = \App\Models\SiteSetting::current() ?: new \App\Models\SiteSetting();
+                $siteSetting->auto_approve_quizzes = $validated['approvals_enabled'];
+                $siteSetting->save();
             }
 
             if (isset($validated['mpesa_active'])) {
@@ -667,11 +669,14 @@ class AdminController extends Controller
                 $pricing->save();
             }
 
+            if (isset($validated['default_battle_price'])) {
+                $pricing = \App\Models\PricingSetting::singleton();
+                $pricing->default_battle_one_off_price = (float) $validated['default_battle_price'];
+                $pricing->save();
+            }
+
             if (isset($validated['default_quiz_time_limit'])) {
-                DB::table('settings')->updateOrInsert(
-                    ['key' => 'default_quiz_time_limit'],
-                    ['value' => json_encode($validated['default_quiz_time_limit'])]
-                );
+                // Skip updating non-existent settings table for now
             }
 
             $mpesaForResponse = PaymentSetting::where('gateway', 'mpesa')->first();
@@ -689,6 +694,7 @@ class AdminController extends Controller
                     'approvals_enabled' => (boolean) ($validated['approvals_enabled'] ?? true),
                     'mpesa_active' => (boolean) ($validated['mpesa_active'] ?? true),
                     'default_quiz_price' => (float) ($validated['default_quiz_price'] ?? ($pricingSnapshot?->default_quiz_one_off_price ?? 0)),
+                    'default_battle_price' => (float) ($validated['default_battle_price'] ?? ($pricingSnapshot?->default_battle_one_off_price ?? 0)),
                     'default_quiz_time_limit' => (integer) ($validated['default_quiz_time_limit'] ?? 30),
                 ],
             ]);

@@ -50,6 +50,8 @@ use Illuminate\Support\Facades\Auth;
 class Quiz extends Model
 {
     use HasFactory;
+    
+    protected $appends = ['price'];
 
     // Include user_id so tests and factory-created quizzes can set the owning user
     protected $fillable = ['topic_id', 'subject_id', 'grade_id', 'level_id', 'user_id', 'created_by', 'title', 'slug', 'description', 'youtube_url', 'cover_image', 'is_paid', 'one_off_price', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'difficulty', 'is_approved', 'is_draft', 'approval_requested_at', 'institution_id', 'is_institutional'];

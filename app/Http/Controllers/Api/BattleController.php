@@ -18,6 +18,10 @@ use App\Models\Quiz;
 use App\Models\User;
 use App\Services\AchievementService;
 use App\Services\QuestionMarkingService;
+use App\Models\OneOffPurchase;
+use App\Models\Grade;
+use App\Events\BattleParticipantJoined;
+use App\Events\BattleStatusUpdated;
 
 class BattleController extends Controller
 {
@@ -30,23 +34,10 @@ class BattleController extends Controller
         $this->questionMarkingService = new QuestionMarkingService();
     }
 
-    private function getEffectiveBattlePrice(Battle $battle): float
-    {
-        if (!is_null($battle->one_off_price)) {
-            return (float) $battle->one_off_price;
-        }
-
-        try {
-            $setting = \App\Models\PricingSetting::singleton();
-            return (float) ($setting->default_battle_one_off_price ?? 0);
-        } catch (\Throwable $e) {
-            return 0.0;
-        }
-    }
 
     private function userHasBattlePurchase($user, Battle $battle): bool
     {
-        return \App\Models\OneOffPurchase::where('user_id', $user->id)
+        return OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'battle')
             ->where('item_id', $battle->getKey())
             ->where('status', 'confirmed')
@@ -148,7 +139,7 @@ class BattleController extends Controller
         if (isset($settings['time_per_question'])) {
             $battle->time_per_question = $settings['time_per_question'];
         }
-        $battle->one_off_price = $this->getEffectiveBattlePrice($battle);
+        $battle->one_off_price = $battle->price;
         return response()->json($battle);
     }
 
@@ -177,7 +168,7 @@ class BattleController extends Controller
 
         // broadcast participant joined event
         try {
-            event(new \App\Events\BattleParticipantJoined($battle, $user->id));
+            event(new BattleParticipantJoined($battle, $user->id));
         } catch (\Exception $e) {
             // ignore broadcast errors
         }
@@ -207,7 +198,7 @@ class BattleController extends Controller
 
         // Broadcast status update event
         try {
-            event(new \App\Events\BattleStatusUpdated($battle));
+            event(new BattleStatusUpdated($battle));
         } catch (\Exception $e) {
             // ignore broadcast errors
         }
@@ -288,7 +279,7 @@ class BattleController extends Controller
         if ($level) {
             try {
                 if (Schema::hasTable('grades') && Schema::hasColumn('grades', 'level_id') && Schema::hasColumn('questions', 'grade_id')) {
-                    $gradeIds = \App\Models\Grade::where('level_id', $level)->pluck('id')->toArray();
+                    $gradeIds = Grade::where('level_id', $level)->pluck('id')->toArray();
                     if (!empty($gradeIds)) {
                         $q->whereIn('grade_id', $gradeIds);
                     } else {
@@ -608,7 +599,7 @@ class BattleController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $price = $this->getEffectiveBattlePrice($battle);
+        $price = $battle->price;
         if ($price > 0 && !$this->userHasBattlePurchase($user, $battle)) {
             return response()->json([
                 'ok' => false,
@@ -850,7 +841,7 @@ class BattleController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $price = $this->getEffectiveBattlePrice($battle);
+        $price = $battle->price;
         if ($price > 0 && !$this->userHasBattlePurchase($user, $battle)) {
             return response()->json([
                 'ok' => false,
@@ -1059,7 +1050,7 @@ class BattleController extends Controller
 
         // Detect whether the opponent is the configured admin-bot and expose to frontend
         try {
-            $admin = \App\Models\User::where('role', 'admin')->orderBy('id')->first();
+            $admin = User::where('role', 'admin')->orderBy('id')->first();
             $botUserId = $admin ? $admin->id : null;
             $result['opponent_is_bot'] = ($botUserId && $battle->opponent_id && intval($battle->opponent_id) === intval($botUserId));
             
