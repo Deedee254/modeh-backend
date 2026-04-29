@@ -78,11 +78,16 @@ class UserResource extends JsonResource
         }
 
         // Add profile completion status
+        $missingFields = $this->getMissingProfileFields();
         $payload['profile_status'] = [
             'is_completed' => (bool)$this->is_profile_completed,
-            'missing_fields' => $this->getMissingProfileFields(),
-            'missing_messages' => $this->getMissingProfileMessages($this->getMissingProfileFields()),
+            'missing_fields' => $missingFields,
+            'missing_messages' => $this->getMissingProfileMessages($missingFields),
         ];
+
+        // Directly expose for simpler frontend access
+        $payload['missing_profile_fields'] = $missingFields;
+        $payload['missing_profile_messages'] = array_values($this->getMissingProfileMessages($missingFields));
 
         return $payload;
     }
@@ -98,8 +103,14 @@ class UserResource extends JsonResource
         }
         
         if (!$hasInstitution) {
-            if ($this->role === 'quizee' && optional($this->quizeeProfile)->institution) $hasInstitution = true;
-            if ($this->role === 'quiz-master' && optional($this->quizMasterProfile)->institution) $hasInstitution = true;
+            $quizee = $this->quizeeProfile;
+            $quizMaster = $this->quizMasterProfile;
+            
+            if ($this->role === 'quizee' && $quizee) {
+                $hasInstitution = !empty($quizee->institution) || !empty($quizee->institution_id) || !empty($quizee->verified_institution_id);
+            } elseif ($this->role === 'quiz-master' && $quizMaster) {
+                $hasInstitution = !empty($quizMaster->institution) || !empty($quizMaster->institution_id) || !empty($quizMaster->verified_institution_id);
+            }
         }
 
         if (!$hasInstitution) $missing[] = 'institution';

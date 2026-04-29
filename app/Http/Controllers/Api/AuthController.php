@@ -370,6 +370,10 @@ class AuthController extends Controller
         // Regenerate session to prevent session fixation attacks
         $request->session()->regenerate();
         
+        // Initialize onboarding record and mark role as selected since they chose it during registration
+        $onboarding = $user->onboarding ?? $user->onboarding()->create([]);
+        $onboarding->update(['role_selected' => true]);
+
         // Authenticate the user (establishes session)
         Auth::login($user, remember: false);
 

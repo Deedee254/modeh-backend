@@ -187,13 +187,43 @@ class OnboardingService
      */
     public function syncProfileCompletionStatus(User $user)
     {
+        $user->loadMissing(['quizeeProfile', 'quizMasterProfile', 'institutions', 'onboarding']);
+        
+        $onboarding = $user->onboarding ?? $user->onboarding()->create([]);
+        
         $hasInstitution = false;
         if ($user->institutions()->count() > 0) {
             $hasInstitution = true;
         } else {
-            if ($user->role === 'quizee' && optional($user->quizeeProfile)->institution) $hasInstitution = true;
-            if ($user->role === 'quiz-master' && optional($user->quizMasterProfile)->institution) $hasInstitution = true;
+            $quizee = $user->quizeeProfile;
+            $quizMaster = $user->quizMasterProfile;
+            
+            if ($user->role === 'quizee' && $quizee) {
+                $hasInstitution = !empty($quizee->institution) || !empty($quizee->institution_id) || !empty($quizee->verified_institution_id);
+            } elseif ($user->role === 'quiz-master' && $quizMaster) {
+                $hasInstitution = !empty($quizMaster->institution) || !empty($quizMaster->institution_id) || !empty($quizMaster->verified_institution_id);
+            }
         }
+
+        // Update onboarding flags based on current state
+        $onboarding->institution_added = $hasInstitution;
+        
+        if ($user->role) {
+            $onboarding->role_selected = true;
+        }
+
+        if ($user->role === 'quizee') {
+            $onboarding->grade_selected = !empty(optional($user->quizeeProfile)->grade_id);
+            // Subjects are optional for completion but we sync the flag if present
+            $subjects = optional($user->quizeeProfile)->subjects;
+            $onboarding->subject_selected = !empty($subjects) && is_array($subjects) && count($subjects) > 0;
+        } elseif ($user->role === 'quiz-master') {
+            $onboarding->grade_selected = !empty(optional($user->quizMasterProfile)->grade_id);
+            $subjects = optional($user->quizMasterProfile)->subjects;
+            $onboarding->subject_selected = !empty($subjects) && is_array($subjects) && count($subjects) > 0;
+        }
+
+        $onboarding->save();
 
         $isComplete = false;
         if ($user->role === 'quizee') {
@@ -210,6 +240,12 @@ class OnboardingService
         if ($user->is_profile_completed != $isComplete) {
             $user->is_profile_completed = $isComplete;
             $user->save();
+        }
+
+        // If newly complete, we could also update profile_completed on onboarding model
+        if ($isComplete && !$onboarding->profile_completed) {
+            $onboarding->profile_completed = true;
+            $onboarding->save();
         }
 
         return $isComplete;
