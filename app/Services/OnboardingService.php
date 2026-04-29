@@ -192,7 +192,7 @@ class OnboardingService
         $onboarding = $user->onboarding ?? $user->onboarding()->create([]);
         
         $hasInstitution = false;
-        if ($user->institutions()->count() > 0) {
+        if ($user->institutions()->count() > 0 || ($onboarding && $onboarding->institution_added)) {
             $hasInstitution = true;
         } else {
             $quizee = $user->quizeeProfile;
@@ -227,10 +227,11 @@ class OnboardingService
 
         $isComplete = false;
         if ($user->role === 'quizee') {
-            $isComplete = $hasInstitution && $user->role && optional($user->quizeeProfile)->grade_id;
+            $isComplete = $hasInstitution && $user->role && (optional($user->quizeeProfile)->grade_id || $onboarding->grade_selected);
         } elseif ($user->role === 'quiz-master') {
             $subjects = optional($user->quizMasterProfile)->subjects;
-            $isComplete = $hasInstitution && $user->role && $subjects && is_array($subjects) && count($subjects) > 0;
+            $hasSubjects = ($subjects && is_array($subjects) && count($subjects) > 0) || $onboarding->subject_selected;
+            $isComplete = $hasInstitution && $user->role && $hasSubjects;
         } elseif ($user->role === 'parent') {
             $isComplete = true; // Parents are always complete after role selection
         } else {

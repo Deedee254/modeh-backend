@@ -403,7 +403,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 	        Route::get('/admin/quiz-masters/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'userInsights']);
 	        Route::get('/admin/quiz-analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
 	        Route::get('/admin/quizzes/analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
-	        Route::get('/admin/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizAttemptController::class, 'show']);
+	        Route::get('/admin/quizzes/{quiz}', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'show']);
 	        Route::get('/admin/quizzes/{slug}/insights', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'insightsBySlug']);
 	        Route::get('/admin/withdrawals', [\App\Http\Controllers\Api\AdminController::class, 'withdrawals']);
 	        Route::post('/admin/withdrawals/{id}/approve', [\App\Http\Controllers\Api\AdminController::class, 'approveWithdrawal']);

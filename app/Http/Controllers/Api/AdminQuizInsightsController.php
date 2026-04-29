@@ -35,6 +35,27 @@ class AdminQuizInsightsController extends Controller
         return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
     }
 
+    public function show(Request $request, Quiz $quiz)
+    {
+        if ($resp = $this->requireAdmin()) return $resp;
+
+        // Ensure the current auth user used by policy checks matches the one we validated
+        $user = auth()->user() ?? auth('sanctum')->user();
+        if ($user) auth()->setUser($user);
+
+        // Load all relations needed by the admin editor
+        $quiz->load([
+            'questions',
+            'topic.subject',
+            'subject',
+            'grade.level',
+            'author:id,name,email',
+            'quizMaster:id,user_id',
+        ]);
+
+        return response()->json(['quiz' => $quiz]);
+    }
+
     public function insightsBySlug(Request $request, string $slug)
     {
         if ($resp = $this->requireAdmin()) return $resp;
