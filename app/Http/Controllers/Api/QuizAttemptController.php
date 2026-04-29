@@ -32,13 +32,7 @@ class QuizAttemptController extends Controller
     }
 
 
-    /**
-     * Calculate score and correctness for a given set of answers against a quiz's questions.
-     */
-    private function calculateScore(array $answers, $questions): array
-    {
-        return $this->markingService->calculateScore($answers, $questions, true);
-    }
+
 
     /**
      * Build the payload for the AchievementService.
@@ -591,7 +585,7 @@ class QuizAttemptController extends Controller
 	        // Recompute score from stored answers
 	        $answers = $attempt->answers ?? [];
 	        $quiz = $attempt->quiz()->with('questions')->first();
-	        $scoringResult = $this->calculateScore($answers, $quiz->questions, true, (string)$request->input('shuffle_seed'), true);
+	        $scoringResult = $this->markingService->calculateScore($answers, $quiz->questions, true, (string)$request->input('shuffle_seed'), true);
 	        $score = $scoringResult['score'];
 	        $pointsEarned = $scoringResult['earned_marks'] ?? 0;
 
