@@ -94,6 +94,7 @@ class QuizMasterController extends Controller
                     'name' => $profile->grade->name,
                 ] : null,
                 'subjects' => $subjects,
+                'slug' => strtolower(preg_replace('/[^A-Za-z0-9-]+/', '-', $user->name)),
             ];
 
             // Include quizzes if they were eagerly loaded
@@ -190,6 +191,7 @@ class QuizMasterController extends Controller
                 'name' => $profile->grade->name,
             ] : null,
             'subjects' => $subjects,
+            'slug' => strtolower(preg_replace('/[^A-Za-z0-9-]+/', '-', $user->name)),
             'quizzes' => $user->quizzes->map(function ($quiz) {
                 // Resolve topic name defensively
                 $topicName = null;

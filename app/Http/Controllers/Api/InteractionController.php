@@ -149,9 +149,13 @@ class InteractionController extends Controller
             return response()->json(['followers' => []]);
         }
 
+        if (!$user->quizMasterProfile) {
+            return response()->json(['followers' => [], 'likers' => []]);
+        }
+
         // IDs of users who explicitly follow this quiz-master
         $followerIds = DB::table('quiz_master_follows')
-            ->where('quiz_master_id', $user->id)
+            ->where('quiz_master_id', $user->quizMasterProfile->id)
             ->pluck('user_id')
             ->toArray();
 

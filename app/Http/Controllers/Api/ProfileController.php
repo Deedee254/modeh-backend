@@ -8,9 +8,18 @@ use App\Models\User;
 use App\Models\Subject;
 use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\Validator;
+use App\Services\OnboardingService;
+use App\Services\SessionUserCacheService;
+use Illuminate\Support\Facades\Cache;
 
 class ProfileController extends Controller
 {
+    protected $onboardingService;
+
+    public function __construct(OnboardingService $onboardingService)
+    {
+        $this->onboardingService = $onboardingService;
+    }
     /**
      * Update the quiz master's profile (partial updates only).
      */
@@ -89,9 +98,16 @@ class ProfileController extends Controller
         // Return updated user with relationships
         $user->load(['quizMasterProfile.grade', 'quizMasterProfile.level', 'quizMasterProfile.institution']);
         
+        // Sync profile completion status
+        $this->onboardingService->syncProfileCompletionStatus($user);
+
+        // Clear user caches so /api/me returns fresh data including completion status
+        Cache::forget("user_me_{$user->id}");
+        SessionUserCacheService::invalidateSessionCache($user, $request);
+
         return response()->json([
             'message' => 'Profile updated',
-            'user' => $user,
+            'user' => UserResource::make($user),
         ]);
     }
 
@@ -170,6 +186,13 @@ class ProfileController extends Controller
         // Return updated user with relationships using UserResource for clean response
         $user->load(['quizeeProfile.grade', 'quizeeProfile.level', 'quizeeProfile.institution']);
         
+        // Sync profile completion status
+        $this->onboardingService->syncProfileCompletionStatus($user);
+
+        // Clear user caches so /api/me returns fresh data including completion status
+        Cache::forget("user_me_{$user->id}");
+        SessionUserCacheService::invalidateSessionCache($user, $request);
+
         return response()->json([
             'message' => 'Profile updated',
             'user' => UserResource::make($user),

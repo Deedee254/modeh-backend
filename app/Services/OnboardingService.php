@@ -42,17 +42,17 @@ class OnboardingService
             // Map common step names to flags. If the step was skipped, avoid side effects
             switch ($step) {
                 case 'institution':
+                    $onboarding->institution_added = true;
                     if (! $skipped) {
-                        $onboarding->institution_added = true;
                         $this->handleInstitutionStep($user, $data);
                     }
                     break;
                 case 'role_quizee':
                 case 'role_quiz-master':
                 case 'role_parent':
+                    $onboarding->role_selected = true;
                     if (! $skipped) {
                         // Role selection step: update user's role and optional password
-                        $onboarding->role_selected = true;
                         if (!empty($data['role'])) {
                             $user->role = $data['role'];
                         } else {
@@ -89,8 +89,8 @@ class OnboardingService
                     }
                     break;
                 case 'grade':
+                    $onboarding->grade_selected = true;
                     if (! $skipped) {
-                        $onboarding->grade_selected = true;
                         if (!empty($data['grade_id'])) {
                             $grade = Grade::find($data['grade_id']);
                             $update = ['grade_id' => $data['grade_id']];
@@ -116,8 +116,8 @@ class OnboardingService
                     }
                     break;
                 case 'subjects':
+                    $onboarding->subject_selected = true;
                     if (! $skipped) {
-                        $onboarding->subject_selected = true;
                         if (!empty($data['subjects'])) {
                             // If role known, update corresponding profile; otherwise preserve subjects on both profiles
                             if ($user->role === 'quiz-master') {
@@ -174,6 +174,41 @@ class OnboardingService
 
             return $onboarding->fresh();
         });
+    }
+
+    /**
+     * Re-evaluates and updates the user's is_profile_completed flag based on 
+     * their role and profile data. This is useful when the profile is updated 
+     * outside the onboarding flow (e.g. via settings).
+     */
+    public function syncProfileCompletionStatus(User $user)
+    {
+        $hasInstitution = false;
+        if ($user->institutions()->count() > 0) {
+            $hasInstitution = true;
+        } else {
+            if ($user->role === 'quizee' && optional($user->quizeeProfile)->institution) $hasInstitution = true;
+            if ($user->role === 'quiz-master' && optional($user->quizMasterProfile)->institution) $hasInstitution = true;
+        }
+
+        $isComplete = false;
+        if ($user->role === 'quizee') {
+            $isComplete = $hasInstitution && $user->role && optional($user->quizeeProfile)->grade_id;
+        } elseif ($user->role === 'quiz-master') {
+            $subjects = optional($user->quizMasterProfile)->subjects;
+            $isComplete = $hasInstitution && $user->role && $subjects && is_array($subjects) && count($subjects) > 0;
+        } elseif ($user->role === 'parent') {
+            $isComplete = true; // Parents are always complete after role selection
+        } else {
+            $isComplete = $hasInstitution && $user->role;
+        }
+
+        if ($user->is_profile_completed != $isComplete) {
+            $user->is_profile_completed = $isComplete;
+            $user->save();
+        }
+
+        return $isComplete;
     }
 
     /**
