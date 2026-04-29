@@ -152,13 +152,17 @@ class OnboardingService
                 $isComplete = true;
             } elseif ($user->role === 'quizee') {
                 // Quizees must have: institution, role, and grade
+                // Auto-detect role selection if role is set on the user model
+                $roleSelected = $onboarding->role_selected || !empty($user->role);
                 $isComplete = $onboarding->institution_added &&
-                              $onboarding->role_selected &&
+                              $roleSelected &&
                               $onboarding->grade_selected;
             } elseif ($user->role === 'quiz-master') {
-                // Quiz Masters must have: institution, role, and subjects
+                // Quiz masters must have: institution, role, and subjects
+                // Auto-detect role selection if role is set on the user model
+                $roleSelected = $onboarding->role_selected || !empty($user->role);
                 $isComplete = $onboarding->institution_added &&
-                              $onboarding->role_selected &&
+                              $roleSelected &&
                               $onboarding->subject_selected;
             } else {
                 // Default: institution + role

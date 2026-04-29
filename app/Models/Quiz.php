@@ -86,6 +86,11 @@ class Quiz extends Model
         });
     }
 
+    public function getRouteKeyName()
+    {
+        return 'slug';
+    }
+
     public function topic()
     {
         return $this->belongsTo(Topic::class);
