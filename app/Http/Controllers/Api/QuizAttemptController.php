@@ -64,6 +64,40 @@ class QuizAttemptController extends Controller
             'total' => 100 * (count($attempt->answers ?? []) / max(1, $quiz->questions()->count()))
         ];
     }
+
+    /**
+     * Calculate rank and percentile for a given attempt.
+     * 
+     * @param QuizAttempt $attempt
+     * @return array {rank: int, total_participants: int, percentile: float}
+     */
+    private function calculateRankAndPercentile(QuizAttempt $attempt): array
+    {
+        $totalParticipants = QuizAttempt::where('quiz_id', $attempt->quiz_id)
+            ->whereNotNull('score')
+            ->distinct('user_id')
+            ->count('user_id');
+
+        $higherScores = QuizAttempt::where('quiz_id', $attempt->quiz_id)
+            ->where('score', '>', $attempt->score)
+            ->distinct('user_id')
+            ->count('user_id');
+
+        $rank = $higherScores + 1;
+
+        if ($totalParticipants > 1) {
+            $lowerScores = $totalParticipants - $rank;
+            $percentile = round(($lowerScores / $totalParticipants) * 100, 1);
+        } else {
+            $percentile = 100.0;
+        }
+
+        return [
+            'rank' => $rank,
+            'total_participants' => $totalParticipants,
+            'percentile' => $percentile
+        ];
+    }
     public function show(Request $request, Quiz $quiz)
     {
         $user = $request->user();
@@ -465,6 +499,10 @@ class QuizAttemptController extends Controller
         }
 
 	        $refreshedUser = $user->fresh()->load('achievements');
+            
+            // Calculate rank/percentile for the result modal
+            $rankInfo = $this->calculateRankAndPercentile($attempt);
+
 	        return response()->json([
 	            'ok' => true,
 	            'results' => $results,
@@ -477,6 +515,9 @@ class QuizAttemptController extends Controller
 	            'user' => $refreshedUser,
 	            'requires_payment' => $requiresPayment,
 	            'price' => $accessResult['price'] ?? null,
+                'rank' => $rankInfo['rank'],
+                'total_participants' => $rankInfo['total_participants'],
+                'percentile' => $rankInfo['percentile'],
 	        ]);
 	    }
 
@@ -667,6 +708,8 @@ class QuizAttemptController extends Controller
 	                        'quiz_id' => $quiz->id,
 	                        'price' => $effectivePrice,
 	                        'currency' => 'KES',
+                            'score' => $attempt->score,
+                            'percentile' => $this->calculateRankAndPercentile($attempt)['percentile'],
 	                        'quiz' => [
 	                            'id' => $quiz->id,
 	                            'title' => $quiz->title,
@@ -728,28 +771,10 @@ class QuizAttemptController extends Controller
         }
 
         // Calculate rank and percentile for this quiz
-        $rank = null;
-        $totalParticipants = 0;
-        $percentile = null;
-        if ($attempt->quiz_id) {
-            $totalParticipants = QuizAttempt::where('quiz_id', $attempt->quiz_id)
-                ->whereNotNull('score')
-                ->distinct('user_id')
-                ->count('user_id');
-
-            $higherScores = QuizAttempt::where('quiz_id', $attempt->quiz_id)
-                ->where('score', '>', $attempt->score)->distinct('user_id')->count('user_id');
-            $rank = $higherScores + 1;
-
-            if ($totalParticipants > 1) {
-                // Percentile: Percentage of scores strictly below current score
-                // Or simplified: (1 - rank/total) * 100 roughly
-                $lowerScores = $totalParticipants - $rank;
-                $percentile = round(($lowerScores / $totalParticipants) * 100, 1);
-            } else {
-                $percentile = 100; // First/only participant
-            }
-        }
+        $rankInfo = $this->calculateRankAndPercentile($attempt);
+        $rank = $rankInfo['rank'];
+        $totalParticipants = $rankInfo['total_participants'];
+        $percentile = $rankInfo['percentile'];
 
         // Response Time Analysis
         $fastestAnswer = null;
