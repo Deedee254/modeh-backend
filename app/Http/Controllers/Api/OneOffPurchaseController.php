@@ -213,9 +213,15 @@ class OneOffPurchaseController extends Controller
         switch ($type) {
             case 'quiz':
                 $quiz = Quiz::find($itemId);
+                if (!$quiz && !is_numeric($itemId)) {
+                    $quiz = Quiz::where('slug', $itemId)->first();
+                }
                 return $quiz ? $quiz->price : null;
             case 'battle':
                 $battle = Battle::find($itemId);
+                if (!$battle && !is_numeric($itemId)) {
+                    $battle = Battle::where('uuid', $itemId)->first();
+                }
                 return $battle ? $battle->price : null;
             case 'tournament':
                 $tournament = Tournament::find($itemId);

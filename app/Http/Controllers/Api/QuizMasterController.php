@@ -121,6 +121,8 @@ class QuizMasterController extends Controller
                         'slug' => $quiz->slug,
                         'title' => $quiz->title,
                         'topic_name' => $topicName,
+                        'is_paid' => (bool) $quiz->is_paid,
+                        'price' => (float) $quiz->price,
                     ];
                 });
             }
@@ -211,8 +213,11 @@ class QuizMasterController extends Controller
 
                 return [
                     'id' => $quiz->id,
+                    'slug' => $quiz->slug,
                     'title' => $quiz->title,
                     'topic_name' => $topicName,
+                    'is_paid' => (bool) $quiz->is_paid,
+                    'price' => (float) $quiz->price,
                 ];
             }),
         ];

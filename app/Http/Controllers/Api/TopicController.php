@@ -199,6 +199,7 @@ class TopicController extends Controller
                     'grade_id',
                     'level_id',
                     'is_paid',
+                    'one_off_price',
                     'timer_seconds',
                     'difficulty',
                     'visibility',

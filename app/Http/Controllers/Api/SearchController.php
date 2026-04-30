@@ -34,7 +34,7 @@ class SearchController extends Controller
         $like = '%' . $term . '%';
 
         $quizBase = Quiz::query()
-            ->select('id', 'slug', 'title', 'description', 'cover_image', 'difficulty', 'topic_id', 'subject_id', 'grade_id', 'level_id')
+            ->select('id', 'slug', 'title', 'description', 'cover_image', 'difficulty', 'topic_id', 'subject_id', 'grade_id', 'level_id', 'is_paid', 'one_off_price')
             ->where('is_approved', true)
             ->where('visibility', 'published')
             ->where('title', 'like', $like);

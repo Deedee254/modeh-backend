@@ -44,6 +44,13 @@ Route::bind('grade', function ($value) {
     }
     return \App\Models\Grade::where('slug', $value)->firstOrFail();
 });
+// Allow battles to be resolved by uuid or id
+Route::bind('battle', function ($value) {
+    if (is_numeric($value)) {
+        return \App\Models\Battle::findOrFail($value);
+    }
+    return \App\Models\Battle::where('uuid', $value)->firstOrFail();
+});
 
 // [Debug routes removed]
 

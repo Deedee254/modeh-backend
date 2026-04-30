@@ -45,8 +45,8 @@ class ReconsileMpesaTransaction implements ShouldQueue
             return;
         }
 
-        // Max 5 retries
-        if ($transaction->retry_count >= 5) {
+        // Max 20 retries (approx 5-10 minutes depending on backoff)
+        if ($transaction->retry_count >= 20) {
             Log::warning('[MPESA Job] Max retries exceeded, marking failed', ['transaction_id' => $transaction->id]);
             $transaction->markFailed(null, 'Max retries exceeded without resolution');
             return;
