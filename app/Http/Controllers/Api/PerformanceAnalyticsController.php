@@ -52,7 +52,7 @@ class PerformanceAnalyticsController extends Controller
                     'score' => round($a->score, 1),
                     'quiz_title' => $a->quiz->title ?? 'Quiz',
                 ];
-            });
+            })->values();
 
             // 3. Topic & Subject Analysis
             // Collect all unique question IDs to batch fetch
