@@ -7,7 +7,7 @@ use App\Models\QuizAttempt;
 use App\Models\Question;
 use App\Services\QuestionMarkingService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PerformanceAnalyticsController extends Controller
 {
@@ -21,114 +21,149 @@ class PerformanceAnalyticsController extends Controller
      */
     public function overview(Request $request)
     {
-        $user = $request->user();
-        
-        // 1. Basic Stats
-        $attempts = QuizAttempt::where('user_id', $user->id)
-            ->whereNotNull('score')
-            ->orderBy('created_at', 'asc')
-            ->get();
+        try {
+            $user = $request->user();
+            
+            // 1. Basic Stats
+            $attempts = QuizAttempt::where('user_id', $user->id)
+                ->whereNotNull('score')
+                ->orderBy('created_at', 'asc')
+                ->get();
 
-        if ($attempts->isEmpty()) {
-            return response()->json([
-                'has_data' => false,
-                'stats' => [
-                    'total_quizzes' => 0,
-                    'avg_score' => 0,
-                    'total_time' => 0,
-                ]
-            ]);
-        }
+            if ($attempts->isEmpty()) {
+                return response()->json([
+                    'has_data' => false,
+                    'stats' => [
+                        'total_quizzes' => 0,
+                        'avg_score' => 0,
+                        'total_time' => 0,
+                    ]
+                ]);
+            }
 
-        $totalQuizzes = $attempts->count();
-        $avgScore = round($attempts->avg('score'), 1);
-        $totalTimeSeconds = $attempts->sum('total_time_seconds');
+            $totalQuizzes = $attempts->count();
+            $avgScore = round($attempts->avg('score'), 1);
+            $totalTimeSeconds = $attempts->sum('total_time_seconds');
 
-        // 2. Score Trend
-        $scoreTrend = $attempts->take(-20)->map(function($a) {
-            return [
-                'date' => $a->created_at->format('M d'),
-                'score' => round($a->score, 1),
-                'quiz_title' => $a->quiz->title ?? 'Quiz',
-            ];
-        });
+            // 2. Score Trend
+            $scoreTrend = $attempts->take(-20)->map(function($a) {
+                return [
+                    'date' => $a->created_at->format('M d'),
+                    'score' => round($a->score, 1),
+                    'quiz_title' => $a->quiz->title ?? 'Quiz',
+                ];
+            });
 
-        // 3. Topic & Subject Analysis
-        // We need to iterate through all questions answered by the user
-        $topicStats = [];
-        $subjectStats = [];
-        $markingService = new QuestionMarkingService();
-
-        foreach ($attempts as $attempt) {
-            $answers = $attempt->answers ?? [];
-            if (!is_array($answers)) continue;
-
-            foreach ($answers as $ans) {
-                $qid = $ans['question_id'] ?? null;
-                if (!$qid) continue;
-
-                $question = Question::with(['topics', 'subjects'])->find($qid);
-                if (!$question) continue;
-
-                $isCorrect = $markingService->isAnswerCorrect($ans['selected'] ?? null, $question->answers, $question);
-
-                // Track by Topic
-                foreach ($question->topics as $topic) {
-                    if (!isset($topicStats[$topic->id])) {
-                        $topicStats[$topic->id] = [
-                            'id' => $topic->id,
-                            'name' => $topic->name,
-                            'correct' => 0,
-                            'total' => 0,
-                        ];
+            // 3. Topic & Subject Analysis
+            // Collect all unique question IDs to batch fetch
+            $allQuestionIds = [];
+            foreach ($attempts as $attempt) {
+                $answers = $attempt->answers ?? [];
+                if (!is_array($answers)) continue;
+                foreach ($answers as $ans) {
+                    if (isset($ans['question_id'])) {
+                        $allQuestionIds[] = $ans['question_id'];
                     }
-                    $topicStats[$topic->id]['total']++;
-                    if ($isCorrect) $topicStats[$topic->id]['correct']++;
-                }
-
-                // Track by Subject
-                foreach ($question->subjects as $subject) {
-                    if (!isset($subjectStats[$subject->id])) {
-                        $subjectStats[$subject->id] = [
-                            'id' => $subject->id,
-                            'name' => $subject->name,
-                            'correct' => 0,
-                            'total' => 0,
-                        ];
-                    }
-                    $subjectStats[$subject->id]['total']++;
-                    if ($isCorrect) $subjectStats[$subject->id]['correct']++;
                 }
             }
+            $allQuestionIds = array_unique($allQuestionIds);
+
+            // Fetch all questions with their taxonomy in one go
+            $questionsMap = Question::with(['topic', 'subject'])
+                ->whereIn('id', $allQuestionIds)
+                ->get()
+                ->keyBy('id');
+
+            $topicStats = [];
+            $subjectStats = [];
+            $markingService = new QuestionMarkingService();
+            $totalQuestionsProcessed = 0;
+
+            foreach ($attempts as $attempt) {
+                $answers = $attempt->answers ?? [];
+                if (!is_array($answers)) continue;
+
+                foreach ($answers as $ans) {
+                    $qid = $ans['question_id'] ?? null;
+                    if (!$qid) continue;
+
+                    $question = $questionsMap->get($qid);
+                    if (!$question) continue;
+
+                    $isCorrect = $markingService->isAnswerCorrect($ans['selected'] ?? null, $question->answers, $question);
+                    $totalQuestionsProcessed++;
+
+                    // Track by Topic (Singular in this DB schema)
+                    if ($question->topic) {
+                        $topic = $question->topic;
+                        if (!isset($topicStats[$topic->id])) {
+                            $topicStats[$topic->id] = [
+                                'id' => $topic->id,
+                                'name' => $topic->name,
+                                'correct' => 0,
+                                'total' => 0,
+                            ];
+                        }
+                        $topicStats[$topic->id]['total']++;
+                        if ($isCorrect) $topicStats[$topic->id]['correct']++;
+                    }
+
+                    // Track by Subject (Singular in this DB schema)
+                    if ($question->subject) {
+                        $subject = $question->subject;
+                        if (!isset($subjectStats[$subject->id])) {
+                            $subjectStats[$subject->id] = [
+                                'id' => $subject->id,
+                                'name' => $subject->name,
+                                'correct' => 0,
+                                'total' => 0,
+                            ];
+                        }
+                        $subjectStats[$subject->id]['total']++;
+                        if ($isCorrect) $subjectStats[$subject->id]['correct']++;
+                    }
+                }
+            }
+
+            // Calculate percentages and sort
+            $formattedTopics = collect($topicStats)->map(function($item) {
+                $item['percentage'] = round(($item['correct'] / $item['total']) * 100, 1);
+                return $item;
+            })->values();
+
+            $formattedSubjects = collect($subjectStats)->map(function($item) {
+                $item['percentage'] = round(($item['correct'] / $item['total']) * 100, 1);
+                return $item;
+            })->values();
+
+            $weakTopics = $formattedTopics->sortBy('percentage')->take(5)->values();
+            $strongTopics = $formattedTopics->sortByDesc('percentage')->take(5)->values();
+
+            return response()->json([
+                'has_data' => true,
+                'stats' => [
+                    'total_quizzes' => $totalQuizzes,
+                    'avg_score' => $avgScore,
+                    'total_time_seconds' => $totalTimeSeconds,
+                    'total_questions' => $totalQuestionsProcessed,
+                ],
+                'score_trend' => $scoreTrend,
+                'subjects' => $formattedSubjects,
+                'topics' => $formattedTopics->sortByDesc('total')->values(),
+                'weak_areas' => $weakTopics,
+                'strong_areas' => $strongTopics,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Performance Analytics Error: ' . $e->getMessage(), [
+                'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'An error occurred while generating your performance analytics.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
         }
-
-        // Calculate percentages and sort
-        $formattedTopics = collect($topicStats)->map(function($item) {
-            $item['percentage'] = round(($item['correct'] / $item['total']) * 100, 1);
-            return $item;
-        })->values();
-
-        $formattedSubjects = collect($subjectStats)->map(function($item) {
-            $item['percentage'] = round(($item['correct'] / $item['total']) * 100, 1);
-            return $item;
-        })->values();
-
-        $weakTopics = $formattedTopics->sortBy('percentage')->take(5)->values();
-        $strongTopics = $formattedTopics->sortByDesc('percentage')->take(5)->values();
-
-        return response()->json([
-            'has_data' => true,
-            'stats' => [
-                'total_quizzes' => $totalQuizzes,
-                'avg_score' => $avgScore,
-                'total_time_seconds' => $totalTimeSeconds,
-                'total_questions' => collect($topicStats)->sum('total'),
-            ],
-            'score_trend' => $scoreTrend,
-            'subjects' => $formattedSubjects,
-            'topics' => $formattedTopics->sortByDesc('total')->values(), // sorted by most practiced
-            'weak_areas' => $weakTopics,
-            'strong_areas' => $strongTopics,
-        ]);
     }
 }
