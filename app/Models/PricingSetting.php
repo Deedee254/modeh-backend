@@ -24,11 +24,13 @@ class PricingSetting extends Model
     protected $fillable = [
         'default_quiz_one_off_price',
         'default_battle_one_off_price',
+        'performance_report_price',
     ];
 
     protected $casts = [
         'default_quiz_one_off_price' => 'decimal:2',
         'default_battle_one_off_price' => 'decimal:2',
+        'performance_report_price' => 'decimal:2',
     ];
 
     /**

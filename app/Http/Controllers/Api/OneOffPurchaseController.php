@@ -230,6 +230,8 @@ class OneOffPurchaseController extends Controller
                 $package = \App\Models\Package::find($itemId);
                 if (!$package || ($package->audience ?? 'quizee') !== 'institution') return null;
                 return (float) ($package->price ?? 0);
+            case 'performance_report':
+                return (float) ($pricingSetting->performance_report_price ?? 0.0);
             default:
                 return null;
         }
