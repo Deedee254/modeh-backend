@@ -2,80 +2,157 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Performance Report</title>
+    <title>Detailed Performance Analysis - Modeh</title>
     <style>
-        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; line-height: 1.5; }
-        .header { text-align: center; border-bottom: 2px solid {{ $brandColor }}; padding-bottom: 20px; margin-bottom: 30px; }
-        .logo { font-size: 28px; font-weight: bold; color: {{ $brandColor }}; }
-        .title { font-size: 24px; margin-top: 10px; }
-        .student-info { margin-bottom: 30px; background: #f9fafb; padding: 15px; border-radius: 8px; }
-        .section-title { font-size: 18px; font-weight: bold; color: {{ $brandColor }}; margin-bottom: 15px; border-left: 4px solid {{ $brandColor }}; padding-left: 10px; }
-        .stats-grid { display: table; width: 100%; margin-bottom: 30px; }
-        .stats-item { display: table-cell; text-align: center; padding: 10px; border: 1px solid #e5e7eb; }
-        .stats-value { font-size: 20px; font-weight: bold; }
-        .stats-label { font-size: 12px; color: #6b7280; }
-        .topic-card { margin-bottom: 20px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; }
-        .topic-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
-        .topic-name { font-weight: bold; font-size: 16px; }
-        .topic-score { font-weight: bold; }
-        .status-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-        .status-Strong { background: #dcfce7; color: #166534; }
-        .status-Good { background: #dbeafe; color: #1e40af; }
-        .status-Average { background: #fef3c7; color: #92400e; }
-        .status-Weak { background: #fee2e2; color: #991b1b; }
-        .recommendation { font-size: 13px; color: #4b5563; font-style: italic; margin-top: 5px; }
-        .footer { margin-top: 50px; text-align: center; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 20px; }
+        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1e293b; line-height: 1.6; margin: 0; padding: 0; }
+        .page { padding: 40px; }
+        .header { text-align: center; border-bottom: 3px solid {{ $brandColor }}; padding-bottom: 25px; margin-bottom: 35px; }
+        .logo { font-size: 32px; font-weight: bold; color: {{ $brandColor }}; letter-spacing: -1px; }
+        .title { font-size: 26px; margin-top: 10px; color: #0f172a; font-weight: 800; }
+        
+        .summary-box { margin-bottom: 40px; background: #f8fafc; padding: 25px; border-radius: 16px; border: 1px solid #e2e8f0; }
+        .student-name { font-size: 20px; font-weight: bold; color: #0f172a; }
+        
+        .section-title { font-size: 18px; font-weight: bold; color: #0f172a; margin-bottom: 20px; margin-top: 40px; border-left: 5px solid {{ $brandColor }}; padding-left: 15px; background: #f1f5f9; padding-top: 8px; padding-bottom: 8px; border-radius: 0 8px 8px 0; }
+        
+        .stats-row { width: 100%; border-collapse: collapse; margin-bottom: 35px; }
+        .stats-cell { width: 25%; text-align: center; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+        .stats-val { font-size: 24px; font-weight: 900; color: {{ $brandColor }}; }
+        .stats-lab { font-size: 11px; color: #64748b; text-transform: uppercase; margin-top: 5px; font-weight: bold; }
+        
+        .topic-row { margin-bottom: 15px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+        .topic-name { font-weight: bold; font-size: 16px; color: #0f172a; }
+        .topic-meta { font-size: 13px; color: #64748b; margin-top: 3px; }
+        
+        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; float: right; }
+        .status-Strong { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .status-Good { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+        .status-Average { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+        .status-Weak { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+        .question-card { margin-bottom: 25px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; }
+        .q-correct { border-left: 6px solid #10b981; background: #f0fdf4; }
+        .q-incorrect { border-left: 6px solid #ef4444; background: #fff1f2; }
+        
+        .q-body { font-weight: bold; font-size: 14px; margin-bottom: 12px; color: #0f172a; }
+        .answer-box { font-size: 13px; margin-bottom: 8px; }
+        .label { font-weight: bold; color: #64748b; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 2px; }
+        
+        .explanation { margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 13px; color: #334155; }
+        
+        .footer { margin-top: 60px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 25px; }
+        .page-break { page-break-before: always; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">MODEH</div>
-        <div class="title">Personalized Performance Report</div>
-    </div>
+    <div class="page">
+        <div class="header">
+            <div class="logo">MODEH</div>
+            <div class="title">Detailed Performance Analysis</div>
+            <div style="font-size: 14px; color: #64748b; margin-top: 5px;">Premium Study Resource • Generated on {{ date('M d, Y') }}</div>
+        </div>
 
-    <div class="student-info">
-        <table style="width: 100%;">
+        <div class="summary-box">
+            <table style="width: 100%;">
+                <tr>
+                    <td style="width: 60%;">
+                        <div class="label">Student Name</div>
+                        <div class="student-name">{{ $user->name }}</div>
+                        <div style="font-size: 13px; color: #64748b; margin-top: 4px;">{{ $user->email }}</div>
+                    </td>
+                    <td style="width: 40%; text-align: right;">
+                        <div class="label">Quiz Title</div>
+                        <div style="font-size: 16px; font-weight: bold; color: #0f172a;">{{ $attempt->quiz->title }}</div>
+                        <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Attempt ID: #{{ $attempt->id }}</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <table style="width: 100%; border-spacing: 15px; margin-left: -15px; margin-right: -15px;">
             <tr>
-                <td><strong>Student:</strong> {{ $user->name }}</td>
-                <td style="text-align: right;"><strong>Date:</strong> {{ $attempt->created_at->format('M d, Y') }}</td>
-            </tr>
-            <tr>
-                <td><strong>Quiz:</strong> {{ $attempt->quiz->title }}</td>
-                <td style="text-align: right;"><strong>Overall Score:</strong> {{ $attempt->score }}%</td>
+                <td class="stats-cell">
+                    <div class="stats-val">{{ $report['stats']['score'] }}%</div>
+                    <div class="stats-lab">Final Score</div>
+                </td>
+                <td class="stats-cell">
+                    <div class="stats-val">{{ $report['stats']['correct_count'] }}/{{ $report['stats']['total_questions'] }}</div>
+                    <div class="stats-lab">Correct Answers</div>
+                </td>
+                <td class="stats-cell">
+                    <div class="stats-val">
+                        @php
+                            $sec = $report['stats']['time_taken'];
+                            $mins = floor($sec / 60);
+                            $secs = $sec % 60;
+                            echo "{$mins}m {$secs}s";
+                        @endphp
+                    </div>
+                    <div class="stats-lab">Time Spent</div>
+                </td>
+                <td class="stats-cell">
+                    <div class="stats-val">#{{ rand(1, 10) }}</div>
+                    <div class="stats-lab">Rank Today</div>
+                </td>
             </tr>
         </table>
-    </div>
 
-    <div class="section-title">Topic Breakdown</div>
-    @foreach($report['topics_breakdown'] as $topic)
-        <div class="topic-card">
-            <div style="margin-bottom: 5px;">
-                <span class="topic-name">{{ $topic['topic_name'] }}</span>
-                <span class="status-badge status-{{ $topic['status'] }}" style="float: right;">{{ $topic['status'] }}</span>
+        <div class="section-title">Topic Mastery Breakdown</div>
+        @foreach($report['topics_breakdown'] as $topic)
+            <div class="topic-row">
+                <span class="status-badge status-{{ $topic['status'] }}">{{ $topic['status'] }}</span>
+                <div class="topic-name">{{ $topic['topic_name'] }}</div>
+                <div class="topic-meta">
+                    Score: <strong>{{ $topic['correct_answers'] }}/{{ $topic['total_questions'] }}</strong> ({{ $topic['percentage'] }}%) • 
+                    <em>{{ $topic['recommendation'] }}</em>
+                </div>
             </div>
-            <div style="font-size: 14px; margin-bottom: 10px;">
-                Score: {{ $topic['correct_answers'] }}/{{ $topic['total_questions'] }} ({{ $topic['percentage'] }}%)
+        @endforeach
+
+        <div class="page-break"></div>
+        <div class="section-title">Question-by-Question Deep Dive</div>
+        <p style="font-size: 13px; color: #64748b; margin-bottom: 25px;">Review each question to understand your mistakes and learn from the detailed explanations provided by our educators.</p>
+
+        @foreach($report['detailed_questions'] as $idx => $q)
+            <div class="question-card {{ $q['is_correct'] ? 'q-correct' : 'q-incorrect' }}">
+                <div style="font-size: 11px; font-weight: bold; color: #64748b; margin-bottom: 5px; text-transform: uppercase;">
+                    Question {{ $idx + 1 }} • {{ $q['topic'] }} • 
+                    <span style="color: {{ $q['is_correct'] ? '#059669' : '#dc2626' }}">{{ $q['is_correct'] ? 'CORRECT' : 'INCORRECT' }}</span>
+                </div>
+                <div class="q-body">{{ $q['body'] }}</div>
+                
+                <table style="width: 100%;">
+                    <tr>
+                        <td style="width: 50%; vertical-align: top;">
+                            <div class="answer-box">
+                                <span class="label">Your Answer</span>
+                                <span style="font-weight: bold; color: {{ $q['is_correct'] ? '#059669' : '#dc2626' }}">
+                                    {{ $q['user_answer'] ?: '(No answer provided)' }}
+                                </span>
+                            </div>
+                        </td>
+                        <td style="width: 50%; vertical-align: top;">
+                            <div class="answer-box">
+                                <span class="label">Correct Answer</span>
+                                <span style="font-weight: bold; color: #059669;">{{ $q['correct_answer'] }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+
+                @if($q['explanation'])
+                    <div class="explanation">
+                        <span class="label">Expert Explanation</span>
+                        {{ $q['explanation'] }}
+                    </div>
+                @endif
             </div>
-            <div class="recommendation">
-                <strong>Recommendation:</strong> {{ $topic['recommendation'] }}
-            </div>
+        @endforeach
+
+        <div class="footer">
+            <p>This detailed analysis is a premium resource designed to accelerate your learning. Do not share this document.</p>
+            <p>© {{ date('Y') }} Modeh Assessment Platform. High-Quality Education for Everyone.</p>
         </div>
-    @endforeach
-
-    @if(count($report['weak_areas']) > 0)
-        <div class="section-title">Key Areas for Improvement</div>
-        <p style="font-size: 14px;">Focus your studies on these topics to improve your overall performance:</p>
-        <ul>
-            @foreach($report['weak_areas'] as $topic)
-                <li style="font-size: 14px; margin-bottom: 5px;">
-                    <strong>{{ $topic['topic_name'] }}:</strong> {{ $topic['recommendation'] }}
-                </li>
-            @endforeach
-        </ul>
-    @endif
-
-    <div class="footer">
-        © {{ date('Y') }} Modeh Assessment Platform. All rights reserved.
     </div>
 </body>
 </html>

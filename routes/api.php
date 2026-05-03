@@ -291,6 +291,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/quiz-attempts/{attempt}/performance-report', [\App\Http\Controllers\Api\PerformanceReportController::class, 'show']);
     Route::get('/quiz-attempts/{attempt}/performance-report/download', [\App\Http\Controllers\Api\PerformanceReportController::class, 'download']);
     Route::get('/performance/overview', [\App\Http\Controllers\Api\PerformanceAnalyticsController::class, 'overview']);
+    Route::get('/performance/overview/download', [\App\Http\Controllers\Api\PerformanceAnalyticsController::class, 'download']);
 
     // Daily Challenge endpoints
     Route::get('/daily-challenges/today', [\App\Http\Controllers\Api\DailyChallengeController::class, 'today']);

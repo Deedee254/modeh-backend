@@ -155,7 +155,41 @@ class PerformanceReportController extends Controller
             'topics_breakdown' => $analysis,
             'weak_areas' => array_values(array_filter($analysis, fn($t) => $t['percentage'] < 60)),
             'strong_areas' => array_values(array_filter($analysis, fn($t) => $t['percentage'] >= 80)),
+            'detailed_questions' => $this->getDetailedQuestions($quiz, $answers),
+            'stats' => [
+                'score' => $attempt->score,
+                'total_questions' => $quiz->questions->count(),
+                'correct_count' => $attempt->correct_count ?? count(array_filter($analysis, fn($t) => $t['correct_answers'])),
+                'time_taken' => $attempt->total_time_seconds,
+            ]
         ];
+    }
+
+    private function getDetailedQuestions($quiz, $answers)
+    {
+        $details = [];
+        foreach ($quiz->questions as $q) {
+            $userAnswer = null;
+            foreach ($answers as $ans) {
+                if ((int)($ans['question_id'] ?? 0) === (int)$q->id) {
+                    $userAnswer = $ans['selected'] ?? null;
+                    break;
+                }
+            }
+
+            $isCorrect = $this->markingService->isAnswerCorrect($userAnswer, $q->answers, $q);
+            $optionMap = $this->markingService->buildOptionMap($q);
+
+            $details[] = [
+                'body' => $q->body,
+                'is_correct' => $isCorrect,
+                'user_answer' => $this->markingService->formatExplanationAnswers($userAnswer, $optionMap),
+                'correct_answer' => $this->markingService->formatExplanationAnswers($q->answers, $optionMap),
+                'explanation' => $q->explanation,
+                'topic' => $q->topic->name ?? 'General',
+            ];
+        }
+        return $details;
     }
 
     private function getStatus($percentage)
