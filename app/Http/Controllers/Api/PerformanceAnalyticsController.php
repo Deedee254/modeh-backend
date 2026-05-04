@@ -174,6 +174,8 @@ class PerformanceAnalyticsController extends Controller
                 'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
+    }
+
     private function calculateProficiencyLevel($score)
     {
         if ($score >= 80) return ['label' => 'Exceptional', 'grade' => 'A+', 'color' => '#10b981'];
