@@ -78,6 +78,14 @@ class QuizAttemptController extends Controller
             ->distinct('user_id')
             ->count('user_id');
 
+        if ($attempt->score === null) {
+            return [
+                'rank' => null,
+                'total_participants' => $totalParticipants,
+                'percentile' => null
+            ];
+        }
+
         $higherScores = QuizAttempt::where('quiz_id', $attempt->quiz_id)
             ->where('score', '>', $attempt->score)
             ->distinct('user_id')
