@@ -514,7 +514,7 @@ class QuizAttemptController extends Controller
 	        return response()->json([
 	            'ok' => true,
 	            'results' => $results,
-	            'score' => $defer ? null : $score,
+	            'score' => $score,
 	            'attempt_id' => $attempt->id ?? null,
 	            // If payment required, don't show the points they would earn
 	            'points_delta' => $requiresPayment ? 0 : ($attempt->points_earned ?? 0),
@@ -716,7 +716,7 @@ class QuizAttemptController extends Controller
 	                        'quiz_id' => $quiz->id,
 	                        'price' => $effectivePrice,
 	                        'currency' => 'KES',
-                            'score' => $attempt->score,
+                            'score' => $attempt->score !== null ? $attempt->score : $this->markingService->calculateScore($attempt->answers ?? [], $quiz->questions, true, (string)$request->input('shuffle_seed'), true)['score'],
                             'percentile' => $this->calculateRankAndPercentile($attempt)['percentile'],
 	                        'quiz' => [
 	                            'id' => $quiz->id,

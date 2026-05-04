@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Services\OnboardingService;
+use App\Services\SessionUserCacheService;
+use Illuminate\Support\Facades\Cache;
 
 class OnboardingController extends Controller
 {
@@ -39,6 +41,9 @@ class OnboardingController extends Controller
 
         $onboarding = $this->service->completeStep($user, $step, $payload);
 
+        Cache::forget("user_me_{$user->id}");
+        SessionUserCacheService::invalidateSessionCache($user, $request);
+
         return response()->json(['onboarding' => $onboarding]);
     }
 
@@ -54,6 +59,10 @@ class OnboardingController extends Controller
         // verification is reserved for invite flows and not required for
         // general onboarding in this deployment.
         $onboarding = $this->service->completeStep($user, 'profile_complete');
+
+        Cache::forget("user_me_{$user->id}");
+        SessionUserCacheService::invalidateSessionCache($user, $request);
+
         return response()->json(['onboarding' => $onboarding, 'user' => $user->fresh()]);
     }
 }
