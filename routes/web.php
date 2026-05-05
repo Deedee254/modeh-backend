@@ -21,7 +21,7 @@ Route::middleware('web')->group(function () {
 	Route::get('/invitation/{token}', [App\Http\Controllers\InvitationController::class, 'show'])->name('invitation.show');
 });
 
-Route::get('/dashboard', [AuthWebController::class, 'dashboard'])->middleware('auth');
+Route::get('/dashboard', [AuthWebController::class, 'dashboard'])->middleware('authenticated');
 
 
 // Minimal email verification route that works without an active session.

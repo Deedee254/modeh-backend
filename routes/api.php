@@ -166,14 +166,14 @@ Route::get('/institutions/invitation/{token}', [\App\Http\Controllers\Api\Instit
 // New invitation endpoints for SPA flows (frontend-facing)
 Route::get('/invitations/{token}', [\App\Http\Controllers\Api\InvitationController::class, 'show']);
 Route::post('/invitations/register', [\App\Http\Controllers\Api\InvitationController::class, 'register']);
-Route::post('/invitations/claim', [\App\Http\Controllers\Api\InvitationController::class, 'claim'])->middleware('auth:sanctum');
+Route::post('/invitations/claim', [\App\Http\Controllers\Api\InvitationController::class, 'claim'])->middleware('authenticated:sanctum');
 // Accept tokens via query param for frontend landing pages
 Route::get('/invitations/validate', [\App\Http\Controllers\Api\InvitationController::class, 'validateToken']);
 
 // Public GET for admin settings (read-only defaults) so frontend can load platform defaults without auth
 Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
 
-Route::middleware(['auth:sanctum'])->group(function () {
+Route::middleware(['authenticated:sanctum'])->group(function () {
     // Institution creation (authenticated users become institution-manager)
     Route::post('/institutions', [\App\Http\Controllers\Api\InstitutionController::class, 'store']);
     // Institution update (institution manager only)
@@ -570,7 +570,7 @@ Route::post('/echo/heartbeat', [\App\Http\Controllers\Api\EchoHeartbeatControlle
 Route::prefix('echo-test')->group(function () {
     Route::get('/status', [\App\Http\Controllers\EchoTestController::class, 'getStatus']);
     Route::post('/send', [\App\Http\Controllers\EchoTestController::class, 'sendTestMessage']);
-    Route::post('/send-generic', [\App\Http\Controllers\EchoTestController::class, 'sendGenericBroadcast'])->middleware('auth:sanctum');
+    Route::post('/send-generic', [\App\Http\Controllers\EchoTestController::class, 'sendGenericBroadcast'])->middleware('authenticated:sanctum');
 });
 
 // Broadcasting auth endpoint - moved to API routes for consistency with other API endpoints
@@ -671,4 +671,4 @@ Route::post('/broadcasting/auth', function (Request $request) {
         \Illuminate\Support\Facades\Log::error('Broadcasting auth error:', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
         return response()->json(['error' => 'Broadcasting auth failed', 'message' => $e->getMessage()], 500);
     }
-})->middleware(['auth:sanctum']); // Authenticate via Sanctum (CORS is handled globally)
+})->middleware(['authenticated:sanctum']); // Authenticate via Sanctum (CORS is handled globally)
