@@ -342,6 +342,10 @@ Route::middleware(['authenticated:sanctum'])->group(function () {
     // Support PATCH for updates (clients may use PATCH) and allow deleting questions
     Route::patch('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'update']);
     Route::delete('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'destroy']);
+    
+    // Question Flagging
+    Route::post('/questions/{question}/flag', [\App\Http\Controllers\Api\QuestionFlagController::class, 'store']);
+    Route::get('/questions/{question}/flags', [\App\Http\Controllers\Api\QuestionFlagController::class, 'index'])->middleware('can:viewFilament');
 
     // Generic uploads helper (used by frontend to upload files before attaching URLs)
     Route::post('/uploads', [\App\Http\Controllers\Api\UploadController::class, 'store']);

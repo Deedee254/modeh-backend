@@ -70,6 +70,8 @@ class QuestionResource extends JsonResource
             'level_id' => $this->level_id ?? null,
             'is_banked' => $this->is_banked ?? false,
             'is_approved' => $this->is_approved ?? false,
+            'pending_flags_count' => $this->pendingFlags()->count(),
+            'flags' => $this->relationLoaded('flags') ? $this->flags : [],
             'created_at' => $this->created_at ? $this->created_at->toDateTimeString() : null,
             'updated_at' => $this->updated_at ? $this->updated_at->toDateTimeString() : null,
         ];

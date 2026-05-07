@@ -1141,6 +1141,9 @@ class QuestionController extends Controller
         }
         $question->save();
 
+        // Resolve all pending flags for this question
+        $question->pendingFlags()->update(['status' => 'resolved']);
+
     return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
     }
 

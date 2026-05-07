@@ -47,20 +47,18 @@ class LeaderboardController extends Controller
         // Check if points column exists and build query accordingly
         $hasPointsColumn = \Schema::hasColumn('users', 'points');
         
+        $query = User::query()->where('role', 'quizee');
+
         if ($hasPointsColumn) {
-            try {
-                // Avoid selecting optional columns such as `country` which may not exist
-                // across all environments. Select a minimal safe set and normalize later.
-                $query = User::query()->select(['id', 'name', 'email', 'points', 'social_avatar', 'avatar_url', 'created_at']);
-            } catch (\Exception $e) {
-                \Log::warning('Failed to query with points column: ' . $e->getMessage());
-                $query = User::query()->selectRaw('id, name, email, 0 as points, social_avatar, created_at');
-            }
+            $query->select(['id', 'name', 'email', 'points', 'social_avatar', 'avatar_url', 'created_at']);
         } else {
-            // Fallback for older schema without points column
-            $query = User::query()->selectRaw('id, name, email, 0 as points, social_avatar, created_at');
-            \Log::info('Using fallback query - points column does not exist');
+            $query->selectRaw('id, name, email, 0 as points, social_avatar, avatar_url, created_at');
         }
+
+        // Add average score calculation
+        $query->withAvg('quizAttempts as average_score', 'score');
+        // We might also want to know how many attempts they've made
+        $query->withCount('quizAttempts as attempts_count');
 
         if ($q) {
             $query->where(function ($sub) use ($q) {
@@ -84,7 +82,6 @@ class LeaderboardController extends Controller
         }
 
         // Filter by subject if provided
-        // Note: subjects are stored as JSON array in the quizee profile, so we use whereHas with whereJsonContains
         if ($subjectId) {
             $query->whereHas('quizeeProfile', function ($sub) use ($subjectId) {
                 $sub->whereJsonContains('subjects', (int)$subjectId);
@@ -92,7 +89,6 @@ class LeaderboardController extends Controller
         }
 
         // Filter by topic if provided
-        // Note: topics are accessed through quiz attempts, so find users who attempted quizzes with this topic
         if ($topicId) {
             $query->whereHas('quizAttempts', function ($sub) use ($topicId) {
                 $sub->whereHas('quiz', function ($quizSub) use ($topicId) {
@@ -101,35 +97,34 @@ class LeaderboardController extends Controller
             });
         }
 
-        // Filter by quiz if provided (users who have attempted the quiz)
+        // Filter by quiz if provided
         if ($quizId) {
             $query->whereHas('quizAttempts', function ($sub) use ($quizId) {
                 $sub->where('quiz_id', $quizId);
             });
         }
 
-        // Only include quizee users on the public leaderboard
-        $query->where('role', 'quizee');
-
         // Validate sort_by allowed values
-        $allowedSort = ['points', 'name', 'created_at'];
+        $allowedSort = ['points', 'name', 'created_at', 'average_score'];
         if (!in_array($sortBy, $allowedSort)) {
             $sortBy = 'points';
         }
 
-        // If sorting by points ensure nulls are treated as 0 (safe order)
+        // Sorting logic
         if ($sortBy === 'points') {
-            // Order by points (nullable) and then name for deterministic ordering
             $query->orderByRaw("COALESCE(points, 0) {$sortDir}")
                   ->orderBy('name', 'asc');
+        } elseif ($sortBy === 'average_score') {
+            // When sorting by average score, prioritize those with more attempts if scores are tied
+            // Also filter out users with 0 attempts to avoid a leaderboard full of 0s
+            $query->whereHas('quizAttempts')
+                  ->orderByRaw("average_score {$sortDir}")
+                  ->orderBy('attempts_count', 'desc');
         } else {
             $query->orderBy($sortBy, $sortDir);
         }
 
         try {
-            // Use the query's selected columns (avoid overriding with a columns list that
-            // may not exist across different schema versions). This is more resilient
-            // and avoids errors when migrations differ between environments.
             $paginated = $query->with('institutions')->paginate($perPage, ['*'], 'page', $page);
 
             // Normalize collection items to a stable shape expected by frontend
@@ -138,7 +133,9 @@ class LeaderboardController extends Controller
                     'id' => $u->id,
                     'name' => $u->name ?? ($u->email ?? 'Unknown'),
                     'avatar' => $u->avatar,
-                    'points' => (int)($u->points ?? 0), // Force integer
+                    'points' => (int)($u->points ?? 0),
+                    'average_score' => $u->average_score ? round((float)$u->average_score, 1) : 0,
+                    'attempts_count' => (int)($u->attempts_count ?? 0),
                     'country' => $u->country ?? null,
                     'institution_name' => $u->institutions?->first()?->name ?? null,
                 ];

@@ -227,4 +227,20 @@ class Question extends Model
     {
         return $this->belongsTo(Level::class, 'level_id');
     }
+
+    /**
+     * Get all flags for this question
+     */
+    public function flags()
+    {
+        return $this->hasMany(QuestionFlag::class);
+    }
+
+    /**
+     * Get only pending flags
+     */
+    public function pendingFlags()
+    {
+        return $this->hasMany(QuestionFlag::class)->where('status', 'pending');
+    }
 }
