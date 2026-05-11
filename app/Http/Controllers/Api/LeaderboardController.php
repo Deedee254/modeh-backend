@@ -38,6 +38,11 @@ class LeaderboardController extends Controller
         $sortDir = strtolower($request->get('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
         $q = $request->get('q');
 
+        // Resolve quizId if it's a slug
+        if ($quizId && !is_numeric($quizId)) {
+            $quizId = \App\Models\Quiz::where('slug', $quizId)->value('id');
+        }
+
         // Resolve start date based on timeframe
         $startDate = null;
         if ($timeframe === 'daily') {
