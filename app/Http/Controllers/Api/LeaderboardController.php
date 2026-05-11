@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 
 class LeaderboardController extends Controller
 {
@@ -82,7 +85,7 @@ class LeaderboardController extends Controller
 
         if ($quizId) {
             // Quiz-specific leaderboard: Calculate best score, average, and counts in one pass
-            $statsSub = \DB::table('quiz_attempts')
+            $statsSub = DB::table('quiz_attempts')
                 ->select('user_id')
                 ->selectRaw('MAX(score) as points')
                 ->selectRaw('AVG(score) as average_score')
@@ -98,8 +101,8 @@ class LeaderboardController extends Controller
             }
 
             // Find best time for the best score
-            $bestTimesSub = \DB::table('quiz_attempts')
-                ->select('user_id', 'score', \DB::raw('MIN(total_time_seconds) as min_time'))
+            $bestTimesSub = DB::table('quiz_attempts')
+                ->select('user_id', 'score', DB::raw('MIN(total_time_seconds) as min_time'))
                 ->where('quiz_id', $quizId)
                 ->whereNotNull('score');
             
@@ -137,7 +140,7 @@ class LeaderboardController extends Controller
                 $query->select(['id', 'name', 'email', 'social_avatar', 'avatar_url', 'created_at', 'role']);
                 $query->withSum(['quizAttempts as points' => $applyConstraints], 'points_earned');
             } else {
-                $hasPointsColumn = \Schema::hasColumn('users', 'points');
+                $hasPointsColumn = Schema::hasColumn('users', 'points');
                 if ($hasPointsColumn) {
                     $query->select(['id', 'name', 'email', 'points', 'social_avatar', 'avatar_url', 'created_at', 'role']);
                 } else {
@@ -208,7 +211,7 @@ class LeaderboardController extends Controller
             return response()->json($paginated);
         } catch (\Exception $e) {
             // Log full exception with stack so debugging is easier
-            \Log::error('Leaderboard query failed: ' . $e->getMessage(), ['exception' => $e]);
+            Log::error('Leaderboard query failed: ' . $e->getMessage(), ['exception' => $e]);
 
             // Return empty result set rather than 500 to avoid breaking public pages
             return response()->json([
