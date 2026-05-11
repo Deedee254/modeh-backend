@@ -22,7 +22,7 @@ class TransactionController extends Controller
             'sort_order' => 'string|in:asc,desc',
         ]);
 
-        $query = Invoice::where('user_id', auth()->id());
+        $query = Invoice::where('user_id', (auth()->id() ?? auth('sanctum')->id()));
 
         // Filter by type
         if ($request->filled('type')) {
@@ -74,7 +74,7 @@ class TransactionController extends Controller
     $cutoffDate = now()->addDays($daysAhead);
 
         // Get active subscriptions renewing soon based on ends_at date
-        $renewals = Invoice::where('user_id', auth()->id())
+        $renewals = Invoice::where('user_id', (auth()->id() ?? auth('sanctum')->id()))
             ->where('invoiceable_type', 'App\\Models\\Subscription')
             ->where('status', 'paid')
             ->with('invoiceable')
@@ -101,7 +101,7 @@ class TransactionController extends Controller
     public function show(Invoice $invoice)
     {
         // Ensure user owns this invoice
-        if ($invoice->user_id !== auth()->id()) {
+        if ($invoice->user_id !== (auth()->id() ?? auth('sanctum')->id())) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -116,7 +116,7 @@ class TransactionController extends Controller
     public function download(Invoice $invoice)
     {
         // Ensure user owns this invoice
-        if ($invoice->user_id !== auth()->id()) {
+        if ($invoice->user_id !== (auth()->id() ?? auth('sanctum')->id())) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 

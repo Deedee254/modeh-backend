@@ -11,7 +11,7 @@ class AdminQuizeeAnalyticsController extends Controller
 {
     private function requireAdmin()
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }

@@ -20,7 +20,7 @@ class AdminController extends Controller
      */
     public function metrics()
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -93,7 +93,7 @@ class AdminController extends Controller
      */
     public function transactions(Request $request)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -185,7 +185,7 @@ class AdminController extends Controller
      */
     public function users(Request $request)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -238,7 +238,7 @@ class AdminController extends Controller
      */
     public function quizMasters(Request $request)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -319,7 +319,7 @@ class AdminController extends Controller
      */
     public function withdrawals(Request $request)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -360,7 +360,7 @@ class AdminController extends Controller
      */
     public function approveWithdrawal(Request $request, $withdrawalId)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -391,7 +391,7 @@ class AdminController extends Controller
      */
     public function rejectWithdrawal(Request $request, $withdrawalId)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -434,7 +434,7 @@ class AdminController extends Controller
                 'quiz_master_id' => $withdrawal->{'quiz_master_id'},
                 'amount' => $withdrawal->amount,
                 'reason' => $request->input('reason'),
-                'admin_id' => auth()->id(),
+                'admin_id' => $user->id,
             ]);
             
             return response()->json(['ok' => true, 'message' => 'Withdrawal rejected and refunded']);
@@ -453,7 +453,7 @@ class AdminController extends Controller
      */
     public function markWithdrawalAsPaid(Request $request, $withdrawalId)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -518,7 +518,7 @@ class AdminController extends Controller
         // Allow public GET of settings (read-only) so clients can read defaults.
         // Require admin only for updates (POST/PUT).
         if ($request->method() !== 'GET') {
-            $user = auth()->user();
+            $user = auth()->user() ?? auth('sanctum')->user();
             if (!$user || !$user->is_admin) {
                 return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
             }
@@ -636,7 +636,7 @@ class AdminController extends Controller
      */
     public function quizees(Request $request)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -651,7 +651,7 @@ class AdminController extends Controller
      */
     public function tournaments(Request $request)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -720,7 +720,7 @@ class AdminController extends Controller
      */
     public function tournamentParticipants(Request $request, $tournamentId)
     {
-        $user = auth()->user();
+        $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }

@@ -165,7 +165,7 @@ class PerformanceAnalyticsController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Performance Analytics Error: ' . $e->getMessage(), [
-                'user_id' => auth()->id(),
+                'user_id' => $user->id ?? null,
                 'trace' => $e->getTraceAsString()
             ]);
             
