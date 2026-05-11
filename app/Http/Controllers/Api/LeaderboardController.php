@@ -72,19 +72,21 @@ class LeaderboardController extends Controller
         $query = User::query()->where('role', 'quizee');
 
         if ($quizId) {
-            // If quiz_id is provided, we return the best score per user for this specific quiz.
-            // We join with subqueries to find each user's max score and their best time for that score.
-            $bestScoresSub = \DB::table('quiz_attempts')
-                ->select('user_id', \DB::raw('MAX(score) as max_score'))
+            // Quiz-specific leaderboard: Calculate best score, average, and counts in one pass
+            $statsSub = \DB::table('quiz_attempts')
+                ->select('user_id')
+                ->selectRaw('MAX(score) as points')
+                ->selectRaw('AVG(score) as average_score')
+                ->selectRaw('COUNT(*) as attempts_count')
                 ->where('quiz_id', $quizId)
-                ->whereNotNull('score');
+                ->whereNotNull('score')
+                ->groupBy('user_id');
             
             if ($startDate) {
-                $bestScoresSub->where('created_at', '>=', $startDate);
+                $statsSub->where('created_at', '>=', $startDate);
             }
-            
-            $bestScoresSub->groupBy('user_id');
 
+            // Find best time for the best score
             $bestTimesSub = \DB::table('quiz_attempts')
                 ->select('user_id', 'score', \DB::raw('MIN(total_time_seconds) as min_time'))
                 ->where('quiz_id', $quizId)
@@ -96,10 +98,10 @@ class LeaderboardController extends Controller
             
             $bestTimesSub->groupBy('user_id', 'score');
 
-            $query->joinSub($bestScoresSub, 'best_scores', 'users.id', '=', 'best_scores.user_id')
+            $query->joinSub($statsSub, 'stats', 'users.id', '=', 'stats.user_id')
                   ->joinSub($bestTimesSub, 'best_times', function ($join) {
                       $join->on('users.id', '=', 'best_times.user_id')
-                           ->on('best_scores.max_score', '=', 'best_times.score');
+                           ->on('stats.points', '=', 'best_times.score');
                   })
                   ->select([
                       'users.id',
@@ -108,23 +110,21 @@ class LeaderboardController extends Controller
                       'users.social_avatar',
                       'users.avatar_url',
                       'users.created_at',
-                      'users.role'
-                  ])
-                  ->selectRaw('best_scores.max_score as points')
-                  ->selectRaw('best_times.min_time as best_time');
+                      'users.role',
+                      'stats.points',
+                      'stats.average_score',
+                      'stats.attempts_count',
+                      'best_times.min_time as best_time'
+                  ]);
             
-            // Override sort_by for quiz leaderboard
-            $sortBy = 'points';
+            // For quiz leaderboard, we don't need additional withAvg/withCount as they are in the join
         } else {
             // Global/Contextual points leaderboard
             if ($startDate || $topicId || $subjectId) {
-                // aggregate points from attempts in the period/context
                 $query->withSum(['quizAttempts as timeframe_points' => $applyConstraints], 'points_earned');
-                
                 $query->select(['id', 'name', 'email', 'social_avatar', 'avatar_url', 'created_at', 'role']);
                 $query->selectRaw('COALESCE(timeframe_points, 0) as points');
             } else {
-                // All-time global leaderboard: use cached users.points column
                 $hasPointsColumn = \Schema::hasColumn('users', 'points');
                 if ($hasPointsColumn) {
                     $query->select(['id', 'name', 'email', 'points', 'social_avatar', 'avatar_url', 'created_at', 'role']);
@@ -132,11 +132,11 @@ class LeaderboardController extends Controller
                     $query->selectRaw('id, name, email, 0 as points, social_avatar, avatar_url, created_at, role');
                 }
             }
+            
+            // Attach metrics for non-quiz-specific view
+            $query->withAvg(['quizAttempts as average_score' => $applyConstraints], 'score');
+            $query->withCount(['quizAttempts as attempts_count' => $applyConstraints]);
         }
-
-        // Add metrics: average score and attempts count
-        $query->withAvg(['quizAttempts as average_score' => $applyConstraints], 'score');
-        $query->withCount(['quizAttempts as attempts_count' => $applyConstraints]);
 
         if ($q) {
             $query->where(function ($sub) use ($q) {
@@ -145,56 +145,31 @@ class LeaderboardController extends Controller
             });
         }
 
-        // Filter by level if provided
+        // Filter by level/grade
         if ($levelId) {
-            $query->whereHas('quizeeProfile', function ($sub) use ($levelId) {
-                $sub->where('level_id', $levelId);
-            });
+            $query->whereHas('quizeeProfile', fn($sub) => $sub->where('level_id', $levelId));
         }
-
-        // Filter by grade if provided
         if ($gradeId) {
-            $query->whereHas('quizeeProfile', function ($sub) use ($gradeId) {
-                $sub->where('grade_id', $gradeId);
-            });
+            $query->whereHas('quizeeProfile', fn($sub) => $sub->where('grade_id', $gradeId));
         }
 
-        // Filter by topic if provided
-        if ($topicId && !$quizId) {
-            $query->whereHas('quizAttempts', $applyConstraints);
+        // Contextual filters (only if quizId is not already filtering via join)
+        if (!$quizId) {
+            if ($topicId) $query->whereHas('quizAttempts', $applyConstraints);
+            if ($subjectId) $query->whereHas('quizAttempts', $applyConstraints);
         }
 
-        // Filter by subject if provided
-        if ($subjectId && !$quizId) {
-            $query->whereHas('quizAttempts', $applyConstraints);
-        }
-
-        // Filter by quiz if provided (if we didn't already join above)
-        if ($quizId && !str_contains($query->toSql(), 'join')) {
-            $query->whereHas('quizAttempts', $applyConstraints);
-        }
-
-        // Validate sort_by allowed values
+        // Validate sort_by
         $allowedSort = ['points', 'name', 'created_at', 'average_score'];
-        if (!in_array($sortBy, $allowedSort)) {
-            $sortBy = 'points';
-        }
+        if (!in_array($sortBy, $allowedSort)) $sortBy = 'points';
 
-        // Sorting logic
+        // Sorting
         if ($sortBy === 'points') {
-            if ($quizId) {
-                // For specific quiz: Highest score first, then fastest time (minimum seconds)
-                $query->orderByRaw("points {$sortDir}")
-                      ->orderByRaw("CASE WHEN best_time IS NULL THEN 2147483647 ELSE best_time END ASC")
-                      ->orderBy('name', 'asc');
-            } else {
-                $query->orderByRaw("COALESCE(points, 0) {$sortDir}")
-                      ->orderBy('name', 'asc');
-            }
+            $query->orderByRaw("points {$sortDir}")
+                  ->orderByRaw("CASE WHEN " . ($quizId ? 'best_time' : '0') . " IS NULL THEN 2147483647 ELSE " . ($quizId ? 'best_time' : '0') . " END ASC")
+                  ->orderBy('name', 'asc');
         } elseif ($sortBy === 'average_score') {
-            // When sorting by average score, prioritize those with more attempts if scores are tied
-            // Also filter out users with 0 attempts to avoid a leaderboard full of 0s
-            $query->whereHas('quizAttempts')
+            $query->whereHas('quizAttempts', $applyConstraints)
                   ->orderByRaw("average_score {$sortDir}")
                   ->orderBy('attempts_count', 'desc');
         } else {
@@ -204,13 +179,12 @@ class LeaderboardController extends Controller
         try {
             $paginated = $query->with('institutions')->paginate($perPage, ['*'], 'page', $page);
 
-            // Normalize collection items to a stable shape expected by frontend
-            $paginated->getCollection()->transform(function ($u) use ($quizId) {
+            $paginated->getCollection()->transform(function ($u) {
                 return [
                     'id' => $u->id,
                     'name' => $u->name ?? ($u->email ?? 'Unknown'),
                     'avatar' => $u->avatar,
-                    'points' => $quizId ? (float)($u->points ?? 0) : (int)($u->points ?? 0),
+                    'points' => (float)($u->points ?? 0),
                     'average_score' => $u->average_score ? round((float)$u->average_score, 1) : 0,
                     'attempts_count' => (int)($u->attempts_count ?? 0),
                     'total_time_seconds' => isset($u->best_time) ? (int)$u->best_time : null,
