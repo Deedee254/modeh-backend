@@ -41,18 +41,44 @@ class LeaderboardController extends Controller
         // NOTE: For now we use the users.points column as the authoritative "points" value
         // (this corresponds to how AchievementService increments user points). Timeframe
         // filters (daily/weekly/monthly) are not yet implemented and will return all-time
-        // results. This is a deliberate minimal implementation to match frontend needs;
-        // future work: compute timeframe-limited points by aggregating attempts/achievements.
+        // results. This is a deliberate minimal implementation to match frontend needs.
 
-        // Check if points column exists and build query accordingly
-        $hasPointsColumn = \Schema::hasColumn('users', 'points');
-        
         $query = User::query()->where('role', 'quizee');
 
-        if ($hasPointsColumn) {
-            $query->select(['id', 'name', 'email', 'points', 'social_avatar', 'avatar_url', 'created_at']);
+        if ($quizId) {
+            // If quiz_id is provided, we return the best score per user for this specific quiz.
+            // We join with subqueries to find each user's max score and their best time for that score.
+            $bestScoresSub = \DB::table('quiz_attempts')
+                ->select('user_id', \DB::raw('MAX(score) as max_score'))
+                ->where('quiz_id', $quizId)
+                ->whereNotNull('score')
+                ->groupBy('user_id');
+
+            $bestTimesSub = \DB::table('quiz_attempts')
+                ->select('user_id', 'score', \DB::raw('MIN(total_time_seconds) as min_time'))
+                ->where('quiz_id', $quizId)
+                ->whereNotNull('score')
+                ->groupBy('user_id', 'score');
+
+            $query->joinSub($bestScoresSub, 'best_scores', 'users.id', '=', 'best_scores.user_id')
+                  ->joinSub($bestTimesSub, 'best_times', function ($join) {
+                      $join->on('users.id', '=', 'best_times.user_id')
+                           ->on('best_scores.max_score', '=', 'best_times.score');
+                  })
+                  ->select(['users.*'])
+                  ->selectRaw('best_scores.max_score as points')
+                  ->selectRaw('best_times.min_time as best_time');
+            
+            // Override sort_by for quiz leaderboard
+            $sortBy = 'points';
         } else {
-            $query->selectRaw('id, name, email, 0 as points, social_avatar, avatar_url, created_at');
+            // Global/Contextual points leaderboard
+            $hasPointsColumn = \Schema::hasColumn('users', 'points');
+            if ($hasPointsColumn) {
+                $query->select(['id', 'name', 'email', 'points', 'social_avatar', 'avatar_url', 'created_at', 'role']);
+            } else {
+                $query->selectRaw('id, name, email, 0 as points, social_avatar, avatar_url, created_at, role');
+            }
         }
 
         // Add average score calculation
@@ -88,8 +114,8 @@ class LeaderboardController extends Controller
             });
         }
 
-        // Filter by topic if provided
-        if ($topicId) {
+        // Filter by topic if provided (only if quizId is not already filtering attempts)
+        if ($topicId && !$quizId) {
             $query->whereHas('quizAttempts', function ($sub) use ($topicId) {
                 $sub->whereHas('quiz', function ($quizSub) use ($topicId) {
                     $quizSub->where('topic_id', $topicId);
@@ -97,8 +123,8 @@ class LeaderboardController extends Controller
             });
         }
 
-        // Filter by quiz if provided
-        if ($quizId) {
+        // Filter by quiz if provided (if we didn't already join above)
+        if ($quizId && !str_contains($query->toSql(), 'join')) {
             $query->whereHas('quizAttempts', function ($sub) use ($quizId) {
                 $sub->where('quiz_id', $quizId);
             });
@@ -112,8 +138,15 @@ class LeaderboardController extends Controller
 
         // Sorting logic
         if ($sortBy === 'points') {
-            $query->orderByRaw("COALESCE(points, 0) {$sortDir}")
-                  ->orderBy('name', 'asc');
+            if ($quizId) {
+                // For specific quiz: Highest score first, then fastest time (minimum seconds)
+                $query->orderByRaw("points {$sortDir}")
+                      ->orderByRaw("CASE WHEN best_time IS NULL THEN 2147483647 ELSE best_time END ASC")
+                      ->orderBy('name', 'asc');
+            } else {
+                $query->orderByRaw("COALESCE(points, 0) {$sortDir}")
+                      ->orderBy('name', 'asc');
+            }
         } elseif ($sortBy === 'average_score') {
             // When sorting by average score, prioritize those with more attempts if scores are tied
             // Also filter out users with 0 attempts to avoid a leaderboard full of 0s
@@ -128,14 +161,15 @@ class LeaderboardController extends Controller
             $paginated = $query->with('institutions')->paginate($perPage, ['*'], 'page', $page);
 
             // Normalize collection items to a stable shape expected by frontend
-            $paginated->getCollection()->transform(function ($u) {
+            $paginated->getCollection()->transform(function ($u) use ($quizId) {
                 return [
                     'id' => $u->id,
                     'name' => $u->name ?? ($u->email ?? 'Unknown'),
                     'avatar' => $u->avatar,
-                    'points' => (int)($u->points ?? 0),
+                    'points' => $quizId ? (float)($u->points ?? 0) : (int)($u->points ?? 0),
                     'average_score' => $u->average_score ? round((float)$u->average_score, 1) : 0,
                     'attempts_count' => (int)($u->attempts_count ?? 0),
+                    'total_time_seconds' => isset($u->best_time) ? (int)$u->best_time : null,
                     'country' => $u->country ?? null,
                     'institution_name' => $u->institutions?->first()?->name ?? null,
                 ];
@@ -146,9 +180,7 @@ class LeaderboardController extends Controller
             // Log full exception with stack so debugging is easier
             \Log::error('Leaderboard query failed: ' . $e->getMessage(), ['exception' => $e]);
 
-            // Return empty result set rather than 500 to avoid breaking public pages,
-            // but include a helpful message in logs. Frontend will show the empty
-            // pagination shape and our UI now renders table headers while loading.
+            // Return empty result set rather than 500 to avoid breaking public pages
             return response()->json([
                 'data' => [],
                 'total' => 0,
@@ -158,4 +190,5 @@ class LeaderboardController extends Controller
             ]);
         }
     }
+}
 }

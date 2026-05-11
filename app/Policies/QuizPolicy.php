@@ -13,8 +13,11 @@ class QuizPolicy
     public function viewAnalytics(User $user, Quiz $quiz)
     {
         // Owner (created_by or user_id) or admin
-        if (($quiz->created_by && $quiz->created_by === $user->id) || ($quiz->user_id && $quiz->user_id === $user->id)) return true;
-        if ($user->isAdmin()) return true;
+        $isOwner = ($quiz->created_by && (string)$quiz->created_by === (string)$user->id) || 
+                   ($quiz->user_id && (string)$quiz->user_id === (string)$user->id);
+        
+        if ($isOwner || $user->isAdmin()) return true;
+        
         return false;
     }
 
@@ -23,8 +26,11 @@ class QuizPolicy
      */
     public function update(User $user, Quiz $quiz)
     {
-        if (($quiz->created_by && $quiz->created_by === $user->id) || ($quiz->user_id && $quiz->user_id === $user->id)) return true;
-        if ($user->isAdmin()) return true;
+        $isOwner = ($quiz->created_by && (string)$quiz->created_by === (string)$user->id) || 
+                   ($quiz->user_id && (string)$quiz->user_id === (string)$user->id);
+                   
+        if ($isOwner || $user->isAdmin()) return true;
+        
         return false;
     }
 }
