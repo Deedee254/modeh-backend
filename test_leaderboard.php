@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 // --- CONFIGURATION ---
-$slug = 'regional-integration-general-questions'; // Change to any quiz slug
+$slug = 'criminal-litigation-capital-charges'; // Change to any quiz slug
 $timeframe = 'all-time'; // Options: daily, weekly, monthly, custom, all-time
 $customDate = null; // '2024-05-11' - Use when timeframe is 'custom'
 $sortBy = 'points'; // Options: points, average_score
