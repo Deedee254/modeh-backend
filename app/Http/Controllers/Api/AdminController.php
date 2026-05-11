@@ -12,18 +12,38 @@ use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Gate;
 
 class AdminController extends Controller
 {
+    private function requireAdmin()
+    {
+        // Try default auth user (session) then sanctum token user
+        $user = auth()->user() ?? auth('sanctum')->user();
+
+        // Allow explicit admin role
+        if ($user && ($user->is_admin ?? false)) {
+            return null;
+        }
+
+        // Allow users authorized to access Filament/admin panels
+        try {
+            if (Gate::allows('viewFilament')) {
+                return null;
+            }
+        } catch (\Throwable $_) {
+            // ignore gate errors
+        }
+
+        return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+    }
+
     /**
      * Get admin dashboard metrics
      */
     public function metrics()
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
+        if ($resp = $this->requireAdmin()) return $resp;
 
         // Get date range (last 30 days)
         $thirtyDaysAgo = now()->subDays(30);
@@ -93,10 +113,7 @@ class AdminController extends Controller
      */
     public function transactions(Request $request)
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
+        if ($resp = $this->requireAdmin()) return $resp;
 
         $query = Transaction::query()->with([
             'user:id,name,email,phone',
@@ -185,10 +202,7 @@ class AdminController extends Controller
      */
     public function users(Request $request)
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
+        if ($resp = $this->requireAdmin()) return $resp;
 
         $query = User::query();
 
@@ -238,10 +252,7 @@ class AdminController extends Controller
      */
     public function quizMasters(Request $request)
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
+        if ($resp = $this->requireAdmin()) return $resp;
 
         $stats = Transaction::query()
             ->selectRaw("`quiz_master_id` as quiz_master_id")
@@ -319,10 +330,7 @@ class AdminController extends Controller
      */
     public function withdrawals(Request $request)
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
+        if ($resp = $this->requireAdmin()) return $resp;
 
         $query = DB::table('withdrawal_requests')
             ->join('users', 'withdrawal_requests.quiz_master_id', '=', 'users.id')
@@ -636,10 +644,7 @@ class AdminController extends Controller
      */
     public function quizees(Request $request)
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
+        if ($resp = $this->requireAdmin()) return $resp;
 
         // Force role filter to quizee (the `users` endpoint already supports `role`)
         $request->merge(['role' => 'quizee']);
@@ -651,10 +656,7 @@ class AdminController extends Controller
      */
     public function tournaments(Request $request)
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
+        if ($resp = $this->requireAdmin()) return $resp;
 
         $query = \App\Models\Tournament::query();
 
@@ -720,10 +722,7 @@ class AdminController extends Controller
      */
     public function tournamentParticipants(Request $request, $tournamentId)
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
-        }
+        if ($resp = $this->requireAdmin()) return $resp;
 
         $tournament = \App\Models\Tournament::findOrFail($tournamentId);
 

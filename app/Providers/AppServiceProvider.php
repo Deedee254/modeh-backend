@@ -42,12 +42,18 @@ use App\Policies\QuizPolicy;
         Gate::policy(Quiz::class, QuizPolicy::class);
         Gate::policy(Tournament::class, TournamentPolicy::class);
         Gate::define('viewFilament', function ($user = null) {
-            // Keep admin API + panel access aligned with the rest of the app's admin checks.
-            $user = $user ?? auth()->user() ?? auth('sanctum')->user();
-            return (bool) ($user && (
-                (($user->role ?? null) === 'admin')
-                || (method_exists($user, 'isAdmin') && $user->isAdmin())
-                || ($user->is_admin ?? false)
+            // Resolve the user from any active guard (session or sanctum token)
+            $resolvedUser = $user ?? auth()->user() ?? auth('sanctum')->user();
+            
+            // If still no user, try resolving directly from the request's sanctum guard
+            if (!$resolvedUser) {
+                $resolvedUser = request()->user('sanctum');
+            }
+
+            return (bool) ($resolvedUser && (
+                (($resolvedUser->role ?? null) === 'admin')
+                || (method_exists($resolvedUser, 'isAdmin') && $resolvedUser->isAdmin())
+                || ($resolvedUser->is_admin ?? false)
             ));
         });
 
