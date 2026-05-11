@@ -359,7 +359,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->leftJoinSub($topicsAll, 'ta', function ($join) {
                 $join->on('ta.user_id', '=', 'u.id');
             })
-            ->selectRaw('u.id, u.slug, u.name, u.email, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
+            ->selectRaw('u.id, u.slug, u.name, u.email, u.phone, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
             ->selectRaw('g.name as grade_name, l.name as level_name')
             ->selectRaw('COALESCE(w.available,0) as wallet_available')
             ->selectRaw('COALESCE(w.withdrawn_pending,0) as wallet_withdrawn_pending')
@@ -396,6 +396,7 @@ class AdminQuizMasterAnalyticsController extends Controller
                     'slug' => $r->slug ?? null,
                     'name' => $r->name,
                     'email' => $r->email,
+                    'phone' => $r->phone,
                     'avatar' => $r->avatar,
                     'avatar_url' => $r->avatar,
                     'created_at' => $r->created_at,

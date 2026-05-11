@@ -337,7 +337,7 @@ class AdminQuizeeAnalyticsController extends Controller
             ->leftJoinSub($lastDaily, 'ld', function ($join) {
                 $join->on('ld.user_id', '=', 'u.id');
             })
-            ->selectRaw('u.id, u.name, u.email, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
+            ->selectRaw('u.id, u.name, u.email, u.phone, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
             ->selectRaw('u.points as points')
             ->selectRaw('q.points as profile_points')
             ->selectRaw('COALESCE(q.current_streak,0) as current_streak')
@@ -368,6 +368,7 @@ class AdminQuizeeAnalyticsController extends Controller
                     'id' => (int) $r->id,
                     'name' => $r->name,
                     'email' => $r->email,
+                    'phone' => $r->phone,
                     'avatar' => $r->avatar,
                     'created_at' => $r->created_at,
                     'level' => $r->level_name,

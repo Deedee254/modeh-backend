@@ -60,4 +60,33 @@ class NotificationController extends Controller
 
         return response()->json(['success' => true, 'id' => $id]);
     }
+
+    /**
+     * Get various counts for sidebar badges
+     */
+    public function counts(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(['unread_count' => 0]);
+
+        $counts = [
+            'unread_notifications' => $user->unreadNotifications()->count(),
+        ];
+
+        // Admin counts
+        if ($user->isAdmin()) {
+            $counts['pending_quizzes'] = \App\Models\Quiz::where('is_approved', false)->whereNotNull('approval_requested_at')->count();
+            $counts['flagged_questions'] = \App\Models\Question::whereHas('pendingFlags')->count();
+            $counts['approvals_total'] = $counts['pending_quizzes'] + $counts['flagged_questions'];
+        }
+
+        // Quiz Master counts
+        if ($user->role === 'quiz-master') {
+            $counts['my_flagged_questions'] = \App\Models\Question::where('created_by', $user->id)
+                ->whereHas('pendingFlags')
+                ->count();
+        }
+
+        return response()->json($counts);
+    }
 }

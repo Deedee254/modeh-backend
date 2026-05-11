@@ -221,6 +221,14 @@ class Question extends Model
     }
 
     /**
+     * Get the user who created this question
+     */
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
      * Optional level relationship — some questions are organized by level
      */
     public function level()

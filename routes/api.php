@@ -345,6 +345,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Question Flagging
     Route::post('/questions/{question}/flag', [\App\Http\Controllers\Api\QuestionFlagController::class, 'store']);
+    Route::get('/questions/flags/recent', [\App\Http\Controllers\Api\QuestionFlagController::class, 'recent']);
     Route::get('/questions/{question}/flags', [\App\Http\Controllers\Api\QuestionFlagController::class, 'index'])->middleware('can:viewFilament');
 
     // Generic uploads helper (used by frontend to upload files before attaching URLs)
@@ -355,6 +356,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Notifications
     Route::get('/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
+    Route::get('/notifications/counts', [\App\Http\Controllers\Api\NotificationController::class, 'counts']);
     Route::post('/notifications/{id}/mark-read', [\App\Http\Controllers\Api\NotificationController::class, 'markRead']);
 
     // Notification preferences (per-user)

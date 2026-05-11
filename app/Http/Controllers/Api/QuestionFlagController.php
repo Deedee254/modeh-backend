@@ -32,9 +32,20 @@ class QuestionFlagController extends Controller
         if ($pendingFlagsCount >= 3) {
             $question->update(['is_approved' => false]);
             
-            // Optionally notify quiz master
-            // Notification::send($question->author, new QuestionAutoUnapproved($question));
+            // Notify quiz master about auto-unapproval
+            if ($question->creator) {
+                $question->creator->notify(new \App\Notifications\QuestionAutoUnapproved($question));
+            }
+        } else {
+            // Notify quiz master about the flag
+            if ($question->creator) {
+                $question->creator->notify(new \App\Notifications\QuestionFlagged($question, $flag));
+            }
         }
+
+        // Also notify admins about the flag
+        $admins = \App\Models\User::where('role', 'admin')->get();
+        \Illuminate\Support\Facades\Notification::send($admins, new \App\Notifications\QuestionFlagged($question, $flag));
 
         return response()->json([
             'message' => 'Question flagged successfully.',
@@ -43,13 +54,34 @@ class QuestionFlagController extends Controller
         ]);
     }
 
-    /**
-     * List flags for a question (Admin only)
-     */
     public function index(Question $question)
     {
         // Admin middleware should be applied in routes
         $flags = $question->flags()->with('user:id,name,email')->latest()->get();
+
+        return response()->json([
+            'flags' => $flags
+        ]);
+    }
+
+    /**
+     * Get recent flags across the platform or for current user
+     */
+    public function recent(Request $request)
+    {
+        $user = $request->user();
+        $query = QuestionFlag::with(['question:id,body,quiz_id', 'user:id,name', 'question.quiz:id,title'])
+            ->latest();
+
+        if ($user->role === 'quiz-master') {
+            $query->whereHas('question', function ($q) use ($user) {
+                $q->where('created_by', $user->id);
+            });
+        } elseif (!$user->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $flags = $query->limit(10)->get();
 
         return response()->json([
             'flags' => $flags
