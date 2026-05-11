@@ -134,9 +134,8 @@ class LeaderboardController extends Controller
         } else {
             // Global/Contextual points leaderboard
             if ($startDate || $topicId || $subjectId) {
-                $query->withSum(['quizAttempts as timeframe_points' => $applyConstraints], 'points_earned');
                 $query->select(['id', 'name', 'email', 'social_avatar', 'avatar_url', 'created_at', 'role']);
-                $query->selectRaw('COALESCE(timeframe_points, 0) as points');
+                $query->withSum(['quizAttempts as points' => $applyConstraints], 'points_earned');
             } else {
                 $hasPointsColumn = \Schema::hasColumn('users', 'points');
                 if ($hasPointsColumn) {
