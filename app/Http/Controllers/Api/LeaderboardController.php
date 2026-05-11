@@ -43,9 +43,15 @@ class LeaderboardController extends Controller
             $quizId = \App\Models\Quiz::where('slug', $quizId)->value('id');
         }
 
-        // Resolve start date based on timeframe
+        // Resolve start/end dates based on timeframe or specific date
         $startDate = null;
-        if ($timeframe === 'daily') {
+        $endDate = null;
+        
+        $specificDate = $request->get('date');
+        if ($specificDate) {
+            $startDate = \Carbon\Carbon::parse($specificDate)->startOfDay();
+            $endDate = \Carbon\Carbon::parse($specificDate)->endOfDay();
+        } elseif ($timeframe === 'daily') {
             $startDate = now()->startOfDay();
         } elseif ($timeframe === 'weekly') {
             $startDate = now()->startOfWeek();
@@ -54,10 +60,13 @@ class LeaderboardController extends Controller
         }
 
         // Helper to apply common constraints to relationships (timeframe, context)
-        $applyConstraints = function($sub) use ($startDate, $quizId, $topicId, $subjectId) {
-            if ($startDate) {
+        $applyConstraints = function($sub) use ($startDate, $endDate, $quizId, $topicId, $subjectId) {
+            if ($startDate && $endDate) {
+                $sub->whereBetween('created_at', [$startDate, $endDate]);
+            } elseif ($startDate) {
                 $sub->where('created_at', '>=', $startDate);
             }
+            
             if ($quizId) {
                 $sub->where('quiz_id', $quizId);
             }
@@ -82,7 +91,9 @@ class LeaderboardController extends Controller
                 ->whereNotNull('score')
                 ->groupBy('user_id');
             
-            if ($startDate) {
+            if ($startDate && $endDate) {
+                $statsSub->whereBetween('created_at', [$startDate, $endDate]);
+            } elseif ($startDate) {
                 $statsSub->where('created_at', '>=', $startDate);
             }
 
@@ -92,7 +103,9 @@ class LeaderboardController extends Controller
                 ->where('quiz_id', $quizId)
                 ->whereNotNull('score');
             
-            if ($startDate) {
+            if ($startDate && $endDate) {
+                $bestTimesSub->whereBetween('created_at', [$startDate, $endDate]);
+            } elseif ($startDate) {
                 $bestTimesSub->where('created_at', '>=', $startDate);
             }
             
