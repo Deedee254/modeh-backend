@@ -101,7 +101,15 @@ class LeaderboardController extends Controller
                       $join->on('users.id', '=', 'best_times.user_id')
                            ->on('best_scores.max_score', '=', 'best_times.score');
                   })
-                  ->select(['users.*'])
+                  ->select([
+                      'users.id',
+                      'users.name',
+                      'users.email',
+                      'users.social_avatar',
+                      'users.avatar_url',
+                      'users.created_at',
+                      'users.role'
+                  ])
                   ->selectRaw('best_scores.max_score as points')
                   ->selectRaw('best_times.min_time as best_time');
             
