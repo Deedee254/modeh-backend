@@ -436,7 +436,7 @@ class AdminQuizeeAnalyticsController extends Controller
             ->leftJoin('quizees as q', 'q.user_id', '=', 'u.id')
             ->leftJoin('grades as g', 'g.id', '=', 'q.grade_id')
             ->leftJoin('levels as l', 'l.id', '=', 'q.level_id')
-            ->selectRaw('u.id, u.name, u.email, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.points as points, u.created_at')
+            ->selectRaw('u.id, u.name, u.email, u.phone, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.points as points, u.created_at')
             ->selectRaw('q.points as profile_points, COALESCE(q.current_streak,0) as current_streak, COALESCE(q.longest_streak,0) as longest_streak')
             ->selectRaw('g.name as grade_name, l.name as level_name')
             ->first();
@@ -445,7 +445,7 @@ class AdminQuizeeAnalyticsController extends Controller
             return response()->json(['ok' => false, 'message' => 'Not found'], 404);
 
         $attemptsQ = DB::table('quiz_attempts as a')
-            ->where('a.user_id', (int) $userId)
+            ->where('a.user_id', $user->id)
             ->whereBetween('a.created_at', [$fromTs, $toTs]);
 
         $attemptKpis = (clone $attemptsQ)
@@ -457,15 +457,15 @@ class AdminQuizeeAnalyticsController extends Controller
 
         $dailyQ = DB::table('daily_challenge_submissions as s')
             ->join('daily_challenges_cache as c', 'c.id', '=', 's.daily_challenge_cache_id')
-            ->where('s.user_id', (int) $userId)
+            ->where('s.user_id', $user->id)
             ->whereBetween('c.date', [$from, $to]);
 
         $dailyCount = (int) (clone $dailyQ)->count();
 
-        $badgeCount = (int) DB::table('user_badges')->where('user_id', (int) $userId)->count();
+        $badgeCount = (int) DB::table('user_badges')->where('user_id', $user->id)->count();
         $badges = DB::table('user_badges as ub')
             ->join('badges as b', 'b.id', '=', 'ub.badge_id')
-            ->where('ub.user_id', (int) $userId)
+            ->where('ub.user_id', $user->id)
             ->orderBy('ub.earned_at', 'desc')
             ->limit(20)
             ->get()
@@ -561,6 +561,7 @@ class AdminQuizeeAnalyticsController extends Controller
                     'id' => (int) $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    'phone' => $user->phone,
                     'avatar' => $user->avatar,
                     'created_at' => $user->created_at,
                     'level' => $user->level_name,

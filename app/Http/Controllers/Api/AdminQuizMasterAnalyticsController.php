@@ -467,7 +467,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->leftJoin('quiz_masters as qm', 'qm.user_id', '=', 'u.id')
             ->leftJoin('grades as g', 'g.id', '=', 'qm.grade_id')
             ->leftJoin('levels as l', 'l.id', '=', 'qm.level_id')
-            ->selectRaw('u.id, u.name, u.email, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
+            ->selectRaw('u.id, u.name, u.email, u.phone, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
             ->selectRaw('COALESCE(w.available,0) as wallet_available, COALESCE(w.withdrawn_pending,0) as wallet_withdrawn_pending, COALESCE(w.lifetime_earned,0) as wallet_lifetime_earned')
             ->selectRaw('g.name as grade_name, l.name as level_name')
             ->first();
@@ -619,6 +619,7 @@ class AdminQuizMasterAnalyticsController extends Controller
                     'id' => (int) $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    'phone' => $user->phone,
                     'avatar' => $user->avatar,
                     'created_at' => $user->created_at,
                     'grade' => $user->grade_name,
