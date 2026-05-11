@@ -26,7 +26,7 @@ class LeaderboardController extends Controller
      */
     public function index(Request $request)
     {
-        $timeframe = $request->get('timeframe', 'all-time');
+        $timeframe = $request->get('timeframe', 'all-time'); // all-time, daily, weekly, monthly
         $levelId = $request->get('level_id');
         $gradeId = $request->get('grade_id');
         $subjectId = $request->get('subject_id');
@@ -38,10 +38,31 @@ class LeaderboardController extends Controller
         $sortDir = strtolower($request->get('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
         $q = $request->get('q');
 
-        // NOTE: For now we use the users.points column as the authoritative "points" value
-        // (this corresponds to how AchievementService increments user points). Timeframe
-        // filters (daily/weekly/monthly) are not yet implemented and will return all-time
-        // results. This is a deliberate minimal implementation to match frontend needs.
+        // Resolve start date based on timeframe
+        $startDate = null;
+        if ($timeframe === 'daily') {
+            $startDate = now()->startOfDay();
+        } elseif ($timeframe === 'weekly') {
+            $startDate = now()->startOfWeek();
+        } elseif ($timeframe === 'monthly') {
+            $startDate = now()->startOfMonth();
+        }
+
+        // Helper to apply common constraints to relationships (timeframe, context)
+        $applyConstraints = function($sub) use ($startDate, $quizId, $topicId, $subjectId) {
+            if ($startDate) {
+                $sub->where('created_at', '>=', $startDate);
+            }
+            if ($quizId) {
+                $sub->where('quiz_id', $quizId);
+            }
+            if ($topicId || $subjectId) {
+                $sub->whereHas('quiz', function($q) use ($topicId, $subjectId) {
+                    if ($topicId) $q->where('topic_id', $topicId);
+                    if ($subjectId) $q->where('subject_id', $subjectId);
+                });
+            }
+        };
 
         $query = User::query()->where('role', 'quizee');
 
@@ -51,14 +72,24 @@ class LeaderboardController extends Controller
             $bestScoresSub = \DB::table('quiz_attempts')
                 ->select('user_id', \DB::raw('MAX(score) as max_score'))
                 ->where('quiz_id', $quizId)
-                ->whereNotNull('score')
-                ->groupBy('user_id');
+                ->whereNotNull('score');
+            
+            if ($startDate) {
+                $bestScoresSub->where('created_at', '>=', $startDate);
+            }
+            
+            $bestScoresSub->groupBy('user_id');
 
             $bestTimesSub = \DB::table('quiz_attempts')
                 ->select('user_id', 'score', \DB::raw('MIN(total_time_seconds) as min_time'))
                 ->where('quiz_id', $quizId)
-                ->whereNotNull('score')
-                ->groupBy('user_id', 'score');
+                ->whereNotNull('score');
+            
+            if ($startDate) {
+                $bestTimesSub->where('created_at', '>=', $startDate);
+            }
+            
+            $bestTimesSub->groupBy('user_id', 'score');
 
             $query->joinSub($bestScoresSub, 'best_scores', 'users.id', '=', 'best_scores.user_id')
                   ->joinSub($bestTimesSub, 'best_times', function ($join) {
@@ -73,18 +104,26 @@ class LeaderboardController extends Controller
             $sortBy = 'points';
         } else {
             // Global/Contextual points leaderboard
-            $hasPointsColumn = \Schema::hasColumn('users', 'points');
-            if ($hasPointsColumn) {
-                $query->select(['id', 'name', 'email', 'points', 'social_avatar', 'avatar_url', 'created_at', 'role']);
+            if ($startDate || $topicId || $subjectId) {
+                // aggregate points from attempts in the period/context
+                $query->withSum(['quizAttempts as timeframe_points' => $applyConstraints], 'points_earned');
+                
+                $query->select(['id', 'name', 'email', 'social_avatar', 'avatar_url', 'created_at', 'role']);
+                $query->selectRaw('COALESCE(timeframe_points, 0) as points');
             } else {
-                $query->selectRaw('id, name, email, 0 as points, social_avatar, avatar_url, created_at, role');
+                // All-time global leaderboard: use cached users.points column
+                $hasPointsColumn = \Schema::hasColumn('users', 'points');
+                if ($hasPointsColumn) {
+                    $query->select(['id', 'name', 'email', 'points', 'social_avatar', 'avatar_url', 'created_at', 'role']);
+                } else {
+                    $query->selectRaw('id, name, email, 0 as points, social_avatar, avatar_url, created_at, role');
+                }
             }
         }
 
-        // Add average score calculation
-        $query->withAvg('quizAttempts as average_score', 'score');
-        // We might also want to know how many attempts they've made
-        $query->withCount('quizAttempts as attempts_count');
+        // Add metrics: average score and attempts count
+        $query->withAvg(['quizAttempts as average_score' => $applyConstraints], 'score');
+        $query->withCount(['quizAttempts as attempts_count' => $applyConstraints]);
 
         if ($q) {
             $query->where(function ($sub) use ($q) {
@@ -107,27 +146,19 @@ class LeaderboardController extends Controller
             });
         }
 
-        // Filter by subject if provided
-        if ($subjectId) {
-            $query->whereHas('quizeeProfile', function ($sub) use ($subjectId) {
-                $sub->whereJsonContains('subjects', (int)$subjectId);
-            });
+        // Filter by topic if provided
+        if ($topicId && !$quizId) {
+            $query->whereHas('quizAttempts', $applyConstraints);
         }
 
-        // Filter by topic if provided (only if quizId is not already filtering attempts)
-        if ($topicId && !$quizId) {
-            $query->whereHas('quizAttempts', function ($sub) use ($topicId) {
-                $sub->whereHas('quiz', function ($quizSub) use ($topicId) {
-                    $quizSub->where('topic_id', $topicId);
-                });
-            });
+        // Filter by subject if provided
+        if ($subjectId && !$quizId) {
+            $query->whereHas('quizAttempts', $applyConstraints);
         }
 
         // Filter by quiz if provided (if we didn't already join above)
         if ($quizId && !str_contains($query->toSql(), 'join')) {
-            $query->whereHas('quizAttempts', function ($sub) use ($quizId) {
-                $sub->where('quiz_id', $quizId);
-            });
+            $query->whereHas('quizAttempts', $applyConstraints);
         }
 
         // Validate sort_by allowed values
@@ -190,5 +221,4 @@ class LeaderboardController extends Controller
             ]);
         }
     }
-}
 }
