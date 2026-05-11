@@ -469,7 +469,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->leftJoin('levels as l', 'l.id', '=', 'qm.level_id')
             ->selectRaw('u.id, u.name, u.email, u.phone, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.created_at')
             ->selectRaw('COALESCE(w.available,0) as wallet_available, COALESCE(w.withdrawn_pending,0) as wallet_withdrawn_pending, COALESCE(w.lifetime_earned,0) as wallet_lifetime_earned')
-            ->selectRaw('g.name as grade_name, l.name as level_name')
+            ->selectRaw('g.name as grade_name, l.name as level_name, qm.first_name, qm.last_name, qm.headline, qm.bio, qm.institution')
             ->first();
 
         if (!$user) return response()->json(['ok' => false, 'message' => 'Not found'], 404);
@@ -624,6 +624,11 @@ class AdminQuizMasterAnalyticsController extends Controller
                     'created_at' => $user->created_at,
                     'grade' => $user->grade_name,
                     'level' => $user->level_name,
+                    'first_name' => $user->first_name,
+                    'last_name' => $user->last_name,
+                    'headline' => $user->headline,
+                    'bio' => $user->bio,
+                    'institution' => $user->institution,
                     'wallet' => [
                         'available' => (float) ($user->wallet_available ?? 0),
                         'withdrawn_pending' => (float) ($user->wallet_withdrawn_pending ?? 0),

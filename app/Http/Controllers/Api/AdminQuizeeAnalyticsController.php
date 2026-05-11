@@ -438,7 +438,7 @@ class AdminQuizeeAnalyticsController extends Controller
             ->leftJoin('levels as l', 'l.id', '=', 'q.level_id')
             ->selectRaw('u.id, u.name, u.email, u.phone, COALESCE(u.avatar_url, u.social_avatar) as avatar, u.points as points, u.created_at')
             ->selectRaw('q.points as profile_points, COALESCE(q.current_streak,0) as current_streak, COALESCE(q.longest_streak,0) as longest_streak')
-            ->selectRaw('g.name as grade_name, l.name as level_name')
+            ->selectRaw('g.name as grade_name, l.name as level_name, q.first_name, q.last_name, q.dob, q.institution')
             ->first();
 
         if (!$user)
@@ -570,6 +570,10 @@ class AdminQuizeeAnalyticsController extends Controller
                     'profile_points' => (int) ($user->profile_points ?? 0),
                     'current_streak' => (int) ($user->current_streak ?? 0),
                     'longest_streak' => (int) ($user->longest_streak ?? 0),
+                    'first_name' => $user->first_name,
+                    'last_name' => $user->last_name,
+                    'dob' => $user->dob,
+                    'institution' => $user->institution,
                 ],
                 'kpis' => [
                     'attempts' => (int) ($attemptKpis->attempts ?? 0),
