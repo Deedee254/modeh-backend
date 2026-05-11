@@ -43,6 +43,7 @@ use App\Policies\QuizPolicy;
         Gate::policy(Tournament::class, TournamentPolicy::class);
         Gate::define('viewFilament', function ($user = null) {
             // Keep admin API + panel access aligned with the rest of the app's admin checks.
+            $user = $user ?? auth()->user() ?? auth('sanctum')->user();
             return (bool) ($user && (
                 (($user->role ?? null) === 'admin')
                 || (method_exists($user, 'isAdmin') && $user->isAdmin())

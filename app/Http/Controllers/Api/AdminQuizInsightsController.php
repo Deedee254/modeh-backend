@@ -8,7 +8,6 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Log;
 
 class AdminQuizInsightsController extends Controller
 {
@@ -31,7 +30,6 @@ class AdminQuizInsightsController extends Controller
             // ignore gate errors
         }
 
-        Log::info('[AdminQuizInsights] requireAdmin failed', ['user_id' => $user?->id ?? null, 'role' => $user?->role ?? null]);
         return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
     }
 
