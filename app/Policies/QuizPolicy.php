@@ -14,7 +14,7 @@ class QuizPolicy
     {
         // Owner (created_by or user_id) or admin
         if (($quiz->created_by && $quiz->created_by === $user->id) || ($quiz->user_id && $quiz->user_id === $user->id)) return true;
-        if (property_exists($user, 'is_admin') && $user->is_admin) return true;
+        if ($user->isAdmin()) return true;
         return false;
     }
 
@@ -24,7 +24,7 @@ class QuizPolicy
     public function update(User $user, Quiz $quiz)
     {
         if (($quiz->created_by && $quiz->created_by === $user->id) || ($quiz->user_id && $quiz->user_id === $user->id)) return true;
-        if (property_exists($user, 'is_admin') && $user->is_admin) return true;
+        if ($user->isAdmin()) return true;
         return false;
     }
 }
