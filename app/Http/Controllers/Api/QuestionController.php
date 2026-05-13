@@ -1105,6 +1105,17 @@ class QuestionController extends Controller
             if ($request->has($f))
                 $question->{$f} = $request->get($f);
         }
+
+        // Allow admins to toggle approval status during update
+        if ($user->isAdmin() && $request->has('is_approved')) {
+            $question->is_approved = $request->boolean('is_approved');
+            
+            // If approving, also resolve all pending flags
+            if ($question->is_approved) {
+                $question->pendingFlags()->update(['status' => 'resolved']);
+            }
+        }
+
         $question->save();
 
         if ($question->quiz_id) {
