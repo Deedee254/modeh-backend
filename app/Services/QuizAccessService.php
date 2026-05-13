@@ -83,13 +83,63 @@ class QuizAccessService
 
         // Paid public quiz - Use the unified price accessor from the model
         $price = $quiz->price;
+
+        // Check for personal subscriptions (Quizee plans)
+        $personalSub = \App\Models\Subscription::where('owner_type', \App\Models\User::class)
+            ->where('owner_id', $user->id)
+            ->where('status', 'active')
+            ->where(function($q) {
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
+            })
+            ->first();
+
+        if ($personalSub) {
+            // Check usage limits if applicable
+            $package = $personalSub->package;
+            if ($package) {
+                $features = $package->features ?? [];
+                $limits = $features['limits'] ?? [];
+                $limit = $limits['quiz_results'] ?? null;
+
+                if ($limit === null) {
+                    // Unlimited
+                    return [
+                        'can_access' => true,
+                        'is_free' => true,
+                        'institution_member' => false,
+                        'institution_id' => null,
+                        'price' => null,
+                        'message' => 'Free access via personal subscription (Unlimited)'
+                    ];
+                }
+
+                // Count usage today
+                $today = now()->startOfDay();
+                $used = \App\Models\QuizAttempt::where('user_id', $user->id)
+                    ->whereNotNull('score')
+                    ->where('created_at', '>=', $today)
+                    ->count();
+
+                if ($used < $limit) {
+                    return [
+                        'can_access' => true,
+                        'is_free' => true,
+                        'institution_member' => false,
+                        'institution_id' => null,
+                        'price' => null,
+                        'message' => "Free access via personal subscription ({$used}/{$limit} used)"
+                    ];
+                }
+            }
+        }
+
         return [
             'can_access' => true,
             'is_free' => false,
             'institution_member' => false,
             'institution_id' => null,
             'price' => $price,
-            'message' => "Pay-per-attempt required: {$price}"
+            'message' => $personalSub ? "Daily subscription limit reached ({$limit}). Pay-per-attempt required." : "Pay-per-attempt required: {$price}"
         ];
     }
 
