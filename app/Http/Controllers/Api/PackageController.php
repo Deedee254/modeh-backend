@@ -21,25 +21,35 @@ class PackageController extends Controller
             $q = $q->where('audience', $audience);
         }
         $packages = $q->get()->map(function ($p) {
-            return [
-                'id' => $p->id,
-                'title' => $p->title,
-                'name' => $p->name,
-                'description' => $p->description,
-                'short_description' => $p->short_description,
-                'price' => $p->price,
-                'price_display' => $p->price_display,
-                'currency' => $p->currency,
-                'features' => $p->features ?? [],
-                'duration_days' => $p->duration_days,
-                'cover_image' => $p->cover_image,
-                'more_link' => $p->more_link,
-                'is_active' => (bool) $p->is_active,
-                'slug' => $p->slug,
-                'audience' => $p->audience ?? 'quizee',
-            ];
+            return $this->transformPackage($p);
         });
         return response()->json(['packages' => $packages]);
+    }
+
+    public function show(Package $package)
+    {
+        return response()->json(['package' => $this->transformPackage($package)]);
+    }
+
+    private function transformPackage($p)
+    {
+        return [
+            'id' => $p->id,
+            'title' => $p->title,
+            'name' => $p->name,
+            'description' => $p->description,
+            'short_description' => $p->short_description,
+            'price' => $p->price,
+            'price_display' => $p->price_display,
+            'currency' => $p->currency,
+            'features' => $p->features ?? [],
+            'duration_days' => $p->duration_days,
+            'cover_image' => $p->cover_image,
+            'more_link' => $p->more_link,
+            'is_active' => (bool) $p->is_active,
+            'slug' => $p->slug,
+            'audience' => $p->audience ?? 'quizee',
+        ];
     }
 
     public function subscribe(Request $request, Package $package)
@@ -90,61 +100,59 @@ class PackageController extends Controller
      */
     private function resolveSubscriptionOwner(Request $request, $user): array
     {
-        $requestOwnerType = $request->input('owner_type', 'institution');
-        if ($requestOwnerType !== 'institution' && !\str_contains((string) $requestOwnerType, 'Institution')) {
-            return [
-                'error' => ['ok' => false, 'message' => 'Only institution package subscriptions are allowed'],
-                'status' => 422
-            ];
-        }
-
-        $institutionId = $request->input('owner_id');
-
-        $institution = null;
-        if ($institutionId) {
-            $instQuery = \App\Models\Institution::query();
-            if (\ctype_digit(\strval($institutionId))) {
-                $instQuery->where('id', (int)$institutionId);
+        $requestOwnerType = $request->input('owner_type');
+        
+        // If owner_type is specified and is an institution, resolve it
+        if ($requestOwnerType === 'institution' || ($requestOwnerType && \str_contains((string) $requestOwnerType, 'Institution'))) {
+            $institutionId = $request->input('owner_id');
+            $institution = null;
+            if ($institutionId) {
+                $instQuery = \App\Models\Institution::query();
+                if (\ctype_digit(\strval($institutionId))) {
+                    $instQuery->where('id', (int)$institutionId);
+                } else {
+                    $instQuery->where('slug', $institutionId);
+                }
+                $institution = $instQuery->first();
             } else {
-                $instQuery->where('slug', $institutionId);
+                $managed = $user->institutions()
+                    ->wherePivot('role', 'institution-manager')
+                    ->get(['institutions.id']);
+                if ($managed->count() === 1) {
+                    $institution = \App\Models\Institution::find($managed->first()->id);
+                } elseif ($managed->count() > 1) {
+                    return [
+                        'error' => ['ok' => false, 'message' => 'owner_id is required when managing multiple institutions'],
+                        'status' => 422
+                    ];
+                }
             }
-            $institution = $instQuery->first();
-        } else {
-            // If owner_id is omitted, infer from institutions the user manages.
-            $managed = $user->institutions()
-                ->wherePivot('role', 'institution-manager')
-                ->get(['institutions.id']);
-            if ($managed->count() === 1) {
-                $institution = \App\Models\Institution::find($managed->first()->id);
-            } elseif ($managed->count() > 1) {
+
+            if (!$institution) {
                 return [
-                    'error' => ['ok' => false, 'message' => 'owner_id is required when managing multiple institutions'],
-                    'status' => 422
+                    'error' => ['ok' => false, 'message' => 'Institution not found'],
+                    'status' => 404
                 ];
             }
+
+            // Verify user is institution manager
+            $isManager = $institution->users()
+                ->where('users.id', $user->id)
+                ->wherePivot('role', 'institution-manager')
+                ->exists();
+
+            if (!$isManager) {
+                return [
+                    'error' => ['ok' => false, 'message' => 'Forbidden: must be an institution-manager to subscribe on behalf of institution'],
+                    'status' => 403
+                ];
+            }
+
+            return [\App\Models\Institution::class, $institution->id];
         }
 
-        if (!$institution) {
-            return [
-                'error' => ['ok' => false, 'message' => 'Institution not found'],
-                'status' => 404
-            ];
-        }
-
-        // Verify user is institution manager
-        $isManager = $institution->users()
-            ->where('users.id', $user->id)
-            ->wherePivot('role', 'institution-manager')
-            ->exists();
-
-        if (!$isManager) {
-            return [
-                'error' => ['ok' => false, 'message' => 'Forbidden: must be an institution-manager to subscribe on behalf of institution'],
-                'status' => 403
-            ];
-        }
-
-        return [\App\Models\Institution::class, $institution->id];
+        // Default: subscribe as an individual user
+        return [\App\Models\User::class, $user->id];
     }
 
     /**
@@ -155,7 +163,11 @@ class PackageController extends Controller
         $packageAudience = $package->audience ?? 'quizee';
 
         if ($ownerType === \App\Models\Institution::class && $packageAudience !== 'institution') {
-            return ['ok' => false, 'message' => 'Package is not available for institutions'];
+            return ['ok' => false, 'message' => 'This package is not available for institutions'];
+        }
+
+        if ($ownerType === \App\Models\User::class && $packageAudience === 'institution') {
+            return ['ok' => false, 'message' => 'This package is only available for institutions'];
         }
 
         return true;

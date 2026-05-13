@@ -135,6 +135,7 @@ Route::get('/subjects/{subject}/topics', [\App\Http\Controllers\Api\SubjectContr
 Route::get('/sponsors', [\App\Http\Controllers\Api\SponsorController::class, 'index']);
 // Public packages listing for pricing page
 Route::get('/packages', [\App\Http\Controllers\Api\PackageController::class, 'index']);
+Route::get('/packages/{package}', [\App\Http\Controllers\Api\PackageController::class, 'show']);
 Route::get('/quiz-masters', [\App\Http\Controllers\Api\QuizMasterController::class, 'index']);
 Route::get('/quiz-masters/{id}', [\App\Http\Controllers\Api\QuizMasterController::class, 'show']);
 // quiz-master's followers (moved to authenticated group below)

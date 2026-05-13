@@ -419,8 +419,8 @@ class PaymentController extends Controller
             $this->createGuestUnlockToken($purchase);
         }
 
-        // Provision institution package subscription when package purchases are confirmed.
-        $this->provisionInstitutionPackageFromPurchase($purchase, $txId);
+        // Provision package subscription (institution or individual) when package purchases are confirmed.
+        $this->provisionPackageFromPurchase($purchase, $txId);
 
         $amount = $purchase->amount ?? 0;
 
@@ -434,6 +434,7 @@ class PaymentController extends Controller
             'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount),
             'battle' => $this->createTransactionForBattle($purchase, $txId, $amount),
             'tournament' => $this->createTransactionForTournament($purchase, $txId, $amount),
+            'package' => $this->createTransactionForPackage($purchase, $txId, $amount),
             default => $this->createGenericTransaction($purchase, $txId, $amount),
         };
 
@@ -534,9 +535,10 @@ class PaymentController extends Controller
     }
 
     /**
-     * Create/refresh an institution subscription when a package one-off purchase succeeds.
+     * Create/refresh a subscription when a package one-off purchase succeeds.
+     * Supports both institution and individual (quizee) packages.
      */
-    private function provisionInstitutionPackageFromPurchase(\App\Models\OneOffPurchase $purchase, string $txId): void
+    private function provisionPackageFromPurchase(\App\Models\OneOffPurchase $purchase, string $txId): void
     {
         if ($purchase->item_type !== 'package') {
             return;
@@ -544,8 +546,8 @@ class PaymentController extends Controller
 
         try {
             $package = Package::find($purchase->item_id);
-            if (!$package || ($package->audience ?? 'quizee') !== 'institution') {
-                Log::warning('[Payment] Package purchase ignored: invalid institution package', [
+            if (!$package) {
+                Log::warning('[Payment] Package purchase ignored: package not found', [
                     'purchase_id' => $purchase->id,
                     'package_id' => $purchase->item_id,
                 ]);
@@ -553,43 +555,58 @@ class PaymentController extends Controller
             }
 
             $meta = is_array($purchase->gateway_meta) ? $purchase->gateway_meta : [];
-            $institutionId = $meta['institution_id'] ?? null;
-            if (!$institutionId) {
-                Log::warning('[Payment] Package purchase ignored: missing institution_id', [
+            $audience = $package->audience ?? 'quizee';
+            
+            $ownerType = null;
+            $ownerId = null;
+
+            if ($audience === 'institution') {
+                $institutionId = $meta['institution_id'] ?? null;
+                if (!$institutionId) {
+                    Log::warning('[Payment] Package purchase ignored: missing institution_id', [
+                        'purchase_id' => $purchase->id,
+                    ]);
+                    return;
+                }
+                $ownerType = \App\Models\Institution::class;
+                $ownerId = $institutionId;
+            } else {
+                // Individual quizee package
+                $ownerType = \App\Models\User::class;
+                $ownerId = $purchase->user_id;
+            }
+
+            if (!$ownerId) {
+                Log::warning('[Payment] Package purchase ignored: missing owner_id', [
                     'purchase_id' => $purchase->id,
+                    'audience' => $audience
                 ]);
                 return;
             }
 
-            $institution = \App\Models\Institution::find($institutionId);
-            if (!$institution) {
-                Log::warning('[Payment] Package purchase ignored: institution not found', [
-                    'purchase_id' => $purchase->id,
-                    'institution_id' => $institutionId,
-                ]);
-                return;
-            }
-
-            $existingProvisioned = Subscription::where('owner_type', \App\Models\Institution::class)
-                ->where('owner_id', $institution->id)
+            // Check if already provisioned for this purchase
+            $existingProvisioned = Subscription::where('owner_type', $ownerType)
+                ->where('owner_id', $ownerId)
                 ->where('gateway_meta->purchase_id', $purchase->id)
                 ->first();
             if ($existingProvisioned) {
                 return;
             }
 
-            Subscription::where('owner_type', \App\Models\Institution::class)
-                ->where('owner_id', $institution->id)
+            // Cancel existing active subscriptions for this owner
+            Subscription::where('owner_type', $ownerType)
+                ->where('owner_id', $ownerId)
                 ->where('status', 'active')
                 ->update([
                     'status' => 'cancelled',
                     'ends_at' => now(),
                 ]);
 
+            // Create new subscription
             Subscription::create([
                 'user_id' => $purchase->user_id,
-                'owner_type' => \App\Models\Institution::class,
-                'owner_id' => $institution->id,
+                'owner_type' => $ownerType,
+                'owner_id' => $ownerId,
                 'package_id' => $package->id,
                 'status' => 'active',
                 'gateway' => 'one_off_purchase',
@@ -601,8 +618,15 @@ class PaymentController extends Controller
                 'started_at' => now(),
                 'ends_at' => $package->duration_days ? now()->addDays($package->duration_days) : null,
             ]);
+
+            Log::info('[Payment] Package provisioned successfully', [
+                'purchase_id' => $purchase->id,
+                'owner_type' => $ownerType,
+                'owner_id' => $ownerId,
+                'package_id' => $package->id,
+            ]);
         } catch (\Throwable $e) {
-            Log::error('[Payment] Failed provisioning institution package from purchase', [
+            Log::error('[Payment] Failed provisioning package from purchase', [
                 'purchase_id' => $purchase->id,
                 'error' => $e->getMessage(),
             ]);
@@ -1173,6 +1197,54 @@ class PaymentController extends Controller
                 'purchase_id' => $purchase->id,
                 'user_id' => $purchase->user_id,
                 'tournament_id' => $purchase->item_id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Create transaction for package one-off purchase.
+     */
+    private function createTransactionForPackage(\App\Models\OneOffPurchase $purchase, string $txId, float $amount)
+    {
+        try {
+            $affiliateReferral = $purchase->user_id
+                ? \App\Models\AffiliateReferral::where('user_id', $purchase->user_id)->first()
+                : null;
+            $referralCode = $affiliateReferral?->affiliate?->referral_code;
+
+            $package = \App\Models\Package::find($purchase->item_id);
+            $packageName = $package->name ?? 'Subscription Package';
+
+            // Process payment through TransactionService
+            $result = $this->transactionService->processPayment([
+                'user_id' => $purchase->user_id,
+                'amount' => $amount,
+                'referral_code' => $referralCode,
+                'gateway' => $purchase->gateway ?? 'mpesa',
+                'tx_id' => $txId,
+                'purchase_id' => $purchase->id,
+                'item_id' => $purchase->item_id,
+                'item_type' => 'package',
+                'description' => "Purchase of subscription package: {$packageName}",
+                'meta' => [
+                    'package_id' => $purchase->item_id,
+                    'audience' => $package->audience ?? null,
+                ],
+            ]);
+
+            Log::channel('payment')->info('[Payment] Package one-off purchase processed via TransactionService', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'package_id' => $purchase->item_id,
+                'amount' => $amount,
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('payment')->error('[Payment] Failed to process package one-off purchase', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'package_id' => $purchase->item_id,
                 'error' => $e->getMessage(),
             ]);
             throw $e;

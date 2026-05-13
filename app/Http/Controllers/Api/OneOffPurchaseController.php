@@ -228,7 +228,7 @@ class OneOffPurchaseController extends Controller
                 return $tournament ? (float) ($tournament->entry_fee ?? 0) : null;
             case 'package':
                 $package = \App\Models\Package::find($itemId);
-                if (!$package || ($package->audience ?? 'quizee') !== 'institution') return null;
+                if (!$package) return null;
                 return (float) ($package->price ?? 0);
             case 'performance_report':
                 return (float) ($pricingSetting->performance_report_price ?? 0.0);

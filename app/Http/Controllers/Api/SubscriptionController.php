@@ -27,7 +27,25 @@ class SubscriptionController extends Controller
 
         $user->loadMissing('institutions');
 
-        // Institution package subscriptions for institutions the user belongs to.
+        // 1. Personal subscriptions (owner_type = User)
+        $personalSubs = Subscription::with('package')
+            ->where('owner_type', \App\Models\User::class)
+            ->where('owner_id', $user->id)
+            ->where('status', 'active')
+            ->get()
+            ->map(function ($sub) {
+                return [
+                    'id' => $sub->id,
+                    'package_id' => $sub->package_id,
+                    'package' => $sub->package,
+                    'status' => $sub->status,
+                    'renews_at' => $sub->ends_at,
+                    'limit' => self::getPackageLimit($sub->package, 'quiz_results'),
+                    'type' => 'personal'
+                ];
+            });
+
+        // 2. Institution package subscriptions for institutions the user belongs to.
         $institutionSubs = [];
         if ($user->institutions && $user->institutions->count() > 0) {
             foreach ($user->institutions as $institution) {
@@ -52,21 +70,26 @@ class SubscriptionController extends Controller
             }
         }
 
-        // Calculate remaining for institution subscriptions
-        foreach ($institutionSubs as &$instSub) {
-            $limit = $instSub['limit'];
-            $used = $this->countTodayUsage($user->id);
-            $instSub['used'] = $used;
-            $instSub['remaining'] = $limit ? max(0, $limit - $used) : null;
+        // Combine all subscriptions
+        $allSubs = $personalSubs->concat($institutionSubs);
+
+        // Calculate usage for each subscription (simplistic approach: same usage for all)
+        $used = $this->countTodayUsage($user->id);
+        foreach ($allSubs as &$sub) {
+            $limit = $sub['limit'];
+            $sub['used'] = $used;
+            $sub['remaining'] = $limit ? max(0, $limit - $used) : null;
         }
 
-        $primarySub = $institutionSubs[0] ?? null;
+        $primarySub = $allSubs[0] ?? null;
 
         return response()->json([
             'ok' => true,
-            'subscriptions' => $institutionSubs,
+            'subscriptions' => $allSubs,
             'subscription' => $primarySub,
+            'personal_subscriptions' => $personalSubs,
             'institution_subscriptions' => $institutionSubs,
+            'has_subscription' => count($allSubs) > 0,
             'has_institution' => count($institutionSubs) > 0
         ]);
     }
