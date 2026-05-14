@@ -228,59 +228,62 @@ class Quiz extends Model
      * Return questions optionally shuffled and with answers shuffled per settings.
      * Supports a seed for deterministic shuffling.
      */
+    /**
+     * Return questions optionally shuffled and with answers shuffled per settings.
+     * Supports a seed for deterministic shuffling.
+     * Returns an array of standardized question data (public format).
+     */
     public function getPreparedQuestions(string $seed = '')
     {
         $questions = $this->questions()->where('is_approved', true)->get();
-        $qs = $questions->toArray();
+        $qs = $questions->all();
 
-        if ($this->shuffle_questions && $seed !== '') {
-            $qs = $this->baseSeededShuffle($qs, $seed . '::questions');
-        } elseif ($this->shuffle_questions) {
-            shuffle($qs);
-        }
-
-        if ($this->shuffle_answers) {
-            foreach ($qs as &$q) {
-                if (!empty($q['options']) && is_array($q['options'])) {
-                    $opts = $q['options'];
-                    
-                    if ($seed !== '') {
-                        $shuffledOpts = $this->baseSeededShuffle($opts, $seed . '::q' . $q['id']);
-                        // Map old indices to new indices
-                        $indexMap = [];
-                        foreach ($opts as $oldIdx => $opt) {
-                            $newIdx = array_search($opt, $shuffledOpts);
-                            if ($newIdx !== false) $indexMap[$oldIdx] = $newIdx;
-                        }
-                        $q['options'] = $shuffledOpts;
-                    } else {
-                        // fallback to non-deterministic shuffle
-                        $order = array_keys($opts);
-                        shuffle($order);
-                        $newOpts = [];
-                        $indexMap = [];
-                        foreach ($order as $newIndex => $oldIndex) {
-                            $newOpts[] = $opts[$oldIndex];
-                            $indexMap[$oldIndex] = $newIndex;
-                        }
-                        $q['options'] = $newOpts;
-                    }
-
-                    if (!empty($q['answers']) && is_array($q['answers'])) {
-                        $newAnswers = [];
-                        foreach ($q['answers'] as $ans) {
-                            if (isset($indexMap[$ans])) {
-                                $newAnswers[] = $indexMap[$ans];
-                                continue;
-                            }
-                            $newAnswers[] = $ans;
-                        }
-                        $q['answers'] = $newAnswers;
-                    }
-                }
+        if ($this->shuffle_questions) {
+            if ($seed !== '') {
+                $qs = $this->baseSeededShuffle($qs, $seed . '::questions');
+            } else {
+                shuffle($qs);
             }
         }
-        return $qs;
+
+        $prepared = [];
+        foreach ($qs as $q) {
+            if ($this->shuffle_answers && !empty($q->options)) {
+                $opts = $q->options;
+                $shuffledOpts = $opts;
+
+                if ($seed !== '') {
+                    $shuffledOpts = $this->baseSeededShuffle($opts, $seed . '::q' . $q->id);
+                } else {
+                    shuffle($shuffledOpts);
+                }
+
+                // Map old indices to new indices for answers
+                $indexMap = [];
+                foreach ($opts as $oldIdx => $opt) {
+                    $newIdx = array_search($opt, $shuffledOpts);
+                    if ($newIdx !== false) $indexMap[$oldIdx] = $newIdx;
+                }
+
+                // Update the model's attributes temporarily for toPublicArray
+                $q->options = $shuffledOpts;
+
+                if (!empty($q->answers) && is_array($q->answers)) {
+                    $newAnswers = [];
+                    foreach ($q->answers as $ans) {
+                        if (isset($indexMap[$ans])) {
+                            $newAnswers[] = $indexMap[$ans];
+                        } else {
+                            $newAnswers[] = $ans;
+                        }
+                    }
+                    $q->answers = $newAnswers;
+                }
+            }
+            $prepared[] = $q->toPublicArray();
+        }
+
+        return $prepared;
     }
 
 }

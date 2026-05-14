@@ -251,4 +251,29 @@ class Question extends Model
     {
         return $this->hasMany(QuestionFlag::class)->where('status', 'pending');
     }
+
+    /**
+     * Convert the question to a public array for quiz taking.
+     * This strips internal data and ensures a consistent structure.
+     * Use this in controllers when preparing quizzes for students/guests.
+     */
+    public function toPublicArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'type' => $this->type,
+            'body' => $this->body,
+            'options' => $this->options ?? [],
+            'media_path' => $this->media_path,
+            'media_type' => $this->media_type,
+            'media_metadata' => $this->media_metadata,
+            'youtube_url' => $this->youtube_url,
+            'explanation' => $this->explanation,
+            'difficulty' => (int)($this->difficulty ?? 3),
+            'marks' => (float)($this->marks ?? 1.0),
+            'parts' => $this->parts,
+            'fill_parts' => $this->fill_parts,
+            'topic_id' => $this->topic_id,
+        ];
+    }
 }

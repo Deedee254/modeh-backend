@@ -16,15 +16,21 @@ class QuestionResource extends JsonResource
         // Ensure options are in the form { option, text, is_correct }
         $opts = null;
         if (is_array($this->options)) {
-            $opts = array_values(array_map(function ($opt, $idx) {
+            $answers = is_array($this->answers) ? array_map('strval', $this->answers) : [];
+            $opts = array_values(array_map(function ($opt, $idx) use ($answers) {
                 if (is_array($opt)) {
                     $text = isset($opt['text']) ? (string) $opt['text'] : (isset($opt['option']) ? (string) $opt['option'] : '');
                     $media = $opt['media'] ?? $opt['media_path'] ?? null;
                     $mediaUrl = $media ? ((\Illuminate\Support\Str::startsWith($media, ['http://', 'https://', '/'])) ? $media : url('storage/' . $media)) : null;
+                    
+                    // Prioritize is_correct flag if it exists in the option array, 
+                    // otherwise fall back to checking if the index is in the answers array.
+                    $isCorrect = !empty($opt['is_correct']) || in_array((string)$idx, $answers, true);
+                    
                     return [
                         'option' => $text,
                         'text' => $text,
-                        'is_correct' => !empty($opt['is_correct']),
+                        'is_correct' => $isCorrect,
                         'media' => $media,
                         'media_url' => $mediaUrl,
                         'media_type' => $opt['media_type'] ?? null,
@@ -34,7 +40,7 @@ class QuestionResource extends JsonResource
                 return [
                     'option' => $text,
                     'text' => $text,
-                    'is_correct' => false,
+                    'is_correct' => in_array((string)$idx, $answers, true),
                 ];
             }, $this->options, array_keys($this->options)));
         }
@@ -52,6 +58,7 @@ class QuestionResource extends JsonResource
             'type' => $this->type ?? 'mcq',
             'question' => $this->body ?? '',
             'text' => $this->body ?? '',
+            'body' => $this->body ?? '',
             'marks' => isset($this->marks) ? (float) $this->marks : null,
             'difficulty' => isset($this->difficulty) ? (int) $this->difficulty : null,
             'options' => $opts,
@@ -64,10 +71,15 @@ class QuestionResource extends JsonResource
             'youtube_url' => $this->youtube_url ?? null,
             'created_by' => $this->created_by ?? null,
             'quiz_id' => $this->quiz_id ?? null,
+            'quiz_title' => $this->quiz->title ?? ($this->quiz->name ?? null),
             'subject_id' => $this->subject_id ?? null,
+            'subject_name' => $this->subject->name ?? null,
             'topic_id' => $this->topic_id ?? null,
+            'topic_name' => $this->topic->name ?? null,
             'grade_id' => $this->grade_id ?? null,
+            'grade_name' => $this->grade->name ?? null,
             'level_id' => $this->level_id ?? null,
+            'level_name' => $this->grade->level->name ?? ($this->level->name ?? null),
             'is_banked' => $this->is_banked ?? false,
             'is_approved' => $this->is_approved ?? false,
             'pending_flags_count' => $this->pendingFlags()->count(),

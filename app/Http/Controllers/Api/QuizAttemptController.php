@@ -16,6 +16,7 @@ use App\Services\InstitutionPackageUsageService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Auth;
 
 
 use App\Services\QuestionMarkingService;
@@ -108,52 +109,40 @@ class QuizAttemptController extends Controller
     }
     public function show(Request $request, Quiz $quiz)
     {
-        $user = $request->user();
+        $user = $request->user() ?: Auth::guard('sanctum')->user();
 
         // If the requester is authenticated and is the owner (created_by or user_id) or an admin,
         // return the full quiz with relations so the quiz-master UI can display metadata.
         if ($user) {
             $isOwner = false;
             try {
-                $isOwner = ($quiz->created_by && (string) $quiz->created_by === (string) $user->id) || ($quiz->user_id && (string) $quiz->user_id === (string) $user->id);
+                $isOwner = ($quiz->created_by && (string) $quiz->created_by === (string) $user?->id) || ($quiz->user_id && (string) $quiz->user_id === (string) $user?->id);
+        
+        // Security check: Only allow access to approved/published quizzes for non-owners
+        if (!$quiz->is_approved || $quiz->visibility !== 'published') {
+            if (!$user || !($isOwner || ($user->is_admin ?? false))) {
+                return response()->json(['message' => 'Quiz not found or not yet approved'], 404);
+            }
+        }
             } catch (\Exception $e) {
                 $isOwner = false;
             }
-            if ($isOwner || ($user->is_admin ?? false)) {
-                // Ensure the grade->level relation is loaded so the frontend can
-                // reconstruct level_id/level metadata when pre-filling the create form.
+
+            // If owner/admin AND not explicitly requesting "take" mode, return the full edit payload
+            if (($isOwner || ($user->is_admin ?? false)) && $request->input('mode') !== 'take') {
                 $quiz->load(['topic.subject', 'subject', 'grade.level', 'questions']);
                 return response()->json(['quiz' => $quiz]);
             }
         }
 
-        // Public / attempt view: Load questions and taxonomy so the frontend can display details.
-        // Use the model helper to prepare questions so server-side shuffling of questions
-        // and answers is applied when the quiz is configured to shuffle them.
+        // --- TAKING THE QUIZ ---
+        // For students (or owners in take mode), prepare the questions (shuffle, hide answers, etc.)
         $quiz->load(['topic.subject', 'subject', 'grade.level', 'questions', 'author']);
         $shuffleSeed = (string)$request->input('shuffle_seed', bin2hex(random_bytes(4)));
         $prepared = $quiz->getPreparedQuestions($shuffleSeed);
-        $questions = [];
-        foreach ($prepared as $q) {
-            $questions[] = [
-                'id' => isset($q['id']) ? $q['id'] : (isset($q->id) ? $q->id : null),
-                'type' => isset($q['type']) ? $q['type'] : (isset($q->type) ? $q->type : null),
-                'body' => isset($q['body']) ? $q['body'] : (isset($q->body) ? $q->body : (isset($q['text']) ? $q['text'] : '')),
-                'options' => isset($q['options']) ? $q['options'] : (isset($q->options) ? $q->options : []),
-                'media_path' => isset($q['media_path']) ? $q['media_path'] : (isset($q->media_path) ? $q->media_path : null),
-                'media' => isset($q['media']) ? $q['media'] : (isset($q->media) ? $q->media : null),
-                'youtube_url' => isset($q['youtube_url']) ? $q['youtube_url'] : (isset($q->youtube_url) ? $q->youtube_url : null),
-                'youtube' => isset($q['youtube']) ? $q['youtube'] : (isset($q->youtube) ? $q->youtube : null),
-                'marks' => isset($q['marks']) ? $q['marks'] : (isset($q->marks) ? $q->marks : 1),
-                // Never expose correct answers in the public take-quiz payload.
-                'answers' => [],
-                'option_mode' => isset($q['option_mode']) ? $q['option_mode'] : (isset($q->option_mode) ? $q->option_mode : null),
-                'is_approved' => isset($q['is_approved']) ? $q['is_approved'] : (isset($q->is_approved) ? $q->is_approved : null),
-            ];
-        }
 
         // Calculate total marks dynamically (defaulting to 1 per question if marks is null/0)
-        $totalMarks = $quiz->questions->reduce(function ($carry, $q) {
+        $totalMarks = $quiz->questions->where('is_approved', true)->reduce(function ($carry, $q) {
             return $carry + (floatval($q->marks) ?: 1.0);
         }, 0);
 
@@ -177,24 +166,21 @@ class QuizAttemptController extends Controller
                 'description' => $quiz->description,
                 'timer_seconds' => $quiz->timer_seconds,
                 'per_question_seconds' => $quiz->per_question_seconds,
-                'use_per_question_timer' => (bool) $quiz->use_per_question_timer,
+                'use_per_question_timer' => (bool)$quiz->use_per_question_timer,
                 'attempts_allowed' => $quiz->attempts_allowed,
-                'shuffle_questions' => (bool) $quiz->shuffle_questions,
-                'shuffle_answers' => (bool) $quiz->shuffle_answers,
+                'shuffle_questions' => (bool)$quiz->shuffle_questions,
+                'shuffle_answers' => (bool)$quiz->shuffle_answers,
                 'shuffle_seed' => $shuffleSeed,
-                // Expose multimedia fields publicly as requested
-                'youtube_url' => $quiz->youtube_url ?? null,
-                'video_url' => $quiz->video_url ?? null,
-                'cover_image' => $quiz->cover_image ?? null,
-                'questions' => $questions,
-                'questions_count' => count($questions),
-                'marks' => $totalMarks, // Ensure specific total marks are included
-                'is_paid' => (bool) $quiz->is_paid,
-                'one_off_price' => $quiz->one_off_price ?? null,
+                'youtube_url' => $quiz->youtube_url,
+                'cover_image' => $quiz->cover_image,
+                'questions' => $prepared,
+                'questions_count' => count($prepared),
+                'total_marks' => $totalMarks,
+                'marks' => $totalMarks, // Backward compatibility
+                'is_paid' => (bool)$quiz->is_paid,
+                'one_off_price' => $quiz->one_off_price,
                 'price' => $quiz->price,
-                // liked status
                 'liked' => $liked,
-                // Creator info
                 'created_by' => $quiz->author ? [
                     'id' => $quiz->author->id,
                     'name' => $quiz->author->name,
@@ -202,17 +188,17 @@ class QuizAttemptController extends Controller
                     'slug' => $quiz->author->username ?? $quiz->author->name ?? null,
                 ] : null,
                 'likes_count' => $quiz->likes_count ?? 0,
-                'topic' => $quiz->topic ?? null,
+                'topic' => $quiz->topic,
                 'topic_name' => $quiz->topic?->title ?? $quiz->topic?->name ?? null,
                 'topic_slug' => $quiz->topic?->slug ?? null,
-                'subject' => $quiz->subject ?? null,
+                'subject' => $quiz->subject ?? ($quiz->topic?->subject),
                 'subject_name' => $quiz->subject?->name ?? $quiz->topic?->subject?->name,
                 'subject_slug' => $quiz->subject?->slug ?? $quiz->topic?->subject?->slug,
-                'grade' => $quiz->grade ?? null,
+                'grade' => $quiz->grade,
                 'grade_name' => $quiz->grade?->name,
                 'grade_slug' => $quiz->grade?->slug,
-                'level_id' => $quiz->level_id ?? ($level ? ($level->id ?? null) : null),
-                'level' => $level ?? null,
+                'level_id' => $quiz->level_id ?? $level?->id,
+                'level' => $level,
                 'level_name' => $level ? ($level->name === 'Tertiary' ? ($level->course_name ?? $level->name) : $level->name) : null,
                 'level_slug' => $level?->slug,
             ]

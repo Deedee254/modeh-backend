@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Subject;
+use App\Models\Quiz;
+use App\Models\QuizAttempt;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class QuizMasterController extends Controller
 {
@@ -16,6 +19,7 @@ class QuizMasterController extends Controller
     public function index()
     {
         $request = request();
+        $currentUser = Auth::guard('sanctum')->user();
         
         // Start building the query for users with a quiz master profile
         $query = User::query()->whereHas('quizMasterProfile');
@@ -42,12 +46,35 @@ class QuizMasterController extends Controller
                     ->orWhereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%" . implode("%", $slugParts) . "%"]);
             });
             
-            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes' => function ($q) {
-                $q->where('is_approved', true)->where('visibility', 'published')->with('topic');
+            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes' => function ($q) use ($currentUser) {
+                // When eager loading for the list, we need to be careful with the user context.
+                // We'll use a subquery to handle the OR logic properly within the relationship constraint.
+                $q->where(function($query) use ($currentUser) {
+                    $query->where('is_approved', true)->where('visibility', 'published');
+                    if ($currentUser) {
+                        // Owners see their own quizzes; quizees see all published quizzes on profiles
+                        if ($currentUser->role === 'quizee' || $currentUser->is_admin) {
+                            $query->orWhere('visibility', 'published');
+                        } else {
+                            $query->orWhere('user_id', $currentUser->id)
+                                  ->orWhere('created_by', $currentUser->id);
+                        }
+                    }
+                })->with('topic');
             }])->get();
         } else {
-            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes' => function ($q) {
-                $q->where('is_approved', true)->where('visibility', 'published')->with('topic');
+            $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes' => function ($q) use ($currentUser) {
+                $q->where(function($query) use ($currentUser) {
+                    $query->where('is_approved', true)->where('visibility', 'published');
+                    if ($currentUser) {
+                        if ($currentUser->role === 'quizee' || $currentUser->is_admin) {
+                            $query->orWhere('visibility', 'published');
+                        } else {
+                            $query->orWhere('user_id', $currentUser->id)
+                                  ->orWhere('created_by', $currentUser->id);
+                        }
+                    }
+                })->with('topic');
             }])->paginate(12);
         }
 
@@ -123,6 +150,7 @@ class QuizMasterController extends Controller
                         'topic_name' => $topicName,
                         'is_paid' => (bool) $quiz->is_paid,
                         'price' => (float) $quiz->price,
+                        'is_approved' => (bool) $quiz->is_approved,
                     ];
                 });
             }
@@ -159,11 +187,38 @@ class QuizMasterController extends Controller
      */
     public function show(Request $request, string $id)
     {
-        // Find the user and eager-load all necessary relationships.
-        // Only load approved+published quizzes on this public endpoint
-        $user = User::with(['quizMasterProfile', 'quizzes' => function ($q) {
-            $q->where('is_approved', true)->where('visibility', 'published')->with('topic');
-        }])->findOrFail($id);
+        $currentUser = Auth::guard('sanctum')->user();
+
+        // Support finding by ID or by slug/name-pattern
+        $userQuery = User::query();
+        if (is_numeric($id)) {
+            $userQuery->where('id', $id);
+        } else {
+            $userQuery->where(function($q) use ($id) {
+                $q->whereRaw("LOWER(REPLACE(name, ' ', '-')) = LOWER(?)", [$id]);
+            });
+        }
+
+        $user = $userQuery->with(['quizMasterProfile', 'quizzes' => function ($q) use ($currentUser) {
+            $q->where(function($query) use ($currentUser) {
+                // By default, show approved and published
+                $query->where('is_approved', true)->where('visibility', 'published');
+                
+                if ($currentUser) {
+                    // Quiz Master viewing their own profile should see ALL their quizzes
+                    // Quizees (students) should see all PUBLISHED quizzes even if not approved
+                    // Admins see everything
+                    $query->orWhere(function($inner) use ($currentUser) {
+                        if ($currentUser->role === 'quizee' || $currentUser->is_admin) {
+                             $inner->where('visibility', 'published');
+                        } else {
+                             $inner->where('user_id', $currentUser->id)
+                                   ->orWhere('created_by', $currentUser->id);
+                        }
+                    });
+                }
+            })->with('topic');
+        }])->firstOrFail();
 
         // Ensure the user has a quiz master profile.
         if (!$user->quizMasterProfile) {
@@ -218,6 +273,7 @@ class QuizMasterController extends Controller
                     'topic_name' => $topicName,
                     'is_paid' => (bool) $quiz->is_paid,
                     'price' => (float) $quiz->price,
+                    'is_approved' => (bool) $quiz->is_approved,
                 ];
             }),
         ];
@@ -262,5 +318,33 @@ class QuizMasterController extends Controller
         }
 
         return response()->json(['data' => $data]);
+    }
+
+    /**
+     * Get statistics for a quizee relative to this quiz master's quizzes.
+     */
+    public function quizeeStats(Request $request, User $user)
+    {
+        $quizMaster = $request->user();
+        if (!$quizMaster || $quizMaster->role !== 'quiz-master') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Get IDs of quizzes created by this quiz master
+        $quizIds = Quiz::where('user_id', $quizMaster->id)
+            ->orWhere('created_by', $quizMaster->id)
+            ->pluck('id');
+
+        // Aggregate attempts by this user for these quizzes
+        $attempts = QuizAttempt::where('user_id', $user->id)
+            ->whereIn('quiz_id', $quizIds);
+
+        $totalAttempts = $attempts->count();
+        $avgScore = $totalAttempts > 0 ? round($attempts->avg('score'), 2) : 0;
+
+        return response()->json([
+            'quizzes_attempted' => $totalAttempts,
+            'avg_score' => $avgScore,
+        ]);
     }
 }

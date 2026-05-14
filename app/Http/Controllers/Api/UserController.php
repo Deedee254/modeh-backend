@@ -276,4 +276,39 @@ class UserController extends Controller
         $theme = $request->session()->get('theme', null);
         return response()->json(['theme' => $theme]);
     }
+
+    /**
+     * Return a single user profile with quizee details.
+     */
+    public function show(User $user)
+    {
+        $user->loadMissing(['quizeeProfile.grade', 'quizeeProfile.level', 'badges']);
+        
+        // Use the QuizeeProfile points if available, otherwise User points
+        $points = $user->quizeeProfile ? (int)$user->quizeeProfile->points : (int)($user->points ?? 0);
+        $level = \App\Models\QuizeeLevel::getLevel($points);
+        
+        // Calculate quizzes taken
+        $quizzesTaken = \App\Models\QuizAttempt::where('user_id', $user->id)->count();
+
+        return response()->json([
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'bio' => $user->bio,
+            'avatar_url' => $user->avatar_url,
+            'social_avatar' => $user->social_avatar,
+            'profile' => [
+                'bio' => $user->quizeeProfile?->bio ?? $user->bio,
+                'grade' => $user->quizeeProfile?->grade,
+                'institution' => $user->quizeeProfile?->institution,
+                'points' => $points,
+                'level' => $level ? $level->name : 'Beginner',
+                'quizzes_taken' => $quizzesTaken,
+                'subject_models' => $user->quizeeProfile?->subjectModels ?? [],
+            ],
+            'badges' => $user->badges ?? []
+        ]);
+    }
 }
+

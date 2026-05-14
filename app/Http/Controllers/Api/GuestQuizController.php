@@ -39,72 +39,44 @@ class GuestQuizController extends Controller
             ], 403);
         }
 
-        // Load questions with options
-        $quiz->load(['questions']);
+        // Load questions and taxonomy metadata
+        $quiz->load(['questions', 'topic.subject', 'subject', 'grade.level']);
 
         // Prepare questions (apply shuffling if configured)
         $shuffleSeed = (string)$request->input('shuffle_seed', bin2hex(random_bytes(4)));
         $prepared = $quiz->getPreparedQuestions($shuffleSeed);
-        $questions = [];
 
-        foreach ($prepared as $q) {
-            $questionData = [
-                'id' => $q['id'] ?? null,
-                'type' => $q['type'] ?? 'mcq',
-                'body' => $q['body'] ?? $q['text'] ?? '',
-                'marks' => $q['marks'] ?? 1,
-                'media_path' => $q['media_path'] ?? null,
-                'youtube_url' => $q['youtube_url'] ?? null,
-                'option_mode' => $q['option_mode'] ?? null,
-                'is_approved' => $q['is_approved'] ?? true,
-            ];
-
-            // Include options WITHOUT the is_correct field to prevent cheating
-            $options = $q['options'] ?? [];
-            $cleanedOptions = [];
-
-            if (is_array($options)) {
-                foreach ($options as $opt) {
-                    if (is_array($opt)) {
-                        $cleanedOption = [
-                            'id' => $opt['id'] ?? null,
-                            'text' => $opt['text'] ?? $opt['body'] ?? $opt['option'] ?? null,
-                        ];
-                        $cleanedOptions[] = array_filter($cleanedOption);
-                    } else {
-                        $cleanedOptions[] = $opt;
-                    }
-                }
-            }
-
-            $questionData['options'] = $cleanedOptions;
-            $questions[] = $questionData;
-        }
+        // expose taxonomy objects in the public payload (level may be nested under grade)
+        $level = $quiz->level ?? ($quiz->grade && $quiz->grade->level ? $quiz->grade->level : null);
 
         return response()->json([
             'quiz' => [
                 'id' => $quiz->id,
+                'slug' => $quiz->slug,
                 'title' => $quiz->title,
                 'description' => $quiz->description,
                 'timer_seconds' => $quiz->timer_seconds,
-                'shuffle_seed' => $shuffleSeed,
                 'per_question_seconds' => $quiz->per_question_seconds,
-                'use_per_question_timer' => (bool) $quiz->use_per_question_timer,
-                'shuffle_questions' => (bool) $quiz->shuffle_questions,
-                'shuffle_answers' => (bool) $quiz->shuffle_answers,
-                'is_paid' => (bool) $quiz->is_paid,
-                'one_off_price' => $quiz->one_off_price ?? null,
-                'default_quiz_one_off_price' => (function () use ($quiz) {
-                    try {
-                        $setting = \App\Models\PricingSetting::singleton();
-                        return (float) ($setting->default_quiz_one_off_price ?? 0);
-                    } catch (\Throwable $_) {
-                        return 0.0;
-                    }
-                })(),
+                'use_per_question_timer' => (bool)$quiz->use_per_question_timer,
+                'attempts_allowed' => $quiz->attempts_allowed,
+                'shuffle_questions' => (bool)$quiz->shuffle_questions,
+                'shuffle_answers' => (bool)$quiz->shuffle_answers,
+                'shuffle_seed' => $shuffleSeed,
+                'access' => $quiz->is_paid ? 'paywall' : 'free',
+                'is_paid' => (bool)$quiz->is_paid,
+                'one_off_price' => $quiz->one_off_price,
                 'price' => $quiz->price,
-                'questions' => $questions,
-            ],
+                'questions' => $prepared,
+                // Taxonomy Metadata (Human Readable)
+                'topic_name' => $quiz->topic?->title ?? $quiz->topic?->name ?? null,
+                'subject_name' => $quiz->subject?->name ?? $quiz->topic?->subject?->name,
+                'grade_name' => $quiz->grade?->name,
+                'level_name' => $level ? ($level->name === 'Tertiary' ? ($level->course_name ?? $level->name) : $level->name) : null,
+                'level_id' => $quiz->level_id ?? $level?->id,
+                'grade_id' => $quiz->grade_id,
+                'subject_id' => $quiz->subject_id,
+                'topic_id' => $quiz->topic_id,
+            ]
         ]);
     }
 

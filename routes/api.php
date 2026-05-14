@@ -285,6 +285,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/quiz-attempts/{attempt}/access', [\App\Http\Controllers\Api\QuizAttemptController::class, 'checkAttemptAccess']);
     // List authenticated user's quiz attempts (quizee)
     Route::get('/quiz-attempts', [\App\Http\Controllers\Api\QuizAttemptController::class, 'index']);
+    Route::get('/quiz-master/quizees/{user}/stats', [\App\Http\Controllers\Api\QuizMasterController::class, 'quizeeStats']);
     // Aggregated quiz stats for dashboard
     Route::get('/user/quiz-stats', [\App\Http\Controllers\Api\QuizAttemptController::class, 'getUserStats']);
 
@@ -518,6 +519,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/quiz-masters/{quiz_master}/unfollow', [\App\Http\Controllers\Api\InteractionController::class, 'unfollowQuizMaster']);
     // quiz-master followers (authenticated)
     Route::get('/quiz-master/followers', [\App\Http\Controllers\Api\InteractionController::class, 'quizMasterFollowers']);
+    Route::get('/quiz-master/quizees/{user}/stats', [\App\Http\Controllers\Api\QuizMasterController::class, 'quizeeStats']);
+    Route::get('/quizee/{user}/quiz-master-stats', [\App\Http\Controllers\Api\QuizMasterController::class, 'quizeeStats']);
+    Route::get('/users/{user}', [\App\Http\Controllers\Api\UserController::class, 'show']);
+
     // User's followed quiz masters (authenticated)
     Route::get('/user/following', [\App\Http\Controllers\Api\InteractionController::class, 'userFollowing']);
     // User's liked quizzes (authenticated)

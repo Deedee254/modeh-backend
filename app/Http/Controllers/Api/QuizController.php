@@ -112,8 +112,32 @@ class QuizController extends Controller
         }
 
         $this->finalizeQuizUpdate($quiz);
+        $this->clearQuizCache($user);
 
         return response()->json($quiz);
+    }
+
+    /**
+     * Clear quiz listing cache for the current user and guests
+     */
+    private function clearQuizCache($user = null): void
+    {
+        try {
+            if ($user) {
+                // Clear various possible index variations for this user
+                // (This is a bit broad but effective for standard dashboard filters)
+                Cache::forget('quizzes_index_' . md5(serialize(['mine' => '1']) . $user->id));
+                Cache::forget('quizzes_index_' . md5(serialize(['mine' => 1]) . $user->id));
+                Cache::forget('quizzes_index_' . md5(serialize([]) . $user->id));
+            }
+            // Also clear guest cache for public listings if needed
+            Cache::forget('quizzes_index_' . md5(serialize([]) . 'guest'));
+            
+            // Log cache clearing for debugging
+            Log::info('Quiz cache invalidated', ['user_id' => $user?->id]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to clear quiz cache: ' . $e->getMessage());
+        }
     }
 
     private function normalizeUpdateRequestData(Request $request): void
@@ -545,7 +569,7 @@ class QuizController extends Controller
     // Paginated list for quizzes with search and filter support
     public function index(Request $request)
     {
-        $user = $request->user();
+        $user = $request->user() ?: Auth::guard('sanctum')->user();
         // OPTIMIZED: Strategy B - Selective fields, Strategy A - Counts only
         // Eager-load topic->subject, grade, and level so frontend can access data directly
         // and include a questions_count and attempts_count for each quiz using withCount
@@ -985,7 +1009,7 @@ class QuizController extends Controller
                 }
                 if ($file) {
                     $mPath = Storage::disk('public')->putFile('question_media', $file);
-                    $mediaPath = Storage::url($mPath);
+                    $mediaPath = $mPath;
                     $mediaType = $file->getClientMimeType();
                 }
 
@@ -1019,7 +1043,16 @@ class QuizController extends Controller
                     'difficulty' => $q['difficulty'] ?? 3,
                     'marks' => isset($q['marks']) ? $q['marks'] : null,
                     'is_quiz-master_marked' => true,
-                    'is_approved' => false,
+                    'is_approved' => (function() use ($quiz) {
+                        try {
+                            $siteSettings = \App\Models\SiteSetting::current();
+                            $siteAutoQuestions = $siteSettings ? (bool) $siteSettings->auto_approve_questions : true;
+                            $topic = $quiz->topic ?? \App\Models\Topic::with('subject')->find($quiz->topic_id);
+                            return $siteAutoQuestions || ($topic && $topic->subject && (bool) ($topic->subject->auto_approve ?? false));
+                        } catch (\Throwable $_) {
+                            return false;
+                        }
+                    })(),
                     'is_banked' => $isBanked,
                     'level_id' => $quiz->level_id,
                     'grade_id' => $quiz->grade_id,
@@ -1092,6 +1125,8 @@ class QuizController extends Controller
             $quiz->save();
         }
 
+        $this->clearQuizCache($user);
+
         return response()->json(['quiz' => $quiz], 201);
     }
 
@@ -1106,6 +1141,8 @@ class QuizController extends Controller
 
         $quiz->is_approved = true;
         $quiz->save();
+
+        $this->clearQuizCache($quiz->user);
 
         return response()->json(['quiz' => $quiz]);
     }
@@ -1132,6 +1169,8 @@ class QuizController extends Controller
         }
 
         $quiz->save();
+
+        $this->clearQuizCache($quiz->user);
 
         // Notify owner if possible
         try {
