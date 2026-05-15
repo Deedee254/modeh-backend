@@ -259,12 +259,8 @@ class TournamentQuestionService
                     $optValue = $rowData[$k2];
                 }
                 // Add option if the column exists, even if empty (preserve alignment)
-                // But stop if we hit an empty option after finding at least one non-empty
                 if ($optValue !== null) {
                     $options[] = ['text' => trim((string)$optValue)];
-                } elseif (!empty($options)) {
-                    // Stop when we hit first gap after finding options
-                    break;
                 }
             }
         }
