@@ -11,11 +11,10 @@ class AdminTournamentAnalyticsController extends Controller
 {
     private function requireAdmin()
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        if (\Illuminate\Support\Facades\Gate::allows('viewFilament')) {
+            return null;
         }
-        return null;
+        return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
     }
 
     public function analytics(Request $request)

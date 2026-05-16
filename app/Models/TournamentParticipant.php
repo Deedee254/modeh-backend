@@ -22,4 +22,10 @@ class TournamentParticipant extends Model
     {
         return $this->belongsTo(Tournament::class, 'tournament_id');
     }
+
+    public function attempts()
+    {
+        return $this->hasMany(TournamentQualificationAttempt::class, 'user_id', 'user_id')
+            ->whereColumn('tournament_id', 'tournament_id');
+    }
 }

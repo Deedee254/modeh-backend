@@ -753,15 +753,15 @@ class AdminController extends Controller
             ->take($limit)
             ->get()
             ->map(function ($participant) {
-                $attempts = $participant->attempts ?? [];
+                $attempts = $participant->attempts ?? collect([]);
                 $bestScore = $attempts->max('score') ?? 0;
-                $attemptCount = count($attempts);
+                $attemptCount = $attempts->count();
 
                 return [
                     'id' => $participant->id,
                     'user_id' => $participant->user_id,
-                    'user_name' => $participant->user->name,
-                    'user_email' => $participant->user->email,
+                    'user_name' => $participant->user->name ?? 'Unknown',
+                    'user_email' => $participant->user->email ?? '',
                     'status' => $participant->status,
                     'rank' => $participant->rank,
                     'score' => (float) $participant->score,
@@ -771,12 +771,11 @@ class AdminController extends Controller
                         return [
                             'id' => $attempt->id,
                             'score' => (float) $attempt->score,
-                            'correct_answers' => $attempt->correct_answers,
-                            'total_questions' => $attempt->total_questions,
-                            'duration_seconds' => $attempt->duration_seconds,
-                            'created_at' => $attempt->created_at,
+                            'duration_seconds' => (int) $attempt->duration_seconds,
+                            'correct_answers' => (int) ($attempt->meta['correct_answers'] ?? 0),
+                            'created_at' => $attempt->created_at->toISOString(),
                         ];
-                    })->values(),
+                    }),
                     'joined_at' => $participant->created_at,
                 ];
             });

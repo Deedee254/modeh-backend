@@ -11,8 +11,7 @@ class AdminBattleController extends Controller
 {
     public function index(Request $request)
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
+        if (!\Illuminate\Support\Facades\Gate::allows('viewFilament')) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -100,8 +99,7 @@ class AdminBattleController extends Controller
 
     public function show(Request $request, $id)
     {
-        $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
+        if (!\Illuminate\Support\Facades\Gate::allows('viewFilament')) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 

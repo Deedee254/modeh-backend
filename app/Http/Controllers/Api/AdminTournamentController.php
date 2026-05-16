@@ -19,7 +19,7 @@ class AdminTournamentController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'required|string',
             'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
+            'end_date' => 'nullable|date|after:start_date',
             'prize_pool' => 'nullable|numeric|min:0',
             'max_participants' => 'nullable|integer|min:2|max:1000',
             'entry_fee' => 'nullable|numeric|min:0',
@@ -37,6 +37,19 @@ class AdminTournamentController extends Controller
             'round_delay_days' => 'nullable|integer|min:0|max:365',
         ]);
 
+        if (empty($data['end_date']) && !empty($data['start_date']) && !empty($data['qualifier_days'])) {
+            try {
+                $sd = \Illuminate\Support\Carbon::parse($data['start_date']);
+                $data['end_date'] = $sd->copy()->addDays((int) $data['qualifier_days']);
+            } catch (\Throwable $_) {
+            }
+        }
+
+        // If still no end date, we require it
+        if (empty($data['end_date'])) {
+             return response()->json(['message' => 'The end date or qualifier days are required.'], 422);
+        }
+
         $data['created_by'] = $request->user()->id;
         $data['status'] = 'upcoming';
         $data['qualifier_per_question_seconds'] = $data['qualifier_per_question_seconds'] ?? 30;
@@ -47,14 +60,6 @@ class AdminTournamentController extends Controller
         $data['bracket_slots'] = $data['bracket_slots'] ?? 8;
         $data['qualifier_days'] = array_key_exists('qualifier_days', $data) ? $data['qualifier_days'] : null;
         $data['round_delay_days'] = array_key_exists('round_delay_days', $data) ? $data['round_delay_days'] : null;
-
-        if (!isset($data['end_date']) && isset($data['start_date']) && $data['qualifier_days']) {
-            try {
-                $sd = \Illuminate\Support\Carbon::parse($data['start_date']);
-                $data['end_date'] = $sd->copy()->addDays((int) $data['qualifier_days']);
-            } catch (\Throwable $_) {
-            }
-        }
 
         $tournament = Tournament::create($data);
         return response()->json($tournament);
