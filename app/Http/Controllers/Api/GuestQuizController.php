@@ -176,7 +176,7 @@ class GuestQuizController extends Controller
             // Do not expose detailed per-question marking before purchase.
             $result['results'] = [];
         } else {
-            $result['results'] = $scoringResult['results'] ?? [];
+            $result['results'] = $this->formatResultsWithExplanations($scoringResult['results'] ?? [], $questions);
         }
 
         return response()->json([
@@ -309,13 +309,33 @@ class GuestQuizController extends Controller
             $storedFirst = is_array($stored) && count($stored) ? $stored[0] : null;
             $alreadyDetailed = is_array($storedFirst) && (array_key_exists('question_body', $storedFirst) || array_key_exists('is_correct', $storedFirst));
 
+            $questions = $attempt->quiz->questions()->get()->keyBy('id');
+
+            $formattedResults = [];
             if ($alreadyDetailed) {
-                $payload['results'] = $stored;
+                foreach ($stored as $result) {
+                    $qid = $result['question_id'] ?? null;
+                    $q = $qid ? $questions->get($qid) : null;
+                    if ($q) {
+                        $mediaUrl = $q->media_path ? ((\Illuminate\Support\Str::startsWith($q->media_path, ['http://', 'https://', '/'])) ? $q->media_path : \Storage::url($q->media_path)) : null;
+                        $result['media_path'] = $q->media_path;
+                        $result['media_url'] = $mediaUrl;
+                        $result['media_type'] = $q->media_type;
+                        $result['youtube_url'] = $q->youtube_url;
+                        $result['question_body'] = $q->body ?? $q->text ?? $result['question_body'] ?? '';
+                        $result['body'] = $q->body ?? $q->text ?? $result['body'] ?? '';
+                        $result['correct'] = isset($result['is_correct']) ? $result['is_correct'] : (isset($result['correct']) ? $result['correct'] : false);
+                        $result['is_correct'] = $result['correct'];
+                        if (!isset($result['correct_answers']) && isset($result['correct_answer'])) {
+                            $result['correct_answers'] = $result['correct_answer'];
+                        }
+                    }
+                    $formattedResults[] = $result;
+                }
             } else {
-                // Backward-compatible: older records stored minimal results (question_id/correct/marks)
-                $questions = $attempt->quiz->questions()->get();
-                $payload['results'] = $this->formatResultsWithExplanations(is_array($stored) ? $stored : [], $questions);
+                $formattedResults = $this->formatResultsWithExplanations(is_array($stored) ? $stored : [], $attempt->quiz->questions()->get());
             }
+            $payload['results'] = $formattedResults;
         }
 
         return response()->json([
@@ -344,14 +364,24 @@ class GuestQuizController extends Controller
             $optionMap = $this->markingService->buildOptionMap($question);
             $provided = $result['selected'] ?? null;
             
+            $mediaUrl = $question->media_path ? ((\Illuminate\Support\Str::startsWith($question->media_path, ['http://', 'https://', '/'])) ? $question->media_path : \Storage::url($question->media_path)) : null;
+            $isCorrect = $this->markingService->isAnswerCorrect($provided, $question->answers, $question);
+
             $formatted[] = [
                 'question_id' => $result['question_id'],
                 'question_body' => $question->body ?? $question->text ?? '',
-                'is_correct' => $this->markingService->isAnswerCorrect($provided, $question->answers, $question),
+                'body' => $question->body ?? $question->text ?? '',
+                'is_correct' => $isCorrect,
+                'correct' => $isCorrect,
                 'marks_earned' => $result['marks'] ?? (float)($question->marks ?: 1),
                 'explanation' => $question->explanation ?? null,
                 'provided' => $this->markingService->formatExplanationAnswers($provided, $optionMap),
                 'correct_answer' => $this->markingService->formatExplanationAnswers($question->answers, $optionMap),
+                'correct_answers' => $this->markingService->formatExplanationAnswers($question->answers, $optionMap),
+                'media_path' => $question->media_path,
+                'media_url' => $mediaUrl,
+                'media_type' => $question->media_type,
+                'youtube_url' => $question->youtube_url,
             ];
         }
 

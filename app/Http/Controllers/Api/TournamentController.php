@@ -757,13 +757,6 @@ class TournamentController extends Controller
             return;
         }
 
-        // Additional safety: only finalize if there are at least some participants
-        // This prevents premature finalization if tournament hasn't actually started
-        $participantCount = $tournament->participants()->count();
-        if ($participantCount === 0) {
-            return;
-        }
-
         $winnerAttempt = $this->latestAttemptsQuery($tournament)
             ->orderByDesc('score')
             ->orderByRaw('CASE WHEN duration_seconds IS NULL THEN 2147483647 ELSE duration_seconds END ASC')

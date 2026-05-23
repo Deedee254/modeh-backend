@@ -37,10 +37,10 @@ class AdminTournamentController extends Controller
             'round_delay_days' => 'nullable|integer|min:0|max:365',
         ]);
 
-        if (empty($data['end_date']) && !empty($data['start_date']) && !empty($data['qualifier_days'])) {
+        if (!empty($data['start_date']) && !empty($data['qualifier_days'])) {
             try {
                 $sd = \Illuminate\Support\Carbon::parse($data['start_date']);
-                $data['end_date'] = $sd->copy()->addDays((int) $data['qualifier_days']);
+                $data['end_date'] = $sd->copy()->addDays((int) $data['qualifier_days'])->toDateTimeString();
             } catch (\Throwable $_) {
             }
         }
@@ -90,15 +90,17 @@ class AdminTournamentController extends Controller
             'round_delay_days' => 'nullable|integer|min:0|max:365',
         ]);
 
-        $tournament->update($data);
-
-        if (!$tournament->end_date && $tournament->start_date && isset($data['qualifier_days']) && $data['qualifier_days']) {
+        if (isset($data['qualifier_days']) && $data['qualifier_days'] > 0) {
             try {
-                $tournament->end_date = \Illuminate\Support\Carbon::parse($tournament->start_date)->addDays((int) $data['qualifier_days']);
-                $tournament->save();
+                $startDate = $data['start_date'] ?? $tournament->start_date;
+                if ($startDate) {
+                    $data['end_date'] = \Illuminate\Support\Carbon::parse($startDate)->addDays((int) $data['qualifier_days'])->toDateTimeString();
+                }
             } catch (\Throwable $_) {
             }
         }
+
+        $tournament->update($data);
 
         return response()->json($tournament);
     }
