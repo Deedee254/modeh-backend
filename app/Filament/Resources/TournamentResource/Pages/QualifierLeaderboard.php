@@ -22,41 +22,14 @@ class QualifierLeaderboard extends Page implements HasTable
 
     public ?Tournament $record = null;
 
-    /**
-     * Array of user IDs who will qualify (top N according to bracket_slots)
-     * Computed at mount time so table row rendering can highlight them.
-     * @var array<int>
-     */
-    protected array $qualifierIds = [];
-
     public function mount(Tournament $record): void
     {
         $this->record = $record;
-
-        // Pre-compute top qualifiers (unique users) based on existing qualification attempts
-        try {
-            $slots = (int) ($this->record->bracket_slots ?? 8);
-            $attempts = \App\Models\TournamentQualificationAttempt::where('tournament_id', $this->record->id)
-                ->orderByDesc('score')
-                ->orderBy('duration_seconds')
-                ->get();
-
-            if ($attempts->isNotEmpty()) {
-                $selected = $attempts->groupBy('user_id')->map(function($g) { return $g->first(); })->values();
-                $selected = $selected->take($slots);
-                $this->qualifierIds = $selected->pluck('user_id')->toArray();
-            }
-        } catch (\Throwable $_) {
-            // non-fatal: leave qualifierIds empty and fallback to no highlighting
-            $this->qualifierIds = [];
-        }
     }
 
     public function table(Table $table): Table
     {
         return $table
-            // Highlight qualified rows green and non-qualified rows red
-            ->rowClasses(fn ($record) => in_array($record->user_id, $this->qualifierIds) ? 'bg-emerald-50' : 'bg-rose-50')
             ->query(
                 $this->record
                     ->qualificationAttempts()
@@ -101,11 +74,6 @@ class QualifierLeaderboard extends Page implements HasTable
                         default => 'gray',
                     })
                     ->sortable(),
-                Tables\Columns\BadgeColumn::make('is_qualified')
-                    ->label('Qualified')
-                    ->getStateUsing(fn ($record) => in_array($record->user_id, $this->qualifierIds) ? 'Yes' : 'No')
-                    ->color(fn ($state) => $state === 'Yes' ? 'success' : 'danger')
-                    ->sortable(false),
             ])
             ->filters([
                 Tables\Filters\Filter::make('status')

@@ -261,71 +261,42 @@ class TournamentResource extends Resource
     {
         return [
             Section::make('Tournament Configuration')
-                ->description('Configure timing, question counts, and bracket settings')
+                ->description('Configure qualifier timing, question counts, and duration')
                 ->columnSpan('full')
                 ->schema([
-                    Grid::make(2)->schema([
-                        Grid::make(1)->schema([
-                            Forms\Components\TextInput::make('qualifier_per_question_seconds')
-                                ->label('Qualifier: Seconds per Question')
-                                ->numeric()
-                                ->minValue(5)
-                                ->maxValue(300)
-                                ->default(30)
-                                ->helperText('Time allowed per question in qualifier phase (5-300 seconds)'),
+                    Forms\Components\TextInput::make('qualifier_per_question_seconds')
+                        ->label('Qualifier: Seconds per Question')
+                        ->numeric()
+                        ->minValue(5)
+                        ->maxValue(300)
+                        ->default(30)
+                        ->helperText('Time allowed per question in qualifier phase (5-300 seconds)'),
 
-                            Forms\Components\TextInput::make('qualifier_question_count')
-                                ->label('Qualifier: Number of Questions')
-                                ->numeric()
-                                ->minValue(1)
-                                ->maxValue(100)
-                                ->default(10)
-                                ->helperText('How many questions in qualifier phase (1-100)'),
+                    Forms\Components\TextInput::make('qualifier_question_count')
+                        ->label('Qualifier: Number of Questions')
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(100)
+                        ->default(10)
+                        ->helperText('How many questions in qualifier phase (1-100)'),
 
-                            Forms\Components\Select::make('qualifier_tie_breaker')
-                                ->label('Qualifier: Tie-Breaker Rule')
-                                ->options([
-                                    'score_then_duration' => 'Score (higher) then Speed (faster)',
-                                    'duration' => 'Speed (faster only)',
-                                ])
-                                ->default('score_then_duration')
-                                ->helperText('How to rank participants with same scores'),
+                    Forms\Components\Select::make('qualifier_tie_breaker')
+                        ->label('Qualifier: Tie-Breaker Rule')
+                        ->options([
+                            'score_then_duration' => 'Score (higher) then Speed (faster)',
+                            'duration' => 'Speed (faster only)',
+                        ])
+                        ->default('score_then_duration')
+                        ->helperText('How to rank participants with same scores'),
 
-                            Forms\Components\TextInput::make('qualifier_days')
-                                ->label('Qualifier Duration (Days)')
-                                ->numeric()
-                                ->minValue(1)
-                                ->default(7)
-                                ->helperText('Number of days the qualifier phase runs before battles are generated'),
-                        ]),
-
-                        Grid::make(1)->schema([
-                            Forms\Components\TextInput::make('battle_per_question_seconds')
-                                ->label('Battle: Seconds per Question')
-                                ->numeric()
-                                ->minValue(5)
-                                ->maxValue(300)
-                                ->default(30)
-                                ->helperText('Time allowed per question in battle phase (5-300 seconds)'),
-
-                            Forms\Components\TextInput::make('battle_question_count')
-                                ->label('Battle: Number of Questions')
-                                ->numeric()
-                                ->minValue(1)
-                                ->maxValue(100)
-                                ->default(10)
-                                ->helperText('How many questions per battle (1-100)'),
-
-                            Forms\Components\TextInput::make('round_delay_days')
-                                ->label('Days Between Rounds')
-                                ->numeric()
-                                ->minValue(1)
-                                ->default(3)
-                                ->helperText('Number of days between closing one round and generating the next'),
-                        ]),
-                    ]),
+                    Forms\Components\TextInput::make('qualifier_days')
+                        ->label('Qualifier Duration (Days)')
+                        ->numeric()
+                        ->minValue(1)
+                        ->default(7)
+                        ->helperText('Number of days the qualifier phase runs'),
                 ])
-                ->columns(1)
+                ->columns(2)
                 ->collapsible(),
         ];
     }

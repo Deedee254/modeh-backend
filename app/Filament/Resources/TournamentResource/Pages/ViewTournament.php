@@ -20,7 +20,7 @@ class ViewTournament extends ViewRecord
             EditAction::make()
                 ->visible(fn () => $this->record->status === 'upcoming'),
             Action::make('view_leaderboard')
-                ->label('Battle Leaderboard')
+                ->label('Tournament Leaderboard')
                 ->url(fn () => route('filament.admin.resources.tournaments.leaderboard', $this->record))
                 ->openUrlInNewTab()
                 ->visible(fn () => in_array($this->record->status, ['active', 'completed']))
@@ -84,7 +84,7 @@ class ViewTournament extends ViewRecord
 
             // Configuration Section
             Section::make('Tournament Configuration')
-                ->columns(3)
+                ->columns(2)
                 ->schema([
                     Placeholder::make('qualifier_question_count')
                         ->label('Qualifier Questions')
@@ -94,17 +94,9 @@ class ViewTournament extends ViewRecord
                         ->label('Qualifier Time/Q')
                         ->content(fn () => ($this->record->qualifier_per_question_seconds ?? '30') . 's'),
                     
-                    Placeholder::make('battle_question_count')
-                        ->label('Battle Questions')
-                        ->content(fn () => (string) ($this->record->battle_question_count ?? '10')),
-                    
-                    Placeholder::make('battle_per_question_seconds')
-                        ->label('Battle Time/Q')
-                        ->content(fn () => ($this->record->battle_per_question_seconds ?? '30') . 's'),
-                    
-                    Placeholder::make('bracket_slots')
-                        ->label('Bracket Slots')
-                        ->content(fn () => (string) ($this->record->bracket_slots ?? '8')),
+                    Placeholder::make('qualifier_days')
+                        ->label('Qualifier Duration')
+                        ->content(fn () => ($this->record->qualifier_days ?? '7') . ' days'),
                     
                     Placeholder::make('qualifier_tie_breaker')
                         ->label('Tie-Breaker')
@@ -113,7 +105,7 @@ class ViewTournament extends ViewRecord
 
             // Statistics Section
             Section::make('Tournament Statistics')
-                ->columns(4)
+                ->columns(2)
                 ->schema([
                     Placeholder::make('participants_count')
                         ->label('Participants')
@@ -122,14 +114,6 @@ class ViewTournament extends ViewRecord
                     Placeholder::make('questions_count')
                         ->label('Questions')
                         ->content(fn () => (string) ($this->record->questions_count ?? '0')),
-                    
-                    Placeholder::make('battles_count')
-                        ->label('Battles')
-                        ->content(fn () => (string) ($this->record->battles_count ?? '0')),
-                    
-                    Placeholder::make('current_round')
-                        ->label('Current Round')
-                        ->content(fn () => (string) ($this->record->current_round ?? '0')),
                 ]),
 
             // Sponsor Section
