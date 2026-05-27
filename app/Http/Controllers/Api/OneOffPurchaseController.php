@@ -23,7 +23,7 @@ class OneOffPurchaseController extends Controller
         if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
 
         $data = $request->validate([
-            'item_type' => 'required|in:quiz,battle,tournament,package',
+            'item_type' => 'required|in:quiz,battle,tournament,package,performance_report',
             'item_id' => 'required',
             'amount' => 'nullable|numeric',
             'phone' => 'nullable|string',
