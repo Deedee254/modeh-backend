@@ -54,6 +54,23 @@ class TournamentController extends Controller
         $isParticipant = $user ? $tournament->participants()->where('user_id', $user->id)->exists() : false;
         $tournament->is_participant = $isParticipant;
 
+        if (request()->query('start_attempt') && $user) {
+            $participant = $tournament->participants()->where('user_id', $user->id)->first();
+            $isPaid = $participant && ($participant->pivot->status ?? 'pending_payment') === 'paid';
+            
+            if ($isPaid) {
+                $attemptsUsed = \App\Models\TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+                    ->where('user_id', $user->id)
+                    ->count();
+                
+                if ($attemptsUsed < self::SIMPLE_FLOW_MAX_ATTEMPTS) {
+                    $cacheKey = "t_attempt_started_{$tournament->id}_{$user->id}";
+                    // Store start time only if it doesn't already exist to prevent resetting on page refreshes
+                    \Illuminate\Support\Facades\Cache::add($cacheKey, now(), now()->addHours(2));
+                }
+            }
+        }
+
         $eligibility = [
             'can_join' => false,
             'reason' => null,
@@ -130,6 +147,8 @@ class TournamentController extends Controller
                         $q->corrects = $newIndices;
                     }
                 }
+
+                $q->makeHidden(['correct', 'corrects', 'answers', 'explanation']);
 
                 return $q;
             })->toArray();
@@ -475,12 +494,26 @@ class TournamentController extends Controller
             $computedScore += (float) ($answerData['points'] ?? 0);
         }
 
+        $cacheKey = "t_attempt_started_{$tournament->id}_{$user->id}";
+        $startedAt = \Illuminate\Support\Facades\Cache::get($cacheKey);
+        
+        if ($startedAt) {
+            $startedAt = \Illuminate\Support\Carbon::parse($startedAt);
+            $durationSeconds = now()->diffInSeconds($startedAt);
+            \Illuminate\Support\Facades\Cache::forget($cacheKey);
+        } else {
+            // Secure fallback to client duration, capped at maximum allowed time plus buffer
+            $clientDuration = intval($data['duration_seconds'] ?? 0);
+            $maxAllowed = ($tournament->qualifier_per_question_seconds ?? 30) * ($tournament->qualifier_question_count ?? 10);
+            $durationSeconds = min($clientDuration, $maxAllowed + 60);
+        }
+
         $attempt = TournamentQualificationAttempt::create([
             'tournament_id' => $tournament->id,
             'user_id' => $user->id,
             'score' => round($computedScore, 2),
             'answers' => $answersToStore,
-            'duration_seconds' => $data['duration_seconds'] ?? null,
+            'duration_seconds' => $durationSeconds,
         ]);
 
         // Resolve answer text for the response payload
@@ -508,9 +541,66 @@ class TournamentController extends Controller
 
         $this->maybeFinalizeSimpleFlowTournament($tournament->fresh());
 
+        $mappedQuestions = $tournament->questions()->get()->map(function ($q) use ($shuffleSeed) {
+            $q = clone $q;
+            $opts = [];
+            if (is_array($q->options)) {
+                $opts = $q->options;
+            } elseif (is_string($q->options)) {
+                $decoded = json_decode((string) $q->options, true);
+                if (is_array($decoded)) {
+                    $opts = $decoded;
+                }
+            }
+
+            if (!empty($opts)) {
+                $correctValues = [];
+                $isMcq = $q->type === 'mcq';
+                $isMulti = $q->type === 'multi';
+
+                if ($isMcq && !is_null($q->correct) && isset($opts[$q->correct])) {
+                    $correctValues[] = $opts[$q->correct];
+                } elseif ($isMulti && !empty($q->corrects)) {
+                    $indices = is_array($q->corrects) ? $q->corrects : json_decode($q->corrects, true);
+                    if (is_array($indices)) {
+                        foreach ($indices as $idx) {
+                            if (isset($opts[$idx])) {
+                                $correctValues[] = $opts[$idx];
+                            }
+                        }
+                    }
+                }
+
+                $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
+                $q->options = $shuffled;
+
+                if ($isMcq && !empty($correctValues)) {
+                    $newIdx = array_search($correctValues[0], $shuffled);
+                    if ($newIdx !== false) {
+                        $q->correct = $newIdx;
+                    }
+                } elseif ($isMulti && !empty($correctValues)) {
+                    $newIndices = [];
+                    foreach ($correctValues as $val) {
+                        $newIdx = array_search($val, $shuffled);
+                        if ($newIdx !== false) {
+                            $newIndices[] = $newIdx;
+                        }
+                    }
+                    sort($newIndices);
+                    $q->corrects = $newIndices;
+                }
+            }
+            
+            $q->makeVisible(['correct', 'corrects', 'answers', 'explanation']);
+            return $q;
+        })->toArray();
+        $questionsWithAnswers = $this->seededShuffle($mappedQuestions, $shuffleSeed);
+
         return response()->json([
             'message' => 'Tournament attempt recorded',
             'attempt' => array_merge($attempt->toArray(), ['answers' => $resolvedAnswers]),
+            'questions' => $questionsWithAnswers,
             'rank' => $rank,
             'attempts_used' => $attemptsUsed,
             'attempts_remaining' => max(0, self::SIMPLE_FLOW_MAX_ATTEMPTS - $attemptsUsed),

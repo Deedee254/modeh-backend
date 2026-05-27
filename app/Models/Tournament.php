@@ -241,160 +241,71 @@ class Tournament extends Model
     }
 
     /**
-     * Calculate recommended and minimum question counts based on tournament size
-     * For single elimination: each round has half the battles of the previous
-     * Round 1: N/2 battles, Round 2: N/4 battles, etc.
+     * Calculate recommended and minimum question counts based on tournament qualifier settings.
+     * Since the tournament is qualifier-only (static quiz flow), we simply need enough questions
+     * in the pool to satisfy the configured quiz length.
      * 
      * @return array ['minimum' => int, 'optimum' => int, 'current' => int, 'breakdown' => array]
      */
     public function getQuestionRecommendations(): array
     {
-        $participantCount = $this->participants()->count();
-        $questionPerBattle = $this->battle_question_count ?? 10;
-        
-        if ($participantCount < 2) {
-            return [
-                'minimum' => $questionPerBattle,
-                'optimum' => $questionPerBattle,
-                'current' => $this->questions()->count(),
-                'breakdown' => [],
-                'message' => 'Need at least 2 participants to calculate'
-            ];
-        }
-
-        // Calculate for single elimination tournament
-        $breakdown = [];
-        $totalMinimum = 0;
-        $totalOptimum = 0;
-        $battlesPerRound = $participantCount / 2;
-        $round = 1;
-
-        while ($battlesPerRound >= 1) {
-            $battlesInRound = (int)$battlesPerRound;
-            if ($battlesInRound === 0) break;
-
-            $questionForRound = $battlesInRound * $questionPerBattle;
-            
-            // Minimum: can have some overlap, estimate ~70% unique needed
-            $minimumForRound = (int)ceil($questionForRound * 0.7);
-            
-            // Optimum: all questions unique (no overlap) per round
-            $optimumForRound = $questionForRound;
-
-            $breakdown[] = [
-                'round' => $round,
-                'battles' => $battlesInRound,
-                'questions_per_battle' => $questionPerBattle,
-                'minimum_questions' => $minimumForRound,
-                'optimum_questions' => $optimumForRound,
-            ];
-
-            $totalMinimum += $minimumForRound;
-            $totalOptimum += $optimumForRound;
-            $battlesPerRound = $battlesPerRound / 2;
-            $round++;
-        }
-
+        $qualifierCount = $this->qualifier_question_count ?? 10;
         $currentCount = $this->questions()->count();
+        $participantCount = $this->participants()->count();
+
+        $minimum = $qualifierCount;
+        $optimum = $qualifierCount * 2; // Recommended to support healthy variety in shuffled attempts
 
         return [
-            'minimum' => $totalMinimum,
-            'optimum' => $totalOptimum,
+            'minimum' => $minimum,
+            'optimum' => $optimum,
             'current' => $currentCount,
             'participants' => $participantCount,
-            'total_rounds' => count($breakdown),
-            'breakdown' => $breakdown,
-            'status' => $currentCount >= $totalOptimum ? 'excellent' 
-                      : ($currentCount >= $totalMinimum ? 'good' : 'warning'),
-            'message' => $this->getQuestionRecommendationMessage($currentCount, $totalMinimum, $totalOptimum),
+            'total_rounds' => 1,
+            'breakdown' => [
+                [
+                    'round' => 1,
+                    'battles' => 1,
+                    'questions_per_battle' => $qualifierCount,
+                    'minimum_questions' => $minimum,
+                    'optimum_questions' => $optimum,
+                ]
+            ],
+            'status' => $currentCount >= $optimum ? 'excellent' 
+                      : ($currentCount >= $minimum ? 'good' : 'warning'),
+            'message' => $currentCount >= $optimum 
+                ? "Excellent! Your {$currentCount} questions exceed the optimum recommended ({$optimum} questions) for healthy variety and shuffling."
+                : ($currentCount >= $minimum 
+                    ? "Good! Your {$currentCount} questions cover the required quiz length ({$minimum}). Organizers are encouraged to add up to {$optimum} questions for better variety."
+                    : "Warning: You have only {$currentCount} questions but the tournament requires {$minimum} questions per attempt (short by " . ($minimum - $currentCount) . "). Users will not be able to complete attempts!"),
         ];
     }
 
     /**
-     * Generate a human-readable message about question coverage
-     */
-    private function getQuestionRecommendationMessage(int $current, int $minimum, int $optimum): string
-    {
-        if ($current >= $optimum) {
-            return "Excellent! Your {$current} questions exceed the optimum ({$optimum} recommended). No overlaps expected.";
-        } elseif ($current >= $minimum) {
-            $overlap = (int)ceil(($optimum - $current) / $optimum * 100);
-            return "Good! Your {$current} questions cover the minimum ({$minimum}). Expect ~{$overlap}% question overlap across rounds.";
-        } else {
-            $shortage = $minimum - $current;
-            return "Warning: You have {$current} questions but need at least {$minimum} (short by {$shortage}). Significant overlap expected.";
-        }
-    }
-
-    /**
-     * Calculate recommended max participants based on question count
-     * Works backwards from questions available to determine tournament size
+     * Calculate recommended max participants based on question count.
+     * Since the tournament is qualifier-only, all participants take the same quiz, 
+     * so we can support unlimited participants regardless of question pool size.
      * 
-     * @return array ['recommended_min' => int, 'recommended_max' => int, 'current_questions' => int, 'current_participants' => int]
+     * @return array
      */
     public function getMaxParticipantsRecommendation(): array
     {
         $currentQuestions = $this->questions()->count();
-        $questionPerBattle = $this->battle_question_count ?? 10;
+        $qualifierCount = $this->qualifier_question_count ?? 10;
         $currentParticipants = $this->participants()->count();
 
-        // For single elimination, calculate how many participants can be supported
-        // Working backwards: if we have X questions, what's max tournament size?
-        
-        // Optimum: no overlaps at all
-        // Total questions needed for N participants = sum of (N/2 + N/4 + N/8 + ... + 1) * question_per_battle
-        // This is roughly N * question_per_battle (varies by exact N)
-        
-        $optimalMaxParticipants = max(2, (int)floor($currentQuestions / $questionPerBattle * 0.9));
-        
-        // For minimum (allowing ~30% overlap): more participants can be supported
-        $minimalMaxParticipants = max(2, (int)floor($currentQuestions / $questionPerBattle * 1.3));
-
-        // Find closest power of 2 for bracket sizing (tournaments typically use 2, 4, 8, 16, 32, 64)
-        $optimalBracketSize = $this->closestPowerOfTwo($optimalMaxParticipants);
-        $minimalBracketSize = $this->closestPowerOfTwo($minimalMaxParticipants);
+        $isSufficient = $currentQuestions >= $qualifierCount;
 
         return [
             'current_questions' => $currentQuestions,
             'current_participants' => $currentParticipants,
-            'question_per_battle' => $questionPerBattle,
-            'recommended_min_max_participants' => $optimalBracketSize,  // No/minimal overlap
-            'recommended_max_max_participants' => $minimalBracketSize,  // Can handle with overlap
-            'message' => $this->getParticipantsRecommendationMessage($currentQuestions, $optimalBracketSize, $minimalBracketSize, $currentParticipants),
+            'question_per_battle' => $qualifierCount,
+            'recommended_min_max_participants' => $this->max_participants ?? 1000,
+            'recommended_max_max_participants' => $this->max_participants ?? 1000,
+            'message' => $isSufficient 
+                ? "✅ Perfect! Your question pool of {$currentQuestions} questions is sufficient to support any number of participants (current: {$currentParticipants})."
+                : "⚠️ Warning: The question pool has only {$currentQuestions} questions, which is less than the required {$qualifierCount} questions per attempt. Please add more questions.",
         ];
-    }
-
-    /**
-     * Find closest power of 2 for bracket sizing
-     */
-    private function closestPowerOfTwo(int $number): int
-    {
-        $powers = [2, 4, 8, 16, 32, 64, 128, 256, 512];
-        
-        if ($number <= 2) return 2;
-        if ($number >= 512) return 512;
-
-        foreach ($powers as $power) {
-            if ($power >= $number) return $power;
-        }
-
-        return 512;
-    }
-
-    /**
-     * Generate message about participant capacity based on questions
-     */
-    private function getParticipantsRecommendationMessage(int $questions, int $optimal, int $minimal, int $current): string
-    {
-        if ($current > $minimal) {
-            $surplus = $current - $minimal;
-            return "⚠️ Warning: You have {$current} participants but only {$questions} questions. Recommended max: {$minimal} (for ~30% overlap) or {$optimal} (for ~5% overlap).";
-        } elseif ($current > $optimal) {
-            $overlap = (int)ceil(($current / $optimal - 1) * 100);
-            return "⚠️ Caution: You have {$current} participants with {$questions} questions. Expect ~{$overlap}% overlap. Optimal: {$optimal} (no overlap) or up to {$minimal} (acceptable).";
-        } else {
-            return "✅ Perfect! Your {$current} participants work well with {$questions} questions. You could support up to {$minimal} participants with acceptable overlap.";
-        }
     }
 
 }
