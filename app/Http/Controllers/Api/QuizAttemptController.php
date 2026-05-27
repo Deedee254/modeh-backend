@@ -20,11 +20,12 @@ use Illuminate\Support\Facades\Auth;
 
 
 use App\Services\QuestionMarkingService;
+use Illuminate\Support\Facades\Storage;
 
 class QuizAttemptController extends Controller
 {
-    protected $achievementService;
-    protected $markingService;
+    protected AchievementService $achievementService;
+    protected QuestionMarkingService $markingService;
 
     public function __construct(AchievementService $achievementService, QuestionMarkingService $markingService)
     {
@@ -733,7 +734,7 @@ class QuizAttemptController extends Controller
             $isCorrect = $this->markingService->isAnswerCorrect($provided, $q->answers, $q);
             $correctDisplay = $this->markingService->formatExplanationAnswers($q->answers, $optionMap);
 
-            $mediaUrl = $q->media_path ? ((\Illuminate\Support\Str::startsWith($q->media_path, ['http://', 'https://', '/'])) ? $q->media_path : \Storage::url($q->media_path)) : null;
+            $mediaUrl = $q->media_path ? ((\Illuminate\Support\Str::startsWith($q->media_path, ['http://', 'https://', '/'])) ? $q->media_path : Storage::url($q->media_path)) : null;
 
             $details[] = [
                 'question_id' => $q->id,
@@ -1182,6 +1183,24 @@ class QuizAttemptController extends Controller
                     ->where('item_id', $quiz->id)
                     ->where('status', 'confirmed')
                     ->exists();
+
+                // Link any unassigned guest purchases to this user so ownership is officially assigned
+                \App\Models\OneOffPurchase::whereNull('user_id')
+                    ->where('guest_identifier', $payload['guest_identifier'])
+                    ->update(['user_id' => $user->id]);
+            }
+
+            // Map and persist detailed guest results into standard QuizAttempt format
+            $answers = [];
+            if (!empty($payload['results'])) {
+                foreach ($payload['results'] as $resItem) {
+                    if (isset($resItem['question_id'])) {
+                        $answers[] = [
+                            'question_id' => (int) $resItem['question_id'],
+                            'selected' => $resItem['selected'] ?? null,
+                        ];
+                    }
+                }
             }
 
             // Create the attempt record
@@ -1189,7 +1208,7 @@ class QuizAttemptController extends Controller
                 'user_id' => $user->id,
                 'quiz_id' => $quiz->id,
                 'paid_for' => $paidFor,
-                'answers' => [], // Guest attempts don't store detailed answers
+                'answers' => $answers, // Guest attempts detailed answers persisted
                 'score' => $payload['score'],
                 'points_earned' => $pointsEarned,
                 'total_time_seconds' => $payload['time_taken'],
