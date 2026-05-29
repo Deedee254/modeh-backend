@@ -430,7 +430,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
 	        Route::post('/admin/withdrawals/{id}/approve', [\App\Http\Controllers\Api\AdminController::class, 'approveWithdrawal']);
 	        Route::post('/admin/withdrawals/{id}/reject', [\App\Http\Controllers\Api\AdminController::class, 'rejectWithdrawal']);
 		Route::post('/admin/withdrawals/{id}/mark-paid', [\App\Http\Controllers\Api\AdminController::class, 'markWithdrawalAsPaid']);
-	        Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
 	        Route::post('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
 	        Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
 	        Route::get('/admin/quizees', [\App\Http\Controllers\Api\AdminController::class, 'quizees']);
