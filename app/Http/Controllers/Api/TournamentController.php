@@ -222,6 +222,23 @@ class TournamentController extends Controller
                     return response()->json(['message' => 'Already registered for this tournament'], 400);
                 }
                 if ($existingParticipant->status === 'pending_payment') {
+                    if ($isPaid) {
+                        DB::table('tournament_participants')
+                            ->where('tournament_id', $lockedTournament->id)
+                            ->where('user_id', $user->id)
+                            ->update([
+                                'status' => 'paid',
+                                'approved_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+
+                        $this->achievementService->checkAchievements($user->id, [
+                            'type' => 'tournament_joined',
+                            'tournament_id' => $lockedTournament->id,
+                        ]);
+
+                        return response()->json(['message' => 'Successfully joined tournament', 'status' => 'paid']);
+                    }
                     return response()->json(['message' => 'Registration pending payment', 'status' => 'pending_payment'], 202);
                 }
                 if ($existingParticipant->status === 'rejected') {
