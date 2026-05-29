@@ -49,7 +49,7 @@ class TournamentController extends Controller
         $this->maybeFinalizeSimpleFlowTournament($tournament);
 
         $tournament->load(['subject', 'topic', 'grade', 'level', 'participants', 'questions', 'winner', 'sponsor']);
-        $user = Auth::user();
+        $user = Auth::user() ?? Auth::guard('sanctum')->user();
 
         $isParticipant = $user ? $tournament->participants()->where('user_id', $user->id)->exists() : false;
         $tournament->is_participant = $isParticipant;
@@ -365,7 +365,7 @@ class TournamentController extends Controller
             'tournament' => $tournament->only(['id', 'name', 'status']),
             'leaderboard' => $leaderboard,
             'max_attempts' => self::SIMPLE_FLOW_MAX_ATTEMPTS,
-            'is_qualifier_phase' => false,
+            'is_qualifier_phase' => in_array($tournament->status, ['upcoming', 'active'], true),
         ]);
     }
 
