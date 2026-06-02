@@ -168,7 +168,24 @@ class TournamentQuestionService
 
             $body = $rowData['body'] ?? $rowData['prompt'] ?? $rowData['question'] ?? $rowData['text'] ?? null;
             if (!$body) continue;
-            $type = $rowData['type'] ?? $rowData['question_type'] ?? 'mcq';
+            $rawType = strtolower(trim($rowData['type'] ?? $rowData['question_type'] ?? 'mcq'));
+            if (in_array($rawType, ['mcq', 'multiple choice question', 'multiple choice', 'multiple_choice'])) {
+                $type = 'mcq';
+            } elseif (in_array($rawType, ['multi', 'multiple select', 'multiple_select'])) {
+                $type = 'multi';
+            } elseif (in_array($rawType, ['short', 'short answer', 'short_answer'])) {
+                $type = 'short';
+            } elseif (in_array($rawType, ['numeric', 'numeric answer', 'numeric_answer'])) {
+                $type = 'numeric';
+            } elseif (in_array($rawType, ['fill_blank', 'fill in the blanks', 'fill_in_the_blanks', 'fill'])) {
+                $type = 'fill_blank';
+            } elseif (in_array($rawType, ['math', 'math / multipart question', 'math_question'])) {
+                $type = 'math';
+            } elseif (in_array($rawType, ['code', 'code answer question', 'code_answer', 'code_question'])) {
+                $type = 'code';
+            } else {
+                $type = 'mcq';
+            }
 
             $options = $this->getOptions($rowData);
             $correct = null;
@@ -196,10 +213,26 @@ class TournamentQuestionService
                 }
             }
 
+            $answers = [];
+            if ($type === 'mcq' && $correct !== null) {
+                $answers = [(string) $correct];
+            } elseif ($type === 'multi' && $corrects !== null) {
+                $answers = array_map('strval', $corrects);
+            } elseif (in_array($type, ['short', 'numeric', 'fill_blank'])) {
+                if ($rawCorrect !== null) {
+                    if (strpos($rawCorrect, '|') !== false || strpos($rawCorrect, ',') !== false) {
+                        $answers = array_map('trim', preg_split('/[|,]/', $rawCorrect));
+                    } else {
+                        $answers = [trim((string)$rawCorrect)];
+                    }
+                }
+            }
+
             $createData = [
                 'body' => $body,
                 'type' => $type,
                 'options' => $options ?: null,
+                'answers' => $answers,
                 'marks' => isset($rowData['marks']) && is_numeric($rowData['marks']) ? floatval($rowData['marks']) : null,
                 'difficulty' => $rowData['difficulty'] ?? null,
                 'explanation' => $rowData['explanation'] ?? null,
