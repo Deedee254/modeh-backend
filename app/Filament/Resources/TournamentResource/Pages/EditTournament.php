@@ -79,155 +79,30 @@ class EditTournament extends EditRecord
                     }
 
                     try {
-                        // Parse CSV with encoding handling
-                        $rows = [];
-                        if (($handle = fopen($filePath, "r")) !== FALSE) {
-                            // Detect BOM
-                            $bom = fread($handle, 3);
-                            if ($bom !== "\xEF\xBB\xBF") {
-                                rewind($handle);
-                            }
-                            
-                            while (($data = fgetcsv($handle)) !== FALSE) {
-                                $rows[] = array_map(function($value) {
-                                    return mb_convert_encoding($value, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
-                                }, $data);
-                            }
-                            fclose($handle);
+                        $ext = pathinfo($filePath, PATHINFO_EXTENSION);
+                        if (empty($ext)) {
+                            $ext = 'csv';
                         }
-                        $headers = array_shift($rows);
                         
-                        $importedQuestions = [];
-                        $successCount = 0;
-                        $errorCount = 0;
+                        /** @var \App\Services\TournamentQuestionService $service */
+                        $service = app(\App\Services\TournamentQuestionService::class);
+                        $result = $service->attachQuestionsToTournamentFromCsv($this->record, $filePath, $ext);
 
-                        foreach ($rows as $rowIndex => $row) {
-                            if (empty(array_filter($row))) continue;
-                            
-                            $question = array_combine($headers, $row);
-                            
-                            try {
-                                // Parse options as plain strings
-                                $opts = [];
-                                for ($i = 1; $i <= 4; $i++) {
-                                    $optKey = "option{$i}";
-                                    if (!empty($question[$optKey] ?? '')) {
-                                        $opts[] = trim($question[$optKey]);
-                                    }
-                                }
-
-                                // Parse answers (support numeric 1-4 or text matching)
-                                $answersRaw = $question['answers'] ?? null;
-                                $correctIndex = null;
-
-                                if ($answersRaw !== null && $answersRaw !== '') {
-                                    $answersRaw = trim((string)$answersRaw);
-                                    
-                                    // Try numeric first
-                                    if (is_numeric($answersRaw)) {
-                                        $pos = intval($answersRaw);
-                                        if ($pos >= 1 && $pos <= count($opts)) {
-                                            $correctIndex = $pos - 1; // Convert to 0-based
-                                        } else {
-                                            throw new \Exception("Answer {$pos} out of range (1-" . count($opts) . ")");
-                                        }
-                                    } else {
-                                        // Try text matching (case-insensitive)
-                                        $answerTrimmed = trim($answersRaw);
-                                        foreach ($opts as $idx => $opt) {
-                                            // $opt is a plain string
-                                            if (strtolower(trim((string)$opt)) === strtolower($answerTrimmed)) {
-                                                $correctIndex = $idx;
-                                                break;
-                                            }
-                                        }
-                                        if ($correctIndex === null) {
-                                            throw new \Exception("Answer text '{$answersRaw}' not found in options");
-                                        }
-                                    }
-                                }
-
-                                $importedQuestions[] = [
-                                    'type' => $question['type'] ?? 'mcq',
-                                    'body' => $question['text'] ?? '',
-                                    // Ensure options are plain strings when saved
-                                    'options' => array_values(array_map(fn($o) => is_array($o) && array_key_exists('text', $o) ? trim($o['text']) : (is_object($o) && property_exists($o,'text') ? trim($o->text) : trim((string)$o)), $opts)),
-                                    'answers' => $correctIndex !== null ? [(string)$correctIndex] : [],
-                                    'marks' => floatval($question['marks'] ?? 1),
-                                    'difficulty' => intval($question['difficulty'] ?? 2),
-                                    'is_banked' => true,
-                                    'is_approved' => true,
-                                    'level_id' => $this->record->level_id,
-                                    'grade_id' => $this->record->grade_id,
-                                    'subject_id' => $this->record->subject_id,
-                                    'topic_id' => $this->record->topic_id,
-                                ];
-                                $successCount++;
-                            } catch (\Exception $e) {
-                                \Log::warning("CSV import error at row " . ($rowIndex + 2), [
-                                    'tournament_id' => $this->record->id,
-                                    'row_data' => $row,
-                                    'error' => $e->getMessage(),
-                                ]);
-                                $errorCount++;
-                            }
-                        }
-
-                        if (empty($importedQuestions)) {
-                            Notification::make()
-                                ->danger()
-                                ->title('Import Failed')
-                                ->body('No valid questions found in CSV.')
-                                ->send();
-                            return;
-                        }
-
-                        // Get current max position and attach questions
-                        $maxPosition = $this->record->questions()->max('position') ?? 0;
-                        $position = $maxPosition + 1;
-
-                        foreach ($importedQuestions as $qData) {
-                            $question = Question::create([
-                                'type' => $qData['type'] ?? 'mcq',
-                                'body' => $qData['body'] ?? '',
-                                'options' => $qData['options'] ?? [],
-                                'answers' => $qData['answers'] ?? [],
-                                'marks' => $qData['marks'] ?? 1,
-                                'difficulty' => $qData['difficulty'] ?? 2,
-                                'is_banked' => $qData['is_banked'] ?? true,
-                                'is_approved' => $qData['is_approved'] ?? true,
-                                'level_id' => $qData['level_id'] ?? null,
-                                'grade_id' => $qData['grade_id'] ?? null,
-                                'subject_id' => $qData['subject_id'] ?? null,
-                                'topic_id' => $qData['topic_id'] ?? null,
-                            ]);
-                            
-                            $this->record->questions()->attach($question->id, ['position' => $position]);
-                            $position++;
-                        }
-
-                        \Log::info('CSV import completed via edit page', [
+                        Log::info('CSV import completed via edit page', [
                             'tournament_id' => $this->record->id,
-                            'imported_count' => $successCount,
-                            'error_count' => $errorCount,
+                            'imported_count' => $result['attached'],
                         ]);
-
-                        // Show success notification
-                        $message = "Imported {$successCount} questions successfully";
-                        if ($errorCount > 0) {
-                            $message .= " ({$errorCount} rows skipped due to errors)";
-                        }
 
                         Notification::make()
                             ->success()
                             ->title('Import Complete')
-                            ->body($message)
+                            ->body("Imported {$result['attached']} questions successfully")
                             ->send();
 
                         // Refresh the page
                         $this->refreshFormData(['questions']);
                     } catch (\Exception $e) {
-                        \Log::error('CSV import error', [
+                        Log::error('CSV import error', [
                             'tournament_id' => $this->record->id,
                             'error' => $e->getMessage(),
                         ]);

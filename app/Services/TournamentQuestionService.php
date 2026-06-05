@@ -64,6 +64,64 @@ class TournamentQuestionService
         }
     }
 
+    /**
+     * Attach questions to a tournament from an uploaded CSV/XLSX file or file path.
+     *
+     * @param Tournament $tournament
+     * @param UploadedFile|string $file
+     * @param string|null $ext
+     * @return array{attached:int,questions:\Illuminate\Database\Eloquent\Collection}
+     * @throws \Throwable
+     */
+    public function attachQuestionsToTournamentFromCsv(Tournament $tournament, $file, ?string $ext = null)
+    {
+        try {
+            $path = $file instanceof UploadedFile ? $file->getRealPath() : $file;
+            $extension = $ext ?: ($file instanceof UploadedFile ? strtolower($file->getClientOriginalExtension()) : pathinfo($path, PATHINFO_EXTENSION));
+            if (empty($extension)) {
+                $extension = 'csv';
+            }
+
+            [$headers, $rows] = $this->parseCsv($path, $extension);
+
+            if (empty($headers)) {
+                throw new \Exception('Empty or unreadable file');
+            }
+
+            $idKeyIndexes = $this->getIdKeyIndexes($headers);
+
+            DB::beginTransaction();
+
+            if (!empty($idKeyIndexes)) {
+                $attachData = $this->getAttachDataFromIds($rows, $idKeyIndexes);
+            } else {
+                $attachData = $this->createQuestionsFromRows($rows, $headers, $tournament);
+            }
+
+            if (!empty($attachData)) {
+                $maxPosition = $tournament->questions()->max('position') ?? 0;
+                $position = $maxPosition + 1;
+                $adjustedAttachData = [];
+                foreach ($attachData as $questionId => $data) {
+                    $adjustedAttachData[$questionId] = ['position' => $position++];
+                }
+                $tournament->questions()->syncWithoutDetaching($adjustedAttachData);
+            }
+
+            DB::commit();
+
+            return ['attached' => count($attachData), 'questions' => $tournament->questions()->whereIn('questions.id', array_keys($attachData))->get()];
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('attachQuestionsToTournamentFromCsv: exception processing uploaded file', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'tournament_id' => $tournament->id ?? null,
+            ]);
+            throw $e;
+        }
+    }
+
     public function parseCsv(string $path, string $ext): array
     {
         $headers = [];
