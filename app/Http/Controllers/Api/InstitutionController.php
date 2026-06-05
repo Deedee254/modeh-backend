@@ -38,6 +38,7 @@ class InstitutionController extends Controller
             'website' => 'nullable|url',
             'address' => 'nullable|string|max:500',
             'metadata' => 'nullable|array',
+            'is_active' => 'sometimes|boolean',
         ]);
 
         // Resolve parent if provided (accept id or slug)

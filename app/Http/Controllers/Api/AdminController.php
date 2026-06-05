@@ -87,6 +87,70 @@ class AdminController extends Controller
 
         $revenueShare = (float) PaymentSetting::platformRevenueSharePercent();
 
+        // Dashboards extra widgets data
+        
+        // 1. Latest Quizzes
+        $latestQuizzes = \App\Models\QuizAttempt::with(['quiz:id,title', 'user:id,name,avatar_url'])
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get()
+            ->map(function ($attempt) {
+                return [
+                    'id' => $attempt->id,
+                    'quiz_title' => $attempt->quiz?->title ?? 'Unknown Quiz',
+                    'user_name' => $attempt->user?->name ?? 'Unknown User',
+                    'user_avatar' => $attempt->user?->avatar_url ?? null,
+                    'score' => $attempt->score,
+                    'created_at' => $attempt->created_at,
+                ];
+            });
+
+        // 2. Top Quizees
+        $topQuizees = User::where('role', 'quizee')
+            ->orderBy('total_points', 'desc')
+            ->limit(5)
+            ->select('id', 'name', 'avatar_url', 'total_points')
+            ->get();
+
+        // 3. Top Quiz Masters (by revenue)
+        $txStats = Transaction::query()
+            ->selectRaw("`quiz_master_id` as quiz_master_id")
+            ->selectRaw("SUM(CASE WHEN status = 'completed' THEN `quiz-master_share` ELSE 0 END) as total_earnings")
+            ->groupBy(DB::raw('`quiz_master_id`'));
+
+        $topQuizMasters = User::query()
+            ->where('role', 'quiz-master')
+            ->leftJoinSub($txStats, 'tx_stats', function ($join) {
+                $join->on('tx_stats.quiz_master_id', '=', 'users.id');
+            })
+            ->select([
+                'users.id',
+                'users.name',
+                'users.avatar_url',
+                'tx_stats.total_earnings as total_earnings',
+            ])
+            ->orderBy('total_earnings', 'desc')
+            ->limit(5)
+            ->get()
+            ->map(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'avatar_url' => $user->avatar_url,
+                    'total_earnings' => (float) ($user->total_earnings ?? 0),
+                ];
+            });
+
+        // 4. Top Subjects
+        $topSubjects = DB::table('quiz_attempts')
+            ->join('quizzes', 'quiz_attempts.quiz_id', '=', 'quizzes.id')
+            ->join('subjects', 'quizzes.subject_id', '=', 'subjects.id')
+            ->select('subjects.name', DB::raw('count(quiz_attempts.id) as attempts_count'))
+            ->groupBy('subjects.id', 'subjects.name')
+            ->orderBy('attempts_count', 'desc')
+            ->limit(5)
+            ->get();
+
         return response()->json([
             'ok' => true,
             'metrics' => [
@@ -103,6 +167,12 @@ class AdminController extends Controller
                 'pendingWithdrawalCount' => $pendingWithdrawalCount,
                 'platformProfit' => $adminProfit,
                 'lifetimeProfit' => $lifetimeProfit,
+            ],
+            'widgets' => [
+                'latestQuizzes' => $latestQuizzes,
+                'topQuizees' => $topQuizees,
+                'topQuizMasters' => $topQuizMasters,
+                'topSubjects' => $topSubjects,
             ],
             'revenueShare' => $revenueShare,
         ]);
@@ -538,7 +608,9 @@ class AdminController extends Controller
             $revenueShare = $mpesaSetting ? (float) $mpesaSetting->revenue_share : null;
 
             $siteSetting = \App\Models\SiteSetting::current();
-            $approvalsEnabled = $siteSetting ? (boolean) $siteSetting->auto_approve_quizzes : true;
+            $auto_approve_topics = $siteSetting ? (boolean) $siteSetting->auto_approve_topics : true;
+            $auto_approve_quizzes = $siteSetting ? (boolean) $siteSetting->auto_approve_quizzes : true;
+            $auto_approve_questions = $siteSetting ? (boolean) $siteSetting->auto_approve_questions : true;
 
             $defaultQuizPrice = 0.0;
             $defaultBattlePrice = 0.0;
@@ -556,7 +628,9 @@ class AdminController extends Controller
                 'ok' => true,
                 'settings' => [
                     'revenue_share' => $revenueShare,
-                    'approvals_enabled' => (boolean) $approvalsEnabled,
+                    'auto_approve_topics' => $auto_approve_topics,
+                    'auto_approve_quizzes' => $auto_approve_quizzes,
+                    'auto_approve_questions' => $auto_approve_questions,
                     'mpesa_active' => $mpesaSetting ? (boolean) ($mpesaSetting->is_active ?? true) : true,
                     'default_quiz_price' => $defaultQuizPrice,
                     'default_battle_price' => $defaultBattlePrice,
@@ -569,7 +643,9 @@ class AdminController extends Controller
         if ($request->method() === 'POST' || $request->method() === 'PUT') {
             $validated = $request->validate([
                 'revenue_share' => 'sometimes|numeric|min:0|max:100',
-                'approvals_enabled' => 'sometimes|boolean',
+                'auto_approve_topics' => 'sometimes|boolean',
+                'auto_approve_quizzes' => 'sometimes|boolean',
+                'auto_approve_questions' => 'sometimes|boolean',
                 'mpesa_active' => 'sometimes|boolean',
                 'default_quiz_price' => 'sometimes|numeric|min:0',
                 'default_battle_price' => 'sometimes|numeric|min:0',
@@ -588,9 +664,11 @@ class AdminController extends Controller
                 }
             }
 
-            if (isset($validated['approvals_enabled'])) {
+            if (isset($validated['auto_approve_topics']) || isset($validated['auto_approve_quizzes']) || isset($validated['auto_approve_questions'])) {
                 $siteSetting = \App\Models\SiteSetting::current() ?: new \App\Models\SiteSetting();
-                $siteSetting->auto_approve_quizzes = $validated['approvals_enabled'];
+                if (isset($validated['auto_approve_topics'])) $siteSetting->auto_approve_topics = $validated['auto_approve_topics'];
+                if (isset($validated['auto_approve_quizzes'])) $siteSetting->auto_approve_quizzes = $validated['auto_approve_quizzes'];
+                if (isset($validated['auto_approve_questions'])) $siteSetting->auto_approve_questions = $validated['auto_approve_questions'];
                 $siteSetting->save();
             }
 
@@ -794,6 +872,8 @@ class AdminController extends Controller
         ]);
     }
 }
+
+
 
 
 

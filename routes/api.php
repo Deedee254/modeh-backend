@@ -444,6 +444,22 @@ Route::middleware(['auth:sanctum'])->group(function () {
 	        Route::get('/admin/battles/{id}', [\App\Http\Controllers\Api\AdminBattleController::class, 'show']);
 	        Route::get('/admin/daily-challenges/analytics', [\App\Http\Controllers\Api\AdminDailyChallengeAnalyticsController::class, 'analytics']);
 	
+            // Gamification Management Routes
+            Route::get('/admin/quizee-levels', [\App\Http\Controllers\Api\AdminGamificationController::class, 'getQuizeeLevels']);
+            Route::post('/admin/quizee-levels', [\App\Http\Controllers\Api\AdminGamificationController::class, 'storeQuizeeLevel']);
+            Route::put('/admin/quizee-levels/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'updateQuizeeLevel']);
+            Route::delete('/admin/quizee-levels/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'destroyQuizeeLevel']);
+            
+            Route::get('/admin/badges', [\App\Http\Controllers\Api\AdminGamificationController::class, 'getBadges']);
+            Route::post('/admin/badges', [\App\Http\Controllers\Api\AdminGamificationController::class, 'storeBadge']);
+            Route::put('/admin/badges/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'updateBadge']);
+            Route::delete('/admin/badges/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'destroyBadge']);
+            
+            Route::get('/admin/achievements', [\App\Http\Controllers\Api\AdminGamificationController::class, 'getAchievements']);
+            Route::post('/admin/achievements', [\App\Http\Controllers\Api\AdminGamificationController::class, 'storeAchievement']);
+            Route::put('/admin/achievements/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'updateAchievement']);
+            Route::delete('/admin/achievements/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'destroyAchievement']);
+
 	        // Affiliate Management Routes
 	        Route::get('/admin/affiliates', [\App\Http\Controllers\Api\AffiliateController::class, 'adminIndex']);
 	        Route::get('/admin/affiliate-referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'adminReferrals']);
