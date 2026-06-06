@@ -721,11 +721,17 @@ class QuizController extends Controller
         // Strategy C: Limit pagination to prevent huge caches
         $perPage = min(50, max(1, (int) $request->get('per_page', 10)));
 
-        $cacheKey = 'quizzes_index_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
+        $requestingOwnQuizzesOnly = $request->boolean('mine') || $request->get('mine') === '1' || $request->get('mine') === 1;
 
-        $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(5), function () use ($query, $perPage) {
-            return $query->paginate($perPage);
-        });
+        if ($requestingOwnQuizzesOnly) {
+            // Do not cache the dynamic management view for the quiz master's own quizzes
+            $data = $query->paginate($perPage);
+        } else {
+            $cacheKey = 'quizzes_index_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
+            $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(5), function () use ($query, $perPage) {
+                return $query->paginate($perPage);
+            });
+        }
 
         return QuizResource::collection($data);
     }
