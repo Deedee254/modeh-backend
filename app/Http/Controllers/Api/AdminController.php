@@ -107,9 +107,9 @@ class AdminController extends Controller
 
         // 2. Top Quizees
         $topQuizees = User::where('role', 'quizee')
-            ->orderBy('total_points', 'desc')
+            ->orderBy('points', 'desc')
             ->limit(5)
-            ->select('id', 'name', 'avatar_url', 'total_points')
+            ->select('id', 'name', 'avatar_url', 'points as total_points')
             ->get();
 
         // 3. Top Quiz Masters (by revenue)
