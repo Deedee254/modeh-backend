@@ -12,7 +12,6 @@ use App\Models\Question;
  *
  * Tournament Timing:
  * - start_date: When tournament registration opens (participants join via POST /tournaments/{id}/join)
- * - qualifier_days: Duration of the qualifier phase.
  * - end_date: When qualification closes and winner can be finalized.
  *
  * @property int $id
@@ -24,7 +23,6 @@ use App\Models\Question;
  * @property \Illuminate\Support\Carbon|null $registration_end_date
  * @property \Illuminate\Support\Carbon|null $start_date
  * @property \Illuminate\Support\Carbon|null $end_date
- * @property int|null $qualifier_days
  * @property int|null $round_delay_days
  * @property int $battle_question_count
  * @property int $qualifier_question_count
@@ -93,7 +91,6 @@ class Tournament extends Model
         // Tie-breaker and selection
         'qualifier_tie_breaker',
         // Day-based scheduling
-        'qualifier_days',
         'round_delay_days',
     ];
 

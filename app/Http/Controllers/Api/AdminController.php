@@ -436,7 +436,7 @@ class AdminController extends Controller
     /**
      * Approve a withdrawal request
      */
-    public function approveWithdrawal(Request $request, $withdrawalId)
+    public function approveWithdrawal(Request $request, int $withdrawalId)
     {
         $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
@@ -467,7 +467,7 @@ class AdminController extends Controller
      * Reject a withdrawal request
      * Refunds the amount back to quiz master's available balance
      */
-    public function rejectWithdrawal(Request $request, $withdrawalId)
+    public function rejectWithdrawal(Request $request, int $withdrawalId)
     {
         $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
@@ -529,7 +529,7 @@ class AdminController extends Controller
      * Mark withdrawal as paid after admin has sent the money outside the system
      * Updates status, paid_at, and processed_by_admin_id
      */
-    public function markWithdrawalAsPaid(Request $request, $withdrawalId)
+    public function markWithdrawalAsPaid(Request $request, int $withdrawalId)
     {
         $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
@@ -798,7 +798,7 @@ class AdminController extends Controller
     /**
      * Get tournament participants with scores
      */
-    public function tournamentParticipants(Request $request, $tournamentId)
+    public function tournamentParticipants(Request $request, int $tournamentId)
     {
         if ($resp = $this->requireAdmin()) return $resp;
 

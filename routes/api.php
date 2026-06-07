@@ -566,6 +566,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Admin tournament management (requires admin role)
     Route::middleware(['can:viewFilament'])->group(function () {
+        Route::get('/admin/tournaments/{tournament}', [\App\Http\Controllers\Api\AdminTournamentController::class, 'show']);
         Route::post('/admin/tournaments', [\App\Http\Controllers\Api\AdminTournamentController::class, 'store']);
         Route::put('/admin/tournaments/{tournament}', [\App\Http\Controllers\Api\AdminTournamentController::class, 'update']);
         Route::post('/admin/tournaments/{tournament}/questions', [\App\Http\Controllers\Api\AdminTournamentController::class, 'attachQuestions']);

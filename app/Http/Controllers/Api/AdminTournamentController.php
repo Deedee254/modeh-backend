@@ -13,13 +13,24 @@ class AdminTournamentController extends Controller
         $this->middleware(['auth:sanctum', 'can:viewFilament']);
     }
 
+    public function show(Tournament $tournament)
+    {
+        $tournament->load(['subject', 'topic', 'grade', 'level', 'questions']);
+        
+        return response()->json([
+            'tournament' => $tournament,
+            'questions' => $tournament->questions()->get(),
+            'recommendations' => $tournament->getQuestionRecommendations(),
+        ]);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'required|string',
             'start_date' => 'required|date',
-            'end_date' => 'nullable|date|after:start_date',
+            'end_date' => 'required|date|after:start_date',
             'prize_pool' => 'nullable|numeric|min:0',
             'max_participants' => 'nullable|integer|min:2|max:1000',
             'entry_fee' => 'nullable|numeric|min:0',
@@ -29,26 +40,12 @@ class AdminTournamentController extends Controller
             'grade_id' => 'required|exists:grades,id',
             'qualifier_per_question_seconds' => 'nullable|integer|min:5|max:300',
             'qualifier_question_count' => 'nullable|integer|min:1|max:100',
-            'qualifier_days' => 'nullable|integer|min:0|max:365',
             'battle_per_question_seconds' => 'nullable|integer|min:5|max:300',
             'battle_question_count' => 'nullable|integer|min:1|max:100',
             'qualifier_tie_breaker' => 'nullable|in:duration,score_then_duration',
             'bracket_slots' => 'nullable|integer|in:2,4,8',
             'round_delay_days' => 'nullable|integer|min:0|max:365',
         ]);
-
-        if (!empty($data['start_date']) && !empty($data['qualifier_days'])) {
-            try {
-                $sd = \Illuminate\Support\Carbon::parse($data['start_date']);
-                $data['end_date'] = $sd->copy()->addDays((int) $data['qualifier_days'])->toDateTimeString();
-            } catch (\Throwable $_) {
-            }
-        }
-
-        // If still no end date, we require it
-        if (empty($data['end_date'])) {
-             return response()->json(['message' => 'The end date or qualifier days are required.'], 422);
-        }
 
         $data['created_by'] = $request->user()->id;
         $data['status'] = 'upcoming';
@@ -58,7 +55,6 @@ class AdminTournamentController extends Controller
         $data['battle_question_count'] = $data['battle_question_count'] ?? 10;
         $data['qualifier_tie_breaker'] = $data['qualifier_tie_breaker'] ?? 'score_then_duration';
         $data['bracket_slots'] = $data['bracket_slots'] ?? 8;
-        $data['qualifier_days'] = array_key_exists('qualifier_days', $data) ? $data['qualifier_days'] : null;
         $data['round_delay_days'] = array_key_exists('round_delay_days', $data) ? $data['round_delay_days'] : null;
 
         $tournament = Tournament::create($data);
@@ -82,23 +78,12 @@ class AdminTournamentController extends Controller
             'grade_id' => 'sometimes|exists:grades,id',
             'qualifier_per_question_seconds' => 'nullable|integer|min:5|max:300',
             'qualifier_question_count' => 'nullable|integer|min:1|max:100',
-            'qualifier_days' => 'nullable|integer|min:0|max:365',
             'battle_per_question_seconds' => 'nullable|integer|min:5|max:300',
             'battle_question_count' => 'nullable|integer|min:1|max:100',
             'qualifier_tie_breaker' => 'nullable|in:duration,score_then_duration',
             'bracket_slots' => 'nullable|integer|in:2,4,8',
             'round_delay_days' => 'nullable|integer|min:0|max:365',
         ]);
-
-        if (isset($data['qualifier_days']) && $data['qualifier_days'] > 0) {
-            try {
-                $startDate = $data['start_date'] ?? $tournament->start_date;
-                if ($startDate) {
-                    $data['end_date'] = \Illuminate\Support\Carbon::parse($startDate)->addDays((int) $data['qualifier_days'])->toDateTimeString();
-                }
-            } catch (\Throwable $_) {
-            }
-        }
 
         $tournament->update($data);
 

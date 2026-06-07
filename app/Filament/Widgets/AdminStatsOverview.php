@@ -77,7 +77,7 @@ class AdminStatsOverview extends StatsOverviewWidget
 
         $activeSubscriptions = Subscription::where('status', 'active')->count();
 
-        $revenue30 = $transactionsQuery->where('status', 'success')
+        $revenue30 = $transactionsQuery->where('status', 'completed')
             ->sum('amount');
 
         $pendingApprovals = Subject::where('is_approved', false)->count()
