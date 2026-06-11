@@ -93,7 +93,7 @@ class AdminTournamentController extends Controller
     public function attachQuestions(Request $request, Tournament $tournament)
     {
         $request->validate([
-            'questions' => 'required|array',
+            'questions' => 'present|array',
             'questions.*' => 'exists:questions,id',
         ]);
 

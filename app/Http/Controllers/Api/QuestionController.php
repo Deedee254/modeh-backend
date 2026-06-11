@@ -276,6 +276,7 @@ class QuestionController extends Controller
             'subject_id' => 'nullable|exists:subjects,id',
             'topic_id' => 'nullable|exists:topics,id',
             'grade_id' => 'nullable|exists:grades,id',
+            'level_id' => 'nullable|exists:levels,id',
             'for_battle' => 'nullable|boolean',
             'is_quiz-master_marked' => 'nullable|boolean',
             'difficulty' => 'nullable|integer|min:1|max:5',
@@ -488,10 +489,10 @@ class QuestionController extends Controller
             'is_approved' => $siteAutoQuestions,
             'tags' => $request->get('tags'),
             'solution_steps' => $request->get('solution_steps'),
-            'subject_id' => $request->get('subject_id') ?? ($quizObj->subject_id ?? null),
-            'topic_id' => $request->get('topic_id') ?? ($quizObj->topic_id ?? null),
-            'grade_id' => $request->get('grade_id') ?? ($quizObj->grade_id ?? null),
-            'level_id' => $request->get('level_id') ?? ($quizObj->level_id ?? null),
+            'subject_id' => $request->filled('subject_id') ? $request->get('subject_id') : ($quizObj->subject_id ?? null),
+            'topic_id' => $request->filled('topic_id') ? $request->get('topic_id') : ($quizObj->topic_id ?? null),
+            'grade_id' => $request->filled('grade_id') ? $request->get('grade_id') : ($quizObj->grade_id ?? null),
+            'level_id' => $request->filled('level_id') ? $request->get('level_id') : ($quizObj->level_id ?? null),
             'for_battle' => $request->get('for_battle', true),
         ]);
 
@@ -897,6 +898,7 @@ class QuestionController extends Controller
             'subject_id' => 'nullable|exists:subjects,id',
             'topic_id' => 'nullable|exists:topics,id',
             'grade_id' => 'nullable|exists:grades,id',
+            'level_id' => 'nullable|exists:levels,id',
             'for_battle' => 'nullable|boolean',
             'is_quiz-master_marked' => 'nullable|boolean',
             'difficulty' => 'nullable|integer|min:1|max:5',
@@ -1102,8 +1104,10 @@ class QuestionController extends Controller
 
         // additional fields (including level_id)
         foreach (['tags', 'solution_steps', 'subject_id', 'topic_id', 'grade_id', 'level_id', 'for_battle', 'is_quiz-master_marked', 'explanation'] as $f) {
-            if ($request->has($f))
-                $question->{$f} = $request->get($f);
+            if ($request->has($f)) {
+                $val = $request->get($f);
+                $question->{$f} = ($val === '') ? null : $val;
+            }
         }
 
         // Allow admins to toggle approval status during update
