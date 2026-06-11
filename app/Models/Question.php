@@ -163,7 +163,6 @@ class Question extends Model
         'options' => 'array',
         'answers' => 'array',
         'parts' => 'array',
-        'fill_parts' => 'array',
         'corrects' => 'array',
         'marks' => 'float',
         'solution_steps' => 'array',
@@ -179,6 +178,30 @@ class Question extends Model
         'grade_id' => 'integer',
         'level_id' => 'integer',
     ];
+
+    protected $appends = [
+        'fill_parts',
+    ];
+
+    /**
+     * Accessor for virtual fill_parts attribute.
+     */
+    public function getFillPartsAttribute()
+    {
+        return $this->type === 'fill_blank' ? ($this->parts ?? []) : null;
+    }
+
+    /**
+     * Mutator for virtual fill_parts attribute.
+     */
+    public function setFillPartsAttribute($value)
+    {
+        // Intercept setting fill_parts so it does not write to the database.
+        // If the question is a fill_blank type, we can optionally store it in parts.
+        if ($this->type === 'fill_blank' && $value !== null) {
+            $this->parts = $value;
+        }
+    }
     
     /**
      * Get the allowed question types
