@@ -83,42 +83,47 @@ class Invoice extends Model
     }
 
     /**
-     * Create an invoice with a unique invoice number, retrying if a race condition occurs.
+     * Create an invoice with atomically-generated unique invoice number.
+     * Uses pessimistic locking to prevent race conditions.
      */
     public static function createWithUniqueNumber(array $attributes)
     {
-        $attempts = 0;
-        $maxAttempts = 5;
-
-        while ($attempts < $maxAttempts) {
-            try {
-                $attributes['invoice_number'] = self::generateInvoiceNumber();
-                return self::create($attributes);
-            } catch (\Illuminate\Database\QueryException $e) {
-                // Catch unique constraint violation (SQLSTATE 23000 / error code 1062)
-                if ($e->getCode() == 23000 || (isset($e->errorInfo[1]) && $e->errorInfo[1] == 1062)) {
-                    $attempts++;
-                    if ($attempts >= $maxAttempts) {
-                        throw $e;
-                    }
-                    usleep(50000); // Wait 50ms before retrying
-                } else {
-                    throw $e;
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($attributes) {
+            $year = now()->year;
+            
+            // Lock all invoices for this year to guarantee atomicity
+            // This prevents concurrent threads from generating the same invoice number
+            $lastInvoice = self::where(\Illuminate\Support\Facades\DB::raw('YEAR(created_at)'), $year)
+                ->lockForUpdate()
+                ->orderByDesc('id')
+                ->first();
+            
+            $nextCount = 1;
+            if ($lastInvoice) {
+                // Extract numeric suffix from last invoice (e.g., "INV-2026-0042" → 42)
+                if (preg_match('/(\d{4})$/', $lastInvoice->invoice_number, $matches)) {
+                    $nextCount = (int) $matches[1] + 1;
                 }
             }
-        }
+            
+            $attributes['invoice_number'] = sprintf('INV-%d-%04d', $year, $nextCount);
+            return self::create($attributes);
+        });
     }
 
     /**
-     * Generate next invoice number (e.g., INV-2026-0001), skipping existing ones
+     * Generate next invoice number (deprecated - use createWithUniqueNumber instead)
      */
     public static function generateInvoiceNumber()
     {
         $year = now()->year;
-        $count = self::whereYear('created_at', $year)->count() + 1;
+        $lastInvoice = self::where(\Illuminate\Support\Facades\DB::raw('YEAR(created_at)'), $year)
+            ->orderByDesc('id')
+            ->first();
         
-        while (self::where('invoice_number', sprintf('INV-%d-%04d', $year, $count))->exists()) {
-            $count++;
+        $count = 1;
+        if ($lastInvoice && preg_match('/(\d{4})$/', $lastInvoice->invoice_number, $matches)) {
+            $count = (int) $matches[1] + 1;
         }
 
         return sprintf('INV-%d-%04d', $year, $count);

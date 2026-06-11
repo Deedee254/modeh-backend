@@ -30,7 +30,50 @@ class OneOffPurchaseController extends Controller
             'gateway' => 'nullable|string',
             'institution_id' => 'nullable',
             'attempt_id' => 'nullable|integer',  // Quiz attempt ID when paying for results
+            'idempotency_key' => 'nullable|string',  // Unique key for duplicate request prevention
         ]);
+
+        // Check for duplicate request using idempotency_key
+        if (!empty($data['idempotency_key'])) {
+            $existingPurchase = OneOffPurchase::where('user_id', $user->id)
+                ->where('meta->idempotency_key', $data['idempotency_key'])
+                ->first();
+            
+            if ($existingPurchase) {
+                // Return existing purchase details to prevent duplicate charges
+                Log::info('[OneOff Purchase] Duplicate request detected - returning existing purchase', [
+                    'user_id' => $user->id,
+                    'idempotency_key' => $data['idempotency_key'],
+                    'purchase_id' => $existingPurchase->id,
+                    'status' => $existingPurchase->status,
+                ]);
+                
+                // If purchase is still pending, return the same transaction
+                if ($existingPurchase->status === 'pending') {
+                    return response()->json([
+                        'ok' => true,
+                        'purchase' => $existingPurchase,
+                        'tx' => $existingPurchase->gateway_meta['tx'] ?? $existingPurchase->gateway_meta['checkout_request_id'] ?? null,
+                        'checkout_request_id' => $existingPurchase->gateway_meta['checkout_request_id'] ?? null,
+                        'trace_id' => $existingPurchase->gateway_meta['trace_id'] ?? null,
+                        'duplicate' => true,
+                    ]);
+                }
+                
+                // If already completed/confirmed, return success
+                if (in_array($existingPurchase->status, ['completed', 'confirmed'])) {
+                    return response()->json([
+                        'ok' => true,
+                        'purchase' => $existingPurchase,
+                        'tx' => $existingPurchase->gateway_meta['tx'] ?? $existingPurchase->gateway_meta['checkout_request_id'] ?? null,
+                        'checkout_request_id' => $existingPurchase->gateway_meta['checkout_request_id'] ?? null,
+                        'trace_id' => $existingPurchase->gateway_meta['trace_id'] ?? null,
+                        'duplicate' => true,
+                        'already_paid' => true,
+                    ]);
+                }
+            }
+        }
 
         if ($data['item_type'] === 'package') {
             $institutionValidation = $this->resolveInstitutionForPackagePurchase($request, $user);
@@ -100,6 +143,7 @@ class OneOffPurchaseController extends Controller
             'amount' => $resolvedAmount,
             'gateway' => $gateway,
             'phone' => $this->maskPhone($phone),
+            'idempotency_key' => !empty($data['idempotency_key']) ? 'present' : 'none',
         ]);
 
         $purchase = OneOffPurchase::create([
@@ -116,6 +160,7 @@ class OneOffPurchaseController extends Controller
             ], fn($v) => $v !== null && $v !== ''),
             'meta' => array_filter([
                 'attempt_id' => $data['attempt_id'] ?? null,
+                'idempotency_key' => $data['idempotency_key'] ?? null,  // Store for duplicate detection
             ], fn($v) => $v !== null),
         ]);
 
@@ -202,7 +247,7 @@ class OneOffPurchaseController extends Controller
         ], 500);
     }
 
-    private function resolveOneOffAmount(string $type, $itemId): ?float
+    private function resolveOneOffAmount(string $type, int|string $itemId): ?float
     {
         try {
             $pricingSetting = \App\Models\PricingSetting::singleton();
@@ -237,7 +282,7 @@ class OneOffPurchaseController extends Controller
         }
     }
 
-    private function resolveInstitutionForPackagePurchase(Request $request, $user): array
+    private function resolveInstitutionForPackagePurchase(Request $request, \App\Models\User $user): array
     {
         $institutionId = $request->input('institution_id');
         $institution = null;
@@ -276,7 +321,7 @@ class OneOffPurchaseController extends Controller
         return ['ok' => true, 'institution_id' => $institution->id];
     }
 
-    public function show(Request $request, $purchaseId)
+    public function show(Request $request, int|string $purchaseId)
     {
         $user = Auth::user();
         if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
@@ -520,7 +565,7 @@ class OneOffPurchaseController extends Controller
         return substr($value, 0, 4) . str_repeat('*', max(0, strlen($value) - 6)) . substr($value, -2);
     }
 
-    private function resolveMpesaPhone(MpesaService $service, $rawPhone, string $gateway): array
+    private function resolveMpesaPhone(MpesaService $service, string|null $rawPhone, string $gateway): array
     {
         if ($gateway !== 'mpesa') {
             return ['ok' => true, 'phone' => is_string($rawPhone) ? trim($rawPhone) : $rawPhone];

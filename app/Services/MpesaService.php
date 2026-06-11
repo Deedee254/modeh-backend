@@ -439,13 +439,29 @@ class MpesaService
                 'code' => $e->getCode(),
             ]);
 
-            Log::error('[MPESA] STK Push Query request exception', [
-                'checkout_request_id' => $checkoutRequestId,
-                'status_code' => $statusCode,
-                'response_body' => $responseBody,
-                'error' => $e->getMessage(),
-                'code' => $e->getCode(),
-            ]);
+            // Check if it's the transient "Transaction within processing limit" error from Safaricom
+            $isTransient = false;
+            if ($statusCode === 500 && $responseBody) {
+                $errJson = json_decode($responseBody, true);
+                if (($errJson['errorCode'] ?? '') === '500.001.1001' || str_contains($responseBody, 'processing limit')) {
+                    $isTransient = true;
+                }
+            }
+
+            if ($isTransient) {
+                Log::info('[MPESA] STK Push Query transient status: Transaction within processing limit (still waiting for PIN)', [
+                    'checkout_request_id' => $checkoutRequestId,
+                    'status_code' => $statusCode,
+                ]);
+            } else {
+                Log::error('[MPESA] STK Push Query request exception', [
+                    'checkout_request_id' => $checkoutRequestId,
+                    'status_code' => $statusCode,
+                    'response_body' => $responseBody,
+                    'error' => $e->getMessage(),
+                    'code' => $e->getCode(),
+                ]);
+            }
 
             return [
                 'ok' => false,

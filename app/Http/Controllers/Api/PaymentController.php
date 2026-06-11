@@ -377,6 +377,10 @@ class PaymentController extends Controller
 
     /**
      * Handle one-off purchase completion or cancellation.
+     * 
+     * Uses pessimistic locking and database transactions to prevent:
+     * - Duplicate invoices from concurrent webhook callbacks
+     * - Partial payment processing if any operation fails
      */
     private function handleOneOffPurchase(\App\Models\OneOffPurchase $purchase, string $txId, string $status)
     {
@@ -391,15 +395,11 @@ class PaymentController extends Controller
             'status' => $status,
         ]);
 
-        if ($status === 'success') {
-            if ($purchase->status === 'confirmed' && \App\Models\Transaction::where('tx_id', $txId)->exists()) {
-                return response()->json(['ok' => true, 'skipped' => true]);
-            }
-        }
-
+        // Handle non-success cases immediately (no lock needed)
         if ($status !== 'success') {
-            $purchase->status = $status === 'cancelled' ? 'cancelled' : 'failed';
-            $purchase->save();
+            $purchase->update([
+                'status' => $status === 'cancelled' ? 'cancelled' : 'failed',
+            ]);
             Log::warning('[Payment] One-off purchase not successful', [
                 'trace_id' => $traceId,
                 'purchase_id' => $purchase->id,
@@ -410,89 +410,107 @@ class PaymentController extends Controller
             return response()->json(['ok' => false]);
         }
 
-        // Mark purchase as confirmed
-        $purchase->status = 'confirmed';
-        $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], ['completed_at' => now()]);
-        $purchase->save();
+        // Lock the purchase record to serialize concurrent callbacks
+        // This prevents race conditions where two webhooks process the same purchase simultaneously
+        $purchase = \App\Models\OneOffPurchase::lockForUpdate()->find($purchase->id);
 
-        if (!$purchase->user_id) {
-            $this->createGuestUnlockToken($purchase);
-        }
-
-        // Provision package subscription (institution or individual) when package purchases are confirmed.
-        $this->provisionPackageFromPurchase($purchase, $txId);
-
-        $amount = $purchase->amount ?? 0;
-
-        // Prevent duplicate transactions
-        if (\App\Models\Transaction::where('tx_id', $txId)->exists()) {
-            return response()->json(['ok' => true]);
-        }
-
-        // Revenue split (platform vs quiz master, etc.) always runs; invoices stay user-linked only below.
-        match ($purchase->item_type) {
-            'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount),
-            'battle' => $this->createTransactionForBattle($purchase, $txId, $amount),
-            'tournament' => $this->createTransactionForTournament($purchase, $txId, $amount),
-            'package' => $this->createTransactionForPackage($purchase, $txId, $amount),
-            default => $this->createGenericTransaction($purchase, $txId, $amount),
-        };
-
-        // Update tournament participant if applicable
-        if ($purchase->item_type === 'tournament') {
-            $this->updateTournamentParticipant($purchase);
-        }
-
-        // Create invoice for one-off purchase
-        try {
-            $itemType = ucfirst($purchase->item_type); // 'Quiz', 'Battle', 'Tournament', etc.
-            if ($purchase->user_id) {
-                $invoice = \App\Models\Invoice::createWithUniqueNumber([
-                'user_id' => $purchase->user_id,
-                'invoiceable_type' => \App\Models\OneOffPurchase::class,
-                'invoiceable_id' => $purchase->id,
-                'amount' => $amount,
-                'currency' => 'KES',
-                'description' => "{$itemType} Unlock - Item #{$purchase->item_id}",
-                'status' => 'paid',
-                'paid_at' => now(),
-                'payment_method' => 'mpesa',
-                'transaction_id' => $txId,
-                'meta' => [
-                    'item_type' => $purchase->item_type,
-                    'item_id' => $purchase->item_id,
-                    'gateway_meta' => $purchase->gateway_meta,
-                ],
-                ]);
-
-                // Send email with invoice
-                $purchase->user?->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
-
-                Log::info('[Payment] One-off purchase invoice created and email sent', [
-                    'invoice_id' => $invoice->id,
-                    'purchase_id' => $purchase->id,
-                    'user_id' => $purchase->user_id,
-                    'amount' => $amount,
-                    'item_type' => $purchase->item_type,
-                ]);
-            }
-        } catch (\Throwable $e) {
-            Log::error('[Payment] One-off purchase invoice creation failed', [
+        // Idempotency check: if already confirmed and transaction exists, skip processing
+        if ($purchase->status === 'confirmed' && \App\Models\Transaction::where('tx_id', $txId)->exists()) {
+            Log::info('[Payment] One-off purchase already processed (skipping)', [
+                'trace_id' => $traceId,
                 'purchase_id' => $purchase->id,
-                'error' => $e->getMessage(),
+                'tx' => $txId,
             ]);
-            // Don't fail the payment if invoice generation fails
+            return response()->json(['ok' => true, 'skipped' => true]);
         }
 
-        // Mark purchase as completed after all transaction processing succeeds
-        $purchase->update(['status' => 'completed']);
-        Log::info('[Payment] One-off purchase marked as completed', [
-            'purchase_id' => $purchase->id,
-            'item_type' => $purchase->item_type,
-            'item_id' => $purchase->item_id,
-        ]);
+        // Wrap all subsequent operations in a transaction to ensure atomicity
+        // If any step fails, all changes are rolled back
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($purchase, $txId, $traceId, $status) {
+            // Mark purchase as confirmed
+            $purchase->update([
+                'status' => 'confirmed',
+                'gateway_meta' => array_merge($purchase->gateway_meta ?? [], ['completed_at' => now()]),
+            ]);
 
-        return response()->json(['ok' => true]);
+            if (!$purchase->user_id) {
+                $this->createGuestUnlockToken($purchase);
+            }
+
+            // Provision package subscription (institution or individual) when package purchases are confirmed.
+            $this->provisionPackageFromPurchase($purchase, $txId);
+
+            $amount = $purchase->amount ?? 0;
+
+            // Create transactions (platform revenue split, etc.)
+            // These should be idempotent based on tx_id
+            match ($purchase->item_type) {
+                'quiz' => $this->createTransactionForQuiz($purchase, $txId, $amount),
+                'battle' => $this->createTransactionForBattle($purchase, $txId, $amount),
+                'tournament' => $this->createTransactionForTournament($purchase, $txId, $amount),
+                'package' => $this->createTransactionForPackage($purchase, $txId, $amount),
+                default => $this->createGenericTransaction($purchase, $txId, $amount),
+            };
+
+            // Update tournament participant if applicable
+            if ($purchase->item_type === 'tournament') {
+                $this->updateTournamentParticipant($purchase);
+            }
+
+            // Create invoice for one-off purchase (idempotent via firstOrCreate)
+            if ($purchase->user_id) {
+                $itemType = ucfirst($purchase->item_type);
+                $invoice = \App\Models\Invoice::firstOrCreate(
+                    [
+                        'invoiceable_type' => \App\Models\OneOffPurchase::class,
+                        'invoiceable_id' => $purchase->id,
+                    ],
+                    [
+                        'invoice_number' => \App\Models\Invoice::generateInvoiceNumber(),
+                        'user_id' => $purchase->user_id,
+                        'amount' => $amount,
+                        'currency' => 'KES',
+                        'description' => "{$itemType} Unlock - Item #{$purchase->item_id}",
+                        'status' => 'paid',
+                        'paid_at' => now(),
+                        'payment_method' => 'mpesa',
+                        'transaction_id' => $txId,
+                        'meta' => [
+                            'item_type' => $purchase->item_type,
+                            'item_id' => $purchase->item_id,
+                            'gateway_meta' => $purchase->gateway_meta,
+                        ],
+                    ]
+                );
+
+                // Only send email if this is a newly created invoice (not a duplicate)
+                if ($invoice->wasRecentlyCreated) {
+                    $purchase->user?->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
+                    Log::info('[Payment] One-off purchase invoice created and email sent', [
+                        'invoice_id' => $invoice->id,
+                        'purchase_id' => $purchase->id,
+                        'user_id' => $purchase->user_id,
+                        'amount' => $amount,
+                        'item_type' => $purchase->item_type,
+                    ]);
+                } else {
+                    Log::info('[Payment] One-off purchase invoice already exists (skipped email)', [
+                        'invoice_id' => $invoice->id,
+                        'purchase_id' => $purchase->id,
+                    ]);
+                }
+            }
+
+            // Mark purchase as completed (all operations succeeded, we're inside the transaction)
+            $purchase->update(['status' => 'completed']);
+            Log::info('[Payment] One-off purchase marked as completed', [
+                'purchase_id' => $purchase->id,
+                'item_type' => $purchase->item_type,
+                'item_id' => $purchase->item_id,
+            ]);
+
+            return response()->json(['ok' => true]);
+        });
     }
 
     private function createGuestUnlockToken(OneOffPurchase $purchase): void
@@ -1039,7 +1057,7 @@ class PaymentController extends Controller
 	            $owners = $split['owners'];
 	            $unassigned = $split['unassigned'];
 
-	            \DB::transaction(function () use ($purchase, $txId, $amount, $platformShare, $totalQuizMasterShare, $battle, $questionCount, $owners, $unassigned) {
+	            DB::transaction(function () use ($purchase, $txId, $amount, $platformShare, $totalQuizMasterShare, $battle, $questionCount, $owners, $unassigned) {
 	                $platformWallet = \App\Models\Wallet::firstOrCreate(
 	                    ['user_id' => 0, 'type' => \App\Models\Wallet::TYPE_PLATFORM],
 	                    ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
@@ -1507,7 +1525,7 @@ class PaymentController extends Controller
         return null;
     }
 
-    private function emitPaymentStatusUpdate($userId, string $txId, string $status, array $parsedMpesa = [], ?string $kind = null): void
+    private function emitPaymentStatusUpdate(int|null $userId, string $txId, string $status, array $parsedMpesa = [], ?string $kind = null): void
     {
         if (!$userId) {
             return;
@@ -1554,7 +1572,7 @@ class PaymentController extends Controller
     }
 
 
-    private function expectedAmountForBillable($billable): ?float
+    private function expectedAmountForBillable(Subscription|OneOffPurchase $billable): ?float
     {
         if ($billable instanceof Subscription) {
             return (float) ($billable->package->price ?? 0);
