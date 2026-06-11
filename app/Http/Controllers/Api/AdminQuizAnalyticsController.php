@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -13,7 +14,8 @@ class AdminQuizAnalyticsController extends Controller
     private function requireAdmin()
     {
         // Try default auth user (session) then sanctum token user
-        $user = auth()->user() ?? auth('sanctum')->user();
+        /** @var \App\Models\User|null $user */
+        $user = Auth::user() ?? Auth::guard('sanctum')->user();
 
         // Allow explicit admin role
         if ($user && ($user->is_admin ?? false)) {
@@ -414,5 +416,69 @@ class AdminQuizAnalyticsController extends Controller
 	                ],
 	            ],
 	        ]);
+    }
+
+    public function attempts(Request $request)
+    {
+        if ($resp = $this->requireAdmin()) return $resp;
+
+        $validated = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'level_id' => 'nullable|integer|exists:levels,id',
+            'grade_id' => 'nullable|integer|exists:grades,id',
+            'subject_id' => 'nullable|integer|exists:subjects,id',
+            'topic_id' => 'nullable|integer|exists:topics,id',
+            'limit' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $to = isset($validated['to']) ? Carbon::parse($validated['to'])->toDateString() : now()->toDateString();
+        $from = isset($validated['from']) ? Carbon::parse($validated['from'])->toDateString() : Carbon::parse($to)->subDays(29)->toDateString();
+        if ($from > $to) [$from, $to] = [$to, $from];
+        $fromTs = $from . ' 00:00:00';
+        $toTs = $to . ' 23:59:59';
+
+        $levelId = $validated['level_id'] ?? null;
+        $gradeId = $validated['grade_id'] ?? null;
+        $subjectId = $validated['subject_id'] ?? null;
+        $topicId = $validated['topic_id'] ?? null;
+        $limit = (int) $request->input('limit', 15);
+
+        $query = \App\Models\QuizAttempt::with(['quiz:id,title,slug,level_id,grade_id,subject_id,topic_id', 'user:id,name,avatar_url'])
+            ->whereBetween('created_at', [$fromTs, $toTs]);
+
+        if ($levelId || $gradeId || $subjectId || $topicId) {
+            $query->whereHas('quiz', function ($q) use ($levelId, $gradeId, $subjectId, $topicId) {
+                if ($levelId) $q->where('level_id', $levelId);
+                if ($gradeId) $q->where('grade_id', $gradeId);
+                if ($subjectId) $q->where('subject_id', $subjectId);
+                if ($topicId) $q->where('topic_id', $topicId);
+            });
+        }
+
+        $paginated = $query->orderBy('created_at', 'desc')->paginate($limit);
+
+        return response()->json([
+            'ok' => true,
+            'attempts' => $paginated->getCollection()->map(function ($attempt) {
+                return [
+                    'id' => $attempt->id,
+                    'quiz_id' => $attempt->quiz_id,
+                    'quiz_title' => $attempt->quiz?->title ?? 'Unknown Quiz',
+                    'quiz_slug' => $attempt->quiz?->slug ?? null,
+                    'user_id' => $attempt->user_id,
+                    'user_name' => $attempt->user?->name ?? 'Unknown User',
+                    'user_avatar' => $attempt->user?->avatar_url ?? null,
+                    'score' => $attempt->score,
+                    'points_earned' => $attempt->points_earned ?? 0,
+                    'total_time_seconds' => $attempt->total_time_seconds,
+                    'created_at' => $attempt->created_at,
+                ];
+            }),
+            'total' => $paginated->total(),
+            'current_page' => $paginated->currentPage(),
+            'last_page' => $paginated->lastPage(),
+            'per_page' => $paginated->perPage(),
+        ]);
     }
 }
