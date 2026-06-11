@@ -43,7 +43,7 @@ class AdminQuizInsightsController extends Controller
 
         // Load all relations needed by the admin editor
         $quiz->load([
-            'questions',
+            'questions.pendingFlags',
             'topic.subject',
             'subject',
             'grade.level',
