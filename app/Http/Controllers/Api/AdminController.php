@@ -802,9 +802,7 @@ class AdminController extends Controller
     {
         if ($resp = $this->requireAdmin()) return $resp;
 
-        $tournament = \App\Models\Tournament::findOrFail($tournamentId);
-
-        $query = $tournament->participants()
+        $query = \App\Models\TournamentParticipant::where('tournament_id', $tournamentId)
             ->with(['user', 'attempts'])
             ->orderBy('rank', 'asc');
 

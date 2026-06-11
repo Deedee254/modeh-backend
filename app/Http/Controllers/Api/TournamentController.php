@@ -336,7 +336,7 @@ class TournamentController extends Controller
         $attemptCounts = $this->attemptCountsByUser($tournament);
 
         $latestAttempts = $this->latestAttemptsQuery($tournament)
-            ->with('user:id,name,avatar,avatar_url')
+            ->with('user:id,name,avatar_url,social_avatar')
             ->orderByDesc('score')
             ->orderByRaw('CASE WHEN duration_seconds IS NULL THEN 2147483647 ELSE duration_seconds END ASC')
             ->orderBy('id')

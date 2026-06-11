@@ -83,12 +83,44 @@ class Invoice extends Model
     }
 
     /**
-     * Generate next invoice number (e.g., INV-2026-0001)
+     * Create an invoice with a unique invoice number, retrying if a race condition occurs.
+     */
+    public static function createWithUniqueNumber(array $attributes)
+    {
+        $attempts = 0;
+        $maxAttempts = 5;
+
+        while ($attempts < $maxAttempts) {
+            try {
+                $attributes['invoice_number'] = self::generateInvoiceNumber();
+                return self::create($attributes);
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Catch unique constraint violation (SQLSTATE 23000 / error code 1062)
+                if ($e->getCode() == 23000 || (isset($e->errorInfo[1]) && $e->errorInfo[1] == 1062)) {
+                    $attempts++;
+                    if ($attempts >= $maxAttempts) {
+                        throw $e;
+                    }
+                    usleep(50000); // Wait 50ms before retrying
+                } else {
+                    throw $e;
+                }
+            }
+        }
+    }
+
+    /**
+     * Generate next invoice number (e.g., INV-2026-0001), skipping existing ones
      */
     public static function generateInvoiceNumber()
     {
         $year = now()->year;
         $count = self::whereYear('created_at', $year)->count() + 1;
+        
+        while (self::where('invoice_number', sprintf('INV-%d-%04d', $year, $count))->exists()) {
+            $count++;
+        }
+
         return sprintf('INV-%d-%04d', $year, $count);
     }
 }

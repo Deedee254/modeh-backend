@@ -13,8 +13,7 @@ class InvoiceService
      */
     public function createForSubscription(Subscription $sub, ?string $description = null): Invoice
     {
-        $invoice = Invoice::create([
-            'invoice_number' => Invoice::generateInvoiceNumber(),
+        $invoice = Invoice::createWithUniqueNumber([
             'user_id' => $sub->user_id,
             'invoiceable_type' => Subscription::class,
             'invoiceable_id' => $sub->id,

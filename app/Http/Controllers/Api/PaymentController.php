@@ -447,8 +447,7 @@ class PaymentController extends Controller
         try {
             $itemType = ucfirst($purchase->item_type); // 'Quiz', 'Battle', 'Tournament', etc.
             if ($purchase->user_id) {
-                $invoice = \App\Models\Invoice::create([
-                'invoice_number' => \App\Models\Invoice::generateInvoiceNumber(),
+                $invoice = \App\Models\Invoice::createWithUniqueNumber([
                 'user_id' => $purchase->user_id,
                 'invoiceable_type' => \App\Models\OneOffPurchase::class,
                 'invoiceable_id' => $purchase->id,
