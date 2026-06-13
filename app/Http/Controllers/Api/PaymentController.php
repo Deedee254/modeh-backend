@@ -460,13 +460,14 @@ class PaymentController extends Controller
             // Create invoice for one-off purchase (idempotent via firstOrCreate)
             if ($purchase->user_id) {
                 $itemType = ucfirst($purchase->item_type);
-                $invoice = \App\Models\Invoice::firstOrCreate(
-                    [
+                $invoice = \App\Models\Invoice::where('invoiceable_type', \App\Models\OneOffPurchase::class)
+                    ->where('invoiceable_id', $purchase->id)
+                    ->first();
+
+                if (!$invoice) {
+                    $invoice = \App\Models\Invoice::createWithUniqueNumber([
                         'invoiceable_type' => \App\Models\OneOffPurchase::class,
                         'invoiceable_id' => $purchase->id,
-                    ],
-                    [
-                        'invoice_number' => \App\Models\Invoice::generateInvoiceNumber(),
                         'user_id' => $purchase->user_id,
                         'amount' => $amount,
                         'currency' => 'KES',
@@ -480,8 +481,8 @@ class PaymentController extends Controller
                             'item_id' => $purchase->item_id,
                             'gateway_meta' => $purchase->gateway_meta,
                         ],
-                    ]
-                );
+                    ]);
+                }
 
                 // Only send email if this is a newly created invoice (not a duplicate)
                 if ($invoice->wasRecentlyCreated) {
