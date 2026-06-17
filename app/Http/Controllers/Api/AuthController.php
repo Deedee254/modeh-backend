@@ -472,9 +472,6 @@ class AuthController extends Controller
         // return it — the frontend will use it for authenticated API calls.
         $user = User::find($user->id);
         
-        // Revoke all old tokens to prevent token accumulation
-        $user->tokens()->delete();
-        
         $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 
         // Create a personal access token for the user (stateless)
@@ -563,9 +560,6 @@ class AuthController extends Controller
 
         // Load user data explicitly to ensure it's the correct User model with HasApiTokens trait
         $user = User::find(Auth::id());
-        
-        // Revoke all old tokens to prevent token accumulation and potential leaks
-        $user->tokens()->delete();
         
         $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 

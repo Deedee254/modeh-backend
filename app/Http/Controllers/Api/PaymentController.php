@@ -329,16 +329,49 @@ class PaymentController extends Controller
                 $purchase->save();
             }
 
-            // Handle one-off purchase
-            $response = $this->handleOneOffPurchase($purchase, $checkoutId, $status);
-            $this->emitPaymentStatusUpdate(
-                $purchase->user_id,
-                $checkoutId,
-                $status,
-                $payload['parsed_mpesa'] ?? [],
-                'one_off'
-            );
-            return $response;
+            // Handle one-off purchase with proper exception handling
+            try {
+                Log::channel('payment')->info('[Payment] Processing one-off purchase callback', [
+                    'purchase_id' => $purchase->id,
+                    'tx' => $checkoutId,
+                    'status' => $status,
+                ]);
+                $response = $this->handleOneOffPurchase($purchase, $checkoutId, $status);
+                $this->emitPaymentStatusUpdate(
+                    $purchase->user_id,
+                    $checkoutId,
+                    $status,
+                    $payload['parsed_mpesa'] ?? [],
+                    'one_off'
+                );
+                return $response;
+            } catch (\Throwable $e) {
+                Log::error('[Payment] Exception during one-off purchase processing', [
+                    'trace_id' => $traceId,
+                    'purchase_id' => $purchase->id,
+                    'tx' => $checkoutId,
+                    'error' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]);
+
+                // Mark purchase as failed if not already processed
+                try {
+                    $purchase->refresh();
+                    if (in_array($purchase->status, ['pending', 'confirmed'])) {
+                        $purchase->update(['status' => 'failed']);
+                    }
+                } catch (\Throwable $updateErr) {
+                    Log::error('[Payment] Failed to mark purchase as failed', ['error' => $updateErr->getMessage()]);
+                }
+
+                // Still return success to M-PESA to acknowledge webhook receipt
+                // User can manually reconcile via the reconcile endpoint
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Internal processing error',
+                ], 500);
+            }
         }
 
         Log::channel('payment')->info('[Payment] Subscription callback matched', [
@@ -1451,27 +1484,51 @@ class PaymentController extends Controller
      */
     private function updateTournamentParticipant(\App\Models\OneOffPurchase $purchase)
     {
-        try {
-            DB::table('tournament_participants')
-                ->where('tournament_id', $purchase->item_id)
-                ->where('user_id', $purchase->user_id)
-                ->where('status', 'pending_payment')
-                ->update([
-                    'status' => 'paid',
-                    'approved_at' => now(), // repurposed as paid_at
-                    'updated_at' => now(),
-                ]);
+        // Update tournament participant status from pending_payment to paid
+        $updated = DB::table('tournament_participants')
+            ->where('tournament_id', $purchase->item_id)
+            ->where('user_id', $purchase->user_id)
+            ->where('status', 'pending_payment')
+            ->update([
+                'status' => 'paid',
+                'approved_at' => now(), // repurposed as paid_at
+                'updated_at' => now(),
+            ]);
 
-            // Notify user
+        if ($updated === 0) {
+            Log::warning('[Payment] Tournament participant not found for update', [
+                'tournament_id' => $purchase->item_id,
+                'user_id' => $purchase->user_id,
+                'purchase_id' => $purchase->id,
+            ]);
+        } else {
+            Log::info('[Payment] Tournament participant status updated to paid', [
+                'tournament_id' => $purchase->item_id,
+                'user_id' => $purchase->user_id,
+                'purchase_id' => $purchase->id,
+            ]);
+        }
+
+        // Notify user (errors in notification don't prevent payment completion)
+        try {
             $user = \App\Models\User::find($purchase->user_id);
             if ($user) {
                 $tournament = \App\Models\Tournament::find($purchase->item_id);
                 if ($tournament) {
                     $user->notify(new \App\Notifications\TournamentRegistrationStatusChanged($tournament, 'paid'));
+                    Log::info('[Payment] Tournament registration notification sent', [
+                        'user_id' => $purchase->user_id,
+                        'tournament_id' => $purchase->item_id,
+                    ]);
                 }
             }
         } catch (\Throwable $e) {
-            try { Log::warning('Failed to promote tournament participant: ' . $e->getMessage()); } catch (\Throwable $_) {}
+            Log::warning('[Payment] Failed to notify tournament participant', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'error' => $e->getMessage(),
+            ]);
+            // Don't rethrow - notification failure shouldn't block payment confirmation
         }
     }
 
