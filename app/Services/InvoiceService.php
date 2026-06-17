@@ -13,31 +13,65 @@ class InvoiceService
      */
     public function createForSubscription(Subscription $sub, ?string $description = null): Invoice
     {
-        $invoice = Invoice::createWithUniqueNumber([
-            'user_id' => $sub->user_id,
-            'invoiceable_type' => Subscription::class,
-            'invoiceable_id' => $sub->id,
-            'amount' => $sub->package->price ?? 0,
-            'currency' => $sub->package->currency ?? 'KES',
-            'description' => $description ?? ($sub->package->name . ' Subscription'),
-            'status' => 'pending',
-            'due_at' => now()->addDays(30),
-            'meta' => [
-                'package_id' => $sub->package_id,
-                'package_name' => $sub->package->name,
-                'duration_days' => $sub->package->duration_days ?? 30,
+        $existingInvoice = Invoice::where('invoiceable_type', Subscription::class)
+            ->where('invoiceable_id', $sub->id)
+            ->first();
+
+        if ($existingInvoice) {
+            Log::info('[Invoice] Already exists for subscription', [
+                'invoice_id' => $existingInvoice->id,
                 'subscription_id' => $sub->id,
-            ],
-        ]);
+            ]);
+            return $existingInvoice;
+        }
 
-        Log::info('[Invoice] Created for subscription', [
-            'invoice_id' => $invoice->id,
-            'subscription_id' => $sub->id,
-            'user_id' => $sub->user_id,
-            'amount' => $invoice->amount,
-        ]);
+        try {
+            $invoice = Invoice::createWithUniqueNumber([
+                'user_id' => $sub->user_id,
+                'invoiceable_type' => Subscription::class,
+                'invoiceable_id' => $sub->id,
+                'amount' => $sub->package->price ?? 0,
+                'currency' => $sub->package->currency ?? 'KES',
+                'description' => $description ?? ($sub->package->name . ' Subscription'),
+                'status' => 'pending',
+                'due_at' => now()->addDays(30),
+                'meta' => [
+                    'package_id' => $sub->package_id,
+                    'package_name' => $sub->package->name,
+                    'duration_days' => $sub->package->duration_days ?? 30,
+                    'subscription_id' => $sub->id,
+                ],
+            ]);
 
-        return $invoice;
+            Log::info('[Invoice] Created for subscription', [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'subscription_id' => $sub->id,
+                'user_id' => $sub->user_id,
+                'amount' => $invoice->amount,
+            ]);
+
+            return $invoice;
+        } catch (\Throwable $e) {
+            // If creation fails, try to retrieve existing invoice
+            $invoice = Invoice::where('invoiceable_type', Subscription::class)
+                ->where('invoiceable_id', $sub->id)
+                ->first();
+
+            if ($invoice) {
+                Log::info('[Invoice] Retrieved existing invoice after creation failure', [
+                    'invoice_id' => $invoice->id,
+                    'subscription_id' => $sub->id,
+                ]);
+                return $invoice;
+            }
+
+            Log::error('[Invoice] Failed to create or retrieve invoice for subscription', [
+                'subscription_id' => $sub->id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
     }
 
     /**

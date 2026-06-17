@@ -490,46 +490,55 @@ class PaymentController extends Controller
                 $this->updateTournamentParticipant($purchase);
             }
 
-            // Create invoice for one-off purchase (idempotent via firstOrCreate)
+            // Create invoice for one-off purchase
+            // Only create if this is the first time processing this purchase
             if ($purchase->user_id) {
-                $itemType = ucfirst($purchase->item_type);
-                $invoice = \App\Models\Invoice::where('invoiceable_type', \App\Models\OneOffPurchase::class)
+                $existingInvoice = \App\Models\Invoice::where('invoiceable_type', \App\Models\OneOffPurchase::class)
                     ->where('invoiceable_id', $purchase->id)
                     ->first();
 
-                if (!$invoice) {
-                    $invoice = \App\Models\Invoice::createWithUniqueNumber([
-                        'invoiceable_type' => \App\Models\OneOffPurchase::class,
-                        'invoiceable_id' => $purchase->id,
-                        'user_id' => $purchase->user_id,
-                        'amount' => $amount,
-                        'currency' => 'KES',
-                        'description' => "{$itemType} Unlock - Item #{$purchase->item_id}",
-                        'status' => 'paid',
-                        'paid_at' => now(),
-                        'payment_method' => 'mpesa',
-                        'transaction_id' => $txId,
-                        'meta' => [
-                            'item_type' => $purchase->item_type,
-                            'item_id' => $purchase->item_id,
-                            'gateway_meta' => $purchase->gateway_meta,
-                        ],
-                    ]);
-                }
+                if (!$existingInvoice) {
+                    try {
+                        $itemType = ucfirst($purchase->item_type);
+                        $invoice = \App\Models\Invoice::createWithUniqueNumber([
+                            'invoiceable_type' => \App\Models\OneOffPurchase::class,
+                            'invoiceable_id' => $purchase->id,
+                            'user_id' => $purchase->user_id,
+                            'amount' => $amount,
+                            'currency' => 'KES',
+                            'description' => "{$itemType} Unlock - Item #{$purchase->item_id}",
+                            'status' => 'paid',
+                            'paid_at' => now(),
+                            'payment_method' => 'mpesa',
+                            'transaction_id' => $txId,
+                            'meta' => [
+                                'item_type' => $purchase->item_type,
+                                'item_id' => $purchase->item_id,
+                                'gateway_meta' => $purchase->gateway_meta,
+                            ],
+                        ]);
 
-                // Only send email if this is a newly created invoice (not a duplicate)
-                if ($invoice->wasRecentlyCreated) {
-                    $purchase->user?->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
-                    Log::info('[Payment] One-off purchase invoice created and email sent', [
-                        'invoice_id' => $invoice->id,
-                        'purchase_id' => $purchase->id,
-                        'user_id' => $purchase->user_id,
-                        'amount' => $amount,
-                        'item_type' => $purchase->item_type,
-                    ]);
+                        $purchase->user?->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
+                        Log::info('[Payment] One-off purchase invoice created and email sent', [
+                            'invoice_id' => $invoice->id,
+                            'invoice_number' => $invoice->invoice_number,
+                            'purchase_id' => $purchase->id,
+                            'user_id' => $purchase->user_id,
+                            'amount' => $amount,
+                            'item_type' => $purchase->item_type,
+                        ]);
+                    } catch (\Throwable $invoiceError) {
+                        // Don't fail the entire payment if invoice creation fails
+                        // The purchase is already confirmed, user should be able to access content
+                        Log::warning('[Payment] Failed to create invoice for one-off purchase', [
+                            'purchase_id' => $purchase->id,
+                            'error' => $invoiceError->getMessage(),
+                        ]);
+                    }
                 } else {
-                    Log::info('[Payment] One-off purchase invoice already exists (skipped email)', [
-                        'invoice_id' => $invoice->id,
+                    Log::info('[Payment] One-off purchase invoice already exists (skipped)', [
+                        'invoice_id' => $existingInvoice->id,
+                        'invoice_number' => $existingInvoice->invoice_number,
                         'purchase_id' => $purchase->id,
                     ]);
                 }
