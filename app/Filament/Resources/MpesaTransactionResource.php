@@ -22,7 +22,7 @@ class MpesaTransactionResource extends Resource
     protected static ?string $model = MpesaTransaction::class;
     protected static ?string $navigationLabel = 'M-Pesa Transactions';
     /** @var string|null $navigationGroup */
-    protected static ?string $navigationGroup = 'Payments & Subscriptions';
+    protected static \UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
     protected static ?int $navigationSort = 4;
     protected static ?string $recordTitleAttribute = 'mpesa_receipt';
 
