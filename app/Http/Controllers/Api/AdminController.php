@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Models\Wallet;
 use App\Models\WithdrawalRequest;
 use App\Models\PaymentSetting;
+use App\Models\MpesaTransaction;
+use App\Models\Invoice;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +21,7 @@ class AdminController extends Controller
     private function requireAdmin()
     {
         // Try default auth user (session) then sanctum token user
+        /** @var \App\Models\User|null $user */
         $user = auth()->user() ?? auth('sanctum')->user();
 
         // Allow explicit admin role
@@ -179,7 +182,7 @@ class AdminController extends Controller
     }
 
     /**
-     * Get admin transactions list with filters
+     * Get transactions list
      */
     public function transactions(Request $request)
     {
@@ -438,6 +441,7 @@ class AdminController extends Controller
      */
     public function approveWithdrawal(Request $request, int $withdrawalId)
     {
+        /** @var \App\Models\User|null $user */
         $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
@@ -469,6 +473,7 @@ class AdminController extends Controller
      */
     public function rejectWithdrawal(Request $request, int $withdrawalId)
     {
+        /** @var \App\Models\User|null $user */
         $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
@@ -531,6 +536,7 @@ class AdminController extends Controller
      */
     public function markWithdrawalAsPaid(Request $request, int $withdrawalId)
     {
+        /** @var \App\Models\User|null $user */
         $user = auth()->user() ?? auth('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
@@ -596,6 +602,7 @@ class AdminController extends Controller
         // Allow public GET of settings (read-only) so clients can read defaults.
         // Require admin only for updates (POST/PUT).
         if ($request->method() !== 'GET') {
+            /** @var \App\Models\User|null $user */
             $user = auth()->user() ?? auth('sanctum')->user();
             if (!$user || !$user->is_admin) {
                 return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
@@ -825,6 +832,7 @@ class AdminController extends Controller
         $limit = $request->input('limit', 50);
 
         $total = $query->count();
+        $tournament = \App\Models\Tournament::findOrFail($tournamentId);
         $participants = $query->skip(($page - 1) * $limit)
             ->take($limit)
             ->get()
@@ -868,6 +876,254 @@ class AdminController extends Controller
             'limit' => $limit,
             'total' => $total,
         ]);
+    }
+
+    /**
+     * Get M-Pesa transactions with details about linked purchases
+     */
+    public function mpesaTransactions(Request $request)
+    {
+        if ($resp = $this->requireAdmin()) return $resp;
+
+        $query = \App\Models\MpesaTransaction::query();
+
+        // Apply filters
+        if ($request->filled('from')) {
+            $query->where('created_at', '>=', $request->input('from') . ' 00:00:00');
+        }
+
+        if ($request->filled('to')) {
+            $query->where('created_at', '<=', $request->input('to') . ' 23:59:59');
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        if ($request->filled('billable_type')) {
+            $query->where('billable_type', $request->input('billable_type'));
+        }
+
+        // Get total count before pagination
+        $total = $query->count();
+
+        // Get transactions with pagination
+        $perPage = (int) $request->input('limit', 50);
+        $page = (int) $request->input('page', 1);
+
+        $transactions = $query
+            ->orderBy('created_at', 'desc')
+            ->offset(($page - 1) * $perPage)
+            ->limit($perPage)
+            ->get()
+            ->map(function ($tx) {
+                $billableModel = null;
+                $billablePurchaseStatus = null;
+
+                try {
+                    $billableModel = $tx->billable;
+                    if ($billableModel instanceof \App\Models\OneOffPurchase) {
+                        $billablePurchaseStatus = $billableModel->status;
+                    }
+                } catch (\Throwable $_) {
+                    // Billable may not exist
+                }
+
+                return [
+                    'id' => $tx->id,
+                    'checkout_request_id' => $tx->checkout_request_id,
+                    'mpesa_receipt' => $tx->mpesa_receipt,
+                    'phone' => $tx->phone,
+                    'amount' => (float) $tx->amount,
+                    'status' => $tx->status,
+                    'billable_type' => $tx->billable_type,
+                    'billable_id' => $tx->billable_id,
+                    'billable_purchase_status' => $billablePurchaseStatus,
+                    'result_code' => $tx->result_code,
+                    'result_desc' => $tx->result_desc,
+                    'transaction_date' => $tx->transaction_date,
+                    'created_at' => $tx->created_at,
+                    'has_invoice' => $billableModel instanceof \App\Models\OneOffPurchase 
+                        ? \App\Models\Invoice::where('invoiceable_type', 'App\Models\OneOffPurchase')
+                            ->where('invoiceable_id', $tx->billable_id)
+                            ->exists()
+                        : null,
+                ];
+            });
+
+        return response()->json([
+            'ok' => true,
+            'transactions' => $transactions,
+            'total' => $total,
+            'page' => $page,
+            'limit' => $perPage,
+        ]);
+    }
+
+    /**
+     * Create an invoice for an M-Pesa transaction
+     */
+    public function createMpesaInvoice(Request $request, int|string $transactionId)
+    {
+        if ($resp = $this->requireAdmin()) return $resp;
+
+        try {
+            $transaction = MpesaTransaction::findOrFail($transactionId);
+            
+            // Only create invoices for one-off purchases
+            if ($transaction->billable_type !== 'App\Models\OneOffPurchase') {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Can only create invoices for one-off purchases'
+                ], 400);
+            }
+
+            $purchase = $transaction->billable;
+            if (!$purchase) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Associated purchase not found'
+                ], 404);
+            }
+
+            // Check if invoice already exists
+            $existingInvoice = Invoice::where('invoiceable_type', 'App\Models\OneOffPurchase')
+                ->where('invoiceable_id', $purchase->id)
+                ->first();
+
+            if ($existingInvoice) {
+                return response()->json([
+                    'ok' => true,
+                    'message' => 'Invoice already exists',
+                    'invoice' => [
+                        'id' => $existingInvoice->id,
+                        'invoice_number' => $existingInvoice->invoice_number,
+                        'download_url' => route('invoices.download', $existingInvoice->id),
+                    ]
+                ]);
+            }
+
+            // Create invoice atomically
+            $invoice = Invoice::createWithUniqueNumber([
+                'invoiceable_type' => 'App\Models\OneOffPurchase',
+                'invoiceable_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'amount' => $transaction->amount,
+                'description' => 'One-time purchase - M-Pesa Transaction #' . $transaction->mpesa_receipt,
+            ]);
+
+            // Send notification email
+            try {
+                $purchase->user->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
+            } catch (\Throwable $e) {
+                Log::warning('Failed to send invoice notification for transaction ' . $transactionId, [
+                    'error' => $e->getMessage()
+                ]);
+            }
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Invoice created successfully',
+                'invoice' => [
+                    'id' => $invoice->id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'download_url' => route('invoices.download', $invoice->id),
+                ]
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (strpos($e->getMessage(), 'UNIQUE constraint') !== false) {
+                // Invoice number collision - retrieve the existing one
+                try {
+                    $invoice = Invoice::where('invoiceable_type', 'App\Models\OneOffPurchase')
+                        ->where('invoiceable_id', $transactionId)
+                        ->first();
+                    
+                    if ($invoice) {
+                        return response()->json([
+                            'ok' => true,
+                            'message' => 'Invoice exists',
+                            'invoice' => [
+                                'id' => $invoice->id,
+                                'invoice_number' => $invoice->invoice_number,
+                                'download_url' => route('invoices.download', $invoice->id),
+                            ]
+                        ]);
+                    }
+                } catch (\Throwable $_) {
+                    // Continue to error response
+                }
+                
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Invoice number conflict - unable to create'
+                ], 409);
+            }
+
+            Log::error('Failed to create invoice for M-Pesa transaction', [
+                'transaction_id' => $transactionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to create invoice'
+            ], 500);
+        } catch (\Throwable $e) {
+            Log::error('Unexpected error creating M-Pesa invoice', [
+                'transaction_id' => $transactionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'An unexpected error occurred'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get or download invoice for an M-Pesa transaction
+     */
+    public function getMpesaInvoice(Request $request, int|string $transactionId)
+    {
+        if ($resp = $this->requireAdmin()) return $resp;
+
+        try {
+            $transaction = MpesaTransaction::findOrFail($transactionId);
+
+            if ($transaction->billable_type !== 'App\Models\OneOffPurchase') {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'No invoice for this transaction type'
+                ], 404);
+            }
+
+            $invoice = Invoice::where('invoiceable_type', 'App\Models\OneOffPurchase')
+                ->where('invoiceable_id', $transaction->billable_id)
+                ->first();
+
+            if (!$invoice) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Invoice not found'
+                ], 404);
+            }
+
+            // Return download URL
+            return response()->json([
+                'ok' => true,
+                'invoice' => [
+                    'id' => $invoice->id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'download_url' => route('invoices.download', $invoice->id),
+                ]
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to retrieve invoice'
+            ], 500);
+        }
     }
 }
 

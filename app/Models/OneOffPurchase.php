@@ -48,4 +48,12 @@ class OneOffPurchase extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * Get all invoices for this one-off purchase (polymorphic)
+     */
+    public function invoices()
+    {
+        return $this->morphMany(Invoice::class, 'invoiceable');
+    }
 }

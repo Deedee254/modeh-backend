@@ -417,6 +417,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::middleware(['can:viewFilament'])->group(function () {
         Route::get('/admin/metrics', [\App\Http\Controllers\Api\AdminController::class, 'metrics']);
         Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminController::class, 'transactions']);
+        Route::get('/admin/mpesa-transactions', [\App\Http\Controllers\Api\AdminController::class, 'mpesaTransactions']);
+        Route::post('/admin/mpesa-transactions/{transactionId}/create-invoice', [\App\Http\Controllers\Api\AdminController::class, 'createMpesaInvoice']);
+        Route::get('/admin/mpesa-transactions/{transactionId}/invoice', [\App\Http\Controllers\Api\AdminController::class, 'getMpesaInvoice']);
 	        Route::get('/admin/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
 	        Route::get('/admin/quiz-masters', [\App\Http\Controllers\Api\AdminController::class, 'quizMasters']);
 	        Route::get('/admin/quiz-masters/analytics', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'analytics']);
