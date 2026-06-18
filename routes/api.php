@@ -527,7 +527,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('transactions')->group(function () {
         Route::get('/', [\App\Http\Controllers\Api\TransactionController::class, 'index']);
         Route::get('/renewals', [\App\Http\Controllers\Api\TransactionController::class, 'renewals']);
-        Route::get('/{invoice}/download', [\App\Http\Controllers\Api\TransactionController::class, 'download']);
+        Route::get('/{invoice}/download', [\App\Http\Controllers\Api\TransactionController::class, 'download'])->name('invoices.download');
         Route::get('/{invoice}', [\App\Http\Controllers\Api\TransactionController::class, 'show']);
     });
 
