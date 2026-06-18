@@ -12,19 +12,24 @@ use Filament\Tables;
 use Filament\Forms;
 use Illuminate\Database\Eloquent\Builder;
 
-class QualifierLeaderboard extends Page implements HasTable
+class TournamentLeaderboard extends Page implements HasTable
 {
     use InteractsWithTable;
 
     protected static string $resource = TournamentResource::class;
 
-    protected string $view = 'filament.pages.tournaments.qualifier-leaderboard';
+    protected string $view = 'filament.pages.tournaments.tournament-leaderboard';
 
     public ?Tournament $record = null;
 
     public function mount(Tournament $record): void
     {
         $this->record = $record;
+    }
+
+    public function getTitle(): string
+    {
+        return 'Tournament Leaderboard - ' . $this->record->name;
     }
 
     public function table(Table $table): Table

@@ -260,28 +260,28 @@ class TournamentResource extends Resource
     protected static function getTournamentConfigSection(): array
     {
         return [
-            Section::make('Tournament Configuration')
-                ->description('Configure qualifier timing, question counts, and duration')
+            \Filament\Forms\Components\Section::make('Tournament Format Settings')
+                ->description('Configure tournament timing, question counts, and duration')
                 ->columnSpan('full')
                 ->schema([
                     Forms\Components\TextInput::make('qualifier_per_question_seconds')
-                        ->label('Qualifier: Seconds per Question')
+                        ->label('Seconds per Question')
                         ->numeric()
+                        ->default(30)
                         ->minValue(5)
                         ->maxValue(300)
-                        ->default(30)
-                        ->helperText('Time allowed per question in qualifier phase (5-300 seconds)'),
+                        ->helperText('Time allowed per question (5-300 seconds)'),
 
                     Forms\Components\TextInput::make('qualifier_question_count')
-                        ->label('Qualifier: Number of Questions')
+                        ->label('Number of Questions')
                         ->numeric()
+                        ->default(10)
                         ->minValue(1)
                         ->maxValue(100)
-                        ->default(10)
-                        ->helperText('How many questions in qualifier phase (1-100)'),
+                        ->helperText('How many questions in the tournament (1-100)'),
 
                     Forms\Components\Select::make('qualifier_tie_breaker')
-                        ->label('Qualifier: Tie-Breaker Rule')
+                        ->label('Tie-Breaker Rule')
                         ->options([
                             'score_then_duration' => 'Score (higher) then Speed (faster)',
                             'duration' => 'Speed (faster only)',
@@ -290,11 +290,11 @@ class TournamentResource extends Resource
                         ->helperText('How to rank participants with same scores'),
 
                     Forms\Components\TextInput::make('qualifier_days')
-                        ->label('Qualifier Duration (Days)')
+                        ->label('Tournament Duration (Days)')
                         ->numeric()
-                        ->minValue(1)
                         ->default(7)
-                        ->helperText('Number of days the qualifier phase runs'),
+                        ->minValue(1)
+                        ->helperText('Number of days the tournament runs'),
                 ])
                 ->columns(2)
                 ->collapsible(),
@@ -446,7 +446,7 @@ class TournamentResource extends Resource
             'index' => Pages\ListTournaments::route('/'),
             'create' => Pages\CreateTournament::route('/create'),
             'leaderboard' => Pages\Leaderboard::route('/{record}/leaderboard'),
-            'qualifier_leaderboard' => Pages\QualifierLeaderboard::route('/{record}/qualifier-leaderboard'),
+            'tournament_leaderboard' => Pages\TournamentLeaderboard::route('/{record}/tournament-leaderboard'),
             'edit' => Pages\EditTournament::route('/{record}/edit'),
             'view' => Pages\ViewTournament::route('/{record}'),
         ];

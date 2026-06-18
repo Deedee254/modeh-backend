@@ -147,10 +147,10 @@ Route::get('/recommendations/quizzes', [\App\Http\Controllers\Api\Recommendation
 Route::get('/tournaments', [\App\Http\Controllers\Api\TournamentController::class, 'index']);
 Route::get('/tournaments/{tournament}', [\App\Http\Controllers\Api\TournamentController::class, 'show']);
 Route::get('/tournaments/{tournament}/leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'leaderboard']);
-Route::get('/tournaments/{tournament}/qualifier-leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'qualifierLeaderboard']);
+Route::get('/tournaments/{tournament}/paginated-leaderboard', [\App\Http\Controllers\Api\TournamentController::class, 'paginatedLeaderboard']);
 // Tournament user-specific data (may return different results based on auth status)
 Route::get('/tournaments/{tournament}/registration-status', [\App\Http\Controllers\Api\TournamentController::class, 'registrationStatus']);
-Route::get('/tournaments/{tournament}/qualification-status', [\App\Http\Controllers\Api\TournamentController::class, 'qualificationStatus']);
+Route::get('/tournaments/{tournament}/attempt-status', [\App\Http\Controllers\Api\TournamentController::class, 'attemptStatus']);
 // Global public leaderboard (supports pagination, sorting and search)
 Route::get('/leaderboard', [\App\Http\Controllers\Api\LeaderboardController::class, 'index']);
 // Public badges endpoint
@@ -566,7 +566,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Tournaments
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);
-    Route::post('/tournaments/{tournament}/qualify/submit', [\App\Http\Controllers\Api\TournamentController::class, 'qualifySubmit']);
+    Route::post('/tournaments/{tournament}/attempt/submit', [\App\Http\Controllers\Api\TournamentController::class, 'submitAttempt']);
 
     // Admin tournament management (requires admin role)
     Route::middleware(['can:viewFilament'])->group(function () {

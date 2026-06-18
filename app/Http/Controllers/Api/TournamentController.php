@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Tournament;
-use App\Models\TournamentQualificationAttempt;
+use App\Models\TournamentAttempt;
 use App\Services\AchievementService;
 use App\Services\QuestionMarkingService;
 use Illuminate\Http\Request;
@@ -23,7 +23,7 @@ class TournamentController extends Controller
         $this->achievementService = $achievementService;
         $this->markingService = $markingService;
         $this->middleware('auth:sanctum')->except(['index', 'show']);
-        $this->middleware('throttle:60,1')->only(['join', 'qualifySubmit']);
+        $this->middleware('throttle:60,1')->only(['join', 'submitAttempt']);
     }
 
     public function index(Request $request)
@@ -59,7 +59,7 @@ class TournamentController extends Controller
             $isPaid = $participant && ($participant->pivot->status ?? 'pending_payment') === 'paid';
             
             if ($isPaid) {
-                $attemptsUsed = \App\Models\TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+                $attemptsUsed = \App\Models\TournamentAttempt::where('tournament_id', $tournament->id)
                     ->where('user_id', $user->id)
                     ->count();
                 
@@ -365,11 +365,11 @@ class TournamentController extends Controller
             'tournament' => $tournament->only(['id', 'name', 'status']),
             'leaderboard' => $leaderboard,
             'max_attempts' => self::SIMPLE_FLOW_MAX_ATTEMPTS,
-            'is_qualifier_phase' => in_array($tournament->status, ['upcoming', 'active'], true),
+            'is_tournament_phase' => in_array($tournament->status, ['upcoming', 'active'], true),
         ]);
     }
 
-    public function qualifierLeaderboard(Tournament $tournament, Request $request)
+    public function paginatedLeaderboard(Tournament $tournament, Request $request)
     {
         $this->maybeFinalizeSimpleFlowTournament($tournament);
         $perPage = $request->get('per_page', 50);
@@ -416,7 +416,7 @@ class TournamentController extends Controller
         ]);
     }
 
-    public function qualificationStatus(Request $request, Tournament $tournament)
+    public function attemptStatus(Request $request, Tournament $tournament)
     {
         $this->maybeFinalizeSimpleFlowTournament($tournament);
         $user = $request->user();
@@ -431,11 +431,11 @@ class TournamentController extends Controller
             ]);
         }
 
-        $attemptsUsed = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+        $attemptsUsed = TournamentAttempt::where('tournament_id', $tournament->id)
             ->where('user_id', $user->id)
             ->count();
 
-        $attempt = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+        $attempt = TournamentAttempt::where('tournament_id', $tournament->id)
             ->where('user_id', $user->id)
             ->orderByDesc('id')
             ->first();
@@ -475,7 +475,7 @@ class TournamentController extends Controller
         ]);
     }
 
-    public function qualifySubmit(Request $request, Tournament $tournament)
+    public function submitAttempt(Request $request, Tournament $tournament)
     {
         $this->maybeFinalizeSimpleFlowTournament($tournament);
         $user = $request->user();
@@ -483,7 +483,7 @@ class TournamentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $validationError = $this->validateQualifySubmitState($tournament, $user);
+        $validationError = $this->validatesubmitAttemptState($tournament, $user);
         if ($validationError) {
             return $validationError;
         }
@@ -502,7 +502,7 @@ class TournamentController extends Controller
         $answersToStore = [];
 
         foreach ($data['answers'] as $ans) {
-            $answerData = $this->processQualifyAnswer($ans, $questions, $shuffleSeed);
+            $answerData = $this->processAttemptAnswer($ans, $questions, $shuffleSeed);
             if (is_array($answerData) && isset($answerData['error'])) {
                 return response()->json(['message' => $answerData['error']], 400);
             }
@@ -521,11 +521,11 @@ class TournamentController extends Controller
         } else {
             // Secure fallback to client duration, capped at maximum allowed time plus buffer
             $clientDuration = intval($data['duration_seconds'] ?? 0);
-            $maxAllowed = ($tournament->qualifier_per_question_seconds ?? 30) * ($tournament->qualifier_question_count ?? 10);
+            $maxAllowed = ($tournament->per_question_seconds ?? 30) * ($tournament->question_count ?? 10);
             $durationSeconds = min($clientDuration, $maxAllowed + 60);
         }
 
-        $attempt = TournamentQualificationAttempt::create([
+        $attempt = TournamentAttempt::create([
             'tournament_id' => $tournament->id,
             'user_id' => $user->id,
             'score' => round($computedScore, 2),
@@ -544,10 +544,10 @@ class TournamentController extends Controller
             $resolvedAnswers[] = $ans;
         }
 
-        $this->updateQualifyParticipantScore($tournament, $user, $attempt);
+        $this->updateParticipantScore($tournament, $user, $attempt);
 
-        $leaderboard = $this->buildQualifierLeaderboard($tournament);
-        $attemptsUsed = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+        $leaderboard = $this->buildpaginatedLeaderboard($tournament);
+        $attemptsUsed = TournamentAttempt::where('tournament_id', $tournament->id)
             ->where('user_id', $user->id)
             ->count();
 
@@ -644,15 +644,15 @@ class TournamentController extends Controller
         ]);
     }
 
-    private function validateQualifySubmitState(Tournament $tournament, \App\Models\User $user): ?\Illuminate\Http\JsonResponse
+    private function validatesubmitAttemptState(Tournament $tournament, \App\Models\User $user): ?\Illuminate\Http\JsonResponse
     {
         $now = now();
 
-        if ($tournament->start_date && $now->lt($tournament->start_date)) {
-            return response()->json(['message' => 'Qualification has not started'], 400);
+        if ($tournament->status !== 'active' && $tournament->start_date && $now->lt($tournament->start_date)) {
+            return response()->json(['message' => 'Tournament has not started'], 400);
         }
         if ($tournament->end_date && $now->gt($tournament->end_date)) {
-            return response()->json(['message' => 'Qualification is closed'], 400);
+            return response()->json(['message' => 'Tournament is closed'], 400);
         }
         if (!in_array($tournament->status, ['upcoming', 'active'], true)) {
             return response()->json(['message' => 'Tournament is not accepting attempts'], 400);
@@ -663,7 +663,7 @@ class TournamentController extends Controller
             return response()->json(['message' => 'You must be registered and payment must be confirmed before submitting your tournament attempt'], 403);
         }
 
-        $attemptsUsed = TournamentQualificationAttempt::where('tournament_id', $tournament->id)
+        $attemptsUsed = TournamentAttempt::where('tournament_id', $tournament->id)
             ->where('user_id', $user->id)
             ->count();
         if ($attemptsUsed >= self::SIMPLE_FLOW_MAX_ATTEMPTS) {
@@ -673,7 +673,7 @@ class TournamentController extends Controller
         return null;
     }
 
-    private function processQualifyAnswer(array $answerInput, \Illuminate\Support\Collection $questions, string $shuffleSeed): array
+    private function processAttemptAnswer(array $answerInput, \Illuminate\Support\Collection $questions, string $shuffleSeed): array
     {
         $qId = (int) ($answerInput['question_id'] ?? 0);
         $given = $answerInput['answer'] ?? null;
@@ -781,7 +781,7 @@ class TournamentController extends Controller
         return $correctAnswers;
     }
 
-    private function updateQualifyParticipantScore(Tournament $tournament, \App\Models\User $user, TournamentQualificationAttempt $attempt): void
+    private function updateParticipantScore(Tournament $tournament, \App\Models\User $user, TournamentAttempt $attempt): void
     {
         try {
             $tournament->participants()->updateExistingPivot($user->id, [
@@ -792,7 +792,7 @@ class TournamentController extends Controller
         }
     }
 
-    private function buildQualifierLeaderboard(Tournament $tournament): \Illuminate\Support\Collection
+    private function buildpaginatedLeaderboard(Tournament $tournament): \Illuminate\Support\Collection
     {
         $attemptCounts = $this->attemptCountsByUser($tournament);
 
@@ -826,19 +826,19 @@ class TournamentController extends Controller
 
     private function latestAttemptsQuery(Tournament $tournament): \Illuminate\Database\Eloquent\Builder
     {
-        $latestIdsSub = TournamentQualificationAttempt::query()
+        $latestIdsSub = TournamentAttempt::query()
             ->selectRaw('MAX(id) as id')
             ->where('tournament_id', $tournament->id)
             ->groupBy('user_id');
 
-        return TournamentQualificationAttempt::query()
+        return TournamentAttempt::query()
             ->where('tournament_id', $tournament->id)
             ->whereIn('id', $latestIdsSub);
     }
 
     private function attemptCountsByUser(Tournament $tournament): array
     {
-        return TournamentQualificationAttempt::query()
+        return TournamentAttempt::query()
             ->where('tournament_id', $tournament->id)
             ->select('user_id', DB::raw('COUNT(*) as attempts_used'))
             ->groupBy('user_id')

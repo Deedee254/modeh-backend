@@ -5,11 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class TournamentQualificationAttempt extends Model
+class TournamentAttempt extends Model
 {
     use HasFactory;
 
-    protected $table = 'tournament_qualification_attempts';
+    protected $table = 'tournament_attempts';
 
     protected $fillable = [
         'tournament_id',

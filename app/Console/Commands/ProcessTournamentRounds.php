@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Tournament;
-use App\Models\TournamentQualificationAttempt;
+use App\Models\TournamentAttempt;
 
 class ProcessTournamentRounds extends Command
 {
@@ -52,12 +52,12 @@ class ProcessTournamentRounds extends Command
             return false;
         }
 
-        $latestIdsSub = TournamentQualificationAttempt::query()
+        $latestIdsSub = TournamentAttempt::query()
             ->selectRaw('MAX(id) as id')
             ->where('tournament_id', $tournament->id)
             ->groupBy('user_id');
 
-        $winnerAttempt = TournamentQualificationAttempt::query()
+        $winnerAttempt = TournamentAttempt::query()
             ->where('tournament_id', $tournament->id)
             ->whereIn('id', $latestIdsSub)
             ->orderByDesc('score')

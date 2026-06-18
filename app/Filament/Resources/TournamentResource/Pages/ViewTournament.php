@@ -26,9 +26,9 @@ class ViewTournament extends ViewRecord
                 ->visible(fn () => in_array($this->record->status, ['active', 'completed']))
                 ->color('secondary')
                 ->icon('heroicon-o-chart-bar'),
-            Action::make('qualifier_leaderboard')
-                ->label('Qualifier Leaderboard')
-                ->url(fn () => TournamentResource::getUrl('qualifier_leaderboard', ['record' => $this->record]))
+            Action::make('tournament_leaderboard')
+                ->label('Tournament Leaderboard')
+                ->url(fn () => TournamentResource::getUrl('tournament_leaderboard', ['record' => $this->record]))
                 ->visible(fn () => true)
                 ->color('info')
                 ->icon('heroicon-o-list-bullet'),
@@ -86,21 +86,21 @@ class ViewTournament extends ViewRecord
             Section::make('Tournament Configuration')
                 ->columns(2)
                 ->schema([
-                    Placeholder::make('qualifier_question_count')
-                        ->label('Qualifier Questions')
-                        ->content(fn () => (string) ($this->record->qualifier_question_count ?? '10')),
+                    Placeholder::make('question_count')
+                        ->label('Questions')
+                        ->content(fn () => (string) ($this->record->question_count ?? '10')),
                     
-                    Placeholder::make('qualifier_per_question_seconds')
-                        ->label('Qualifier Time/Q')
-                        ->content(fn () => ($this->record->qualifier_per_question_seconds ?? '30') . 's'),
+                    Placeholder::make('per_question_seconds')
+                        ->label('Time/Q')
+                        ->content(fn () => ($this->record->per_question_seconds ?? '30') . 's'),
                     
-                    Placeholder::make('qualifier_days')
-                        ->label('Qualifier Duration')
-                        ->content(fn () => ($this->record->qualifier_days ?? '7') . ' days'),
+                    Placeholder::make('duration_days')
+                        ->label('Duration')
+                        ->content(fn () => ($this->record->duration_days ?? '7') . ' days'),
                     
-                    Placeholder::make('qualifier_tie_breaker')
+                    Placeholder::make('tie_breaker')
                         ->label('Tie-Breaker')
-                        ->content(fn () => str_replace('_', ' ', $this->record->qualifier_tie_breaker ?? 'score_then_duration')),
+                        ->content(fn () => str_replace('_', ' ', $this->record->tie_breaker ?? 'score_then_duration')),
                 ]),
 
             // Statistics Section

@@ -25,10 +25,10 @@ use App\Models\Question;
  * @property \Illuminate\Support\Carbon|null $end_date
  * @property int|null $round_delay_days
  * @property int $battle_question_count
- * @property int $qualifier_question_count
+ * @property int $question_count
  * @property int $battle_per_question_seconds
- * @property int $qualifier_per_question_seconds
- * @property string $qualifier_tie_breaker
+ * @property int $per_question_seconds
+ * @property string $tie_breaker
  * @property int $bracket_slots
  * @property string $format
  * @property array|string $rules
@@ -81,15 +81,15 @@ class Tournament extends Model
         'sponsor_details',
         'requires_approval',
         'is_featured',
-        // Qualifier configuration
-        'qualifier_per_question_seconds',
-        'qualifier_question_count',
+        // Tournament configuration
+        'per_question_seconds',
+        'question_count',
         'access_type',
         // Battle configuration
         'battle_per_question_seconds',
         'battle_question_count',
         // Tie-breaker and selection
-        'qualifier_tie_breaker',
+        'tie_breaker',
         // Day-based scheduling
         'round_delay_days',
     ];
@@ -115,15 +115,14 @@ class Tournament extends Model
 
     public function getRegistrationOpenAttribute()
     {
-        if ($this->status !== 'upcoming') {
+        if (!in_array($this->status, ['upcoming', 'active'], true)) {
             return false;
         }
 
         $now = now();
-        return $now->between(
-            $this->registration_end_date ? $now : $this->start_date,
-            $this->registration_end_date ?? $this->start_date
-        );
+        $cutoff = $this->registration_end_date ?? $this->start_date;
+
+        return $cutoff ? $now->lt($cutoff) : true;
     }
 
     public function getCanStartAttribute()
@@ -132,10 +131,7 @@ class Tournament extends Model
             return false;
         }
 
-        $participantCount = $this->participants()->count();
-        return $participantCount >= ($this->min_participants ?? 2) &&
-               $participantCount % 2 === 0 &&
-               now()->gte($this->start_date);
+        return now()->gte($this->start_date);
     }
 
     public function scopeActive($query)
@@ -203,9 +199,9 @@ class Tournament extends Model
         return $this->hasMany(TournamentBattle::class);
     }
 
-    public function qualificationAttempts()
+    public function attempts()
     {
-        return $this->hasMany(TournamentQualificationAttempt::class);
+        return $this->hasMany(TournamentAttempt::class);
     }
 
 
@@ -246,12 +242,12 @@ class Tournament extends Model
      */
     public function getQuestionRecommendations(): array
     {
-        $qualifierCount = $this->qualifier_question_count ?? 10;
+        $questionCount = $this->question_count ?? 10;
         $currentCount = $this->questions()->count();
         $participantCount = $this->participants()->count();
 
-        $minimum = $qualifierCount;
-        $optimum = $qualifierCount * 2; // Recommended to support healthy variety in shuffled attempts
+        $minimum = $questionCount;
+        $optimum = $questionCount * 2; // Recommended to support healthy variety in shuffled attempts
 
         return [
             'minimum' => $minimum,
@@ -263,7 +259,7 @@ class Tournament extends Model
                 [
                     'round' => 1,
                     'battles' => 1,
-                    'questions_per_battle' => $qualifierCount,
+                    'questions_per_battle' => $questionCount,
                     'minimum_questions' => $minimum,
                     'optimum_questions' => $optimum,
                 ]
@@ -288,20 +284,20 @@ class Tournament extends Model
     public function getMaxParticipantsRecommendation(): array
     {
         $currentQuestions = $this->questions()->count();
-        $qualifierCount = $this->qualifier_question_count ?? 10;
+        $questionCount = $this->question_count ?? 10;
         $currentParticipants = $this->participants()->count();
 
-        $isSufficient = $currentQuestions >= $qualifierCount;
+        $isSufficient = $currentQuestions >= $questionCount;
 
         return [
             'current_questions' => $currentQuestions,
             'current_participants' => $currentParticipants,
-            'question_per_battle' => $qualifierCount,
+            'question_per_battle' => $questionCount,
             'recommended_min_max_participants' => $this->max_participants ?? 1000,
             'recommended_max_max_participants' => $this->max_participants ?? 1000,
             'message' => $isSufficient 
                 ? "✅ Perfect! Your question pool of {$currentQuestions} questions is sufficient to support any number of participants (current: {$currentParticipants})."
-                : "⚠️ Warning: The question pool has only {$currentQuestions} questions, which is less than the required {$qualifierCount} questions per attempt. Please add more questions.",
+                : "⚠️ Warning: The question pool has only {$currentQuestions} questions, which is less than the required {$questionCount} questions per attempt. Please add more questions.",
         ];
     }
 
