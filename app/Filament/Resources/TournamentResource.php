@@ -9,8 +9,8 @@ use App\Models\Grade;
 use App\Models\Subject;
 use App\Models\Topic;
 use Filament\Forms;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Grid;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Grid;
 use Filament\Actions\Action;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
@@ -33,7 +33,7 @@ class TournamentResource extends Resource
     protected static function getBasicInfoSection(): array
     {
         return [
-            Section::make()
+            \Filament\Forms\Components\Section::make()
                 ->schema([
                     Forms\Components\TextInput::make('name')
                         ->required()
@@ -52,7 +52,7 @@ class TournamentResource extends Resource
     protected static function getSponsorSection(): array
     {
         return [
-            Section::make('Sponsor Information')
+            \Filament\Forms\Components\Section::make('Sponsor Information')
                 ->description('Configure sponsor details and branding')
                 ->schema([
                     Forms\Components\Select::make('sponsor_id')
@@ -81,7 +81,7 @@ class TournamentResource extends Resource
     protected static function getTaxonomySection(): array
     {
         return [
-            Section::make()
+            \Filament\Forms\Components\Section::make()
                 ->schema([
                     // Hidden version fields used to invalidate preloaded relationship caches
                     Forms\Components\Hidden::make('grade_options_version')
@@ -99,7 +99,7 @@ class TournamentResource extends Resource
                         ->dehydrated(false)
                         ->live(),
                     // Left column: Taxonomy
-                    Grid::make(1)->schema([
+                    \Filament\Forms\Components\Grid::make(1)->schema([
                         Forms\Components\Select::make('level_id')
                             ->relationship('level', 'name', fn (Builder $query) => $query->orderBy('order'))
                             ->required()
@@ -207,9 +207,9 @@ class TournamentResource extends Resource
     protected static function getAdditionalSettingsSection(): array
     {
         return [
-            Section::make('Additional Settings')
+            \Filament\Forms\Components\Section::make('Additional Settings')
                 ->schema([
-                    Grid::make(2)
+                    \Filament\Forms\Components\Grid::make(2)
                         ->schema([
                             Forms\Components\DateTimePicker::make('start_date')
                                 ->label('Start Date')

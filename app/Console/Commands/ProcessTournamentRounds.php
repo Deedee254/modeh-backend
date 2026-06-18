@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Models\Tournament;
 use App\Models\TournamentAttempt;
+use Illuminate\Support\Facades\Log;
 
 class ProcessTournamentRounds extends Command
 {
@@ -30,7 +31,7 @@ class ProcessTournamentRounds extends Command
                     $this->info("Tournament {$t->id}: finalized simple flow winner");
                 }
             } catch (\Throwable $e) {
-                \Log::error('Failed processing tournament rounds for ' . $t->id . ': ' . $e->getMessage());
+                Log::error('Failed processing tournament rounds for ' . $t->id . ': ' . $e->getMessage());
                 $this->error('Failed processing tournament ' . $t->id . ': ' . $e->getMessage());
             }
         }
