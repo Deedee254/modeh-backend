@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 class TournamentController extends Controller
 {
-    private const SIMPLE_FLOW_MAX_ATTEMPTS = 3;
+    private const SIMPLE_FLOW_MAX_ATTEMPTS = 1;
 
     protected AchievementService $achievementService;
     protected QuestionMarkingService $markingService;
@@ -180,6 +180,18 @@ class TournamentController extends Controller
         return DB::transaction(function () use ($tournament, $user, $paymentRef) {
             $lockedTournament = Tournament::lockForUpdate()->find($tournament->id);
 
+            // Check if max participants reached
+            if ($lockedTournament->max_participants) {
+                $paidCount = DB::table('tournament_participants')
+                    ->where('tournament_id', $lockedTournament->id)
+                    ->where('status', 'paid')
+                    ->count();
+
+                if ($paidCount >= $lockedTournament->max_participants) {
+                    return response()->json(['message' => 'Tournament is full'], 400);
+                }
+            }
+
             $fee = $lockedTournament->entry_fee && floatval($lockedTournament->entry_fee) > 0;
             $activeSub = \App\Models\Subscription::where('user_id', $user->id)
                 ->where('status', 'active')
@@ -278,7 +290,7 @@ class TournamentController extends Controller
         });
     }
 
-    public function approveRegistration(Request $request, Tournament $tournament, $userId)
+    public function approveRegistration(Request $request, Tournament $tournament, string $userId)
     {
         $this->authorize('approveRegistration', Tournament::class);
 
@@ -304,7 +316,7 @@ class TournamentController extends Controller
         return response()->json(['message' => 'Registration marked as paid']);
     }
 
-    public function rejectRegistration(Request $request, Tournament $tournament, $userId)
+    public function rejectRegistration(Request $request, Tournament $tournament, string $userId)
     {
         $this->authorize('rejectRegistration', Tournament::class);
 
@@ -651,9 +663,6 @@ class TournamentController extends Controller
         if ($tournament->status !== 'active' && $tournament->start_date && $now->lt($tournament->start_date)) {
             return response()->json(['message' => 'Tournament has not started'], 400);
         }
-        if ($tournament->end_date && $now->gt($tournament->end_date)) {
-            return response()->json(['message' => 'Tournament is closed'], 400);
-        }
         if (!in_array($tournament->status, ['upcoming', 'active'], true)) {
             return response()->json(['message' => 'Tournament is not accepting attempts'], 400);
         }
@@ -859,9 +868,20 @@ class TournamentController extends Controller
             return;
         }
 
-        // Only finalize if end_date has passed
-        if (!$tournament->end_date || now()->lt($tournament->end_date)) {
-            return;
+        // Finalize if max_participants reached
+        if ($tournament->max_participants) {
+            $completedAttempts = \App\Models\TournamentAttempt::where('tournament_id', $tournament->id)
+                ->distinct('user_id')
+                ->count('user_id');
+
+            if ($completedAttempts < $tournament->max_participants) {
+                return;
+            }
+        } else {
+            // Only finalize if end_date has passed
+            if (!$tournament->end_date || now()->lt($tournament->end_date)) {
+                return;
+            }
         }
 
         $winnerAttempt = $this->latestAttemptsQuery($tournament)

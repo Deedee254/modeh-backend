@@ -31,6 +31,7 @@ class OneOffPurchaseController extends Controller
             'institution_id' => 'nullable',
             'attempt_id' => 'nullable|integer',  // Quiz attempt ID when paying for results
             'idempotency_key' => 'nullable|string',  // Unique key for duplicate request prevention
+            'promo_code' => 'nullable|string',
         ]);
 
         // Check for duplicate request using idempotency_key
@@ -97,6 +98,25 @@ class OneOffPurchaseController extends Controller
             ]);
         }
 
+        $promoDiscount = 0;
+        $promoCodeObj = null;
+
+        if (!empty($data['promo_code'])) {
+            $promoCodeObj = \App\Models\PromoCode::where('code', $data['promo_code'])->first();
+            if ($promoCodeObj && $promoCodeObj->isValid()) {
+                $userUses = $user ? $promoCodeObj->usages()->where('user_id', $user->id)->count() : 0;
+                if ($promoCodeObj->max_uses_per_user === null || $userUses < $promoCodeObj->max_uses_per_user) {
+                    $promoDiscount = $promoCodeObj->calculateDiscount($resolvedAmount);
+                } else {
+                    return response()->json(['ok' => false, 'message' => 'Promo code usage limit reached for your account'], 400);
+                }
+            } else {
+                return response()->json(['ok' => false, 'message' => 'Invalid or expired promo code'], 400);
+            }
+        }
+
+        $finalAmount = max(0, $resolvedAmount - $promoDiscount);
+
         $gateway = $data['gateway'] ?? 'mpesa';
         $mpesaConfig = config('services.mpesa', []);
         if ($gateway === 'mpesa') {
@@ -161,11 +181,52 @@ class OneOffPurchaseController extends Controller
             'meta' => array_filter([
                 'attempt_id' => $data['attempt_id'] ?? null,
                 'idempotency_key' => $data['idempotency_key'] ?? null,  // Store for duplicate detection
+                'promo_code_id' => $promoCodeObj->id ?? null,
+                'discount_applied' => $promoDiscount > 0 ? $promoDiscount : null,
             ], fn($v) => $v !== null),
         ]);
 
+        if ($finalAmount == 0) {
+            // Amount is fully covered by promo code, skip M-Pesa
+            Log::info('[OneOff Purchase] Amount fully discounted by promo, skipping gateway', [
+                'purchase_id' => $purchase->id,
+                'promo_code' => $data['promo_code'],
+            ]);
+
+            $purchase->amount = 0;
+            $purchase->gateway = 'promo';
+            $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
+                'tx' => 'PROMO-' . $purchase->id,
+                'completed_at' => now(),
+            ]);
+            $purchase->save();
+
+            // Record promo usage
+            if ($promoCodeObj) {
+                \App\Models\PromoCodeUsage::create([
+                    'promo_code_id' => $promoCodeObj->id,
+                    'user_id' => $user ? $user->id : null,
+                    'purchasable_type' => \App\Models\OneOffPurchase::class,
+                    'purchasable_id' => $purchase->id,
+                    'discount_applied' => $promoDiscount,
+                ]);
+            }
+
+            // Manually fulfill
+            $paymentController = app(\App\Http\Controllers\Api\PaymentController::class);
+            $paymentController->handleOneOffPurchase($purchase, 'PROMO-' . $purchase->id, 'success');
+
+            return response()->json([
+                'ok' => true,
+                'purchase' => $purchase,
+                'tx' => 'PROMO-' . $purchase->id,
+                'discounted_fully' => true,
+                'message' => 'Purchase completed successfully using promo code'
+            ]);
+        }
+
         // initiate mpesa push via MpesaService
-        $res = $service->initiateStkPush($phone, (float)$purchase->amount, 'OneOff-'.$purchase->id, $traceId);
+        $res = $service->initiateStkPush($phone, (float)$finalAmount, 'OneOff-'.$purchase->id, $traceId);
 
         Log::info('[OneOff Purchase] STK initiation response', [
             'trace_id' => $traceId,
@@ -351,6 +412,7 @@ class OneOffPurchaseController extends Controller
             'gateway' => 'nullable|string',
             'guest_identifier' => 'required|string|min:6',
             'guest_attempt_id' => 'nullable|string',
+            'promo_code' => 'nullable|string',
         ]);
 
         $resolvedAmount = $this->resolveOneOffAmount($data['item_type'], $data['item_id']);
@@ -366,6 +428,22 @@ class OneOffPurchaseController extends Controller
                 'resolved_amount' => $resolvedAmount,
             ]);
         }
+
+        $promoDiscount = 0;
+        $promoCodeObj = null;
+
+        if (!empty($data['promo_code'])) {
+            $promoCodeObj = \App\Models\PromoCode::where('code', $data['promo_code'])->first();
+            if ($promoCodeObj && $promoCodeObj->isValid()) {
+                // Guests don't have a user_id, so we can't accurately track uses per user
+                // but we can still calculate discount
+                $promoDiscount = $promoCodeObj->calculateDiscount($resolvedAmount);
+            } else {
+                return response()->json(['ok' => false, 'message' => 'Invalid or expired promo code'], 400);
+            }
+        }
+
+        $finalAmount = max(0, $resolvedAmount - $promoDiscount);
 
         $gateway = $data['gateway'] ?? 'mpesa';
         $mpesaConfig = config('services.mpesa', []);
@@ -429,10 +507,53 @@ class OneOffPurchaseController extends Controller
             ], fn($v) => $v !== null && $v !== ''),
             'meta' => array_filter([
                 'guest_attempt_id' => $data['guest_attempt_id'] ?? null,
-            ], fn($v) => $v !== null && $v !== ''),
+                'promo_code_id' => $promoCodeObj->id ?? null,
+                'discount_applied' => $promoDiscount > 0 ? $promoDiscount : null,
+            ], fn($v) => $v !== null),
         ]);
 
-        $res = $service->initiateStkPush($phone, (float) $purchase->amount, 'GuestOneOff-' . $purchase->id, $traceId);
+        if ($finalAmount == 0) {
+            // Amount is fully covered by promo code, skip M-Pesa
+            Log::info('[Guest OneOff Purchase] Amount fully discounted by promo, skipping gateway', [
+                'purchase_id' => $purchase->id,
+                'promo_code' => $data['promo_code'],
+            ]);
+
+            $purchase->amount = 0;
+            $purchase->gateway = 'promo';
+            $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
+                'tx' => 'PROMO-' . $purchase->id,
+                'completed_at' => now(),
+            ]);
+            $purchase->save();
+
+            // Record promo usage
+            if ($promoCodeObj) {
+                \App\Models\PromoCodeUsage::create([
+                    'promo_code_id' => $promoCodeObj->id,
+                    'user_id' => null, // Guest
+                    'purchasable_type' => \App\Models\OneOffPurchase::class,
+                    'purchasable_id' => $purchase->id,
+                    'discount_applied' => $promoDiscount,
+                ]);
+            }
+
+            // Manually fulfill
+            $paymentController = app(\App\Http\Controllers\Api\PaymentController::class);
+            $paymentController->handleOneOffPurchase($purchase, 'PROMO-' . $purchase->id, 'success');
+
+            return response()->json([
+                'ok' => true,
+                'purchase' => $purchase,
+                'tx' => 'PROMO-' . $purchase->id,
+                'checkout_request_id' => 'PROMO-' . $purchase->id,
+                'trace_id' => $traceId,
+                'discounted_fully' => true,
+            ]);
+        }
+
+        // initiate mpesa push via MpesaService
+        $res = $service->initiateStkPush($phone, (float)$finalAmount, 'OneOff-'.$purchase->id, $traceId);
 
         Log::info('[Guest OneOff Purchase] STK initiation response', [
             'trace_id' => $traceId,

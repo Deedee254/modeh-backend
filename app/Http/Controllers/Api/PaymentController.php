@@ -415,7 +415,7 @@ class PaymentController extends Controller
      * - Duplicate invoices from concurrent webhook callbacks
      * - Partial payment processing if any operation fails
      */
-    private function handleOneOffPurchase(\App\Models\OneOffPurchase $purchase, string $txId, string $status)
+    public function handleOneOffPurchase(\App\Models\OneOffPurchase $purchase, string $txId, string $status)
     {
         $traceId = $purchase->gateway_meta['trace_id'] ?? null;
         Log::channel('payment')->info('[Payment] One-off purchase processing', [

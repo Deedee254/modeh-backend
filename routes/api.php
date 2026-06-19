@@ -110,6 +110,9 @@ Route::prefix('guest')->group(function () {
     Route::post('/one-off-purchases/status', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'guestStatus'])->middleware('throttle:60,1');
 });
 
+// Promo code validation
+Route::post('/promo/validate', [\App\Http\Controllers\Api\Checkout\PromoController::class, 'validateCode'])->middleware('throttle:30,1');
+
 // Public grades listing for frontend
 Route::get('/grades', [\App\Http\Controllers\Api\GradeController::class, 'index']);
 // Public levels listing (grouping of grades)
@@ -444,6 +447,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 	        Route::get('/admin/tournaments/{id}/insights', [\App\Http\Controllers\Api\AdminTournamentAnalyticsController::class, 'insights']);
 	        Route::get('/admin/tournaments', [\App\Http\Controllers\Api\AdminController::class, 'tournaments']);
 	        Route::get('/admin/tournaments/{id}/participants', [\App\Http\Controllers\Api\AdminController::class, 'tournamentParticipants']);
+
+        // Promo Codes
+        Route::apiResource('/admin/promo-codes', \App\Http\Controllers\Api\Admin\PromoCodeController::class);
 	        Route::get('/admin/battles', [\App\Http\Controllers\Api\AdminBattleController::class, 'index']);
 	        Route::get('/admin/battles/{id}', [\App\Http\Controllers\Api\AdminBattleController::class, 'show']);
 	        Route::get('/admin/daily-challenges/analytics', [\App\Http\Controllers\Api\AdminDailyChallengeAnalyticsController::class, 'analytics']);
