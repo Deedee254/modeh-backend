@@ -22,7 +22,7 @@ class TournamentController extends Controller
     {
         $this->achievementService = $achievementService;
         $this->markingService = $markingService;
-        $this->middleware('auth:sanctum')->except(['index', 'show']);
+        $this->middleware(['auth:sanctum'])->except(['index', 'show']);
         $this->middleware('throttle:60,1')->only(['join', 'submitAttempt']);
     }
 
@@ -117,7 +117,7 @@ class TournamentController extends Controller
                     if ($isMcq && !is_null($q->correct) && isset($opts[$q->correct])) {
                         $correctValues[] = $opts[$q->correct];
                     } elseif ($isMulti && !empty($q->corrects)) {
-                        $indices = is_array($q->corrects) ? $q->corrects : json_decode($q->corrects, true);
+                        $indices = is_array($q->corrects) ? $q->corrects : (is_string($q->corrects) ? json_decode((string) $q->corrects, true) : []);
                         if (is_array($indices)) {
                             foreach ($indices as $idx) {
                                 if (isset($opts[$idx])) {
@@ -578,7 +578,7 @@ class TournamentController extends Controller
                 if ($isMcq && !is_null($q->correct) && isset($opts[$q->correct])) {
                     $correctValues[] = $opts[$q->correct];
                 } elseif ($isMulti && !empty($q->corrects)) {
-                    $indices = is_array($q->corrects) ? $q->corrects : json_decode($q->corrects, true);
+                    $indices = is_array($q->corrects) ? $q->corrects : (is_string($q->corrects) ? json_decode((string) $q->corrects, true) : []);
                     if (is_array($indices)) {
                         foreach ($indices as $idx) {
                             if (isset($opts[$idx])) {
@@ -771,7 +771,7 @@ class TournamentController extends Controller
             if (is_array($question->corrects)) {
                 $correctAnswers = $question->corrects;
             } elseif (is_string($question->corrects)) {
-                $decoded = json_decode($question->corrects, true);
+                $decoded = json_decode((string) $question->corrects, true);
                 $correctAnswers = is_array($decoded) ? $decoded : [];
             }
         } else {

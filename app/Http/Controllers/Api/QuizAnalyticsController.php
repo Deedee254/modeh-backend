@@ -67,7 +67,7 @@ class QuizAnalyticsController extends Controller
                 // find question model
                 $qModel = $questions->firstWhere('id', $qid);
                 if (!$qModel) continue;
-                $correctAnswers = is_array($qModel->answers) ? $qModel->answers : json_decode($qModel->answers, true) ?? [];
+                $correctAnswers = is_array($qModel->answers) ? $qModel->answers : json_decode((string) $qModel->answers, true) ?? [];
 
                 // Build option map (id/index -> text) to resolve numeric references and normalize for comparison
                 $optionMap = [];
@@ -197,7 +197,7 @@ class QuizAnalyticsController extends Controller
                     if ($qid !== $q->id) continue;
                     $attemptCount++;
                     $selected = $ans['selected'] ?? null;
-                    $correctAnswers = is_array($q->answers) ? $q->answers : json_decode($q->answers, true) ?? [];
+                    $correctAnswers = is_array($q->answers) ? $q->answers : json_decode((string) $q->answers, true) ?? [];
                     // Build option map for this question
                     $optionMap = [];
                     if (is_array($q->options)) {
