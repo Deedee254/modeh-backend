@@ -40,7 +40,7 @@ class BattleController extends Controller
         return OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'battle')
             ->where('item_id', $battle->getKey())
-            ->where('status', 'confirmed')
+            ->whereIn('status', ['confirmed', 'completed'])
             ->exists();
     }
     public function store(Request $request)

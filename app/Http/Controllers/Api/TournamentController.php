@@ -196,7 +196,7 @@ class TournamentController extends Controller
                     $q->where('id', $paymentRef)->orWhere('gateway_meta->tx', $paymentRef);
                 })->first();
 
-                if ($purchase && $purchase->user_id === $user->id && $purchase->item_type === 'tournament' && $purchase->item_id == $lockedTournament->id && $purchase->status === 'confirmed') {
+                if ($purchase && $purchase->user_id === $user->id && $purchase->item_type === 'tournament' && $purchase->item_id == $lockedTournament->id && in_array($purchase->status, ['confirmed', 'completed'])) {
                     $hasOneOff = true;
                 }
             }
@@ -205,7 +205,7 @@ class TournamentController extends Controller
                 $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
                     ->where('item_type', 'tournament')
                     ->where('item_id', $lockedTournament->id)
-                    ->where('status', 'confirmed')
+                    ->whereIn('status', ['confirmed', 'completed'])
                     ->exists();
             }
 

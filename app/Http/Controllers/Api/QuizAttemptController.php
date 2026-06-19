@@ -243,7 +243,7 @@ class QuizAttemptController extends Controller
         $hasPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'quiz')
             ->where('item_id', $quiz->id)
-            ->where('status', 'confirmed')
+            ->whereIn('status', ['confirmed', 'completed'])
             ->exists();
 
         if (!$hasPurchase) {
@@ -593,7 +593,7 @@ class QuizAttemptController extends Controller
 	                $existingPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
 	                    ->where('item_type', 'quiz')
 	                    ->where('item_id', $quiz->id)
-	                    ->where('status', 'confirmed')
+	                    ->whereIn('status', ['confirmed', 'completed'])
 	                    ->first();
 	                if ($existingPurchase) {
 	                    $attempt->update(['paid_for' => true]);
@@ -689,7 +689,7 @@ class QuizAttemptController extends Controller
 	                $existingPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
 	                    ->where('item_type', 'quiz')
 	                    ->where('item_id', $quiz->id)
-	                    ->where('status', 'confirmed')
+	                    ->whereIn('status', ['confirmed', 'completed'])
 	                    ->first();
 	                if ($existingPurchase) {
 	                    $attempt->update(['paid_for' => true]);
@@ -1181,7 +1181,7 @@ class QuizAttemptController extends Controller
                     ->where('guest_identifier', $payload['guest_identifier'])
                     ->where('item_type', 'quiz')
                     ->where('item_id', $quiz->id)
-                    ->where('status', 'confirmed')
+                    ->whereIn('status', ['confirmed', 'completed'])
                     ->exists();
 
                 // Link any unassigned guest purchases to this user so ownership is officially assigned
@@ -1310,7 +1310,7 @@ class QuizAttemptController extends Controller
         $existingPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'quiz')
             ->where('item_id', $quiz->id)
-            ->where('status', 'confirmed')
+            ->whereIn('status', ['confirmed', 'completed'])
             ->first();
 
         if ($existingPurchase) {

@@ -36,7 +36,7 @@ class PerformanceReportController extends Controller
         $isPaid = OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'performance_report')
             ->where('item_id', $attempt->id)
-            ->where('status', 'confirmed')
+            ->whereIn('status', ['confirmed', 'completed'])
             ->exists();
 
         // If not paid, we might want to hide some details or just return a flag
@@ -62,7 +62,7 @@ class PerformanceReportController extends Controller
         $isPaid = OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'performance_report')
             ->where('item_id', $attempt->id)
-            ->where('status', 'confirmed')
+            ->whereIn('status', ['confirmed', 'completed'])
             ->exists();
 
         if (!$isPaid && !$user->is_admin) {

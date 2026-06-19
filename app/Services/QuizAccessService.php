@@ -163,7 +163,7 @@ class QuizAccessService
         return \App\Models\OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'quiz')
             ->where('item_id', $quiz->id)
-            ->where('status', 'confirmed')
+            ->whereIn('status', ['confirmed', 'completed'])
             ->exists();
     }
 

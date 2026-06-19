@@ -131,7 +131,7 @@ class GuestQuizController extends Controller
             ->where('guest_identifier', $validated['guest_identifier'])
             ->where('item_type', 'quiz')
             ->where('item_id', $quiz->id)
-            ->where('status', 'confirmed')
+            ->whereIn('status', ['confirmed', 'completed'])
             ->exists();
 
         // Prepare minimal result payload for guests
@@ -255,7 +255,7 @@ class GuestQuizController extends Controller
                     ->where('guest_identifier', $guestIdentifier)
                     ->where('item_type', 'quiz')
                     ->where('item_id', $attempt->quiz_id)
-                    ->where('status', 'confirmed')
+                    ->whereIn('status', ['confirmed', 'completed'])
                     ->exists();
             }
 
