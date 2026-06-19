@@ -23,6 +23,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/questions/*',
             'api/guest/quizzes/*/submit',
             'api/guest/quizzes/*/mark',
+            'api/guest/one-off-purchases',
+            'api/guest/one-off-purchases/status',
             'api/quiz-attempts/*/mark',
             'api/register/*',
             'api/auth/*',

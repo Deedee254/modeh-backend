@@ -34,6 +34,8 @@ class VerifyCsrfToken extends BaseVerifier
         // Guest quiz endpoints (public, no authentication)
         'api/guest/quizzes/*/submit',
         'api/guest/quizzes/*/mark',
+        'api/guest/one-off-purchases',
+        'api/guest/one-off-purchases/status',
         
         // Authentication endpoints (Nuxt-Auth doesn't send CSRF)
         'api/login',
