@@ -100,8 +100,14 @@ class TransactionController extends Controller
      */
     public function show(Invoice $invoice)
     {
-        // Ensure user owns this invoice
-        if ($invoice->user_id !== (auth()->id() ?? auth('sanctum')->id())) {
+        $user = auth('sanctum')->user() ?? auth()->user();
+        
+        if (!$user) {
+            return response()->json(['error' => 'Unauthenticated'], 401);
+        }
+
+        // Ensure user owns this invoice or is admin
+        if ($invoice->user_id !== $user->id && !$user->isAdmin()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -115,8 +121,14 @@ class TransactionController extends Controller
      */
     public function download(Invoice $invoice)
     {
-        // Ensure user owns this invoice
-        if ($invoice->user_id !== (auth()->id() ?? auth('sanctum')->id())) {
+        $user = auth('sanctum')->user() ?? auth()->user();
+        
+        if (!$user) {
+            return response()->json(['error' => 'Unauthenticated'], 401);
+        }
+
+        // Ensure user owns this invoice or is admin
+        if ($invoice->user_id !== $user->id && !$user->isAdmin()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
