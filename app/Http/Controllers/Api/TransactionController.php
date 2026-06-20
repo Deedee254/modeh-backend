@@ -125,11 +125,7 @@ class TransactionController extends Controller
             $service = app(\App\Services\InvoiceService::class);
             $pdf = $service->generatePdf($invoice);
 
-            return response()->download(
-                $pdf,
-                "invoice-{$invoice->invoice_number}.pdf",
-                ['Content-Type' => 'application/pdf']
-            );
+            return $pdf;
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Could not generate PDF',
