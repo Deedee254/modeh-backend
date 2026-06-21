@@ -80,8 +80,8 @@
             <div class="invoice-details">
                 <h2>Invoice</h2>
                 <p><strong>Invoice #:</strong> {{ $invoice->invoice_number }}</p>
-                <p><strong>Date:</strong> {{ $invoice->created_at->format('M d, Y') }}</p>
-                <p><strong>Due Date:</strong> {{ $invoice->due_at->format('M d, Y') }}</p>
+                <p><strong>Date:</strong> {{ $invoice->created_at ? $invoice->created_at->format('M d, Y') : 'N/A' }}</p>
+                <p><strong>Due Date:</strong> {{ $invoice->due_at ? $invoice->due_at->format('M d, Y') : 'N/A' }}</p>
                 <div class="status {{ strtolower($invoice->status) }}">
                     {{ ucfirst($invoice->status) }}
                 </div>
