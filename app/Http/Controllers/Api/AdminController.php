@@ -1009,7 +1009,7 @@ class AdminController extends Controller
                 'invoiceable_id' => $purchase->id,
                 'user_id' => $purchase->user_id,
                 'amount' => $transaction->amount,
-                'description' => 'One-time purchase - M-Pesa Transaction #' . $transaction->mpesa_receipt,
+                'description' => ucfirst($purchase->item_type) . ' Unlock - ' . $purchase->item_name,
             ]);
 
             // Send notification email
