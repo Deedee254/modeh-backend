@@ -506,7 +506,7 @@ class PaymentController extends Controller
                             'user_id' => $purchase->user_id,
                             'amount' => $amount,
                             'currency' => 'KES',
-                            'description' => "{$itemType} Unlock - Item #{$purchase->item_id}",
+                            'description' => "{$itemType} Unlock - {$purchase->item_name}",
                             'status' => 'paid',
                             'paid_at' => now(),
                             'payment_method' => 'mpesa',

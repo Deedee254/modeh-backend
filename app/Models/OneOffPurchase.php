@@ -56,4 +56,29 @@ class OneOffPurchase extends Model
     {
         return $this->morphMany(Invoice::class, 'invoiceable');
     }
+
+    /**
+     * Get the descriptive name of the item
+     */
+    public function getItemNameAttribute()
+    {
+        $itemName = "Item #{$this->item_id}";
+        try {
+            $modelClass = match ($this->item_type) {
+                'quiz' => \App\Models\Quiz::class,
+                'battle' => \App\Models\Battle::class,
+                'tournament' => \App\Models\Tournament::class,
+                'package' => \App\Models\Package::class,
+                default => null,
+            };
+            if ($modelClass) {
+                $item = $modelClass::find($this->item_id);
+                if ($item) {
+                    $itemName = $item->title ?? $item->name ?? $itemName;
+                }
+            }
+        } catch (\Throwable $e) {}
+        
+        return $itemName;
+    }
 }
