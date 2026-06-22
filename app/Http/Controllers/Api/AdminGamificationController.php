@@ -16,6 +16,7 @@ class AdminGamificationController extends Controller
 {
     private function requireAdmin()
     {
+        /** @var \App\Models\User|null $user */
         $user = auth()->user() ?? auth('sanctum')->user();
         if ($user && ($user->is_admin ?? false)) return null;
         try {
