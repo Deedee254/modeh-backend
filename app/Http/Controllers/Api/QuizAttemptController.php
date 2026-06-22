@@ -587,33 +587,29 @@ class QuizAttemptController extends Controller
 	        // Enforce payment for paid quizzes before marking (prevents bypassing paywall).
 	        $quiz = $attempt->quiz()->first();
 	        if ($quiz) {
-	            $effectivePrice = $quiz->price;
-	            $isLocked = ($attempt->paid_for === false) && ((bool) ($quiz->is_paid ?? false) || $effectivePrice > 0);
+	            $isLocked = !$attempt->paid_for && !\App\Services\QuizAccessService::hasAccessOrPaid($quiz, $user);
+	            
 	            if ($isLocked) {
-	                $existingPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
-	                    ->where('item_type', 'quiz')
-	                    ->where('item_id', $quiz->id)
-	                    ->whereIn('status', ['confirmed', 'completed'])
-	                    ->first();
-	                if ($existingPurchase) {
+                    return response()->json([
+                        'ok' => false,
+                        'requires_payment' => true,
+                        'locked' => true,
+                        'attempt_id' => $attempt->id,
+                        'quiz_id' => $quiz->id,
+                        'price' => $quiz->price,
+                        'currency' => 'KES',
+                        'quiz' => [
+                            'id' => $quiz->id,
+                            'title' => $quiz->title,
+                            'one_off_price' => $quiz->price,
+                        ],
+                        'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
+                        'message' => 'Payment required',
+                    ], 403);
+	            } else {
+	                // They have access. Mark attempt as paid so we know it's unlocked for them.
+	                if (!$attempt->paid_for) {
 	                    $attempt->update(['paid_for' => true]);
-	                } else {
-	                    return response()->json([
-	                        'ok' => false,
-	                        'requires_payment' => true,
-	                        'locked' => true,
-	                        'attempt_id' => $attempt->id,
-	                        'quiz_id' => $quiz->id,
-	                        'price' => $effectivePrice,
-	                        'currency' => 'KES',
-	                        'quiz' => [
-	                            'id' => $quiz->id,
-	                            'title' => $quiz->title,
-	                            'one_off_price' => $effectivePrice,
-	                        ],
-	                        'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
-	                        'message' => 'Payment required',
-	                    ], 403);
 	                }
 	            }
 	        }
@@ -1291,13 +1287,16 @@ class QuizAttemptController extends Controller
             return response()->json(['message' => 'Quiz not found'], 404);
         }
 
-        // Determine if results are locked
-        // Results are locked if: quiz is paid AND attempt hasn't been paid for yet
         $effectivePrice = $quiz->price;
-        $isLocked = ($attempt->paid_for === false) &&
-                    ($quiz->is_paid || $effectivePrice > 0);
+
+        // Determine if results are locked
+        $isLocked = !$attempt->paid_for && !\App\Services\QuizAccessService::hasAccessOrPaid($quiz, $user);
         
         if (!$isLocked) {
+            // They have access. Mark as paid
+            if (!$attempt->paid_for) {
+                $attempt->update(['paid_for' => true]);
+            }
             // Results are accessible
             return response()->json([
                 'can_view' => true,
