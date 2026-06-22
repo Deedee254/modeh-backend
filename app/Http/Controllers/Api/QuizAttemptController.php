@@ -720,7 +720,8 @@ class QuizAttemptController extends Controller
 	        // Build per-question correctness info (answers stored on attempt)
 	        $answers = $attempt->answers ?? [];
 	        $details = [];
-        foreach ($quiz->questions as $q) {
+        $questions = $quiz ? $quiz->questions : [];
+        foreach ($questions as $q) {
             $provided = null;
             foreach ($answers as $a) {
                 if ((int) ($a['question_id'] ?? 0) === (int) $q->id) {
