@@ -17,6 +17,26 @@ use Illuminate\Support\Str;
 
 class OneOffPurchaseController extends Controller
 {
+    public function index(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+
+        $query = OneOffPurchase::where('user_id', $user->id);
+
+        if ($request->has('item_type')) {
+            $query->where('item_type', $request->item_type);
+        }
+
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $purchases = $query->orderBy('created_at', 'desc')->paginate($request->per_page ?? 15);
+
+        return response()->json($purchases);
+    }
+
     public function store(Request $request)
     {
         $user = Auth::user();

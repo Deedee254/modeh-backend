@@ -525,6 +525,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/subscriptions/{subscription}/status', [\App\Http\Controllers\Api\SubscriptionController::class, 'status']);
     Route::post('/payments/subscriptions/{subscription}/mpesa/initiate', [\App\Http\Controllers\Api\PaymentController::class, 'initiateMpesa']);
     // One-off purchases (pay-to-unlock a single quiz or battle)
+    Route::get('/one-off-purchases', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'index']);
     Route::post('/one-off-purchases', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'store']);
     Route::get('/one-off-purchases/{purchase}', [\App\Http\Controllers\Api\OneOffPurchaseController::class, 'show']);
     Route::get('/subscriptions/mine', [\App\Http\Controllers\Api\SubscriptionController::class, 'mine']);
