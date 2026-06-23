@@ -9,6 +9,7 @@ use App\Models\PricingSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\QuestionMarkingService;
+use App\Services\QuizAccessService;
 
 class PerformanceReportController extends Controller
 {
@@ -22,6 +23,11 @@ class PerformanceReportController extends Controller
 
     /**
      * Get performance report analysis (weak areas).
+     * 
+     * Access is granted if:
+     * 1. User is the attempt owner
+     * 2. Quiz is free (no separate payment for report), OR
+     * 3. User has paid for the quiz OR the report separately
      */
     public function show(Request $request, QuizAttempt $attempt)
     {
@@ -30,26 +36,60 @@ class PerformanceReportController extends Controller
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
-        $report = $this->generateAnalysis($attempt);
+        $quiz = $attempt->quiz;
+        if (!$quiz) {
+            return response()->json(['ok' => false, 'message' => 'Quiz not found'], 404);
+        }
+
+        // Check if user has access to view this report
+        $accessResult = QuizAccessService::checkAccess($quiz, $user);
         
-        // Check if report is paid
-        $isPaid = OneOffPurchase::where('user_id', $user->id)
+        // Check if quiz is free - if yes, user can view report
+        $quizIsFree = $accessResult['is_free'] ?? false;
+        
+        // Check if user has paid for the report separately
+        $reportIsPaid = OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'performance_report')
             ->where('item_id', $attempt->id)
             ->whereIn('status', ['confirmed', 'completed'])
             ->exists();
+        
+        // Check if user paid for the quiz (if not free)
+        $quizIsPaid = !$quizIsFree ? QuizAccessService::hasAccessOrPaid($quiz, $user) : false;
+        
+        // Allow access if: quiz is free OR user paid for quiz OR user paid for report
+        $canViewReport = $quizIsFree || $quizIsPaid || $reportIsPaid || $user->is_admin;
+        
+        if (!$canViewReport) {
+            $price = PricingSetting::singleton()->performance_report_price ?? 0.0;
+            return response()->json([
+                'ok' => false,
+                'message' => 'Payment required to view performance report',
+                'requires_payment' => true,
+                'price' => $price,
+                'attempt_id' => $attempt->id,
+            ], 403);
+        }
 
-        // If not paid, we might want to hide some details or just return a flag
+        $report = $this->generateAnalysis($attempt);
+        $price = PricingSetting::singleton()->performance_report_price ?? 0.0;
+        
         return response()->json([
             'ok' => true,
             'report' => $report,
-            'is_paid' => $isPaid,
-            'price' => PricingSetting::singleton()->performance_report_price ?? 0.0,
+            'is_paid' => $reportIsPaid,
+            'price' => $price,
+            'quiz_is_free' => $quizIsFree,
         ]);
     }
 
     /**
      * Download PDF report.
+     * 
+     * Access is granted if:
+     * 1. User is the attempt owner
+     * 2. Quiz is free (no separate payment for report), OR
+     * 3. User has paid for the quiz OR the report separately
      */
     public function download(Request $request, QuizAttempt $attempt)
     {
@@ -58,15 +98,37 @@ class PerformanceReportController extends Controller
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
-        // Enforce payment
-        $isPaid = OneOffPurchase::where('user_id', $user->id)
+        $quiz = $attempt->quiz;
+        if (!$quiz) {
+            return response()->json(['ok' => false, 'message' => 'Quiz not found'], 404);
+        }
+
+        // Check if user has access to download this report (same rules as show())
+        $accessResult = QuizAccessService::checkAccess($quiz, $user);
+        $quizIsFree = $accessResult['is_free'] ?? false;
+        
+        // Check if user has paid for the report separately
+        $reportIsPaid = OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'performance_report')
             ->where('item_id', $attempt->id)
             ->whereIn('status', ['confirmed', 'completed'])
             ->exists();
-
-        if (!$isPaid && !$user->is_admin) {
-            return response()->json(['ok' => false, 'message' => 'Payment required to download report'], 402);
+        
+        // Check if user paid for the quiz (if not free)
+        $quizIsPaid = !$quizIsFree ? QuizAccessService::hasAccessOrPaid($quiz, $user) : false;
+        
+        // Allow download if: quiz is free OR user paid for quiz OR user paid for report
+        $canDownload = $quizIsFree || $quizIsPaid || $reportIsPaid || $user->is_admin;
+        
+        if (!$canDownload) {
+            $price = PricingSetting::singleton()->performance_report_price ?? 0.0;
+            return response()->json([
+                'ok' => false,
+                'message' => 'Payment required to download report',
+                'requires_payment' => true,
+                'price' => $price,
+                'attempt_id' => $attempt->id,
+            ], 402);
         }
 
         $report = $this->generateAnalysis($attempt);
