@@ -8,6 +8,7 @@ use App\Http\Resources\GradeResource;
 use App\Http\Resources\TopicResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class GradeController extends Controller
@@ -17,10 +18,21 @@ class GradeController extends Controller
         // Public for browsing
     }
 
+    private function resolveGrade(Grade|string|int $grade): Grade
+    {
+        if ($grade instanceof Grade) {
+            return $grade;
+        }
+
+        return Grade::where('slug', $grade)
+            ->orWhere('id', $grade)
+            ->firstOrFail();
+    }
+
     /**
      * Safely cache data with fallback if caching fails (e.g., due to size limits)
      */
-    private function safeCacheRemember(string $key, $ttl, callable $callback)
+    private function safeCacheRemember(string $key, \DateTimeInterface|\DateInterval|int|null $ttl, callable $callback)
     {
         try {
             // Try to get from cache first
@@ -37,7 +49,7 @@ class GradeController extends Controller
                 Cache::put($key, $data, $ttl);
             } catch (\Exception $e) {
                 // Log the error but continue without caching
-                \Log::warning('Failed to cache data', [
+                Log::warning('Failed to cache data', [
                     'key' => $key,
                     'error' => $e->getMessage(),
                     'error_type' => get_class($e)
@@ -47,7 +59,7 @@ class GradeController extends Controller
             return $data;
         } catch (\Exception $e) {
             // If cache retrieval fails, just execute the callback
-            \Log::warning('Cache operation failed, falling back to direct query', [
+            Log::warning('Cache operation failed, falling back to direct query', [
                 'key' => $key,
                 'error' => $e->getMessage()
             ]);
@@ -110,8 +122,9 @@ class GradeController extends Controller
 
     // Show a single grade with subjects and counts
     // OPTIMIZED: Strategy D - Cache individual items with selective fields
-    public function show(Grade $grade)
+    public function show(Grade|string|int $grade)
     {
+        $grade = $this->resolveGrade($grade);
         $cacheKey = 'grade_show_' . $grade->id;
 
         $grade = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($grade) {
@@ -145,9 +158,10 @@ class GradeController extends Controller
 
     // Get topics for a specific grade (through its subjects)
     // OPTIMIZED: Strategy C - Pagination limits, Strategy B - Selective fields
-    public function topics(Grade $grade)
+    public function topics(Grade|string|int $grade)
     {
-        $perPage = min(100, max(1, (int) request()->get('per_page', 50))); // Strategy C: Limit max items
+        $grade = $this->resolveGrade($grade);
+        $perPage = min(200, max(1, (int) request()->get('per_page', 50))); // Strategy C: Limit max items
         $cacheKey = 'grade_topics_' . $grade->id . '_' . $perPage;
 
         return $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($grade, $perPage) {

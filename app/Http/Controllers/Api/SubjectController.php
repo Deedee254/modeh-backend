@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use App\Models\User;
 use App\Notifications\ResourceRejected;
@@ -26,7 +27,7 @@ class SubjectController extends Controller
     /**
      * Safely cache data with fallback if caching fails (e.g., due to size limits)
      */
-    private function safeCacheRemember(string $key, $ttl, callable $callback)
+    private function safeCacheRemember(string $key, \DateTimeInterface|\DateInterval|int|null $ttl, callable $callback)
     {
         try {
             // Try to get from cache first
@@ -43,7 +44,7 @@ class SubjectController extends Controller
                 Cache::put($key, $data, $ttl);
             } catch (\Exception $e) {
                 // Log the error but continue without caching
-                \Log::warning('Failed to cache data', [
+                Log::warning('Failed to cache data', [
                     'key' => $key,
                     'error' => $e->getMessage(),
                     'error_type' => get_class($e)
@@ -53,7 +54,7 @@ class SubjectController extends Controller
             return $data;
         } catch (\Exception $e) {
             // If cache retrieval fails, just execute the callback
-            \Log::warning('Cache operation failed, falling back to direct query', [
+            Log::warning('Cache operation failed, falling back to direct query', [
                 'key' => $key,
                 'error' => $e->getMessage()
             ]);
@@ -102,7 +103,7 @@ class SubjectController extends Controller
 
             $query->orderBy('name', 'asc');
             // Strategy C: Limit pagination to prevent huge caches
-            $perPage = min(50, max(1, (int) $request->get('per_page', 50)));
+            $perPage = min(200, max(1, (int) $request->get('per_page', 50)));
 
             $paginated = $query->paginate($perPage);
 
@@ -201,7 +202,7 @@ class SubjectController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            \Log::warning('Failed to notify owner after subject rejection', ['subject_id' => $subject->id, 'error' => $e->getMessage()]);
+            Log::warning('Failed to notify owner after subject rejection', ['subject_id' => $subject->id, 'error' => $e->getMessage()]);
         }
 
         return response()->json(['subject' => $subject]);
@@ -274,7 +275,7 @@ class SubjectController extends Controller
             }
 
             // Strategy C: Limit pagination
-            $perPage = min(50, max(1, (int) $request->get('per_page', 10)));
+            $perPage = min(200, max(1, (int) $request->get('per_page', 10)));
             $data = $query->paginate($perPage);
 
             // Populate quizzes_cover_image for Resource
