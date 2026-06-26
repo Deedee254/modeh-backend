@@ -159,12 +159,9 @@ class QuizAccessService
             return true;
         }
 
-        // Check if user has a confirmed one-off purchase for this quiz
-        return \App\Models\OneOffPurchase::where('user_id', $user->id)
-            ->where('item_type', 'quiz')
-            ->where('item_id', $quiz->id)
-            ->whereIn('status', ['confirmed', 'completed'])
-            ->exists();
+        // Return false here so each attempt requires payment if not free.
+        // Payment is per-attempt, so we rely on the specific QuizAttempt's paid_for flag.
+        return false;
     }
 
     /**

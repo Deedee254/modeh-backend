@@ -239,27 +239,13 @@ class QuizAttemptController extends Controller
             ];
         }
 
-        // User needs to pay - check if they already have a confirmed one-off purchase
-        $hasPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
-            ->where('item_type', 'quiz')
-            ->where('item_id', $quiz->id)
-            ->whereIn('status', ['confirmed', 'completed'])
-            ->exists();
-
-        if (!$hasPurchase) {
-            // Need to initiate payment
-            return [
-                'ok' => false,
-                'requires_payment' => true,
-                'price' => $access['price'],
-                'message' => 'Payment required',
-                'access_result' => $access,
-            ];
-        }
-
-        // Has paid, allow access
+        // Payment is per attempt, so a quiz-level purchase does not grant access.
+        // The user will pay for the specific attempt when viewing results.
         return [
-            'ok' => true,
+            'ok' => false,
+            'requires_payment' => true,
+            'price' => $access['price'],
+            'message' => 'Payment required per attempt',
             'access_result' => $access,
         ];
     }
@@ -681,35 +667,25 @@ class QuizAttemptController extends Controller
 	            $effectivePrice = $quiz->price;
 	            $isLocked = ($attempt->paid_for === false) && ((bool) ($quiz->is_paid ?? false) || $effectivePrice > 0);
 	            if ($isLocked) {
-	                // If user already has a confirmed purchase, mark the attempt as paid and allow viewing.
-	                $existingPurchase = \App\Models\OneOffPurchase::where('user_id', $user->id)
-	                    ->where('item_type', 'quiz')
-	                    ->where('item_id', $quiz->id)
-	                    ->whereIn('status', ['confirmed', 'completed'])
-	                    ->first();
-	                if ($existingPurchase) {
-	                    $attempt->update(['paid_for' => true]);
-	                } else {
-	                    return response()->json([
-	                        'ok' => false,
-	                        'can_view' => false,
-	                        'locked' => true,
-	                        'requires_payment' => true,
-	                        'attempt_id' => $attempt->id,
-	                        'quiz_id' => $quiz->id,
-	                        'price' => $effectivePrice,
-	                        'currency' => 'KES',
-                            'score' => $attempt->score !== null ? $attempt->score : $this->markingService->calculateScore($attempt->answers ?? [], $quiz->questions, true, (string)$request->input('shuffle_seed'), true)['score'],
-                            'percentile' => $this->calculateRankAndPercentile($attempt)['percentile'],
-	                        'quiz' => [
-	                            'id' => $quiz->id,
-	                            'title' => $quiz->title,
-	                            'one_off_price' => $effectivePrice,
-	                        ],
-	                        'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
-	                        'message' => 'Payment required',
-	                    ], 403);
-	                }
+	                return response()->json([
+	                    'ok' => false,
+	                    'can_view' => false,
+	                    'locked' => true,
+	                    'requires_payment' => true,
+	                    'attempt_id' => $attempt->id,
+	                    'quiz_id' => $quiz->id,
+	                    'price' => $effectivePrice,
+	                    'currency' => 'KES',
+                        'score' => $attempt->score !== null ? $attempt->score : $this->markingService->calculateScore($attempt->answers ?? [], $quiz->questions, true, (string)$request->input('shuffle_seed'), true)['score'],
+                        'percentile' => $this->calculateRankAndPercentile($attempt)['percentile'],
+	                    'quiz' => [
+	                        'id' => $quiz->id,
+	                        'title' => $quiz->title,
+	                        'one_off_price' => $effectivePrice,
+	                    ],
+	                    'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
+	                    'message' => 'Payment required',
+	                ], 403);
 	            }
 	        }
 

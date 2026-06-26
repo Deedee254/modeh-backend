@@ -127,12 +127,9 @@ class GuestQuizController extends Controller
 
         $price = $quiz->price;
         $requiresPayment = ((bool) $quiz->is_paid) || ($price > 0);
-        $isUnlocked = !$requiresPayment || OneOffPurchase::whereNull('user_id')
-            ->where('guest_identifier', $validated['guest_identifier'])
-            ->where('item_type', 'quiz')
-            ->where('item_id', $quiz->id)
-            ->whereIn('status', ['confirmed', 'completed'])
-            ->exists();
+        
+        // Payment is per-attempt. New attempts are always locked if payment is required.
+        $isUnlocked = !$requiresPayment;
 
         // Prepare minimal result payload for guests
         // Use quiz questions count as total so omitted answers are treated as incorrect
@@ -249,16 +246,6 @@ class GuestQuizController extends Controller
         $isUnlocked = !$requiresPayment || !$attempt->is_locked;
 
         if (!$isUnlocked) {
-            $hasGuestPurchase = false;
-            if ($guestIdentifier !== '') {
-                $hasGuestPurchase = OneOffPurchase::whereNull('user_id')
-                    ->where('guest_identifier', $guestIdentifier)
-                    ->where('item_type', 'quiz')
-                    ->where('item_id', $attempt->quiz_id)
-                    ->whereIn('status', ['confirmed', 'completed'])
-                    ->exists();
-            }
-
             $hasUnlockToken = false;
             if ($unlockToken !== '') {
                 $token = GuestUnlockToken::where('token', $unlockToken)
@@ -269,7 +256,7 @@ class GuestQuizController extends Controller
                 $hasUnlockToken = (bool) $token;
             }
 
-            if ($hasGuestPurchase || $hasUnlockToken) {
+            if ($hasUnlockToken) {
                 $attempt->is_locked = false;
                 $attempt->unlocked_at = now();
                 $attempt->save();
