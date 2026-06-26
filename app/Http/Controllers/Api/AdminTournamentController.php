@@ -38,24 +38,29 @@ class AdminTournamentController extends Controller
             'subject_id' => 'required|exists:subjects,id',
             'topic_id' => 'nullable|exists:topics,id',
             'grade_id' => 'required|exists:grades,id',
-            'qualifier_per_question_seconds' => 'nullable|integer|min:5|max:300',
-            'qualifier_question_count' => 'nullable|integer|min:1|max:100',
+            'per_question_seconds' => 'nullable|integer|min:5|max:300',
+            'question_count' => 'nullable|integer|min:1|max:100',
             'battle_per_question_seconds' => 'nullable|integer|min:5|max:300',
             'battle_question_count' => 'nullable|integer|min:1|max:100',
-            'qualifier_tie_breaker' => 'nullable|in:duration,score_then_duration',
+            'tie_breaker' => 'nullable|in:duration,score_then_duration',
             'bracket_slots' => 'nullable|integer|in:2,4,8',
             'round_delay_days' => 'nullable|integer|min:0|max:365',
+            'sponsor_banner' => 'nullable|image|max:2048',
         ]);
 
         $data['created_by'] = $request->user()->id;
         $data['status'] = 'upcoming';
-        $data['qualifier_per_question_seconds'] = $data['qualifier_per_question_seconds'] ?? 30;
-        $data['qualifier_question_count'] = $data['qualifier_question_count'] ?? 10;
+        $data['per_question_seconds'] = $data['per_question_seconds'] ?? 30;
+        $data['question_count'] = $data['question_count'] ?? 10;
         $data['battle_per_question_seconds'] = $data['battle_per_question_seconds'] ?? 30;
         $data['battle_question_count'] = $data['battle_question_count'] ?? 10;
-        $data['qualifier_tie_breaker'] = $data['qualifier_tie_breaker'] ?? 'score_then_duration';
+        $data['tie_breaker'] = $data['tie_breaker'] ?? 'score_then_duration';
         $data['bracket_slots'] = $data['bracket_slots'] ?? 8;
         $data['round_delay_days'] = array_key_exists('round_delay_days', $data) ? $data['round_delay_days'] : null;
+
+        if ($request->hasFile('sponsor_banner')) {
+            $data['sponsor_banner'] = $request->file('sponsor_banner')->store('sponsor-banners', 'public');
+        }
 
         $tournament = Tournament::create($data);
         return response()->json($tournament);
@@ -76,14 +81,19 @@ class AdminTournamentController extends Controller
             'subject_id' => 'sometimes|exists:subjects,id',
             'topic_id' => 'nullable|exists:topics,id',
             'grade_id' => 'sometimes|exists:grades,id',
-            'qualifier_per_question_seconds' => 'nullable|integer|min:5|max:300',
-            'qualifier_question_count' => 'nullable|integer|min:1|max:100',
+            'per_question_seconds' => 'nullable|integer|min:5|max:300',
+            'question_count' => 'nullable|integer|min:1|max:100',
             'battle_per_question_seconds' => 'nullable|integer|min:5|max:300',
             'battle_question_count' => 'nullable|integer|min:1|max:100',
-            'qualifier_tie_breaker' => 'nullable|in:duration,score_then_duration',
+            'tie_breaker' => 'nullable|in:duration,score_then_duration',
             'bracket_slots' => 'nullable|integer|in:2,4,8',
             'round_delay_days' => 'nullable|integer|min:0|max:365',
+            'sponsor_banner' => 'nullable|image|max:2048',
         ]);
+
+        if ($request->hasFile('sponsor_banner')) {
+            $data['sponsor_banner'] = $request->file('sponsor_banner')->store('sponsor-banners', 'public');
+        }
 
         $tournament->update($data);
 
