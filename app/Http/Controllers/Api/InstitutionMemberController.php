@@ -830,28 +830,35 @@ class InstitutionMemberController extends Controller
         $activeToday = 0;
         $activeThisWeek = 0;
         if (!empty($memberIds)) {
+            // Count distinct users who have made at least one attempt today
             $activeToday = DB::table('quiz_attempts')
                 ->whereIn('user_id', $memberIds)
                 ->whereDate('created_at', $now)
-                ->count();
+                ->distinct('user_id')
+                ->count('user_id');
 
-            $activeThisWeek = DB::table('quiz_attempts')
-                ->whereIn('user_id', $memberIds)
-                ->whereBetween('created_at', [$weekAgo, $now])
-                ->count() > 0 ? DB::table('users')
-                ->whereIn('id', $memberIds)
+            // Count distinct users who have made at least one attempt this week.
+            // Use Eloquent User model here — whereHas() is an Eloquent method and
+            // is NOT available on the raw DB query builder (DB::table).
+            $activeThisWeek = User::whereIn('id', $memberIds)
                 ->whereHas('quizAttempts', function ($q) use ($weekAgo, $now) {
                     $q->whereBetween('created_at', [$weekAgo, $now]);
-                })->count() : 0;
+                })->count();
         }
 
         $totalAttempts = 0;
         $avgScore = 0;
         if (!empty($memberIds)) {
-            $attempts = DB::table('quiz_attempts')->whereIn('user_id', $memberIds)->get();
-            $totalAttempts = $attempts->count();
+            // Use SQL aggregates instead of loading all rows into memory,
+            // which could exhaust PHP memory for large institutions.
+            $totalAttempts = DB::table('quiz_attempts')
+                ->whereIn('user_id', $memberIds)
+                ->count();
             if ($totalAttempts > 0) {
-                $avgScore = round($attempts->avg('score'), 2);
+                $avgScore = round(
+                    (float) (DB::table('quiz_attempts')->whereIn('user_id', $memberIds)->avg('score') ?? 0),
+                    2
+                );
             }
         }
 

@@ -213,6 +213,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/institutions/{institution}/analytics/performance', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsPerformance']);
     Route::get('/institutions/{institution}/analytics/member/{user}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'analyticsMember']);
 
+    // Institution quizzes
+    Route::get('/institutions/{institution}/quizzes', function (\Illuminate\Http\Request $request, \App\Models\Institution $institution) {
+        $request->merge(['institution_id' => $institution->id]);
+        return app(\App\Http\Controllers\Api\QuizController::class)->index($request);
+    });
+
     Route::get('/me', [\App\Http\Controllers\Api\UserController::class, 'me']);
 
     // Billing settings for the authenticated user (frontend expects PATCH /api/me/billing)
@@ -574,6 +580,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Tournaments
     Route::post('/tournaments/{tournament}/join', [\App\Http\Controllers\Api\TournamentController::class, 'join']);
     Route::post('/tournaments/{tournament}/attempt/submit', [\App\Http\Controllers\Api\TournamentController::class, 'submitAttempt']);
+    Route::get('/tournaments/{tournament}/report/download/{attemptId?}', [\App\Http\Controllers\Api\TournamentController::class, 'downloadReport']);
 
     // Admin tournament management (requires admin role)
     Route::middleware(['can:viewFilament'])->group(function () {
@@ -589,6 +596,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/battles/{battle}/submit', [\App\Http\Controllers\Api\BattleController::class, 'submit']);
     Route::post('/battles/{battle}/mark', [\App\Http\Controllers\Api\BattleController::class, 'mark']);
     Route::get('/battles/{battle}/result', [\App\Http\Controllers\Api\BattleController::class, 'result']);
+    Route::get('/battles/{battle}/report/download', [\App\Http\Controllers\Api\BattleController::class, 'downloadReport']);
     Route::post('/battles/{battle}/attach-questions', [\App\Http\Controllers\Api\BattleController::class, 'attachQuestions']);
     Route::post('/battles/{battle}/solo-complete', [\App\Http\Controllers\Api\BattleController::class, 'soloComplete']);
 

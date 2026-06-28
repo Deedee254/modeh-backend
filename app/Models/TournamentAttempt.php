@@ -17,10 +17,12 @@ class TournamentAttempt extends Model
         'score',
         'answers',
         'duration_seconds',
+        'per_question_time',
     ];
 
     protected $casts = [
         'answers' => 'array',
+        'per_question_time' => 'array',
         'score' => 'float',
     ];
 

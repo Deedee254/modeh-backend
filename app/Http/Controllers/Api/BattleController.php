@@ -1085,4 +1085,71 @@ class BattleController extends Controller
             ],
         ]);
     }
+
+    public function downloadReport(Request $request, Battle $battle)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $submissions = $battle->submissions()->where('user_id', $user->id)->get();
+        if ($submissions->isEmpty()) {
+            return response()->json(['message' => 'No submission found for this battle'], 404);
+        }
+
+        $answers = [];
+        $perQuestionTime = [];
+        $correctCount = 0;
+        $totalTime = 0;
+        
+        foreach ($submissions as $sub) {
+            $answers[] = [
+                'question_id' => $sub->question_id,
+                'selected' => $sub->selected,
+            ];
+            $perQuestionTime[$sub->question_id] = $sub->time_taken;
+            if ($sub->correct_flag) {
+                $correctCount++;
+            }
+            $totalTime += $sub->time_taken;
+        }
+
+        $isInitiator = $battle->initiator_id === $user->id;
+        $score = $isInitiator ? $battle->initiator_points : $battle->opponent_points;
+
+        $fakeAttempt = new \stdClass();
+        $fakeAttempt->id = $battle->id;
+        $fakeAttempt->answers = $answers;
+        $fakeAttempt->per_question_time = $perQuestionTime;
+        $fakeAttempt->score = $score;
+        $fakeAttempt->correct_count = $correctCount;
+        $fakeAttempt->total_time_seconds = ceil($totalTime);
+        $fakeAttempt->battle = $battle; 
+
+        // Generate report using the generic logic in PerformanceReportController
+        $reportController = new \App\Http\Controllers\Api\PerformanceReportController(app(\App\Services\QuizMarkingService::class));
+        $report = $reportController->generateAnalysis($fakeAttempt);
+
+        $html = view('reports.performance_report_pdf', [
+            'attempt' => (object)['id' => $battle->id],
+            'report' => $report,
+            'user' => $user,
+            'title' => 'Battle against ' . ($isInitiator ? ($battle->opponent->name ?? 'Opponent') : ($battle->initiator->name ?? 'Opponent')),
+            'brandColor' => '#7c3aed',
+        ])->render();
+
+        $options = new \Dompdf\Options();
+        $options->set('isRemoteEnabled', true);
+        $dompdf = new \Dompdf\Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        $filename = "battle-report-{$battle->id}.pdf";
+        return response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "attachment; filename={$filename}"
+        ]);
+    }
 }

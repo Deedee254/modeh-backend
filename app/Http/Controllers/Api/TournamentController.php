@@ -428,6 +428,52 @@ class TournamentController extends Controller
         ]);
     }
 
+    public function downloadReport(Request $request, Tournament $tournament, $attemptId = null)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $attemptQuery = TournamentAttempt::where('tournament_id', $tournament->id)
+            ->where('user_id', $user->id);
+
+        if ($attemptId) {
+            $attemptQuery->where('id', $attemptId);
+        }
+
+        $attempt = $attemptQuery->latest('id')->first();
+
+        if (!$attempt) {
+            return response()->json(['message' => 'Attempt not found'], 404);
+        }
+
+        // Generate report using the generic logic in PerformanceReportController
+        $reportController = new \App\Http\Controllers\Api\PerformanceReportController(app(\App\Services\QuizMarkingService::class));
+        $report = $reportController->generateAnalysis($attempt);
+
+        $html = view('reports.performance_report_pdf', [
+            'attempt' => $attempt,
+            'report' => $report,
+            'user' => $user,
+            'title' => $tournament->name,
+            'brandColor' => '#7c3aed',
+        ])->render();
+
+        $options = new \Dompdf\Options();
+        $options->set('isRemoteEnabled', true);
+        $dompdf = new \Dompdf\Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        $filename = "tournament-report-attempt-{$attempt->id}.pdf";
+        return response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "attachment; filename={$filename}"
+        ]);
+    }
+
     public function attemptStatus(Request $request, Tournament $tournament)
     {
         $this->maybeFinalizeSimpleFlowTournament($tournament);
@@ -504,6 +550,7 @@ class TournamentController extends Controller
             'answers' => 'required|array',
             'answers.*.question_id' => 'required|integer',
             'answers.*.answer' => 'nullable',
+            'answers.*.time_taken' => 'nullable|numeric|min:0',
             'duration_seconds' => 'nullable|integer|min:0',
         ]);
 
@@ -512,11 +559,17 @@ class TournamentController extends Controller
 
         $computedScore = 0.0;
         $answersToStore = [];
+        $perQuestionTime = [];
 
         foreach ($data['answers'] as $ans) {
             $answerData = $this->processAttemptAnswer($ans, $questions, $shuffleSeed);
             if (is_array($answerData) && isset($answerData['error'])) {
                 return response()->json(['message' => $answerData['error']], 400);
+            }
+
+            if (isset($ans['time_taken'])) {
+                $answerData['time_taken'] = (float) $ans['time_taken'];
+                $perQuestionTime[$ans['question_id']] = (float) $ans['time_taken'];
             }
 
             $answersToStore[] = $answerData;
@@ -543,6 +596,7 @@ class TournamentController extends Controller
             'score' => round($computedScore, 2),
             'answers' => $answersToStore,
             'duration_seconds' => $durationSeconds,
+            'per_question_time' => !empty($perQuestionTime) ? $perQuestionTime : null,
         ]);
 
         // Resolve answer text for the response payload

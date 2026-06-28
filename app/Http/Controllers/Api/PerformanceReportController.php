@@ -155,13 +155,26 @@ class PerformanceReportController extends Controller
         ]);
     }
 
-    private function generateAnalysis(QuizAttempt $attempt)
+    public function generateAnalysis($attempt)
     {
-        $quiz = $attempt->quiz()->with('questions.topic')->first();
+        $assessment = null;
+        if (method_exists($attempt, 'quiz') && $attempt->quiz) {
+            $assessment = $attempt->quiz()->with('questions.topic')->first();
+        } elseif (method_exists($attempt, 'tournament') && $attempt->tournament) {
+            $assessment = $attempt->tournament()->with('questions.topic')->first();
+        } elseif (method_exists($attempt, 'battle') && $attempt->battle) {
+            $assessment = $attempt->battle()->with('questions.topic')->first();
+        }
+
+        if (!$assessment) {
+            return [];
+        }
+
         $answers = $attempt->answers ?? [];
+        $perQuestionTime = $attempt->per_question_time ?? [];
         $topicsData = [];
 
-        foreach ($quiz->questions as $q) {
+        foreach ($assessment->questions as $q) {
             $topicId = $q->topic_id ?? 0;
             $topicName = $q->topic->title ?? $q->topic->name ?? 'General';
 
@@ -213,24 +226,49 @@ class PerformanceReportController extends Controller
             ];
         }
 
+        $weakAreas = array_values(array_filter($analysis, fn($t) => $t['percentage'] < 60));
+        $weakTopicIds = array_column($weakAreas, 'topic_id');
+        
+        $recommendedQuizzes = [];
+        if (!empty($weakTopicIds)) {
+            // Fetch some active quizzes from these topics
+            $recommendedQuizzes = \App\Models\Quiz::whereIn('topic_id', $weakTopicIds)
+                ->where('status', 'active')
+                ->where('id', '!=', $assessment->id) // don't recommend the same quiz
+                ->withCount('questions')
+                ->inRandomOrder()
+                ->limit(3)
+                ->get()
+                ->map(function($q) {
+                    return [
+                        'title' => $q->title,
+                        'description' => $q->description,
+                        'topic' => $q->topic->title ?? $q->topic->name ?? 'General',
+                        'questions_count' => $q->questions_count
+                    ];
+                })
+                ->toArray();
+        }
+
         return [
             'topics_breakdown' => $analysis,
-            'weak_areas' => array_values(array_filter($analysis, fn($t) => $t['percentage'] < 60)),
+            'weak_areas' => $weakAreas,
             'strong_areas' => array_values(array_filter($analysis, fn($t) => $t['percentage'] >= 80)),
-            'detailed_questions' => $this->getDetailedQuestions($quiz, $answers),
+            'detailed_questions' => $this->getDetailedQuestions($assessment, $answers, $perQuestionTime),
+            'recommended_quizzes' => $recommendedQuizzes,
             'stats' => [
                 'score' => $attempt->score,
-                'total_questions' => $quiz->questions->count(),
+                'total_questions' => $assessment->questions->count(),
                 'correct_count' => $attempt->correct_count ?? count(array_filter($analysis, fn($t) => $t['correct_answers'])),
-                'time_taken' => $attempt->total_time_seconds,
+                'time_taken' => $attempt->total_time_seconds ?? $attempt->duration_seconds ?? 0,
             ]
         ];
     }
 
-    private function getDetailedQuestions($quiz, $answers)
+    private function getDetailedQuestions($assessment, $answers, $perQuestionTime = [])
     {
         $details = [];
-        foreach ($quiz->questions as $q) {
+        foreach ($assessment->questions as $q) {
             $userAnswer = null;
             foreach ($answers as $ans) {
                 if ((int)($ans['question_id'] ?? 0) === (int)$q->id) {
@@ -241,14 +279,16 @@ class PerformanceReportController extends Controller
 
             $isCorrect = $this->markingService->isAnswerCorrect($userAnswer, $q->answers, $q);
             $optionMap = $this->markingService->buildOptionMap($q);
+            $timeTaken = $perQuestionTime[$q->id] ?? null;
 
             $details[] = [
                 'body' => $q->body,
                 'is_correct' => $isCorrect,
                 'user_answer' => $this->markingService->formatExplanationAnswers($userAnswer, $optionMap),
                 'correct_answer' => $this->markingService->formatExplanationAnswers($q->answers, $optionMap),
+                'time_taken' => $timeTaken,
                 'explanation' => $q->explanation,
-                'topic' => $q->topic->name ?? 'General',
+                'topic' => $q->topic->title ?? $q->topic->name ?? 'General',
             ];
         }
         return $details;

@@ -57,7 +57,22 @@ class RecentTransactions extends TableWidget
     {
         return [
             TextColumn::make('tx_id')->label('Tx')->limit(20),
-            TextColumn::make('user.name')->label('User')->toggleable(),
+            TextColumn::make('user_name')
+                ->label('User')
+                ->getStateUsing(function (Transaction $record): string {
+                    if ($record->user) {
+                        return $record->user->name ?? $record->user->email ?? $record->user->phone ?? 'Unknown User';
+                    }
+                    
+                    // Try to fetch phone number from M-Pesa transaction
+                    $phone = \App\Models\MpesaTransaction::where('checkout_request_id', $record->tx_id)->value('phone');
+                    if ($phone) {
+                        return 'Guest (' . $phone . ')';
+                    }
+
+                    return 'Guest';
+                })
+                ->toggleable(),
             TextColumn::make('amount')->label('Amount')->formatStateUsing(fn($state) => number_format($state,2)),
             TextColumn::make('gateway')->label('Gateway')->toggleable(),
             TextColumn::make('status')->label('Status')->toggleable(),

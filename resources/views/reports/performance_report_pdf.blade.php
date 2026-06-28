@@ -61,8 +61,8 @@
                         <div style="font-size: 13px; color: #64748b; margin-top: 4px;">{{ $user->email }}</div>
                     </td>
                     <td style="width: 40%; text-align: right;">
-                        <div class="label">Quiz Title</div>
-                        <div style="font-size: 16px; font-weight: bold; color: #0f172a;">{{ $attempt->quiz->title }}</div>
+                        <div class="label">Assessment Title</div>
+                        <div style="font-size: 16px; font-weight: bold; color: #0f172a;">{{ $title ?? $attempt->quiz->title ?? $attempt->tournament->name ?? 'Assessment' }}</div>
                         <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Attempt ID: #{{ $attempt->id }}</div>
                     </td>
                 </tr>
@@ -123,18 +123,17 @@
                 
                 <table style="width: 100%;">
                     <tr>
-                        <td style="width: 50%; vertical-align: top;">
+                        <td style="width: 100%; vertical-align: top;">
                             <div class="answer-box">
                                 <span class="label">Your Answer</span>
                                 <span style="font-weight: bold; color: {{ $q['is_correct'] ? '#059669' : '#dc2626' }}">
                                     {{ $q['user_answer'] ?: '(No answer provided)' }}
                                 </span>
-                            </div>
-                        </td>
-                        <td style="width: 50%; vertical-align: top;">
-                            <div class="answer-box">
-                                <span class="label">Correct Answer</span>
-                                <span style="font-weight: bold; color: #059669;">{{ $q['correct_answer'] }}</span>
+                                @if(isset($q['time_taken']) && $q['time_taken'] > 0)
+                                <span style="margin-left: 15px; font-size: 11px; color: #64748b; font-weight: normal;">
+                                    ⏱️ {{ $q['time_taken'] }}s
+                                </span>
+                                @endif
                             </div>
                         </td>
                     </tr>
@@ -148,6 +147,22 @@
                 @endif
             </div>
         @endforeach
+
+        @if(!empty($report['recommended_quizzes']) && count($report['recommended_quizzes']) > 0)
+        <div class="page-break"></div>
+        <div class="section-title">Recommended Next Steps</div>
+        <p style="font-size: 13px; color: #64748b; margin-bottom: 25px;">Based on your weak areas, we recommend taking the following quizzes to improve your mastery of these topics:</p>
+        
+        @foreach($report['recommended_quizzes'] as $rec)
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                <div style="font-size: 15px; font-weight: bold; color: #0f172a; margin-bottom: 5px;">{{ $rec['title'] }}</div>
+                <div style="font-size: 12px; color: #64748b;">Topic: {{ $rec['topic'] }} • Questions: {{ $rec['questions_count'] }}</div>
+                @if($rec['description'])
+                <div style="font-size: 13px; color: #475569; margin-top: 8px;">{{ \Illuminate\Support\Str::limit(strip_tags($rec['description']), 150) }}</div>
+                @endif
+            </div>
+        @endforeach
+        @endif
 
         <div class="footer">
             <p>This detailed analysis is a premium resource designed to accelerate your learning. Do not share this document.</p>

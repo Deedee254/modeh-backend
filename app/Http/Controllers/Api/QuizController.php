@@ -694,6 +694,19 @@ class QuizController extends Controller
             $query->where('is_approved', (bool) $request->get('approved'));
         }
 
+        // Filter by institution
+        if ($institutionId = $request->get('institution_id')) {
+            $query->where('institution_id', $institutionId);
+        }
+
+        // Filter by creator (quiz master)
+        if ($creatorId = $request->get('creator_id') ?: $request->get('user_id') ?: $request->get('quiz_master_id')) {
+            $query->where(function ($q) use ($creatorId) {
+                $q->where('user_id', $creatorId)
+                    ->orWhere('created_by', $creatorId);
+            });
+        }
+
         // sorting
         $sort = $request->get('sort', 'newest');
         switch ($sort) {
