@@ -54,6 +54,16 @@ class InstitutionController extends Controller
             if ($parent) $parentId = $parent->id;
         }
 
+        if (empty($data['slug'])) {
+            $slug = \Illuminate\Support\Str::slug($data['name']);
+            $originalSlug = $slug;
+            $count = 1;
+            while (Institution::where('slug', $slug)->exists()) {
+                $slug = $originalSlug . '-' . $count++;
+            }
+            $data['slug'] = $slug;
+        }
+
         $institution = Institution::create(array_merge($data, ['created_by' => $user->id, 'parent_id' => $parentId]));
 
         // Attach the creator as institution-manager
@@ -62,6 +72,15 @@ class InstitutionController extends Controller
             'status' => 'active',
             'invited_by' => null,
         ]);
+        
+        // Invalidate cache since institutions list has changed
+        try {
+            \App\Services\SessionUserCacheService::invalidateSessionCache($user->id, $request);
+            \Illuminate\Support\Facades\Cache::forget("user_me_{$user->id}");
+            $user->touch();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to invalidate user cache on institution creation: ' . $e->getMessage());
+        }
 
         return response()->json($institution, 201);
     }
@@ -360,6 +379,15 @@ class InstitutionController extends Controller
         }
 
         $institution->delete();
+
+        // Invalidate cache since institutions list has changed
+        try {
+            \App\Services\SessionUserCacheService::invalidateSessionCache($user->id, $request);
+            \Illuminate\Support\Facades\Cache::forget("user_me_{$user->id}");
+            $user->touch();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to invalidate user cache on institution deletion: ' . $e->getMessage());
+        }
 
         return response()->json(['ok' => true, 'message' => 'Institution deleted successfully']);
     }
