@@ -205,6 +205,7 @@ class LeaderboardController extends Controller
                     'total_time_seconds' => isset($u->best_time) ? (int)$u->best_time : null,
                     'country' => $u->country ?? null,
                     'institution_name' => $u->institutions?->first()?->name ?? null,
+                    'institution_county' => $u->institutions?->first()?->county ?? null,
                 ];
             });
 
