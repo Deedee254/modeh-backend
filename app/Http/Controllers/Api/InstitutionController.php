@@ -37,6 +37,7 @@ class InstitutionController extends Controller
             'logo_url' => 'nullable|string|max:1000',
             'website' => 'nullable|url',
             'address' => 'nullable|string|max:500',
+            'county' => 'nullable|string|max:255',
             'metadata' => 'nullable|array',
             'is_active' => 'sometimes|boolean',
         ]);
@@ -108,6 +109,7 @@ class InstitutionController extends Controller
             'logo_url' => 'sometimes|nullable|string|max:1000',
             'website' => 'sometimes|nullable|url',
             'address' => 'sometimes|nullable|string|max:500',
+            'county' => 'sometimes|nullable|string|max:255',
             'metadata' => 'sometimes|nullable|array',
             'is_active' => 'sometimes|boolean',
         ]);

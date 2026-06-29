@@ -36,6 +36,7 @@ class Institution extends Model
         'logo_url',
         'website',
         'address',
+        'county',
         'metadata',
         'is_active',
         'created_by',

@@ -101,6 +101,14 @@ class TournamentPolicy
      */
     public function join(User $user, Tournament $tournament)
     {
+        // Enforce strict level locking as requested: if the tournament has a level, you MUST belong to it
+        if ($tournament->level_id) {
+            $userLevelId = $user->quizeeProfile->level_id ?? null;
+            if ($userLevelId !== $tournament->level_id) {
+                return $this->deny('You can only join tournaments of your level.');
+            }
+        }
+
         // access_type controls who may join: public, grade, level
         $access = $tournament->access_type ?? 'public';
 
@@ -118,13 +126,8 @@ class TournamentPolicy
             return true;
         }
 
-        // Level-restricted: enforce level match
+        // Level-restricted: enforce level match (already covered above, but kept for completeness if no level_id is set)
         if ($access === 'level') {
-            if ($tournament->level_id) {
-                if (! $user->quizeeProfile || ($user->quizeeProfile->level_id ?? null) !== $tournament->level_id) {
-                    return $this->deny('You are not in the correct level for this tournament.');
-                }
-            }
             return true;
         }
 

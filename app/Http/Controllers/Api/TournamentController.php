@@ -39,6 +39,9 @@ class TournamentController extends Controller
         if ($gradeId = $request->get('grade_id')) {
             $query->where('grade_id', $gradeId);
         }
+        if ($levelId = $request->get('level_id')) {
+            $query->where('level_id', $levelId);
+        }
 
         $tournaments = $query->withCount('participants')->latest()->paginate(20);
         return response()->json($tournaments);
@@ -348,7 +351,7 @@ class TournamentController extends Controller
         $attemptCounts = $this->attemptCountsByUser($tournament);
 
         $latestAttempts = $this->latestAttemptsQuery($tournament)
-            ->with('user:id,name,avatar_url,social_avatar')
+            ->with(['user:id,name,avatar_url,social_avatar', 'user.institutions:id,name,slug'])
             ->orderByDesc('score')
             ->orderByRaw('CASE WHEN duration_seconds IS NULL THEN 2147483647 ELSE duration_seconds END ASC')
             ->orderBy('id')
@@ -362,6 +365,7 @@ class TournamentController extends Controller
             return [
                 'id' => $userId,
                 'name' => $user->name ?? null,
+                'institution_name' => $user->institutions?->first()?->name ?? null,
                 'avatar_url' => $user->avatar_url ?? null,
                 'avatar' => $user->avatar ?? null,
                 'points' => (float) $attempt->score,
@@ -387,7 +391,7 @@ class TournamentController extends Controller
         $perPage = $request->get('per_page', 50);
 
         $attempts = $this->latestAttemptsQuery($tournament)
-            ->with('user:id,name,email,avatar_url,social_avatar')
+            ->with(['user:id,name,email,avatar_url,social_avatar', 'user.institutions:id,name,slug'])
             ->orderByDesc('score')
             ->orderByRaw('CASE WHEN duration_seconds IS NULL THEN 2147483647 ELSE duration_seconds END ASC')
             ->orderBy('id')
@@ -404,6 +408,7 @@ class TournamentController extends Controller
                     'id' => $attempt->id,
                     'user_id' => $attempt->user_id,
                     'user_name' => $user->name ?? null,
+                    'institution_name' => $user->institutions?->first()?->name ?? null,
                     'user_email' => $user->email ?? null,
                     'avatar_url' => $user->avatar_url ?? null,
                     'avatar' => $user->avatar ?? null,
