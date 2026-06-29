@@ -1037,4 +1037,99 @@ class InstitutionMemberController extends Controller
             ]
         ]);
     }
+
+    public function directCreate(Request $request, Institution $institution)
+    {
+        /** @var Institution $institution */
+        $user = $request->user();
+        
+        // Only institution managers can create members directly
+        $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
+        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6',
+            'role' => 'required|string|in:quizee,quiz-master',
+            'level_id' => 'nullable|exists:levels,id',
+            'grade_id' => 'nullable|exists:grades,id',
+            'subjects' => 'nullable|array',
+            'subjects.*' => 'exists:subjects,id',
+        ]);
+
+        return DB::transaction(function () use ($data, $institution, $user) {
+            // 1. Create user
+            $newUser = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => \Illuminate\Support\Facades\Hash::make($data['password']),
+                'role' => $data['role'],
+            ]);
+
+            // 2. Create profile based on role
+            if ($data['role'] === 'quizee') {
+                \App\Models\Quizee::create([
+                    'user_id' => $newUser->id,
+                    'institution' => $institution->name,
+                    'level_id' => $data['level_id'] ?? null,
+                    'grade_id' => $data['grade_id'] ?? null,
+                    'subjects' => $data['subjects'] ?? [],
+                    'institution_verified' => true,
+                    'verified_institution_id' => $institution->id,
+                ]);
+            } else if ($data['role'] === 'quiz-master') {
+                \App\Models\QuizMaster::create([
+                    'user_id' => $newUser->id,
+                    'institution' => $institution->name,
+                    'level_id' => $data['level_id'] ?? null,
+                    'grade_id' => $data['grade_id'] ?? null,
+                    'subjects' => $data['subjects'] ?? [],
+                    'institution_verified' => true,
+                    'verified_institution_id' => $institution->id,
+                ]);
+            }
+
+            // 3. Attach to institution_user pivot table
+            DB::table('institution_user')->insert([
+                'institution_id' => $institution->id,
+                'user_id' => $newUser->id,
+                'role' => $data['role'],
+                'status' => 'active',
+                'invited_by' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // 4. Record seat usage
+            try {
+                InstitutionPackageUsageService::recordSeatUsage($institution, $newUser);
+            } catch (\Throwable $e) {
+                Log::warning('[Institution] Failed to record seat usage for directly created member: ' . $e->getMessage());
+            }
+
+            // 5. Try to assign active subscription seat if available
+            $activeSub = $institution->activeSubscription();
+            if ($activeSub && $activeSub->package) {
+                try {
+                    $activeSub->assignUser($newUser->id, $user->id);
+                } catch (\Throwable $e) {
+                    Log::warning('[Institution] Failed to assign subscription seat to directly created member: ' . $e->getMessage());
+                }
+            }
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'User account created and added to institution successfully.',
+                'member' => [
+                    'id' => $newUser->id,
+                    'name' => $newUser->name,
+                    'email' => $newUser->email,
+                    'role' => $data['role'],
+                    'status' => 'active',
+                    'avatar' => null,
+                ]
+            ], 201);
+        });
+    }
 }

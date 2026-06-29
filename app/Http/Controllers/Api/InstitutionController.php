@@ -349,4 +349,18 @@ class InstitutionController extends Controller
             ], 500);
         }
     }
+
+    public function destroy(Request $request, Institution $institution)
+    {
+        // Only institution managers or admin can delete
+        $user = $request->user();
+        $isManager = $institution->users()->where('user_id', $user->id)->where('role', 'institution-manager')->exists();
+        if (!$isManager && !($user && $user->isAdmin())) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $institution->delete();
+
+        return response()->json(['ok' => true, 'message' => 'Institution deleted successfully']);
+    }
 }

@@ -183,6 +183,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Institution update (institution manager only)
     Route::patch('/institutions/{institution}', [\App\Http\Controllers\Api\InstitutionController::class, 'update']);
     Route::put('/institutions/{institution}', [\App\Http\Controllers\Api\InstitutionController::class, 'update']);
+    Route::delete('/institutions/{institution}', [\App\Http\Controllers\Api\InstitutionController::class, 'destroy']);
     // Institution member management (institution manager only)
     Route::get('/institutions/{institution}/members', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'index']);
     Route::get('/institutions/{institution}/subscription', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'subscription']);
@@ -202,6 +203,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/institutions/{id}/members', [\App\Http\Controllers\Api\InstitutionController::class, 'members']);
     // Direct invitations
     Route::post('/institutions/{institution}/members/invite', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'invite']);
+    Route::post('/institutions/{institution}/members/direct-create', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'directCreate']);
     // Generate an invite token (no email sent) so frontend can compose and send the invite link
     Route::post('/institutions/{institution}/members/generate-token', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'generateInviteToken']);
     Route::post('/institutions/{institution}/members/accept-invitation/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'acceptInvitation']);
