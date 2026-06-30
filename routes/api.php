@@ -204,6 +204,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Direct invitations
     Route::post('/institutions/{institution}/members/invite', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'invite']);
     Route::post('/institutions/{institution}/members/direct-create', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'directCreate']);
+    Route::post('/institutions/{institution}/members/import-csv', [\App\Http\Controllers\Api\InstitutionMemberImportController::class, 'importCsv']);
     // Generate an invite token (no email sent) so frontend can compose and send the invite link
     Route::post('/institutions/{institution}/members/generate-token', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'generateInviteToken']);
     Route::post('/institutions/{institution}/members/accept-invitation/{token}', [\App\Http\Controllers\Api\InstitutionMemberController::class, 'acceptInvitation']);
