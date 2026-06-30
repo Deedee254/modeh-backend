@@ -25,7 +25,7 @@ class TournamentParticipant extends Model
 
     public function attempts()
     {
-        return $this->hasMany(TournamentQualificationAttempt::class, 'user_id', 'user_id')
-            ->whereColumn('tournament_id', 'tournament_id');
+        return $this->hasMany(TournamentAttempt::class, 'user_id', 'user_id')
+            ->whereColumn('tournament_attempts.tournament_id', 'tournament_participants.tournament_id');
     }
 }
