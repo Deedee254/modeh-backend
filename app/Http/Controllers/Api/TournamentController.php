@@ -39,8 +39,22 @@ class TournamentController extends Controller
         if ($gradeId = $request->get('grade_id')) {
             $query->where('grade_id', $gradeId);
         }
-        if ($levelId = $request->get('level_id')) {
-            $query->where('level_id', $levelId);
+
+        $user = \Illuminate\Support\Facades\Auth::guard('sanctum')->user() ?? \Illuminate\Support\Facades\Auth::user();
+        $userLevelId = null;
+        if ($user && $user->role === 'quizee' && $user->quizeeProfile) {
+            $userLevelId = $user->quizeeProfile->level_id;
+        }
+
+        $targetLevelId = $request->get('level_id') ?? $userLevelId;
+
+        if ($targetLevelId) {
+            $query->where(function ($q) use ($targetLevelId) {
+                $q->where('level_id', $targetLevelId)
+                  ->orWhereHas('grade', function ($gQ) use ($targetLevelId) {
+                      $gQ->where('level_id', $targetLevelId);
+                  });
+            });
         }
 
         $tournaments = $query->withCount('participants')->latest()->paginate(20);
@@ -53,6 +67,14 @@ class TournamentController extends Controller
 
         $tournament->load(['subject', 'topic', 'grade', 'level', 'participants', 'questions', 'winner', 'sponsor']);
         $user = Auth::user() ?? Auth::guard('sanctum')->user();
+
+        if ($user && $user->role === 'quizee' && $user->quizeeProfile) {
+            $userLevelId = $user->quizeeProfile->level_id;
+            $tournamentLevelId = $tournament->level_id ?? ($tournament->grade ? $tournament->grade->level_id : null);
+            if ($tournamentLevelId && $userLevelId && (int)$tournamentLevelId !== (int)$userLevelId) {
+                return response()->json(['message' => 'This tournament is not available for your level.'], 403);
+            }
+        }
 
         $isParticipant = $user ? $tournament->participants()->where('user_id', $user->id)->exists() : false;
         $tournament->is_participant = $isParticipant;
