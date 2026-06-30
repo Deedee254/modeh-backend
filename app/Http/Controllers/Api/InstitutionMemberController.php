@@ -1118,6 +1118,15 @@ class InstitutionMemberController extends Controller
                 }
             }
 
+            // Refresh user model and evaluate profile completion status
+            $newUser->refresh();
+            try {
+                $onboardingService = new \App\Services\OnboardingService();
+                $onboardingService->syncProfileCompletionStatus($newUser);
+            } catch (\Throwable $e) {
+                Log::error('[Institution] Failed to sync profile completion status for directly created member: ' . $e->getMessage());
+            }
+
             return response()->json([
                 'ok' => true,
                 'message' => 'User account created and added to institution successfully.',
