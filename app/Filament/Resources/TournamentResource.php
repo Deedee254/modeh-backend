@@ -61,6 +61,14 @@ class TournamentResource extends Resource
                         ->preload()
                         ->searchable(),
 
+                    Forms\Components\FileUpload::make('banner')
+                        ->label('Tournament Banner')
+                        ->image()
+                        ->disk('public')
+                        ->directory('tournament-banners')
+                        ->visibility('public')
+                        ->maxSize(5120), // 5MB
+
                     Forms\Components\FileUpload::make('sponsor_banner')
                         ->label('Sponsor Banner')
                         ->image()

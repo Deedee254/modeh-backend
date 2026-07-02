@@ -79,7 +79,6 @@ class InstitutionMemberController extends Controller
 
         /**
          * Map users to member response format
-         * @var \Illuminate\Support\Collection $members
          */
         $members = collect($paginator->items())->map(function ($u) use ($institution) {
             // pivot info for this institution is available under institutions relation (filtered)
@@ -169,7 +168,7 @@ class InstitutionMemberController extends Controller
         }
 
         // exclude those already in pivot
-        $existing = \DB::table('institution_user')->where('institution_id', $institution->id)->whereIn('user_id', $userIds)->pluck('user_id')->toArray();
+        $existing = DB::table('institution_user')->where('institution_id', $institution->id)->whereIn('user_id', $userIds)->pluck('user_id')->toArray();
         $pendingIds = array_values(array_diff($userIds, $existing));
 
         $query = User::whereIn('id', $pendingIds);
@@ -226,11 +225,11 @@ class InstitutionMemberController extends Controller
         }
 
         // Attach or update pivot
-        $existing = \DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->first();
+        $existing = DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->first();
         if ($existing) {
-            \DB::table('institution_user')->where('id', $existing->id)->update(['role' => $pivotRole, 'status' => 'active', 'updated_at' => now()]);
+            DB::table('institution_user')->where('id', $existing->id)->update(['role' => $pivotRole, 'status' => 'active', 'updated_at' => now()]);
         } else {
-            \DB::table('institution_user')->insert([
+            DB::table('institution_user')->insert([
                 'institution_id' => $institution->id,
                 'user_id' => $u->id,
                 'role' => $pivotRole,
@@ -272,12 +271,12 @@ class InstitutionMemberController extends Controller
                 if (!$assignment) {
                     // rollback pivot change
                     // mark the pivot back to pending or delete (we'll mark pending)
-                    \DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->update(['status' => 'pending', 'updated_at' => now()]);
+                    DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->update(['status' => 'pending', 'updated_at' => now()]);
                     return response()->json(['ok' => false, 'message' => 'Failed to assign subscription seat: limit reached'], 422);
                 }
             } catch (\Throwable $e) {
                 // best-effort: revert pivot and surface error
-                \DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->update(['status' => 'pending', 'updated_at' => now()]);
+                DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->update(['status' => 'pending', 'updated_at' => now()]);
                 return response()->json(['ok' => false, 'message' => 'Failed to assign subscription seat'], 500);
             }
         }
@@ -285,14 +284,14 @@ class InstitutionMemberController extends Controller
         return response()->json(['ok' => true, 'message' => 'User accepted into institution', 'institution_id' => $institution->id]);
     }
 
-    public function remove(Request $request, Institution $institution, $userId)
+    public function remove(Request $request, Institution $institution, int $userId)
     {
         /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
         if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
 
-        \DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $userId)->delete();
+        DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $userId)->delete();
         return response()->json(['ok' => true, 'message' => 'User removed from institution']);
     }
 
@@ -371,7 +370,7 @@ class InstitutionMemberController extends Controller
 
         // Optionally mark the pivot as removed so the member no longer counts as active
         try {
-            \DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $data['user_id'])->update(['status' => 'removed', 'updated_at' => now()]);
+            DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $data['user_id'])->update(['status' => 'removed', 'updated_at' => now()]);
         } catch (\Throwable $_) {}
 
         return response()->json(['ok' => true, 'message' => 'Assignment revoked']);
@@ -598,7 +597,7 @@ class InstitutionMemberController extends Controller
     /**
      * Get invitation details by token
      */
-    public function getInvitationDetails($token)
+    public function getInvitationDetails(string $token)
     {
         $invitation = DB::table('institution_user')
             ->where('invitation_token', $token)
@@ -629,7 +628,7 @@ class InstitutionMemberController extends Controller
     /**
      * Accept a direct invitation
      */
-    public function acceptInvitation(Request $request, Institution $institution, $token)
+    public function acceptInvitation(Request $request, Institution $institution, string $token)
     {
         /** @var Institution $institution */
         $user = $request->user();
@@ -669,12 +668,12 @@ class InstitutionMemberController extends Controller
             try {
                 $activeSub->assignUser($user->id, $user->id);
             } catch (\Throwable $e) {
-                \Log::error('Failed to assign seat', ['error' => $e->getMessage()]);
+                Log::error('Failed to assign seat', ['error' => $e->getMessage()]);
             }
         }
 
         // Log acceptance
-        \Log::info('Invitation accepted', ['institution_id' => $institution->id, 'user_id' => $user->id, 'invited_email' => $invitation->invited_email]);
+        Log::info('Invitation accepted', ['institution_id' => $institution->id, 'user_id' => $user->id, 'invited_email' => $invitation->invited_email]);
 
         // Notify institution managers that a new user joined via invitation
         try {
@@ -776,7 +775,7 @@ class InstitutionMemberController extends Controller
     /**
      * Revoke a pending invitation by token (manager only)
      */
-    public function revokeInvite(Request $request, Institution $institution, $token)
+    public function revokeInvite(Request $request, Institution $institution, string $token)
     {
         /** @var Institution $institution */
         $user = $request->user();
@@ -800,7 +799,7 @@ class InstitutionMemberController extends Controller
             'updated_at' => now(),
         ]);
 
-        \Log::info('Invitation revoked', ['institution_id' => $institution->id, 'invited_email' => $inv->invited_email, 'revoked_by' => $user->id]);
+        Log::info('Invitation revoked', ['institution_id' => $institution->id, 'invited_email' => $inv->invited_email, 'revoked_by' => $user->id]);
 
         return response()->json(['ok' => true, 'message' => 'Invitation revoked']);
     }
@@ -992,7 +991,7 @@ class InstitutionMemberController extends Controller
     /**
      * Get member engagement details
      */
-    public function analyticsMember(Request $request, Institution $institution, $userId)
+    public function analyticsMember(Request $request, Institution $institution, int $userId)
     {
         /** @var Institution $institution */
         $user = $request->user();

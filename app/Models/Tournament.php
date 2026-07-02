@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\Level;
@@ -40,6 +41,7 @@ use App\Models\Question;
  * @property int|null $level_id
  * @property int|null $winner_id
  * @property int|null $sponsor_id
+ * @property string|null $banner
  * @property string|null $sponsor_banner
  * @property array|string|null $sponsor_details
  * @property bool $requires_approval
@@ -77,6 +79,7 @@ class Tournament extends Model
         'topic_id',
         'created_by',
         'sponsor_id',
+        'banner',
         'sponsor_banner',
         'sponsor_details',
         'requires_approval',
@@ -134,23 +137,23 @@ class Tournament extends Model
         return now()->gte($this->start_date);
     }
 
-    public function scopeActive($query)
+    public function scopeActive(Builder $query)
     {
         return $query->where('status', 'active');
     }
 
-    public function scopeUpcoming($query)
+    public function scopeUpcoming(Builder $query)
     {
         return $query->where('status', 'upcoming')
                     ->where('start_date', '>', now());
     }
 
-    public function scopeCompleted($query)
+    public function scopeCompleted(Builder $query)
     {
         return $query->where('status', 'completed');
     }
 
-    public function scopeFeatured($query)
+    public function scopeFeatured(Builder $query)
     {
         return $query->where('is_featured', true);
     }

@@ -45,6 +45,7 @@ class AdminTournamentController extends Controller
             'tie_breaker' => 'nullable|in:duration,score_then_duration',
             'bracket_slots' => 'nullable|integer|in:2,4,8',
             'round_delay_days' => 'nullable|integer|min:0|max:365',
+            'banner' => 'nullable|image|max:2048',
             'sponsor_banner' => 'nullable|image|max:2048',
         ]);
 
@@ -57,6 +58,10 @@ class AdminTournamentController extends Controller
         $data['tie_breaker'] = $data['tie_breaker'] ?? 'score_then_duration';
         $data['bracket_slots'] = $data['bracket_slots'] ?? 8;
         $data['round_delay_days'] = array_key_exists('round_delay_days', $data) ? $data['round_delay_days'] : null;
+
+        if ($request->hasFile('banner')) {
+            $data['banner'] = $request->file('banner')->store('tournament-banners', 'public');
+        }
 
         if ($request->hasFile('sponsor_banner')) {
             $data['sponsor_banner'] = $request->file('sponsor_banner')->store('sponsor-banners', 'public');
@@ -88,8 +93,13 @@ class AdminTournamentController extends Controller
             'tie_breaker' => 'nullable|in:duration,score_then_duration',
             'bracket_slots' => 'nullable|integer|in:2,4,8',
             'round_delay_days' => 'nullable|integer|min:0|max:365',
+            'banner' => 'nullable|image|max:2048',
             'sponsor_banner' => 'nullable|image|max:2048',
         ]);
+
+        if ($request->hasFile('banner')) {
+            $data['banner'] = $request->file('banner')->store('tournament-banners', 'public');
+        }
 
         if ($request->hasFile('sponsor_banner')) {
             $data['sponsor_banner'] = $request->file('sponsor_banner')->store('sponsor-banners', 'public');
