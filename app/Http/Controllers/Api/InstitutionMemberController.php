@@ -147,31 +147,43 @@ class InstitutionMemberController extends Controller
 
         $perPage = (int) $request->input('per_page', 10);
         $page = (int) $request->input('page', 1);
-        // taxonomy filters (same as index)
         $levelId = $request->input('level_id', null);
         $gradeId = $request->input('grade_id', null);
 
-        // collect user ids from profile-matched quizmasters and quizees, applying taxonomy filters when present
-        $qmQuery = $institution->profileQuizMasters();
-        if ($levelId) $qmQuery->where('level_id', $levelId);
-        if ($gradeId) $qmQuery->where('grade_id', $gradeId);
-        $qm = $qmQuery->pluck('user_id')->filter()->unique()->values()->toArray();
+        $query = User::where(function ($q) use ($institution, $levelId, $gradeId) {
+            $q->whereHas('quizMasterProfile', function ($qq) use ($institution, $levelId, $gradeId) {
+                $qq->where(function ($sub) use ($institution) {
+                    $sub->where('institution_id', $institution->id);
+                    $institution->addInstitutionTextProfileMatch($sub);
+                });
 
-        $qzQuery = $institution->profileQuizees();
-        if ($levelId) $qzQuery->where('level_id', $levelId);
-        if ($gradeId) $qzQuery->where('grade_id', $gradeId);
-        $qz = $qzQuery->pluck('user_id')->filter()->unique()->values()->toArray();
-        $userIds = array_values(array_unique(array_merge($qm, $qz)));
+                if ($levelId) {
+                    $qq->where('level_id', $levelId);
+                }
+                if ($gradeId) {
+                    $qq->where('grade_id', $gradeId);
+                }
+            });
 
-        if (empty($userIds)) {
-            return response()->json(['ok' => true, 'requests' => [], 'meta' => ['total' => 0, 'per_page' => $perPage, 'current_page' => $page, 'last_page' => 0]]);
-        }
+            $q->orWhereHas('quizeeProfile', function ($qq) use ($institution, $levelId, $gradeId) {
+                $qq->where(function ($sub) use ($institution) {
+                    $sub->where('institution_id', $institution->id);
+                    $institution->addInstitutionTextProfileMatch($sub);
+                });
 
-        // exclude those already in pivot
-        $existing = DB::table('institution_user')->where('institution_id', $institution->id)->whereIn('user_id', $userIds)->pluck('user_id')->toArray();
-        $pendingIds = array_values(array_diff($userIds, $existing));
+                if ($levelId) {
+                    $qq->where('level_id', $levelId);
+                }
+                if ($gradeId) {
+                    $qq->where('grade_id', $gradeId);
+                }
+            });
+        });
 
-        $query = User::whereIn('id', $pendingIds);
+        $query->whereDoesntHave('institutions', function ($qq) use ($institution) {
+            $qq->where('institutions.id', $institution->id);
+        });
+
         $paginator = $query->paginate($perPage, ['*'], 'page', $page);
 
         $pending = collect($paginator->items())->map(function ($u) {

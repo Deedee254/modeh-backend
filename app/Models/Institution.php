@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Institution model
@@ -72,9 +75,8 @@ class Institution extends Model
     {
         // Match either explicit foreign key (institution_id) or the legacy/text field
         return QuizMaster::where(function($q) {
-            $q->where('institution_id', $this->id)
-              ->orWhere('institution', $this->name)
-              ->orWhere('institution', $this->slug);
+            $q->where('institution_id', $this->id);
+            $this->addInstitutionTextProfileMatch($q);
         });
     }
 
@@ -92,9 +94,8 @@ class Institution extends Model
     {
         // Match either explicit foreign key (institution_id) or the legacy/text field
         return Quizee::where(function($q) {
-            $q->where('institution_id', $this->id)
-              ->orWhere('institution', $this->name)
-              ->orWhere('institution', $this->slug);
+            $q->where('institution_id', $this->id);
+            $this->addInstitutionTextProfileMatch($q);
         });
     }
 
@@ -119,9 +120,30 @@ class Institution extends Model
         if (empty($userIds)) return collect([]);
 
         // exclude those already in pivot
-        $existing = \DB::table('institution_user')->where('institution_id', $this->id)->whereIn('user_id', $userIds)->pluck('user_id')->toArray();
+        $existing = DB::table('institution_user')->where('institution_id', $this->id)->whereIn('user_id', $userIds)->pluck('user_id')->toArray();
         $pendingIds = array_values(array_diff($userIds, $existing));
-        return \App\Models\User::whereIn('id', $pendingIds)->get();
+        return User::whereIn('id', $pendingIds)->get();
+    }
+
+    public function addInstitutionTextProfileMatch(Builder $q)
+    {
+        $normalizedName = Str::lower(trim($this->name ?? ''));
+        $normalizedSlug = Str::lower(trim($this->slug ?? ''));
+        $slugifiedName = Str::lower(Str::slug($this->name ?? ''));
+        $slugAsText = Str::lower(str_replace('-', ' ', trim($this->slug ?? '')));
+
+        if ($normalizedName !== '') {
+            $q->orWhereRaw('LOWER(TRIM(institution)) = ?', [$normalizedName]);
+        }
+        if ($normalizedSlug !== '' && $normalizedSlug !== $normalizedName) {
+            $q->orWhereRaw('LOWER(TRIM(institution)) = ?', [$normalizedSlug]);
+        }
+        if ($slugifiedName !== '' && $slugifiedName !== $normalizedSlug) {
+            $q->orWhereRaw('LOWER(REPLACE(TRIM(institution), " ", "-")) = ?', [$slugifiedName]);
+        }
+        if ($slugAsText !== '' && $slugAsText !== $normalizedName) {
+            $q->orWhereRaw('LOWER(REPLACE(TRIM(institution), "-", " ")) = ?', [$slugAsText]);
+        }
     }
 
     public function subjects()

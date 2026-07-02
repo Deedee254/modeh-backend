@@ -143,6 +143,7 @@ class Tournament extends Model
     }
 
     public function scopeUpcoming(Builder $query)
+    
     {
         return $query->where('status', 'upcoming')
                     ->where('start_date', '>', now());
