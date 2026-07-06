@@ -97,11 +97,17 @@ class OneOffPurchaseController extends Controller
         }
 
         if ($data['item_type'] === 'package') {
-            $institutionValidation = $this->resolveInstitutionForPackagePurchase($request, $user);
-            if (!$institutionValidation['ok']) {
-                return response()->json(['ok' => false, 'message' => $institutionValidation['message']], $institutionValidation['status']);
+            $package = \App\Models\Package::find($data['item_id']);
+            if (!$package) {
+                return response()->json(['ok' => false, 'message' => 'Package not found'], 404);
             }
-            $data['institution_id'] = $institutionValidation['institution_id'];
+            if (($package->audience ?? 'quizee') === 'institution') {
+                $institutionValidation = $this->resolveInstitutionForPackagePurchase($request, $user);
+                if (!$institutionValidation['ok']) {
+                    return response()->json(['ok' => false, 'message' => $institutionValidation['message']], $institutionValidation['status']);
+                }
+                $data['institution_id'] = $institutionValidation['institution_id'];
+            }
         }
 
         $resolvedAmount = $this->resolveOneOffAmount($data['item_type'], $data['item_id']);
