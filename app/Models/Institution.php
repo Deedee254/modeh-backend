@@ -180,6 +180,22 @@ class Institution extends Model
     }
 
     /**
+     * Retrieve the model for a bound value.
+     *
+     * @param  mixed  $value
+     * @param  string|null  $field
+     * @return \Illuminate\Database\Eloquent\Model|null
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if (is_numeric($value)) {
+            return $this->where('id', $value)->first();
+        }
+
+        return $this->where($field ?? $this->getRouteKeyName(), $value)->first();
+    }
+
+    /**
      * Get the active subscription for this institution.
      */
     public function activeSubscription()

@@ -20,7 +20,9 @@ class InstitutionController extends Controller
             $query->where('name', 'like', '%' . $request->query('name') . '%');
         }
 
-        $institutions = $query->with('children', 'users')->paginate($perPage);
+        $institutions = $query->with('children', 'users')
+            ->orderBy('name', 'asc')
+            ->paginate($perPage);
 
         return response()->json($institutions);
     }
