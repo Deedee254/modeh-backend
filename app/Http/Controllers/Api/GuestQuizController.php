@@ -12,11 +12,12 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
+use Illuminate\Support\Facades\Storage;
 use App\Services\QuestionMarkingService;
 
 class GuestQuizController extends Controller
 {
-    protected $markingService;
+    protected QuestionMarkingService $markingService;
 
     public function __construct(QuestionMarkingService $markingService)
     {
@@ -33,10 +34,20 @@ class GuestQuizController extends Controller
     {
         // Guests can never take institutional quizzes.
         if ($quiz->is_institutional) {
-            return response()->json([
-                'error' => 'This quiz requires authentication. Please login or register to continue.',
-                'code' => 'INSTITUTIONAL_QUIZ'
-            ], 403);
+            $user = auth('sanctum')->user();
+            if (!$user) {
+                return response()->json([
+                    'error' => 'This quiz requires authentication. Please login or register to continue.',
+                    'code' => 'INSTITUTIONAL_QUIZ'
+                ], 403);
+            }
+            $accessResult = \App\Services\QuizAccessService::checkAccess($quiz, $user);
+            if (empty($accessResult['can_access'])) {
+                return response()->json([
+                    'error' => $accessResult['message'] ?? 'You do not have access to this institutional quiz.',
+                    'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED'
+                ], 403);
+            }
         }
 
         // Load questions and taxonomy metadata
@@ -92,10 +103,20 @@ class GuestQuizController extends Controller
     {
         // Guests can never submit institutional quizzes.
         if ($quiz->is_institutional) {
-            return response()->json([
-                'error' => 'This quiz requires authentication. Please login or register to continue.',
-                'code' => 'INSTITUTIONAL_QUIZ'
-            ], 403);
+            $user = auth('sanctum')->user();
+            if (!$user) {
+                return response()->json([
+                    'error' => 'This quiz requires authentication. Please login or register to continue.',
+                    'code' => 'INSTITUTIONAL_QUIZ'
+                ], 403);
+            }
+            $accessResult = \App\Services\QuizAccessService::checkAccess($quiz, $user);
+            if (empty($accessResult['can_access'])) {
+                return response()->json([
+                    'error' => $accessResult['message'] ?? 'You do not have access to this institutional quiz.',
+                    'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED'
+                ], 403);
+            }
         }
 
         // Validate submission
@@ -128,6 +149,14 @@ class GuestQuizController extends Controller
         $price = $quiz->price;
         $requiresPayment = ((bool) $quiz->is_paid) || ($price > 0);
         
+        // If the request is authenticated, check if the user has subscription/institutional access
+        if ($user = auth('sanctum')->user()) {
+            $accessResult = \App\Services\QuizAccessService::checkAccess($quiz, $user);
+            if (!empty($accessResult['can_access']) && !empty($accessResult['is_free'])) {
+                $requiresPayment = false;
+            }
+        }
+
         // Payment is per-attempt. New attempts are always locked if payment is required.
         $isUnlocked = !$requiresPayment;
 
@@ -193,10 +222,20 @@ class GuestQuizController extends Controller
     public function markQuestion(Request $request, Quiz $quiz)
     {
         if ($quiz->is_institutional) {
-            return response()->json([
-                'error' => 'This quiz requires authentication. Please login or register to continue.',
-                'code' => 'INSTITUTIONAL_QUIZ'
-            ], 403);
+            $user = auth('sanctum')->user();
+            if (!$user) {
+                return response()->json([
+                    'error' => 'This quiz requires authentication. Please login or register to continue.',
+                    'code' => 'INSTITUTIONAL_QUIZ'
+                ], 403);
+            }
+            $accessResult = \App\Services\QuizAccessService::checkAccess($quiz, $user);
+            if (empty($accessResult['can_access'])) {
+                return response()->json([
+                    'error' => $accessResult['message'] ?? 'You do not have access to this institutional quiz.',
+                    'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED'
+                ], 403);
+            }
         }
 
         $validated = $request->validate([
@@ -243,6 +282,14 @@ class GuestQuizController extends Controller
         $unlockToken = (string) $request->query('unlock_token', '');
         $price = $attempt->quiz->price;
         $requiresPayment = ((bool) $attempt->quiz->is_paid) || ($price > 0);
+        
+        if ($user = auth('sanctum')->user()) {
+            $accessResult = \App\Services\QuizAccessService::checkAccess($attempt->quiz, $user);
+            if (!empty($accessResult['can_access']) && !empty($accessResult['is_free'])) {
+                $requiresPayment = false;
+            }
+        }
+
         $isUnlocked = !$requiresPayment || !$attempt->is_locked;
 
         if (!$isUnlocked) {
@@ -304,7 +351,7 @@ class GuestQuizController extends Controller
                     $qid = $result['question_id'] ?? null;
                     $q = $qid ? $questions->get($qid) : null;
                     if ($q) {
-                        $mediaUrl = $q->media_path ? ((\Illuminate\Support\Str::startsWith($q->media_path, ['http://', 'https://', '/'])) ? $q->media_path : \Storage::url($q->media_path)) : null;
+                        $mediaUrl = $q->media_path ? ((\Illuminate\Support\Str::startsWith($q->media_path, ['http://', 'https://', '/'])) ? $q->media_path : Storage::url($q->media_path)) : null;
                         $result['media_path'] = $q->media_path;
                         $result['media_url'] = $mediaUrl;
                         $result['media_type'] = $q->media_type;
@@ -350,8 +397,7 @@ class GuestQuizController extends Controller
 
             $optionMap = $this->markingService->buildOptionMap($question);
             $provided = $result['selected'] ?? null;
-            
-            $mediaUrl = $question->media_path ? ((\Illuminate\Support\Str::startsWith($question->media_path, ['http://', 'https://', '/'])) ? $question->media_path : \Storage::url($question->media_path)) : null;
+            $mediaUrl = $question->media_path ? ((\Illuminate\Support\Str::startsWith($question->media_path, ['http://', 'https://', '/'])) ? $question->media_path : Storage::url($question->media_path)) : null;
             $isCorrect = $this->markingService->isAnswerCorrect($provided, $question->answers, $question);
 
             $formatted[] = [

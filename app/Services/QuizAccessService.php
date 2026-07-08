@@ -93,9 +93,22 @@ class QuizAccessService
             })
             ->first();
 
-        if ($personalSub) {
+        // Check for institutional subscriptions
+        $institutionIds = $user->institutions()->pluck('institutions.id');
+        $institutionalSub = \App\Models\Subscription::where('owner_type', \App\Models\Institution::class)
+            ->whereIn('owner_id', $institutionIds)
+            ->where('status', 'active')
+            ->where(function($q) {
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
+            })
+            ->first();
+
+        // Check which subscription to use
+        $activeSub = $personalSub ?? $institutionalSub;
+
+        if ($activeSub) {
             // Check usage limits if applicable
-            $package = $personalSub->package;
+            $package = $activeSub->package;
             if ($package) {
                 $features = $package->features ?? [];
                 $limits = $features['limits'] ?? [];
@@ -109,7 +122,7 @@ class QuizAccessService
                         'institution_member' => false,
                         'institution_id' => null,
                         'price' => null,
-                        'message' => 'Free access via personal subscription (Unlimited)'
+                        'message' => 'Free access via active subscription (Unlimited)'
                     ];
                 }
 
@@ -127,7 +140,7 @@ class QuizAccessService
                         'institution_member' => false,
                         'institution_id' => null,
                         'price' => null,
-                        'message' => "Free access via personal subscription ({$used}/{$limit} used)"
+                        'message' => "Free access via active subscription ({$used}/{$limit} used)"
                     ];
                 }
             }
@@ -139,7 +152,7 @@ class QuizAccessService
             'institution_member' => false,
             'institution_id' => null,
             'price' => $price,
-            'message' => $personalSub ? "Daily subscription limit reached ({$limit}). Pay-per-attempt required." : "Pay-per-attempt required: {$price}"
+            'message' => $activeSub ? "Daily subscription limit reached ({$limit}). Pay-per-attempt required." : "Pay-per-attempt required: {$price}"
         ];
     }
 

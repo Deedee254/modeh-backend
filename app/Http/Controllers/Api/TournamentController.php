@@ -36,17 +36,24 @@ class TournamentController extends Controller
         if ($subjectId = $request->get('subject_id')) {
             $query->where('subject_id', $subjectId);
         }
-        if ($gradeId = $request->get('grade_id')) {
-            $query->where('grade_id', $gradeId);
-        }
 
         $user = \Illuminate\Support\Facades\Auth::guard('sanctum')->user() ?? \Illuminate\Support\Facades\Auth::user();
         $userLevelId = null;
+        $userGradeId = null;
         if ($user && $user->role === 'quizee' && $user->quizeeProfile) {
             $userLevelId = $user->quizeeProfile->level_id;
+            $userGradeId = $user->quizeeProfile->grade_id;
         }
 
         $targetLevelId = $request->get('level_id') ?? $userLevelId;
+        $targetGradeId = $request->get('grade_id') ?? $userGradeId;
+
+        if ($targetGradeId) {
+            $query->where(function ($q) use ($targetGradeId) {
+                $q->where('grade_id', $targetGradeId)
+                  ->orWhereNull('grade_id');
+            });
+        }
 
         if ($targetLevelId) {
             $query->where(function ($q) use ($targetLevelId) {
@@ -476,7 +483,7 @@ class TournamentController extends Controller
         }
 
         // Generate report using the generic logic in PerformanceReportController
-        $reportController = new \App\Http\Controllers\Api\PerformanceReportController(app(\App\Services\QuizMarkingService::class));
+        $reportController = new \App\Http\Controllers\Api\PerformanceReportController(app(\App\Services\QuestionMarkingService::class));
         $report = $reportController->generateAnalysis($attempt);
 
         $html = view('reports.performance_report_pdf', [
