@@ -640,8 +640,19 @@ class QuizController extends Controller
             });
         }
 
-        // filter by subject_id explicitly - check both direct subject_id and topic's subject
-        if ($subjectId = $request->get('subject_id')) {
+        // filter by subject_id(s) explicitly - check both direct subject_id and topic's subject
+        if ($subjectIds = $request->get('subject_ids')) {
+            // subject_ids is a comma-separated list of IDs
+            $ids = array_filter(array_map('trim', explode(',', $subjectIds)));
+            if (!empty($ids)) {
+                $query->where(function ($q) use ($ids) {
+                    $q->whereIn('subject_id', $ids)
+                      ->orWhereHas('topic.subject', function ($sq) use ($ids) {
+                          $sq->whereIn('id', $ids);
+                      });
+                });
+            }
+        } elseif ($subjectId = $request->get('subject_id')) {
             $query->where(function ($q) use ($subjectId) {
                 $q->where('subject_id', $subjectId)
                   ->orWhereHas('topic.subject', function ($sq) use ($subjectId) {
