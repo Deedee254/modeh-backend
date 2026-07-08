@@ -85,8 +85,12 @@ class QuizAccessService
         $price = $quiz->price;
 
         // Check for personal subscriptions (Quizee plans)
-        $personalSub = \App\Models\Subscription::where('owner_type', \App\Models\User::class)
-            ->where('owner_id', $user->id)
+        $personalSub = \App\Models\Subscription::where(function($q) use ($user) {
+                $q->where(function($q2) use ($user) {
+                    $q2->where('owner_type', \App\Models\User::class)
+                       ->where('owner_id', $user->id);
+                })->orWhere('user_id', $user->id);
+            })
             ->where('status', 'active')
             ->where(function($q) {
                 $q->whereNull('ends_at')->orWhere('ends_at', '>', now());

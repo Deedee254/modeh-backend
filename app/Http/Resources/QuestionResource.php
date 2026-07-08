@@ -21,7 +21,7 @@ class QuestionResource extends JsonResource
                 if (is_array($opt)) {
                     $text = isset($opt['text']) ? (string) $opt['text'] : (isset($opt['option']) ? (string) $opt['option'] : '');
                     $media = $opt['media'] ?? $opt['media_path'] ?? null;
-                    $mediaUrl = $media ? ((\Illuminate\Support\Str::startsWith($media, ['http://', 'https://', '/'])) ? $media : url('storage/' . $media)) : null;
+                    $mediaUrl = $media ? ((\Illuminate\Support\Str::startsWith($media, ['http://', 'https://'])) ? $media : (\Illuminate\Support\Str::startsWith($media, '/') ? url($media) : url('storage/' . $media))) : null;
                     
                     // Prioritize is_correct flag if it exists in the option array, 
                     // otherwise fall back to checking if the index is in the answers array.
@@ -65,7 +65,7 @@ class QuestionResource extends JsonResource
             'answers' => $answers,
             'explanation' => $this->explanation ?? null,
             'media_path' => $this->media_path ?? null,
-            'media_url' => $this->media_path ? ((\Illuminate\Support\Str::startsWith($this->media_path, ['http://', 'https://', '/'])) ? $this->media_path : url('storage/' . $this->media_path)) : null,
+            'media_url' => $this->media_path ? ((\Illuminate\Support\Str::startsWith($this->media_path, ['http://', 'https://'])) ? $this->media_path : (\Illuminate\Support\Str::startsWith($this->media_path, '/') ? url($this->media_path) : url('storage/' . $this->media_path))) : null,
             'media_type' => $this->media_type ?? null,
             'media_metadata' => $this->media_metadata ?? null,
             'youtube_url' => $this->youtube_url ?? null,

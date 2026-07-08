@@ -97,6 +97,8 @@ class AuthController extends Controller
                     Subscription::updateOrCreate([
                         'user_id' => $user->id,
                     ], [
+                        'owner_type' => \App\Models\User::class,
+                        'owner_id' => $user->id,
                         'package_id' => $defaultPackage->id,
                         'status' => 'active',
                         'gateway' => 'seed',

@@ -54,7 +54,7 @@ class UploadController extends Controller
         if (empty($folder)) $folder = 'uploads';
 
         $path = Storage::disk('public')->putFile($folder, $file);
-        $url = Storage::url($path);
+        $url = url(Storage::url($path));
 
         return response()->json([
             'url' => $url,

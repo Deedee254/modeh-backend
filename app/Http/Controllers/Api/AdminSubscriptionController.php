@@ -46,6 +46,8 @@ class AdminSubscriptionController extends Controller
         $sub = Subscription::updateOrCreate([
             'user_id' => $user->id,
         ], [
+            'owner_type' => \App\Models\User::class,
+            'owner_id' => $user->id,
             'package_id' => $package->id,
             'status' => 'active',
             'gateway' => 'admin',
