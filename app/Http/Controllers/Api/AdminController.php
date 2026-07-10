@@ -856,8 +856,8 @@ class AdminController extends Controller
                             'id' => $attempt->id,
                             'score' => (float) $attempt->score,
                             'duration_seconds' => (int) $attempt->duration_seconds,
-                            'correct_answers' => (int) ($attempt->meta['correct_answers'] ?? 0),
-                            'created_at' => $attempt->created_at->toISOString(),
+                            'correct_answers' => is_array($attempt->meta) ? (int) ($attempt->meta['correct_answers'] ?? 0) : 0,
+                            'created_at' => $attempt->created_at ? $attempt->created_at->toISOString() : null,
                         ];
                     }),
                     'joined_at' => $participant->created_at,

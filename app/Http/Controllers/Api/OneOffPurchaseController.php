@@ -196,7 +196,7 @@ class OneOffPurchaseController extends Controller
             'user_id' => $user->id,
             'item_type' => $data['item_type'],
             'item_id' => $data['item_id'],
-            'amount' => $resolvedAmount,
+            'amount' => $finalAmount,
             'status' => 'pending',
             'gateway' => $gateway,
             'gateway_meta' => array_filter([
@@ -514,7 +514,7 @@ class OneOffPurchaseController extends Controller
             'item_type' => $data['item_type'],
             'item_id' => $data['item_id'],
             'guest_attempt_id' => $data['guest_attempt_id'] ?? null,
-            'amount' => $resolvedAmount,
+            'amount' => $finalAmount,
             'gateway' => $gateway,
             'phone' => $this->maskPhone($phone),
         ]);
@@ -524,7 +524,7 @@ class OneOffPurchaseController extends Controller
             'guest_identifier' => $data['guest_identifier'],
             'item_type' => $data['item_type'],
             'item_id' => $data['item_id'],
-            'amount' => $resolvedAmount,
+            'amount' => $finalAmount,
             'status' => 'pending',
             'gateway' => $gateway,
             'gateway_meta' => array_filter([
