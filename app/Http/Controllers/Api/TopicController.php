@@ -113,6 +113,15 @@ class TopicController extends Controller
                 });
             }
 
+            if ($subjectIds = $request->get('subject_ids')) {
+                $ids = array_filter(array_map('trim', explode(',', $subjectIds)));
+                if (!empty($ids)) {
+                    $query->whereIn('subject_id', $ids);
+                }
+            } elseif ($subjectId = $request->get('subject_id')) {
+                $query->where('subject_id', $subjectId);
+            }
+
             // If client requests topics from the quiz-master's followed subjects only
             // e.g. ?followed=1
             if ($request->get('followed')) {
