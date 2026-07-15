@@ -75,13 +75,7 @@ class TournamentController extends Controller
         $tournament->load(['subject', 'topic', 'grade', 'level', 'participants', 'questions', 'winner', 'sponsor']);
         $user = Auth::user() ?? Auth::guard('sanctum')->user();
 
-        if ($user && $user->role === 'quizee' && $user->quizeeProfile) {
-            $userLevelId = $user->quizeeProfile->level_id;
-            $tournamentLevelId = $tournament->level_id ?? ($tournament->grade ? $tournament->grade->level_id : null);
-            if ($tournamentLevelId && $userLevelId && (int)$tournamentLevelId !== (int)$userLevelId) {
-                return response()->json(['message' => 'This tournament is not available for your level.'], 403);
-            }
-        }
+
 
         $isParticipant = $user ? $tournament->participants()->where('user_id', $user->id)->exists() : false;
         $tournament->is_participant = $isParticipant;
@@ -406,9 +400,36 @@ class TournamentController extends Controller
             ];
         });
 
+        $institutionsMap = [];
+        foreach ($leaderboard as $entry) {
+            $instName = $entry['institution_name'];
+            if (!$instName) continue;
+            
+            if (!isset($institutionsMap[$instName])) {
+                $institutionsMap[$instName] = [
+                    'id' => md5($instName), // pseudo-id
+                    'name' => $instName,
+                    'points' => 0,
+                    'participants_count' => 0,
+                ];
+            }
+            $institutionsMap[$instName]['points'] += $entry['points'];
+            $institutionsMap[$instName]['participants_count']++;
+        }
+        
+        $institutionsLeaderboard = collect(array_values($institutionsMap))
+            ->sortByDesc('points')
+            ->values()
+            ->map(function ($inst, $index) {
+                $inst['rank'] = $index + 1;
+                return $inst;
+            })
+            ->toArray();
+
         return response()->json([
             'tournament' => $tournament->only(['id', 'name', 'status']),
             'leaderboard' => $leaderboard,
+            'institutions' => $institutionsLeaderboard,
             'max_attempts' => self::SIMPLE_FLOW_MAX_ATTEMPTS,
             'is_tournament_phase' => in_array($tournament->status, ['upcoming', 'active'], true),
         ]);

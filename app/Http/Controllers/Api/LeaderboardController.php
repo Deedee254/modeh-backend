@@ -30,6 +30,7 @@ class LeaderboardController extends Controller
     public function index(Request $request)
     {
         $timeframe = $request->get('timeframe', 'all-time'); // all-time, daily, weekly, monthly
+        $type = $request->get('type', 'individuals'); // individuals, institutions
         $levelId = $request->get('level_id');
         $gradeId = $request->get('grade_id');
         $subjectId = $request->get('subject_id');
@@ -80,6 +81,33 @@ class LeaderboardController extends Controller
                 });
             }
         };
+
+        if ($type === 'institutions') {
+            $query = \App\Models\Institution::query()->where('is_active', true);
+            
+            if ($q) {
+                $query->where('name', 'like', "%{$q}%");
+            }
+            
+            // For now, aggregate points for the institution by summing the 'points' of its 'quizee' users
+            $query->withSum(['users as points' => function ($q) {
+                $q->where('role', 'quizee');
+            }], 'points');
+
+            $paginated = $query->orderBy('points', 'desc')->paginate($perPage, ['*'], 'page', $page);
+            
+            $paginated->getCollection()->transform(function ($inst) {
+                return [
+                    'id' => $inst->id,
+                    'name' => $inst->name,
+                    'avatar' => $inst->logo_url,
+                    'points' => (float)($inst->points ?? 0),
+                    'country' => $inst->county ?? null,
+                ];
+            });
+            
+            return response()->json($paginated);
+        }
 
         $query = User::query()->where('role', 'quizee');
 
