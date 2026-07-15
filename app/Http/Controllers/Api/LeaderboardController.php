@@ -89,10 +89,35 @@ class LeaderboardController extends Controller
                 $query->where('name', 'like', "%{$q}%");
             }
             
-            // For now, aggregate points for the institution by summing the 'points' of its 'quizee' users
-            $query->withSum(['users as points' => function ($q) {
-                $q->where('users.role', 'quizee');
-            }], 'points');
+            $attemptsSub = DB::table('quiz_attempts')
+                ->join('institution_user', 'quiz_attempts.user_id', '=', 'institution_user.user_id')
+                ->whereColumn('institution_user.institution_id', '=', 'institutions.id')
+                ->selectRaw('COALESCE(SUM(quiz_attempts.points_earned), 0)');
+
+            if ($startDate && $endDate) {
+                $attemptsSub->whereBetween('quiz_attempts.created_at', [$startDate, $endDate]);
+            } elseif ($startDate) {
+                $attemptsSub->where('quiz_attempts.created_at', '>=', $startDate);
+            }
+            
+            if ($quizId) {
+                $attemptsSub->where('quiz_attempts.quiz_id', $quizId);
+            }
+            
+            if ($topicId || $subjectId) {
+                $attemptsSub->join('quizzes', 'quiz_attempts.quiz_id', '=', 'quizzes.id');
+                if ($topicId) $attemptsSub->where('quizzes.topic_id', $topicId);
+                if ($subjectId) $attemptsSub->where('quizzes.subject_id', $subjectId);
+            }
+
+            if ($levelId || $gradeId) {
+                $attemptsSub->join('quizee_profiles', 'quiz_attempts.user_id', '=', 'quizee_profiles.user_id');
+                if ($levelId) $attemptsSub->where('quizee_profiles.level_id', $levelId);
+                if ($gradeId) $attemptsSub->where('quizee_profiles.grade_id', $gradeId);
+            }
+            
+            $query->select(['id', 'name', 'logo_url', 'county']);
+            $query->selectSub($attemptsSub, 'points');
 
             $paginated = $query->orderBy('points', 'desc')->paginate($perPage, ['*'], 'page', $page);
             
