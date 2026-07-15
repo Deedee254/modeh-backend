@@ -91,7 +91,7 @@ class LeaderboardController extends Controller
             
             // For now, aggregate points for the institution by summing the 'points' of its 'quizee' users
             $query->withSum(['users as points' => function ($q) {
-                $q->where('role', 'quizee');
+                $q->where('users.role', 'quizee');
             }], 'points');
 
             $paginated = $query->orderBy('points', 'desc')->paginate($perPage, ['*'], 'page', $page);
