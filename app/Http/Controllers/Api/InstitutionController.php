@@ -98,7 +98,7 @@ class InstitutionController extends Controller
     {
         // Only institution managers can update
         $user = $request->user();
-        $isManager = $institution->users()->where('user_id', $user->id)->where('role', 'institution-manager')->exists();
+        $isManager = $institution->users()->where('user_id', $user->id)->where('institution_user.role', 'institution-manager')->exists();
         if (!$isManager && !($user && $user->isAdmin())) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
@@ -377,7 +377,7 @@ class InstitutionController extends Controller
     {
         // Only institution managers or admin can delete
         $user = $request->user();
-        $isManager = $institution->users()->where('user_id', $user->id)->where('role', 'institution-manager')->exists();
+        $isManager = $institution->users()->where('user_id', $user->id)->where('institution_user.role', 'institution-manager')->exists();
         if (!$isManager && !($user && $user->isAdmin())) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
