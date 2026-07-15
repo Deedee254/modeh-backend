@@ -233,7 +233,8 @@ class PerformanceReportController extends Controller
         if (!empty($weakTopicIds)) {
             // Fetch some active quizzes from these topics
             $recommendedQuizzes = \App\Models\Quiz::whereIn('topic_id', $weakTopicIds)
-                ->where('status', 'active')
+                ->where('is_approved', true)
+                ->where('is_draft', false)
                 ->where('id', '!=', $assessment->id) // don't recommend the same quiz
                 ->withCount('questions')
                 ->inRandomOrder()
