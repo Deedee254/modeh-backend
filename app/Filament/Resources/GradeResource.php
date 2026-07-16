@@ -59,6 +59,11 @@ class GradeResource extends Resource
                     Forms\Components\Toggle::make('is_active')
                         ->required()
                         ->default(true),
+
+                    Forms\Components\FileUpload::make('image')
+                        ->image()
+                        ->directory('grades')
+                        ->columnSpanFull(),
                 ])
                 ->columns(2)
         ]);
@@ -68,6 +73,8 @@ class GradeResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\ImageColumn::make('image'),
+
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
                     ->sortable(),

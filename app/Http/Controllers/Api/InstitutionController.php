@@ -42,6 +42,7 @@ class InstitutionController extends Controller
             'county' => 'nullable|string|max:255',
             'metadata' => 'nullable|array',
             'is_active' => 'sometimes|boolean',
+            'assign_manager' => 'sometimes|boolean',
         ]);
 
         // Resolve parent if provided (accept id or slug)
@@ -67,14 +68,20 @@ class InstitutionController extends Controller
             $data['slug'] = $slug;
         }
 
+        // Extract assign_manager and remove from data before insert
+        $assignManager = $data['assign_manager'] ?? true;
+        unset($data['assign_manager']);
+
         $institution = Institution::create(array_merge($data, ['created_by' => $user->id, 'parent_id' => $parentId]));
 
-        // Attach the creator as institution-manager
-        $institution->users()->attach($user->id, [
-            'role' => 'institution-manager',
-            'status' => 'active',
-            'invited_by' => null,
-        ]);
+        // Attach the creator as institution-manager if requested
+        if ($assignManager) {
+            $institution->users()->attach($user->id, [
+                'role' => 'institution-manager',
+                'status' => 'active',
+                'invited_by' => null,
+            ]);
+        }
         
         // Invalidate cache since institutions list has changed
         try {
@@ -119,6 +126,42 @@ class InstitutionController extends Controller
         $institution->update($data);
 
         return response()->json($institution);
+    }
+
+    public function claim(Request $request, Institution $institution)
+    {
+        $user = $request->user();
+
+        // Check if the user is already a member of this institution
+        $isMember = $institution->users()->where('user_id', $user->id)->exists();
+        if ($isMember) {
+            return response()->json(['message' => 'You are already a member of this institution'], 422);
+        }
+
+        // Check if a pending claim already exists
+        $existingClaim = InstitutionApprovalRequest::where('user_id', $user->id)
+            ->where('institution_id', $institution->id)
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($existingClaim) {
+            return response()->json(['message' => 'You already have a pending claim for this institution'], 422);
+        }
+
+        $profileType = $user->profile_type ?? ($user->role === 'quiz-master' ? 'quiz-master' : 'quizee');
+        $profileId = $profileType === 'quiz-master' ? ($user->quizMaster->id ?? 0) : ($user->quizee->id ?? 0);
+
+        $claim = InstitutionApprovalRequest::create([
+            'institution_name' => $institution->name,
+            'institution_id' => $institution->id,
+            'user_id' => $user->id,
+            'profile_type' => $profileType,
+            'profile_id' => $profileId,
+            'status' => 'pending',
+            'notes' => 'Manager Claim Request',
+        ]);
+
+        return response()->json(['message' => 'Claim request submitted successfully', 'request' => $claim]);
     }
 
     /**
@@ -258,6 +301,10 @@ class InstitutionController extends Controller
                 ]);
             }
 
+            // Determine role
+            $isClaimRequest = str_contains($approvalRequest->notes ?? '', 'Manager Claim Request');
+            $role = $isClaimRequest ? 'institution-manager' : ($approvalRequest->profile_type === 'quiz-master' ? 'instructor' : 'student');
+
             // Add user as member
             InstitutionMember::firstOrCreate(
                 [
@@ -265,10 +312,22 @@ class InstitutionController extends Controller
                     'institution_id' => $institution->id,
                 ],
                 [
-                    'role' => $approvalRequest->profile_type === 'quiz-master' ? 'instructor' : 'student',
+                    'role' => $role,
                     'joined_at' => now(),
                 ]
             );
+
+            // Also attach via the users relation since that's how some queries work
+            if (!$institution->users()->where('users.id', $approvalRequest->user_id)->exists()) {
+                $institution->users()->attach($approvalRequest->user_id, [
+                    'role' => $role,
+                    'status' => 'active',
+                ]);
+            } else {
+                $institution->users()->updateExistingPivot($approvalRequest->user_id, [
+                    'role' => $role
+                ]);
+            }
 
             // Update request status
             $approvalRequest->update([

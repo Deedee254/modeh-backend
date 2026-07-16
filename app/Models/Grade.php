@@ -24,7 +24,7 @@ class Grade extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug', 'description', 'level_id', 'type', 'display_name', 'is_active'];
+    protected $fillable = ['name', 'slug', 'description', 'level_id', 'type', 'display_name', 'is_active', 'image'];
 
     protected $casts = [
         'is_active' => 'boolean',

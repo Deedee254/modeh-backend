@@ -31,6 +31,7 @@ class LevelResource extends Resource
                     Forms\Components\TextInput::make('slug')->maxLength(255),
                     Forms\Components\TextInput::make('order')->numeric()->default(0),
                     Forms\Components\Textarea::make('description')->maxLength(65535),
+                    Forms\Components\FileUpload::make('image')->image()->directory('levels'),
                 ])
         ]);
     }
@@ -40,6 +41,7 @@ class LevelResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('id')->sortable(),
+                Tables\Columns\ImageColumn::make('image'),
                 Tables\Columns\TextColumn::make('name')->searchable()->sortable(),
                 Tables\Columns\TextColumn::make('slug')->sortable(),
                 Tables\Columns\TextColumn::make('order')->sortable(),

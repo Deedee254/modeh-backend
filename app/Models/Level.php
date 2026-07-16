@@ -21,7 +21,7 @@ class Level extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug', 'order', 'description'];
+    protected $fillable = ['name', 'slug', 'order', 'description', 'image'];
 
     protected static function boot()
     {
