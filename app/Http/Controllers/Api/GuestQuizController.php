@@ -515,4 +515,65 @@ class GuestQuizController extends Controller
         ];
     }
 
+    /**
+     * Get random questions for Quick Battle (homepage widget).
+     * Exposes is_correct so the frontend can immediately score the guest teaser.
+     */
+    public function quickBattleQuestions(Request $request)
+    {
+        $limit = min((int) $request->input('limit', 5), 20);
+        $topicId = $request->input('topic_id');
+        $subjectId = $request->input('subject_id');
+        $gradeId = $request->input('grade_id');
+        $levelId = $request->input('level_id');
+
+        $query = \App\Models\Question::with('options')
+            ->where('status', 'approved'); // Assuming questions have a status, or just omit if they don't
+
+        if ($topicId) {
+            $query->where('topic_id', $topicId);
+        } elseif ($subjectId) {
+            $query->where('subject_id', $subjectId);
+        } elseif ($gradeId) {
+            $query->whereHas('topic.subject', function($q) use ($gradeId) {
+                $q->where('grade_id', $gradeId);
+            });
+        } elseif ($levelId) {
+            $query->whereHas('topic.subject.grade', function($q) use ($levelId) {
+                $q->where('level_id', $levelId);
+            });
+        }
+
+        $questions = $query->inRandomOrder()->limit($limit)->get();
+
+        // If not enough questions, fallback to any random questions
+        if ($questions->count() < $limit) {
+            $fallback = \App\Models\Question::with('options')
+                ->whereNotIn('id', $questions->pluck('id'))
+                ->inRandomOrder()
+                ->limit($limit - $questions->count())
+                ->get();
+            $questions = $questions->concat($fallback);
+        }
+
+        // Format to match frontend expectations
+        $formatted = $questions->map(function ($q) {
+            return [
+                'id' => $q->id,
+                'text' => $q->question_text ?? $q->text,
+                'explanation' => $q->explanation,
+                'options' => collect($q->options)->map(function ($opt) {
+                    return [
+                        'id' => $opt->id,
+                        'text' => $opt->option_text ?? $opt->text,
+                        'is_correct' => (bool) $opt->is_correct,
+                    ];
+                })
+            ];
+        });
+
+        return response()->json([
+            'questions' => $formatted
+        ]);
+    }
 }

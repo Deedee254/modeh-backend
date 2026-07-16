@@ -112,14 +112,14 @@ class InstitutionResource extends Resource
                     ->native(false),
             ])
             ->actions([
-                \Filament\Tables\Actions\ViewAction::make(),
-                \Filament\Tables\Actions\EditAction::make(),
-                \Filament\Tables\Actions\DeleteAction::make(),
-                \Filament\Tables\Actions\Action::make('analytics')
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
+                \Filament\Actions\Action::make('analytics')
                     ->label('Analytics')
                     ->icon('heroicon-o-chart-bar')
                     ->url(fn (Institution $record): string => route('filament.admin.resources.institutions.analytics', $record)),
-                \Filament\Tables\Actions\Action::make('manage_members')
+                \Filament\Actions\Action::make('manage_members')
                     ->label('Manage Members')
                     ->icon('heroicon-o-users')
                     ->url(fn (Institution $record): string => route('filament.admin.resources.institutions.members', $record)),
