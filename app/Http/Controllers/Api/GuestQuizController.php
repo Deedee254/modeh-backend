@@ -527,7 +527,7 @@ class GuestQuizController extends Controller
         $gradeId = $request->input('grade_id');
         $levelId = $request->input('level_id');
 
-        $query = \App\Models\Question::with('options')
+        $query = \App\Models\Question::query()
             ->where('is_approved', true);
 
         if ($topicId) {
@@ -549,7 +549,7 @@ class GuestQuizController extends Controller
         // If not enough approved questions, fall back to any random approved questions.
         // This keeps the quick-play widget usable even with sparse approval data.
         if ($questions->count() < $limit) {
-            $fallback = \App\Models\Question::with('options')
+            $fallback = \App\Models\Question::query()
                 ->where('is_approved', true)
                 ->whereNotIn('id', $questions->pluck('id'))
                 ->inRandomOrder()
@@ -562,19 +562,43 @@ class GuestQuizController extends Controller
             return response()->json(['questions' => []]);
         }
 
+        $correctIndexes = collect();
+
         // Format to match frontend expectations
-        $formatted = $questions->map(function ($q) {
+        $formatted = $questions->map(function ($q) use (&$correctIndexes) {
+            $rawOptions = is_array($q->options) ? $q->options : [];
+            $answers = is_array($q->answers) ? $q->answers : [];
+            $correctIndexes = collect($answers)->map(fn ($answer) => (int) $answer)->values()->all();
+
             return [
                 'id' => $q->id,
-                'text' => $q->question_text ?? $q->text,
+                'text' => $q->question_text ?? $q->body ?? $q->text,
                 'explanation' => $q->explanation,
-                'options' => collect($q->options)->map(function ($opt) {
+                'options' => collect($rawOptions)->map(function ($opt, $index) use ($correctIndexes) {
+                    $isCorrect = in_array($index, $correctIndexes, true);
+
+                    if (is_array($opt)) {
+                        return [
+                            'id' => $index + 1,
+                            'text' => $opt['text'] ?? $opt['option_text'] ?? $opt['value'] ?? (string) $opt,
+                            'is_correct' => $isCorrect || (bool) ($opt['is_correct'] ?? false),
+                        ];
+                    }
+
+                    if (is_object($opt)) {
+                        return [
+                            'id' => $index + 1,
+                            'text' => $opt->text ?? $opt->option_text ?? $opt->value ?? (string) $opt,
+                            'is_correct' => $isCorrect || (bool) ($opt->is_correct ?? false),
+                        ];
+                    }
+
                     return [
-                        'id' => $opt->id,
-                        'text' => $opt->option_text ?? $opt->text,
-                        'is_correct' => (bool) $opt->is_correct,
+                        'id' => $index + 1,
+                        'text' => (string) $opt,
+                        'is_correct' => $isCorrect,
                     ];
-                })
+                })->values()->all(),
             ];
         });
 
