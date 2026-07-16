@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Subject;
+use App\Models\Institution;
 use App\Http\Resources\UserResource;
 use Illuminate\Support\Facades\Validator;
 use App\Services\OnboardingService;
@@ -20,12 +21,48 @@ class ProfileController extends Controller
     {
         $this->onboardingService = $onboardingService;
     }
+
+    protected function normalizeInstitutionIdFromRequest(Request $request): void
+    {
+        if (!$request->has('institution_id')) {
+            return;
+        }
+
+        $rawValue = $request->input('institution_id');
+        if ($rawValue === null || $rawValue === '' || $rawValue === []) {
+            return;
+        }
+
+        $institutionId = null;
+        if (is_numeric($rawValue)) {
+            $institutionId = (int) $rawValue;
+        } elseif (is_string($rawValue)) {
+            $trimmed = trim($rawValue);
+            if (ctype_digit($trimmed)) {
+                $institutionId = (int) $trimmed;
+            } elseif ($trimmed !== '') {
+                $institution = Institution::query()
+                    ->where('slug', $trimmed)
+                    ->first();
+
+                if ($institution) {
+                    $institutionId = $institution->id;
+                }
+            }
+        }
+
+        if ($institutionId !== null) {
+            $request->merge(['institution_id' => $institutionId]);
+        }
+    }
     /**
      * Update the quiz master's profile (partial updates only).
      */
     public function updateQuizMasterProfile(Request $request)
     {
         $user = $request->user();
+
+        $this->normalizeInstitutionIdFromRequest($request);
         
         if ($user->role !== 'quiz-master') {
             return response()->json(['message' => 'Not authorized'], 403);
@@ -117,6 +154,8 @@ class ProfileController extends Controller
     public function updateQuizeeProfile(Request $request)
     {
         $user = $request->user();
+
+        $this->normalizeInstitutionIdFromRequest($request);
         
         if ($user->role !== 'quizee') {
             return response()->json(['message' => 'Not authorized'], 403);
