@@ -528,7 +528,7 @@ class GuestQuizController extends Controller
         $levelId = $request->input('level_id');
 
         $query = \App\Models\Question::with('options')
-            ->where('status', 'approved'); // Assuming questions have a status, or just omit if they don't
+            ->where('is_approved', true);
 
         if ($topicId) {
             $query->where('topic_id', $topicId);
@@ -546,14 +546,20 @@ class GuestQuizController extends Controller
 
         $questions = $query->inRandomOrder()->limit($limit)->get();
 
-        // If not enough questions, fallback to any random questions
+        // If not enough approved questions, fall back to any random approved questions.
+        // This keeps the quick-play widget usable even with sparse approval data.
         if ($questions->count() < $limit) {
             $fallback = \App\Models\Question::with('options')
+                ->where('is_approved', true)
                 ->whereNotIn('id', $questions->pluck('id'))
                 ->inRandomOrder()
-                ->limit($limit - $questions->count())
+                ->limit(max(0, $limit - $questions->count()))
                 ->get();
             $questions = $questions->concat($fallback);
+        }
+
+        if ($questions->isEmpty()) {
+            return response()->json(['questions' => []]);
         }
 
         // Format to match frontend expectations
