@@ -255,8 +255,13 @@ class OnboardingService
     /**
      * Create institution approval request if institution doesn't already exist
      */
-    private function createApprovalRequestIfNeeded(User $user, $profile, string $profileType, string $institutionText)
+    public function createApprovalRequestIfNeeded(User $user, $profile, string $profileType, string $institutionText): void
     {
+        $institutionText = trim($institutionText);
+        if ($institutionText === '') {
+            return;
+        }
+
         // Check if institution already exists by name or slug
         $existingInstitution = Institution::where('name', $institutionText)
             ->orWhere('slug', Str::slug($institutionText))

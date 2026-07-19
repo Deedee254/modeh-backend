@@ -123,6 +123,15 @@ class ProfileController extends Controller
             $profile->update($updateData);
         }
 
+        if ($request->has('institution') && $request->filled('institution') && !$request->filled('institution_id')) {
+            $this->onboardingService->createApprovalRequestIfNeeded(
+                $user,
+                $profile,
+                'quiz-master',
+                $request->input('institution')
+            );
+        }
+
         // If a grade was provided, sync the associated level
         if ($request->has('grade_id') && $request->filled('grade_id')) {
             $grade = \App\Models\Grade::find($request->get('grade_id'));
@@ -211,6 +220,15 @@ class ProfileController extends Controller
         // Only update if there are fields to update
         if (!empty($updateData)) {
             $profile->update($updateData);
+        }
+
+        if ($request->has('institution') && $request->filled('institution') && !$request->filled('institution_id')) {
+            $this->onboardingService->createApprovalRequestIfNeeded(
+                $user,
+                $profile,
+                'quizee',
+                $request->input('institution')
+            );
         }
 
         // If a grade was provided, sync the associated level
