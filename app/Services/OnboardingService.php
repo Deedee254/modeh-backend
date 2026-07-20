@@ -273,15 +273,17 @@ class OnboardingService
             return;
         }
 
-        // Check if approval request already pending for this user and institution
+        // Check if there is already a pending approval request for this user
         $existingRequest = InstitutionApprovalRequest::where('user_id', $user->id)
-            ->where('institution_name', $institutionText)
             ->where('profile_type', $profileType)
             ->where('status', 'pending')
             ->first();
 
         if ($existingRequest) {
-            return;  // Already submitted
+            if ($existingRequest->institution_name !== $institutionText) {
+                $existingRequest->update(['institution_name' => $institutionText]);
+            }
+            return;  // Already submitted and now updated
         }
 
         // Create new approval request
