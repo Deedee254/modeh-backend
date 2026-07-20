@@ -111,9 +111,9 @@ class LeaderboardController extends Controller
             }
 
             if ($levelId || $gradeId) {
-                $attemptsSub->join('quizee_profiles', 'quiz_attempts.user_id', '=', 'quizee_profiles.user_id');
-                if ($levelId) $attemptsSub->where('quizee_profiles.level_id', $levelId);
-                if ($gradeId) $attemptsSub->where('quizee_profiles.grade_id', $gradeId);
+                $attemptsSub->join('quizees', 'quiz_attempts.user_id', '=', 'quizees.user_id');
+                if ($levelId) $attemptsSub->where('quizees.level_id', $levelId);
+                if ($gradeId) $attemptsSub->where('quizees.grade_id', $gradeId);
             }
             
             $query->select(['id', 'name', 'logo_url', 'county']);
