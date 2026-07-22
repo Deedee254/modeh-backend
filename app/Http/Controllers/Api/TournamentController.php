@@ -45,8 +45,8 @@ class TournamentController extends Controller
             $userGradeId = $user->quizeeProfile->grade_id;
         }
 
-        $targetLevelId = $request->get('level_id') ?? $userLevelId;
-        $targetGradeId = $request->get('grade_id') ?? $userGradeId;
+        $targetLevelId = $request->get('level_id') ?: $userLevelId;
+        $targetGradeId = $request->get('grade_id') ?: $userGradeId;
 
         if ($targetGradeId) {
             $query->where(function ($q) use ($targetGradeId) {
