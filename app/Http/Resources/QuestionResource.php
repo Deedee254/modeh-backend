@@ -72,6 +72,12 @@ class QuestionResource extends JsonResource
             'created_by' => $this->created_by ?? null,
             'quiz_id' => $this->quiz_id ?? null,
             'quiz_title' => $this->quiz->title ?? ($this->quiz->name ?? null),
+            'tournaments' => $this->relationLoaded('tournaments') 
+                ? $this->tournaments->map(fn($t) => ['id' => $t->id, 'name' => $t->name]) 
+                : ($this->tournaments ? $this->tournaments->map(fn($t) => ['id' => $t->id, 'name' => $t->name]) : []),
+            'tournament_name' => $this->relationLoaded('tournaments') 
+                ? ($this->tournaments->first()->name ?? null) 
+                : ($this->tournaments ? ($this->tournaments->first()->name ?? null) : null),
             'subject_id' => $this->subject_id ?? null,
             'subject_name' => $this->subject->name ?? null,
             'topic_id' => $this->topic_id ?? null,

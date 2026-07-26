@@ -225,6 +225,11 @@ class Question extends Model
         return $this->belongsTo(Quiz::class);
     }
 
+    public function tournaments()
+    {
+        return $this->belongsToMany(Tournament::class, 'tournament_questions');
+    }
+
     /**
      * Taxonomy relationships
      */

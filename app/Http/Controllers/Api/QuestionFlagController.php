@@ -70,7 +70,7 @@ class QuestionFlagController extends Controller
     public function recent(Request $request)
     {
         $user = $request->user();
-        $query = QuestionFlag::with(['question:id,body,quiz_id', 'user:id,name', 'question.quiz:id,title'])
+        $query = QuestionFlag::with(['question:id,body,quiz_id', 'user:id,name', 'question.quiz:id,title', 'question.tournaments:id,name'])
             ->latest();
 
         if ($user->role === 'quiz-master') {

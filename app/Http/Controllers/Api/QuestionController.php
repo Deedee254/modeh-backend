@@ -31,7 +31,7 @@ class QuestionController extends Controller
         // the created_by restriction so non-admin quizees can fetch the
         // public question bank.
         $user = $request->user();
-        $query = Question::query()->with(['grade.level', 'subject', 'topic', 'quiz']);
+        $query = Question::query()->with(['grade.level', 'subject', 'topic', 'quiz', 'tournaments']);
 
         $isBankQuery = $request->boolean('random') || $request->boolean('banked');
         if (!$isBankQuery) {
@@ -208,7 +208,7 @@ class QuestionController extends Controller
         }
 
         // Build final query for fetching results (with relations)
-        $query = (clone $baseQuery)->with(['grade.level', 'subject', 'topic', 'quiz']);
+        $query = (clone $baseQuery)->with(['grade.level', 'subject', 'topic', 'quiz', 'tournaments']);
         // Sorting
         $sort = $request->get('sort_by', 'latest');
         switch ($sort) {
@@ -508,7 +508,7 @@ class QuestionController extends Controller
 
         // Load nested relations for client convenience
         try {
-            $question->load(['grade.level', 'subject', 'topic', 'quiz']);
+            $question->load(['grade.level', 'subject', 'topic', 'quiz', 'tournaments']);
         } catch (\Throwable $_) {
         }
 
@@ -528,7 +528,7 @@ class QuestionController extends Controller
 
         // Ensure nested relations are available to the client
         try {
-            $question->load(['grade.level', 'subject', 'topic', 'quiz']);
+            $question->load(['grade.level', 'subject', 'topic', 'quiz', 'tournaments']);
         } catch (\Throwable $_) {
         }
     return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
