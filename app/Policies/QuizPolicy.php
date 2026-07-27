@@ -12,11 +12,13 @@ class QuizPolicy
      */
     public function viewAnalytics(User $user, Quiz $quiz)
     {
-        // Owner (created_by or user_id) or admin
+        // Owner (created_by or user_id), admin, or any quiz-master
         $isOwner = ($quiz->created_by && (string)$quiz->created_by === (string)$user->id) || 
                    ($quiz->user_id && (string)$quiz->user_id === (string)$user->id);
         
-        if ($isOwner || $user->isAdmin()) return true;
+        $isQuizMaster = ($user->role === 'quiz-master') || (method_exists($user, 'quizMasterProfile') && $user->quizMasterProfile()->exists());
+
+        if ($isOwner || $user->isAdmin() || $isQuizMaster) return true;
         
         return false;
     }

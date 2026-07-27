@@ -84,18 +84,25 @@ class TopicController extends Controller
                 $query->where('name', 'like', "%{$q}%");
             }
 
-            if (!is_null($request->get('approved'))) {
-                $query->where('is_approved', (bool) $request->get('approved'));
+            if ($request->get('mine') || $request->get('scope') === 'mine' || $request->get('created_by') === 'me') {
+                if ($user) {
+                    $query->where('created_by', $user->id);
+                }
             }
 
-            if (!$user) {
-                $query->where('is_approved', true);
+            if (!is_null($request->get('approved'))) {
+                $query->where('is_approved', (bool) $request->get('approved'));
             } else {
-                if (empty($user->is_admin) || !$user->is_admin) {
-                    $query->where(function ($q) use ($user) {
-                        $q->where('is_approved', true)
-                            ->orWhere('created_by', $user->id);
-                    });
+                if (!$user) {
+                    $query->where('is_approved', true);
+                } else {
+                    $isQuizMaster = ($user->role === 'quiz-master') || (method_exists($user, 'quizMasterProfile') && $user->quizMasterProfile()->exists());
+                    if (!$user->is_admin && !$isQuizMaster) {
+                        $query->where(function ($q) use ($user) {
+                            $q->where('is_approved', true)
+                                ->orWhere('created_by', $user->id);
+                        });
+                    }
                 }
             }
 
@@ -298,6 +305,12 @@ class TopicController extends Controller
             $topic->save();
         }
 
+        try {
+            Cache::flush();
+        } catch (\Throwable $e) {
+            Log::warning('Failed to flush cache on topic store', ['error' => $e->getMessage()]);
+        }
+
         return response()->json(['topic' => $topic], 201);
     }
 
@@ -311,6 +324,12 @@ class TopicController extends Controller
 
         $topic->is_approved = true;
         $topic->save();
+
+        try {
+            Cache::flush();
+        } catch (\Throwable $e) {
+            Log::warning('Failed to flush cache on topic approve', ['error' => $e->getMessage()]);
+        }
 
         // Notify owner if possible
         try {
@@ -348,6 +367,12 @@ class TopicController extends Controller
         }
 
         $topic->save();
+
+        try {
+            Cache::flush();
+        } catch (\Throwable $e) {
+            Log::warning('Failed to flush cache on topic reject', ['error' => $e->getMessage()]);
+        }
 
         return response()->json(['topic' => $topic]);
     }

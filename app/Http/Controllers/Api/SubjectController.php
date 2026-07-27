@@ -260,18 +260,30 @@ class SubjectController extends Controller
     // Get topics for a specific subject
     public function topics(Request $request, Subject $subject)
     {
-        $cacheKey = 'subject_topics_' . $subject->id . '_' . md5(serialize($request->all()));
+        $user = $request->user() ?? auth('sanctum')->user();
+        $cacheKey = 'subject_topics_' . $subject->id . '_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
 
-        return $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($request, $subject) {
+        return $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($request, $subject, $user) {
             // OPTIMIZED: Strategy B - Selective fields, Strategy C - Pagination limits
             $query = $subject->topics()
-                ->select('id', 'name', 'slug', 'subject_id', 'description', 'image', 'is_approved')
-                ->where('is_approved', true)
+                ->select('id', 'name', 'slug', 'subject_id', 'description', 'image', 'is_approved', 'created_by')
                 ->withCount('quizzes')
                 ->with(['representativeQuiz:quizzes.id,quizzes.cover_image,quizzes.topic_id,quizzes.title']);
 
             if ($request->has('approved')) {
                 $query->where('is_approved', (bool) $request->get('approved'));
+            } else {
+                if (!$user) {
+                    $query->where('is_approved', true);
+                } else {
+                    $isQuizMaster = ($user->role === 'quiz-master') || (method_exists($user, 'quizMasterProfile') && $user->quizMasterProfile()->exists());
+                    if (!$user->is_admin && !$isQuizMaster) {
+                        $query->where(function ($q) use ($user) {
+                            $q->where('is_approved', true)
+                                ->orWhere('created_by', $user->id);
+                        });
+                    }
+                }
             }
 
             // Strategy C: Limit pagination

@@ -33,10 +33,14 @@ class QuestionController extends Controller
         $user = $request->user();
         $query = Question::query()->with(['grade.level', 'subject', 'topic', 'quiz', 'tournaments']);
 
-        $isBankQuery = $request->boolean('random') || $request->boolean('banked');
-        if (!$isBankQuery) {
-            if (!isset($user->is_admin) || !$user->is_admin) {
-                $query->where('created_by', $user->id);
+        if ($quizId = $request->get('quiz_id')) {
+            $query->where('quiz_id', $quizId);
+        } else {
+            $isBankQuery = $request->boolean('random') || $request->boolean('banked');
+            if (!$isBankQuery && !$request->boolean('all')) {
+                if (!isset($user->is_admin) || !$user->is_admin) {
+                    $query->where('created_by', $user->id);
+                }
             }
         }
 
