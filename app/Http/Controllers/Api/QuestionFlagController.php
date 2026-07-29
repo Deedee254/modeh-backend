@@ -87,4 +87,33 @@ class QuestionFlagController extends Controller
             'flags' => $flags
         ]);
     }
+
+    /**
+     * Resolve all pending flags for a question
+     */
+    public function resolve(Request $request, Question $question)
+    {
+        $user = $request->user();
+
+        // Admin or creator of the question can resolve flags
+        $isCreator = $question->created_by === ($user->id ?? null);
+        $isAdmin = isset($user->is_admin) && $user->is_admin;
+        
+        if (!$isCreator && !$isAdmin && method_exists($user, 'isAdmin') && !$user->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $resolvedCount = $question->flags()->where('status', 'pending')->update(['status' => 'resolved']);
+
+        if ($request->boolean('approve')) {
+            $question->update(['is_approved' => true]);
+        }
+
+        return response()->json([
+            'message' => 'Question flags resolved successfully.',
+            'resolved_count' => $resolvedCount,
+            'question' => $question->fresh(['pendingFlags'])
+        ]);
+    }
 }
+

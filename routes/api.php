@@ -362,6 +362,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Question Flagging
     Route::post('/questions/{question}/flag', [\App\Http\Controllers\Api\QuestionFlagController::class, 'store']);
+    Route::post('/questions/{question}/resolve-flags', [\App\Http\Controllers\Api\QuestionFlagController::class, 'resolve']);
     Route::get('/questions/flags/recent', [\App\Http\Controllers\Api\QuestionFlagController::class, 'recent']);
     Route::get('/questions/{question}/flags', [\App\Http\Controllers\Api\QuestionFlagController::class, 'index'])->middleware('can:viewFilament');
 

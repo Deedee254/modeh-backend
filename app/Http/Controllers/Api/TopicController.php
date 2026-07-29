@@ -96,7 +96,7 @@ class TopicController extends Controller
                 if (!$user) {
                     $query->where('is_approved', true);
                 } else {
-                    $isQuizMaster = ($user->role === 'quiz-master') || (method_exists($user, 'quizMasterProfile') && $user->quizMasterProfile()->exists());
+                    $isQuizMaster = in_array($user->role ?? '', ['quiz-master', 'quiz_master'], true) || (method_exists($user, 'quizMasterProfile') && $user->quizMasterProfile()->exists()) || (method_exists($user, 'isQuizMaster') && $user->isQuizMaster());
                     if (!$user->is_admin && !$isQuizMaster) {
                         $query->where(function ($q) use ($user) {
                             $q->where('is_approved', true)

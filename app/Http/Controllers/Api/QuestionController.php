@@ -1112,14 +1112,13 @@ class QuestionController extends Controller
             }
         }
 
-        // Allow admins to toggle approval status during update
-        if ($user->isAdmin() && $request->has('is_approved')) {
+        // Allow admins to toggle approval status during update, or resolve flags on request
+        if ($request->has('is_approved') && $user->isAdmin()) {
             $question->is_approved = $request->boolean('is_approved');
-            
-            // If approving, also resolve all pending flags
-            if ($question->is_approved) {
-                $question->pendingFlags()->update(['status' => 'resolved']);
-            }
+        }
+        
+        if ($question->is_approved || $request->boolean('resolve_flags')) {
+            $question->pendingFlags()->update(['status' => 'resolved']);
         }
 
         $question->save();
@@ -1156,6 +1155,7 @@ class QuestionController extends Controller
         if (Schema::hasColumn('questions', 'approval_requested_at')) {
             $question->approval_requested_at = null;
         }
+        $question->pendingFlags()->update(['status' => 'resolved']);
         $question->save();
 
         // Resolve all pending flags for this question
