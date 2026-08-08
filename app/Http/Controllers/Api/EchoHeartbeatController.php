@@ -10,9 +10,11 @@ class EchoHeartbeatController extends Controller
 {
     public function heartbeat(Request $request)
     {
-        // optional secret to prevent open POSTs
-        $secret = env('ECHO_HEARTBEAT_SECRET');
-        if ($secret && $request->header('X-Echo-Heartbeat-Secret') !== $secret) {
+        // Retrieve secret from configuration cache safely to avoid direct env() usage in controller
+        $secret = config('site.echo_heartbeat_secret');
+
+        // Prevent timing attack by using hash_equals for secure comparison
+        if ($secret && !hash_equals((string) $secret, (string) $request->header('X-Echo-Heartbeat-Secret'))) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
