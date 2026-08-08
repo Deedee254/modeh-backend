@@ -33,7 +33,19 @@ return new class extends Migration
         Schema::table('quiz_attempts', function (Blueprint $table) {
             // Drop subscription-related columns if they exist
             if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {
-                $table->dropForeign(['subscription_id']);
+                // Drop the index first to prevent SQLite errors
+                try {
+                    $table->dropIndex(['user_id', 'subscription_id']);
+                } catch (\Throwable $e) {
+                    // Ignore if index does not exist or already dropped
+                }
+
+                try {
+                    $table->dropForeign(['subscription_id']);
+                } catch (\Throwable $e) {
+                    // Ignore if foreign key does not exist or already dropped
+                }
+
                 $table->dropColumn('subscription_id');
             }
             
@@ -67,7 +79,9 @@ return new class extends Migration
     {
         Schema::table('quiz_attempts', function (Blueprint $table) {
             if (Schema::hasColumn('quiz_attempts', 'institution_id')) {
-                $table->dropForeign(['institution_id']);
+                try {
+                    $table->dropForeign(['institution_id']);
+                } catch (\Throwable $e) {}
                 $table->dropColumn('institution_id');
             }
             
@@ -91,7 +105,9 @@ return new class extends Migration
             }
 
             if (Schema::hasColumn('quizzes', 'institution_id')) {
-                $table->dropForeign(['institution_id']);
+                try {
+                    $table->dropForeign(['institution_id']);
+                } catch (\Throwable $e) {}
                 $table->dropColumn('institution_id');
             }
         });

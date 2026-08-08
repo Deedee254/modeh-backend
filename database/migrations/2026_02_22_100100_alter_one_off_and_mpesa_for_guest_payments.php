@@ -17,12 +17,24 @@ return new class extends Migration
             }
 
             // Make user_id nullable for guest purchases.
-            DB::statement('ALTER TABLE one_off_purchases MODIFY user_id BIGINT UNSIGNED NULL');
+            if (DB::getDriverName() === 'sqlite') {
+                Schema::table('one_off_purchases', function (Blueprint $table) {
+                    $table->unsignedBigInteger('user_id')->nullable()->change();
+                });
+            } else {
+                DB::statement('ALTER TABLE one_off_purchases MODIFY user_id BIGINT UNSIGNED NULL');
+            }
         }
 
         if (Schema::hasTable('mpesa_transactions')) {
             // Allow M-PESA transaction rows for guest purchases.
-            DB::statement('ALTER TABLE mpesa_transactions MODIFY user_id BIGINT UNSIGNED NULL');
+            if (DB::getDriverName() === 'sqlite') {
+                Schema::table('mpesa_transactions', function (Blueprint $table) {
+                    $table->unsignedBigInteger('user_id')->nullable()->change();
+                });
+            } else {
+                DB::statement('ALTER TABLE mpesa_transactions MODIFY user_id BIGINT UNSIGNED NULL');
+            }
         }
     }
 
@@ -35,12 +47,23 @@ return new class extends Migration
                 });
             }
 
-            DB::statement('ALTER TABLE one_off_purchases MODIFY user_id BIGINT UNSIGNED NOT NULL');
+            if (DB::getDriverName() === 'sqlite') {
+                Schema::table('one_off_purchases', function (Blueprint $table) {
+                    $table->unsignedBigInteger('user_id')->nullable(false)->change();
+                });
+            } else {
+                DB::statement('ALTER TABLE one_off_purchases MODIFY user_id BIGINT UNSIGNED NOT NULL');
+            }
         }
 
         if (Schema::hasTable('mpesa_transactions')) {
-            DB::statement('ALTER TABLE mpesa_transactions MODIFY user_id BIGINT UNSIGNED NOT NULL');
+            if (DB::getDriverName() === 'sqlite') {
+                Schema::table('mpesa_transactions', function (Blueprint $table) {
+                    $table->unsignedBigInteger('user_id')->nullable(false)->change();
+                });
+            } else {
+                DB::statement('ALTER TABLE mpesa_transactions MODIFY user_id BIGINT UNSIGNED NOT NULL');
+            }
         }
     }
 };
-

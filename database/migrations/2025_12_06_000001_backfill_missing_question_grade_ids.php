@@ -22,6 +22,12 @@ return new class extends Migration
             return;
         }
 
+        // On SQLite (testing), there is no existing data to backfill, so we can skip
+        // these MySQL-specific UPDATE ... JOIN raw queries.
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Use a transaction and UPDATE ... JOIN statements to safely fill missing IDs.
         // Each statement only updates rows where the target column is NULL so it is safe
         // to re-run multiple times (idempotent).

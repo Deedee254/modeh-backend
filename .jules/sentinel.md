@@ -1,0 +1,4 @@
+## 2025-10-24 - Laravel Config Cache Security Bypass
+**Vulnerability:** Calling `env('ECHO_HEARTBEAT_SECRET')` directly in `EchoHeartbeatController.php` was vulnerable to a complete security bypass in production where configuration is cached via `php artisan config:cache`. In Laravel, when configuration is cached, any call to `env()` outside of configuration files returns `null`. This made the secret check in the controller evaluate to falsy and bypass security. Additionally, the string comparison for the secret was susceptible to timing attacks.
+**Learning:** Never call `env()` directly in controllers, notifications, or services in Laravel. Always fetch environment values through configuration files.
+**Prevention:** Register all environment variables in configuration files (e.g., `config/site.php` or `config/services.php`) and retrieve them using the `config()` helper. Use `hash_equals()` for secure, constant-time secret comparison to prevent timing attacks.
