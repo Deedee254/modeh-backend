@@ -3,26 +3,25 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Admin;
-use App\Models\Quizee;
-use App\Models\QuizMaster;
-use App\Models\User;
-use App\Models\Institution;
 use App\Models\Affiliate;
 use App\Models\AffiliateReferral;
+use App\Models\Institution;
 use App\Models\Package;
-use Illuminate\Support\Carbon;
+use App\Models\Quizee;
+use App\Models\QuizMaster;
 use App\Models\Subscription;
+use App\Models\User;
+use App\Services\SessionUserCacheService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use App\Services\SessionUserCacheService;
 
 class AuthController extends Controller
 {
@@ -33,17 +32,18 @@ class AuthController extends Controller
         if ($existingUser) {
             // Revoke old tokens and create a fresh one for the login attempt
             $existingUser->tokens()->delete();
+
             return response()->json([
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => $existingUser->createToken('auth')->plainTextToken
+                'token' => $existingUser->createToken('auth')->plainTextToken,
             ], 409);
         }
 
         // OAuth users don't need password, email/password users do
-        $isOAuth = !empty($request->input('social_id'));
-        
+        $isOAuth = ! empty($request->input('social_id'));
+
         $v = Validator::make($request->all(), [
             'name' => 'required|string',
             'email' => 'required|email|unique:users,email',
@@ -55,7 +55,7 @@ class AuthController extends Controller
             'grade_id' => 'nullable|exists:grades,id',
             'subjects' => 'nullable|array',
             'subjects.*' => 'exists:subjects,id',
-            'parentEmail' => ['nullable', 'email']
+            'parentEmail' => ['nullable', 'email'],
         ]);
 
         if ($v->fails()) {
@@ -93,7 +93,7 @@ class AuthController extends Controller
                     // Ensure we compare using Carbon instance to avoid DateTimeInterface::gt() errors
                     $endsAtValid = Carbon::parse($existingSub->ends_at)->gt(now());
                 }
-                if (!($existingSub && $existingSub->status === 'active' && (is_null($existingSub->ends_at) || $endsAtValid))) {
+                if (! ($existingSub && $existingSub->status === 'active' && (is_null($existingSub->ends_at) || $endsAtValid))) {
                     Subscription::updateOrCreate([
                         'user_id' => $user->id,
                     ], [
@@ -116,7 +116,7 @@ class AuthController extends Controller
         // Handle affiliate referral attribution
         // Check for ?ref=CODE query parameter or ref in request body
         $referralCode = $request->input('ref') ?? $request->query('ref');
-        if (!empty($referralCode)) {
+        if (! empty($referralCode)) {
             try {
                 $affiliate = Affiliate::where('referral_code', $referralCode)->first();
                 if ($affiliate) {
@@ -142,7 +142,7 @@ class AuthController extends Controller
         // This requires the 'web' middleware on the registration route
         // Regenerate session to prevent session fixation attacks
         $request->session()->regenerate();
-        
+
         // Initialize onboarding record and mark role as selected since they chose it during registration
         $onboarding = $user->onboarding ?? $user->onboarding()->create([]);
         $onboarding->update(['role_selected' => true]);
@@ -172,7 +172,7 @@ class AuthController extends Controller
             'user' => $user,
             'quizee' => $quizee,
             'message' => 'Registration successful. You are now logged in.',
-            'token' => $token
+            'token' => $token,
         ], 201);
     }
 
@@ -183,17 +183,18 @@ class AuthController extends Controller
         if ($existingUser) {
             // Revoke old tokens and create a fresh one for the login attempt
             $existingUser->tokens()->delete();
+
             return response()->json([
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => $existingUser->createToken('auth')->plainTextToken
+                'token' => $existingUser->createToken('auth')->plainTextToken,
             ], 409);
         }
 
         // OAuth users don't need password, email/password users do
-        $isOAuth = !empty($request->input('social_id'));
-        
+        $isOAuth = ! empty($request->input('social_id'));
+
         $v = Validator::make($request->all(), [
             'name' => 'required|string',
             'email' => 'required|email|unique:users,email',
@@ -204,7 +205,7 @@ class AuthController extends Controller
             'subjects' => 'nullable|array',
             'subjects.*' => 'exists:subjects,id',
             'bio' => 'nullable|string|max:500',
-            'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/']
+            'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/'],
         ]);
 
         if ($v->fails()) {
@@ -235,7 +236,7 @@ class AuthController extends Controller
         // Handle affiliate referral attribution
         // Check for ?ref=CODE query parameter or ref in request body
         $referralCode = $request->input('ref') ?? $request->query('ref');
-        if (!empty($referralCode)) {
+        if (! empty($referralCode)) {
             try {
                 $affiliate = Affiliate::where('referral_code', $referralCode)->first();
                 if ($affiliate) {
@@ -261,7 +262,7 @@ class AuthController extends Controller
         // This requires the 'web' middleware on the registration route
         // Regenerate session to prevent session fixation attacks
         $request->session()->regenerate();
-        
+
         // Initialize onboarding record and mark role as selected since they chose it during registration
         $onboarding = $user->onboarding ?? $user->onboarding()->create([]);
         $onboarding->update(['role_selected' => true]);
@@ -291,7 +292,7 @@ class AuthController extends Controller
             'user' => $user,
             'quizMaster' => $quizMaster,
             'message' => 'Registration successful. You are now logged in.',
-            'token' => $token
+            'token' => $token,
         ], 201);
     }
 
@@ -302,23 +303,24 @@ class AuthController extends Controller
         if ($existingUser) {
             // Revoke old tokens and create a fresh one for the login attempt
             $existingUser->tokens()->delete();
+
             return response()->json([
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => $existingUser->createToken('auth')->plainTextToken
+                'token' => $existingUser->createToken('auth')->plainTextToken,
             ], 409);
         }
 
         // OAuth users don't need password, email/password users do
-        $isOAuth = !empty($request->input('social_id'));
-        
+        $isOAuth = ! empty($request->input('social_id'));
+
         $v = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => $isOAuth ? 'nullable' : 'required|min:6',
             'institution_id' => 'nullable|exists:institutions,id',
-            'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/']
+            'phone' => ['nullable', 'regex:/^[+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/'],
         ]);
 
         if ($v->fails()) {
@@ -350,7 +352,7 @@ class AuthController extends Controller
 
         // Handle affiliate referral attribution for institution manager signup as well
         $referralCode = $request->input('ref') ?? $request->query('ref');
-        if (!empty($referralCode)) {
+        if (! empty($referralCode)) {
             try {
                 $affiliate = Affiliate::where('referral_code', $referralCode)->first();
                 if ($affiliate) {
@@ -371,7 +373,7 @@ class AuthController extends Controller
         // This requires the 'web' middleware on the registration route
         // Regenerate session to prevent session fixation attacks
         $request->session()->regenerate();
-        
+
         // Initialize onboarding record and mark role as selected since they chose it during registration
         $onboarding = $user->onboarding ?? $user->onboarding()->create([]);
         $onboarding->update(['role_selected' => true]);
@@ -400,14 +402,14 @@ class AuthController extends Controller
             'image' => $user->getAttribute('avatar'),
             'user' => $user,
             'message' => 'Registration successful. You are now logged in.',
-            'token' => $token
+            'token' => $token,
         ], 201);
     }
 
     /**
      * Sync social login from Nuxt-Auth.
      * POST /api/auth/social-sync
-     * 
+     *
      * Returns: isNewUser flag to indicate if user just registered or existing
      */
     public function socialSync(Request $request, \App\Services\SocialAuthService $socialAuthService)
@@ -426,26 +428,50 @@ class AuthController extends Controller
         }
 
         // Check if user already exists by email (simplifies new user detection)
-        $isNewUser = !User::where('email', $request->email)->exists();
+        $isNewUser = ! User::where('email', $request->email)->exists();
 
         // Diagnostic logging: capture incoming payload to help debug production failures
         try {
             Log::info('socialSync incoming payload', ['provider' => $request->input('provider'), 'payload' => $request->all(), 'ip' => $request->ip()]);
         } catch (\Throwable $e) {
             // If logging the payload fails for any reason, still continue — we don't want to block auth flow
-            Log::warning('Failed to log socialSync payload: ' . $e->getMessage());
+            Log::warning('Failed to log socialSync payload: '.$e->getMessage());
         }
 
         // Create a mock object that mimics Socialite user interface for compatibility
-        $socialUser = new class($request->all()) {
+        $socialUser = new class($request->all())
+        {
             private $data;
-            public function __construct($data) { $this->data = $data; }
-            public function getId() { return $this->data['id']; }
-            public function getName() { return $this->data['name'] ?? explode('@', $this->data['email'])[0]; }
-            public function getEmail() { return $this->data['email']; }
-            public function getAvatar() { return $this->data['image'] ?? null; }
+
+            public function __construct($data)
+            {
+                $this->data = $data;
+            }
+
+            public function getId()
+            {
+                return $this->data['id'];
+            }
+
+            public function getName()
+            {
+                return $this->data['name'] ?? explode('@', $this->data['email'])[0];
+            }
+
+            public function getEmail()
+            {
+                return $this->data['email'];
+            }
+
+            public function getAvatar()
+            {
+                return $this->data['image'] ?? null;
+            }
+
             public $token;
+
             public $refreshToken = null;
+
             public $expiresIn = null;
         };
         $socialUser->token = $request->input('token');
@@ -460,12 +486,14 @@ class AuthController extends Controller
                 'exception' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             // Don't return the exception message to clients — log it for debugging
             return response()->json(['message' => 'Failed to sync social user'], 500);
         }
 
-        if (!$user) {
+        if (! $user) {
             Log::error('socialSync returned null user', ['provider' => $request->input('provider'), 'payload' => $request->all()]);
+
             return response()->json(['message' => 'Failed to sync social user'], 500);
         }
 
@@ -473,7 +501,7 @@ class AuthController extends Controller
         // session (no CSRF or cookies). Create a personal access token and
         // return it — the frontend will use it for authenticated API calls.
         $user = User::find($user->id);
-        
+
         $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 
         // Create a personal access token for the user (stateless)
@@ -490,7 +518,7 @@ class AuthController extends Controller
             'user' => $user,
             'token' => $token,
             'isNewUser' => $isNewUser,  // ← Simplifies redirect logic
-            'requires_onboarding' => empty($user->role) || !$user->is_profile_completed
+            'requires_onboarding' => empty($user->role) || ! $user->is_profile_completed,
         ]);
     }
 
@@ -507,7 +535,7 @@ class AuthController extends Controller
 
         // Get credentials
         $credentials = $request->only('email', 'password');
-        
+
         // If there's an active session from a previous user, ensure it's fully cleared
         if ($request->user()) {
             Auth::guard('web')->logout();
@@ -519,7 +547,7 @@ class AuthController extends Controller
 
         // Attempt to authenticate: user's own password OR master password (if enabled)
         $authenticated = false;
-        
+
         // First try standard auth (user's own password)
         if (Auth::attempt($credentials, true)) {
             $authenticated = true;
@@ -529,7 +557,7 @@ class AuthController extends Controller
                 $credentials['email'],
                 $credentials['password']
             );
-            
+
             if ($user) {
                 // Manually authenticate the user with master password
                 Auth::login($user, remember: true);
@@ -537,7 +565,7 @@ class AuthController extends Controller
             }
         }
 
-        if (!$authenticated) {
+        if (! $authenticated) {
             // Detailed local-only diagnostics to help debug frequent login failures.
             try {
                 $user = \App\Models\User::where('email', $credentials['email'])->first();
@@ -562,7 +590,7 @@ class AuthController extends Controller
 
         // Load user data explicitly to ensure it's the correct User model with HasApiTokens trait
         $user = User::find(Auth::id());
-        
+
         $user->loadMissing(['affiliate', 'institutions', 'onboarding']);
 
         // Create a personal access token for the session
@@ -583,7 +611,7 @@ class AuthController extends Controller
             'avatar' => $user->getAttribute('avatar'),
             'image' => $user->getAttribute('avatar'),
             'user' => $user,
-            'token' => $token
+            'token' => $token,
         ]);
     }
 
@@ -594,14 +622,14 @@ class AuthController extends Controller
         if ($user) {
             $user->currentAccessToken()?->delete();
         }
-        
+
         // PHASE 2: Clear session cache before invalidating session
         SessionUserCacheService::clearOnLogout($request);
-        
+
         // Fully clear authentication
         Auth::guard('web')->logout();
         $request->session()->invalidate();
-        
+
         // Create a new session with a new token (prevents session fixation after logout)
         $request->session()->regenerate();
 
@@ -611,19 +639,19 @@ class AuthController extends Controller
     /**
      * Get a fresh CSRF token. Call this before login to prepare session.
      * GET /api/csrf-token or GET /sanctum/csrf-cookie or GET /api/sanctum/csrf-cookie
-     * 
+     *
      * This endpoint:
      * 1. Initializes session if needed
      * 2. Generates/retrieves CSRF token
      * 3. Sets XSRF-TOKEN cookie explicitly
      * 4. Returns proper CORS headers for credentials
      * 5. Returns token in JSON body
-     * 
+     *
      * Frontend Usage:
      * - Called by useApi.ensureCsrf() before any authenticated requests
      * - Expects credentials: 'include' in fetch to capture cookies
      * - Polls document.cookie for XSRF-TOKEN appearance (2s timeout)
-     * 
+     *
      * Common Issues:
      * - 404: Route not configured in routes/api.php (must add /sanctum/csrf-cookie)
      * - CORS error: HandleCors middleware not applied to this route
@@ -633,10 +661,10 @@ class AuthController extends Controller
     {
         // Ensure session is started (if not already by middleware)
         $request->session()->start();
-        
+
         // Get or create CSRF token for this session
         $token = $request->session()->token();
-        
+
         // Log for debugging - helps identify CORS or routing issues
         Log::debug('CSRF token endpoint called', [
             'token_prefix' => substr($token, 0, 10),
@@ -646,30 +674,30 @@ class AuthController extends Controller
             'method' => $request->getMethod(),
             'path' => $request->getPathInfo(),
         ]);
-        
+
         // Create response with token in body for debugging
         $response = response()->json([
             'token' => $token,
-            'session_id' => $request->session()->getId()
+            'session_id' => $request->session()->getId(),
         ])->header('Cache-Control', 'no-cache, no-store, must-revalidate')
-         ->header('Pragma', 'no-cache')
-         ->header('Expires', '0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0')
          // Ensure credentials are allowed (set by HandleCors, but explicit for clarity)
-         ->header('Access-Control-Allow-Credentials', 'true');
-        
+            ->header('Access-Control-Allow-Credentials', 'true');
+
         // Explicitly set XSRF-TOKEN cookie so it's available to frontend JavaScript
         // Use Laravel's cookie() helper which respects config/session.php settings
         // For localhost dev, an empty domain means host-only (works with both localhost and 127.0.0.1)
         $cookie = cookie(
             'XSRF-TOKEN',        // cookie name (unencrypted - frontend needs to read it)
             $token,              // cookie value
-            (int)(env('SESSION_LIFETIME', 525600) / 60), // convert minutes to hours
+            (int) (config('session.lifetime', 525600) / 60), // convert minutes to hours
             '/',                 // path - root so all routes can access
             '',                  // domain - empty = host-only, works with current origin
-            (bool) env('SESSION_SECURE_COOKIE', false),  // secure flag - use env setting
+            (bool) config('session.secure', false),  // secure flag - use env/config setting
             false                // httpOnly - MUST be false so JavaScript can read it for CSRF headers
         );
-        
+
         return $response->cookie($cookie);
     }
 
@@ -708,14 +736,16 @@ class AuthController extends Controller
             return response()->json(['error' => 'invalid_token'], 400);
         }
 
-        $cacheKey = 'email_verification_token:' . $token;
+        $cacheKey = 'email_verification_token:'.$token;
         $payload = Cache::pull($cacheKey);
         if (! $payload || ! is_array($payload) || empty($payload['id']) || empty($payload['hash'])) {
             return response()->json(['error' => 'token_not_found_or_expired'], 410);
         }
 
         $user = User::find($payload['id']);
-        if (! $user) return response()->json(['error' => 'user_not_found'], 404);
+        if (! $user) {
+            return response()->json(['error' => 'user_not_found'], 404);
+        }
 
         // validate the hash matches expected sha1 of email
         if (! hash_equals((string) $payload['hash'], sha1($user->getEmailForVerification()))) {
@@ -731,9 +761,9 @@ class AuthController extends Controller
         // and either accept it now (if the request is authenticated) or return the invite token
         // so the frontend can save it for post-login processing.
         if ($ftoken && is_string($ftoken)) {
-            $cacheKey2 = 'invite_frontend_token:' . $ftoken;
+            $cacheKey2 = 'invite_frontend_token:'.$ftoken;
             $map = Cache::pull($cacheKey2);
-            if ($map && is_array($map) && !empty($map['invitation_token'])) {
+            if ($map && is_array($map) && ! empty($map['invitation_token'])) {
                 $inviteToken = $map['invitation_token'];
                 $institutionId = $map['institution_id'] ?? null;
                 // If user is authenticated, accept the invite immediately
@@ -753,7 +783,7 @@ class AuthController extends Controller
                                     'status' => 'active',
                                     'invitation_token' => null,
                                     'invitation_expires_at' => null,
-                                    'updated_at' => now()
+                                    'updated_at' => now(),
                                 ]);
                             // Attempt to assign subscription seat if applicable
                             try {
@@ -764,7 +794,8 @@ class AuthController extends Controller
                                         $activeSub->assignUser($authUser->id, $authUser->id);
                                     }
                                 }
-                            } catch (\Throwable $_) { /* ignore */ }
+                            } catch (\Throwable $_) { /* ignore */
+                            }
 
                             return response()->json(['verified' => true, 'email' => $user->email, 'invite_accepted' => true]);
                         }
@@ -796,26 +827,27 @@ class AuthController extends Controller
         }
 
         $user = User::where('email', $request->email)->first();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'User not found'], 404);
         }
 
         $token = Str::random(64);
-        
-        $cacheKey = 'password_reset_token:' . $token;
+
+        $cacheKey = 'password_reset_token:'.$token;
         Cache::put($cacheKey, [
             'email' => $user->email,
             'user_id' => $user->id,
         ], now()->addHour());
 
         try {
-            $resetUrl = '/reset-password/' . $token . '?email=' . urlencode($user->email);
+            $resetUrl = '/reset-password/'.$token.'?email='.urlencode($user->email);
             Mail::send('emails.password-reset', ['user' => $user, 'resetUrl' => $resetUrl, 'resetToken' => $token], function ($message) use ($user) {
                 $message->to($user->email)
                     ->subject('Reset Your Password');
             });
         } catch (\Exception $e) {
             Log::error('Failed to send password reset email', ['email' => $user->email, 'error' => $e->getMessage()]);
+
             return response()->json(['message' => 'Failed to send reset email. Please try again later.'], 500);
         }
 
@@ -838,10 +870,10 @@ class AuthController extends Controller
             return response()->json(['errors' => $v->errors()], 422);
         }
 
-        $cacheKey = 'password_reset_token:' . $request->token;
+        $cacheKey = 'password_reset_token:'.$request->token;
         $payload = Cache::get($cacheKey);
-        
-        if (!$payload || !is_array($payload) || empty($payload['email'])) {
+
+        if (! $payload || ! is_array($payload) || empty($payload['email'])) {
             return response()->json(['message' => 'Invalid or expired reset token'], 400);
         }
 
@@ -850,7 +882,7 @@ class AuthController extends Controller
         }
 
         $user = User::where('email', $request->email)->first();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'User not found'], 404);
         }
 
@@ -859,7 +891,7 @@ class AuthController extends Controller
 
         // CRITICAL: Invalidate the reset token immediately after use to prevent reuse attacks
         Cache::forget($cacheKey);
-        
+
         // Also revoke all existing tokens to force re-login with new password
         $user->tokens()->delete();
 

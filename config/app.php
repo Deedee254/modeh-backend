@@ -55,7 +55,7 @@ return [
     // Application URL and frontend URL should come from environment variables only.
     // Avoid hard-coded production defaults here; set these values in your deployment `.env`.
     'url' => env('APP_URL'),
-    'frontend_url' => env('FRONTEND_APP_URL'),
+    'frontend_url' => env('FRONTEND_URL', env('FRONTEND_APP_URL', 'http://localhost:3000')),
 
     /*
     |--------------------------------------------------------------------------
