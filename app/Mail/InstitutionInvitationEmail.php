@@ -40,12 +40,12 @@ class InstitutionInvitationEmail extends Mailable implements ShouldQueue
      */
     public function content(): Content
     {
-        $frontend = env('FRONTEND_URL', config('app.url'));
-        $inviteUrl = $frontend . '/email-verified?invite=' . $this->token;
+        $frontend = config('app.frontend_url', config('app.url'));
+        $inviteUrl = $frontend.'/email-verified?invite='.$this->token;
         if ($this->ftoken) {
-            $inviteUrl .= '&ftoken=' . $this->ftoken;
+            $inviteUrl .= '&ftoken='.$this->ftoken;
         }
-        
+
         return new Content(
             markdown: 'emails.institution-invite',
             with: [
