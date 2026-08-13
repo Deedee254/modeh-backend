@@ -33,6 +33,14 @@ class ProfileController extends Controller
             return;
         }
 
+        if (is_string($rawValue)) {
+            $trimmed = trim($rawValue);
+            if (in_array(strtolower($trimmed), ['not_applicable', 'not applicable', 'n/a', 'na'], true)) {
+                $request->merge(['institution_id' => null]);
+                return;
+            }
+        }
+
         $institutionId = null;
         if (is_numeric($rawValue)) {
             $institutionId = (int) $rawValue;
