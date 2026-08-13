@@ -1,0 +1,4 @@
+## 2025-11-23 - [Config Cache Env Call Bypass]
+**Vulnerability:** Under Laravel's configuration caching (`php artisan config:cache`), direct calls to `env()` outside of configuration files return `null`. This can result in bypassing verification checks like the `ECHO_HEARTBEAT_SECRET` (which defaults to being skipped if null) and silently disabling vital cookie security flags like `SESSION_SECURE_COOKIE` in production.
+**Learning:** Hardcoding `env()` lookups inside controllers, middleware, services, or notifications creates silent security bypasses and misconfigurations under production cache settings.
+**Prevention:** Always define custom and native system environment variables in specific config files (e.g., inside `config/site.php` or `config/session.php`) and retrieve them exclusively using the `config()` helper within the application code.

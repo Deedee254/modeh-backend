@@ -3,15 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\ChatMetric;
+use Illuminate\Http\Request;
 
 class EchoHeartbeatController extends Controller
 {
     public function heartbeat(Request $request)
     {
         // optional secret to prevent open POSTs
-        $secret = env('ECHO_HEARTBEAT_SECRET');
+        $secret = config('site.echo_heartbeat_secret');
         if ($secret && $request->header('X-Echo-Heartbeat-Secret') !== $secret) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
