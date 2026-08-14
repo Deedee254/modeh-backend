@@ -86,7 +86,8 @@ Route::post('/auth/social-sync', [AuthController::class, 'socialSync'])->middlew
 
 // Ensure the login route runs through the web (session) middleware so
 // session() is available during cookie-based (Sanctum) authentication.
-Route::post('/login', [AuthController::class, 'login'])->middleware('web');
+// Rate limit login attempts to prevent brute-force attacks (max 10 per minute).
+Route::post('/login', [AuthController::class, 'login'])->middleware('web', 'throttle:10,1');
 
 // Logout and authenticated routes also need the session middleware.
 Route::middleware('web')->group(function () {
@@ -618,7 +619,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
 Route::post('/payments/mpesa/callback', [\App\Http\Controllers\Api\PaymentController::class, 'mpesaCallback']);
 
 // Echo server heartbeat (POST)
-Route::post('/echo/heartbeat', [\App\Http\Controllers\Api\EchoHeartbeatController::class, 'heartbeat']);
+// Rate limit heartbeat requests to prevent spam/abuse (max 30 per minute).
+Route::post('/echo/heartbeat', [\App\Http\Controllers\Api\EchoHeartbeatController::class, 'heartbeat'])->middleware('throttle:30,1');
 
 // Echo/WebSocket Testing Endpoints (for development)
 Route::prefix('echo-test')->group(function () {
