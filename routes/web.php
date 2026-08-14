@@ -16,7 +16,8 @@ Route::middleware(['web'])->get('/sanctum/csrf-cookie', [AuthController::class, 
 Route::middleware('web')->group(function () {
 	Route::get('/', [AuthWebController::class, 'showLogin'])->name('login');
 	Route::get('/login', [AuthWebController::class, 'showLogin']);
-	Route::post('/login', [AuthWebController::class, 'login']);
+	// Rate limit login attempts to prevent brute-force attacks (max 10 per minute).
+	Route::post('/login', [AuthWebController::class, 'login'])->middleware('throttle:10,1');
 	Route::post('/logout', [AuthWebController::class, 'logout']);
 	Route::get('/invitation/{token}', [App\Http\Controllers\InvitationController::class, 'show'])->name('invitation.show');
 });
