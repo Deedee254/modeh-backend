@@ -23,11 +23,12 @@ class UploadController extends Controller
     {
         $type = $request->get('type') ?: 'uploads';
 
-        // Set validation rules by declared type
+        // Security Concern: Restrict file uploads to explicitly allowed safe MIME types/extensions
+        // to prevent uploading arbitrary executable code, scripts, or malicious content.
         $rules = ['file' => 'required|file', 'type' => 'nullable|string'];
         switch (strtolower($type)) {
             case 'image':
-                $rules['file'] = 'required|file|image|mimes:jpeg,png,jpg,gif|max:5120'; // 5 MB
+                $rules['file'] = 'required|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120'; // 5 MB
                 break;
             case 'audio':
                 $rules['file'] = 'required|file|mimes:mp3,wav,ogg,m4a|max:15360'; // 15 MB
@@ -36,7 +37,8 @@ class UploadController extends Controller
                 $rules['file'] = 'required|file|mimes:mp4,webm,mov,ogg|max:51200'; // 50 MB
                 break;
             default:
-                $rules['file'] = 'required|file|max:10240'; // 10 MB default
+                // Restrict generic uploads to safe document and media extensions
+                $rules['file'] = 'required|file|mimes:jpeg,jpg,png,gif,webp,pdf,doc,docx,txt,mp3,wav,ogg,m4a,mp4,webm,mov|max:10240'; // 10 MB default
                 break;
         }
 
@@ -51,14 +53,16 @@ class UploadController extends Controller
 
         // sanitize type into folder name
         $folder = preg_replace('/[^a-z0-9_\-]/i', '_', $type);
-        if (empty($folder)) $folder = 'uploads';
+        if (empty($folder)) {
+            $folder = 'uploads';
+        }
 
         $path = Storage::disk('public')->putFile($folder, $file);
         $url = url(Storage::url($path));
 
         return response()->json([
             'url' => $url,
-            'path' => $path
+            'path' => $path,
         ], 201);
     }
 }
