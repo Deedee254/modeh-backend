@@ -36,7 +36,8 @@ class UploadController extends Controller
                 $rules['file'] = 'required|file|mimes:mp4,webm,mov,ogg|max:51200'; // 50 MB
                 break;
             default:
-                $rules['file'] = 'required|file|max:10240'; // 10 MB default
+                // Security: Restrict allowed file extensions to safe document and media types to prevent dangerous script/executable uploads
+                $rules['file'] = 'required|file|mimes:jpeg,png,jpg,gif,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,mp3,wav,ogg,mp4,webm,zip|max:10240'; // 10 MB default
                 break;
         }
 

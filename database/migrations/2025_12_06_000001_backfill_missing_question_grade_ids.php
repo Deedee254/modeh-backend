@@ -26,6 +26,30 @@ return new class extends Migration
         // Each statement only updates rows where the target column is NULL so it is safe
         // to re-run multiple times (idempotent).
         DB::transaction(function () {
+            if (DB::getDriverName() === 'sqlite') {
+                DB::statement("
+                    UPDATE questions
+                    SET grade_id = (SELECT grade_id FROM quizzes WHERE quizzes.id = questions.quiz_id)
+                    WHERE quiz_id IS NOT NULL AND grade_id IS NULL AND EXISTS (SELECT 1 FROM quizzes WHERE quizzes.id = questions.quiz_id AND quizzes.grade_id IS NOT NULL)
+                ");
+                DB::statement("
+                    UPDATE questions
+                    SET grade_id = (SELECT grade_id FROM subjects WHERE subjects.id = questions.subject_id)
+                    WHERE subject_id IS NOT NULL AND grade_id IS NULL AND EXISTS (SELECT 1 FROM subjects WHERE subjects.id = questions.subject_id AND subjects.grade_id IS NOT NULL)
+                ");
+                DB::statement("
+                    UPDATE questions
+                    SET grade_id = (SELECT subjects.grade_id FROM topics INNER JOIN subjects ON topics.subject_id = subjects.id WHERE topics.id = questions.topic_id)
+                    WHERE topic_id IS NOT NULL AND grade_id IS NULL AND EXISTS (SELECT 1 FROM topics INNER JOIN subjects ON topics.subject_id = subjects.id WHERE topics.id = questions.topic_id AND subjects.grade_id IS NOT NULL)
+                ");
+                DB::statement("
+                    UPDATE questions
+                    SET level_id = (SELECT level_id FROM grades WHERE grades.id = questions.grade_id)
+                    WHERE grade_id IS NOT NULL AND level_id IS NULL AND EXISTS (SELECT 1 FROM grades WHERE grades.id = questions.grade_id AND grades.level_id IS NOT NULL)
+                ");
+                return;
+            }
+
             // Strategy 1: Fill grade_id from quiz for questions that have a quiz_id but no grade_id
             DB::statement("
                 UPDATE questions q
