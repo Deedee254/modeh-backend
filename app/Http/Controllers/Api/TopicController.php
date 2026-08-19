@@ -151,10 +151,9 @@ class TopicController extends Controller
             // Strategy C: Limit pagination to prevent huge caches
             $perPage = min(200, max(1, (int) $request->get('per_page', 20)));
 
-            // Prefetch images to avoid N+1
-            $collection = ($request->has('level_id') || $request->has('grade_id'))
-                ? $query->get()
-                : $query->paginate($perPage);
+            // Keep the response paginated for every filter combination so clients
+            // can load large topic libraries page by page.
+            $collection = $query->paginate($perPage);
 
             $items = ($collection instanceof \Illuminate\Pagination\LengthAwarePaginator)
                 ? $collection->getCollection()
