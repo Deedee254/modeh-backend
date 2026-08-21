@@ -154,10 +154,13 @@ class ChatController extends Controller
 
     public function send(Request $request)
     {
+        // Validate request input and attachments to prevent arbitrary file uploads / DoS
         $request->validate([
             'content' => 'required|string',
             'recipient_id' => 'nullable|integer',
-            'group_id' => 'nullable|integer'
+            'group_id' => 'nullable|integer',
+            'attachments' => 'nullable|array',
+            'attachments.*' => 'file|max:10240|mimes:jpeg,png,jpg,gif,webp,pdf,doc,docx,xls,xlsx,mp3,wav,ogg,m4a,mp4,webm',
         ]);
 
         $fromId = $request->user()->id;
