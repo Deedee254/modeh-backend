@@ -33,6 +33,9 @@ return new class extends Migration
         Schema::table('quiz_attempts', function (Blueprint $table) {
             // Drop subscription-related columns if they exist
             if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {
+                try {
+                    $table->dropIndex('quiz_attempts_user_id_subscription_id_index');
+                } catch (\Throwable $e) {}
                 $table->dropForeign(['subscription_id']);
                 $table->dropColumn('subscription_id');
             }
