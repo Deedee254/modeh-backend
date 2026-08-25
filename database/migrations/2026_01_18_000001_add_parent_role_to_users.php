@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (Schema::hasTable('users')) {
+        if (Schema::hasTable('users') && \DB::getDriverName() === 'mysql') {
             // Add 'parent' to the existing ENUM values for role.
             \DB::statement("ALTER TABLE `users` MODIFY `role` ENUM('quizee','quiz-master','admin','institution-manager','parent') NOT NULL DEFAULT 'quizee'");
         }
@@ -22,7 +22,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        if (Schema::hasTable('users')) {
+        if (Schema::hasTable('users') && \DB::getDriverName() === 'mysql') {
             // Remove 'parent' from the ENUM values (revert to previous set).
             \DB::statement("ALTER TABLE `users` MODIFY `role` ENUM('quizee','quiz-master','admin','institution-manager') NOT NULL DEFAULT 'quizee'");
         }
