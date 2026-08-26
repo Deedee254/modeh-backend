@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\MessageRead;
+use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use App\Models\ChatMetric;
 use App\Models\Message;
 use App\Models\User;
-use App\Events\MessageSent;
-use App\Events\MessageRead;
-use App\Models\ChatMetric;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ChatController extends Controller
 {
@@ -25,11 +25,15 @@ class ChatController extends Controller
         // summarize into conversations keyed by other_user_id
         $conversations = [];
         foreach ($msgs as $m) {
-            if (!empty($m->group_id)) continue; // skip group messages here
+            if (! empty($m->group_id)) {
+                continue;
+            } // skip group messages here
             $other = ($m->sender_id == $user->id) ? $m->recipient_id : $m->sender_id;
-            if (!$other) continue;
+            if (! $other) {
+                continue;
+            }
 
-            if (!isset($conversations[$other])) {
+            if (! isset($conversations[$other])) {
                 $conversations[$other] = [
                     'other_user_id' => $other,
                     'other_name' => optional(\App\Models\User::find($other))->name,
@@ -39,7 +43,7 @@ class ChatController extends Controller
                 ];
             }
             // count unread messages from the other user
-            if ($m->sender_id == $other && !$m->is_read) {
+            if ($m->sender_id == $other && ! $m->is_read) {
                 $conversations[$other]['unread_count']++;
             }
         }
@@ -92,12 +96,14 @@ class ChatController extends Controller
             }
 
             $msgs = $query->orderBy('created_at', 'asc')->limit($perPage)->get();
+
             return response()->json(['messages' => $msgs]);
         }
 
         if ($request->has('group_id')) {
             $gid = intval($request->get('group_id'));
             $msgs = Message::where('group_id', $gid)->orderBy('created_at', 'asc')->get();
+
             return response()->json(['messages' => $msgs]);
         }
 
@@ -114,7 +120,7 @@ class ChatController extends Controller
 
         // Verify the recipient exists
         $recipient = \App\Models\User::find($to);
-        if (!$recipient) {
+        if (! $recipient) {
             return response()->json(['error' => 'Recipient not found'], 404);
         }
 
@@ -134,10 +140,10 @@ class ChatController extends Controller
         $request->validate(['other_user_id' => 'required|integer']);
         $other = intval($request->other_user_id);
         Message::where('sender_id', $other)->where('recipient_id', $user->id)->update(['is_read' => true]);
-        
+
         // Broadcast to the sender that messages were read
         broadcast(new MessageRead($other, $user->id))->toOthers();
-        
+
         return response()->json(['ok' => true]);
     }
 
@@ -149,6 +155,7 @@ class ChatController extends Controller
         // Mark all messages in group as read for this user by toggling a pivot or message read flag
         // Simpler approach: set read = true for messages in group that are not from this user
         Message::where('group_id', $gid)->where('sender_id', '!=', $user->id)->update(['is_read' => true]);
+
         return response()->json(['ok' => true]);
     }
 
@@ -157,7 +164,7 @@ class ChatController extends Controller
         $request->validate([
             'content' => 'required|string',
             'recipient_id' => 'nullable|integer',
-            'group_id' => 'nullable|integer'
+            'group_id' => 'nullable|integer',
         ]);
 
         $fromId = $request->user()->id;
@@ -166,6 +173,7 @@ class ChatController extends Controller
 
         if ($isSupportMessage) {
             $messages = $this->handleSupportMessage($fromId, $request, $attachmentsMeta);
+
             return response()->json(['message' => $messages[0] ?? null], 201);
         }
 
@@ -179,7 +187,7 @@ class ChatController extends Controller
 
     private function processAttachments(Request $request): ?array
     {
-        if (!$request->hasFile('attachments')) {
+        if (! $request->hasFile('attachments')) {
             return null;
         }
 
@@ -190,12 +198,12 @@ class ChatController extends Controller
                 $attachmentsMeta[] = [
                     'name' => $file->getClientOriginalName(),
                     'path' => $path,
-                    'url' => asset('storage/' . $path),
+                    'url' => asset('storage/'.$path),
                     'size' => $file->getSize(),
                     'mime' => $file->getClientMimeType(),
                 ];
             } catch (\Exception $e) {
-                \Log::warning('Failed to store chat attachment: ' . $e->getMessage());
+                \Log::warning('Failed to store chat attachment: '.$e->getMessage());
             }
         }
 
@@ -221,7 +229,7 @@ class ChatController extends Controller
             try {
                 $admin->notify(new \App\Notifications\NewMessageNotification($msg));
             } catch (\Exception $e) {
-                \Log::error('Failed to send support notification to admin ' . $admin->id . ': ' . $e->getMessage());
+                \Log::error('Failed to send support notification to admin '.$admin->id.': '.$e->getMessage());
             }
         }
 
@@ -229,7 +237,7 @@ class ChatController extends Controller
             try {
                 event(new MessageSent($msg));
             } catch (\Exception $e) {
-                \Log::error('Failed to broadcast message: ' . $e->getMessage());
+                \Log::error('Failed to broadcast message: '.$e->getMessage());
             }
         }
 
@@ -269,7 +277,7 @@ class ChatController extends Controller
                 try {
                     $recipient->notify(new \App\Notifications\NewMessageNotification($msg));
                 } catch (\Exception $e) {
-                    \Log::error('Failed to send NewMessageNotification: ' . $e->getMessage());
+                    \Log::error('Failed to send NewMessageNotification: '.$e->getMessage());
                 }
             }
         }
@@ -280,7 +288,7 @@ class ChatController extends Controller
         try {
             event(new MessageSent($msg));
         } catch (\Exception $e) {
-            \Log::error('Broadcast MessageSent failed: ' . $e->getMessage());
+            \Log::error('Broadcast MessageSent failed: '.$e->getMessage());
         }
     }
 
@@ -288,16 +296,17 @@ class ChatController extends Controller
     {
         try {
             DB::table('chat_metrics')->where('key', 'messages_total')->increment('value', $count, ['last_updated_at' => now()]);
-            
+
             $bucket = now()->format('YmdHi');
+            // Security: Ensure $count is strictly cast to int in DB::raw concatenation to prevent SQL injection risks
             \App\Models\ChatMetricBucket::updateOrCreate(
                 ['metric_key' => 'messages_per_minute', 'bucket' => $bucket],
-                ['value' => DB::raw('COALESCE(value,0) + ' . $count), 'last_updated_at' => now()]
+                ['value' => DB::raw('COALESCE(value,0) + '.(int) $count), 'last_updated_at' => now()]
             );
 
             ChatMetric::updateOrCreate(['key' => 'last_message_at'], ['value' => now()->getTimestamp(), 'last_updated_at' => now()]);
         } catch (\Exception $e) {
-            \Log::error('Failed to update chat metrics: ' . $e->getMessage());
+            \Log::error('Failed to update chat metrics: '.$e->getMessage());
         }
     }
 
@@ -312,6 +321,7 @@ class ChatController extends Controller
         $request->validate(['body' => 'required|string']);
         $msg->content = $request->body;
         $msg->save();
+
         // Optionally broadcast update event
         return response()->json(['message' => $msg]);
     }
@@ -325,6 +335,7 @@ class ChatController extends Controller
             return response()->json(['error' => 'Forbidden'], 403);
         }
         $msg->delete();
+
         // Optionally broadcast delete event
         return response()->json(['ok' => true]);
     }
@@ -336,7 +347,7 @@ class ChatController extends Controller
         $threadId = $request->input('thread_id');
         // Broadcast typing whisper to recipient (Echo private channel)
         if ($threadId) {
-            \Broadcast::channel('App.Models.User.' . $threadId, function () use ($user, $threadId) {
+            \Broadcast::channel('App.Models.User.'.$threadId, function () {
                 return true;
             });
             try {
@@ -346,9 +357,10 @@ class ChatController extends Controller
                     $b->socket($request)->whisper('typing', ['thread_id' => $threadId, 'user_id' => $user->id]);
                 }
             } catch (\Throwable $e) {
-                \Log::warning('Broadcast whisper failed: ' . $e->getMessage());
+                \Log::warning('Broadcast whisper failed: '.$e->getMessage());
             }
         }
+
         return response()->json(['ok' => true]);
     }
 
@@ -358,7 +370,7 @@ class ChatController extends Controller
         $user = $request->user();
         $threadId = $request->input('thread_id');
         if ($threadId) {
-            \Broadcast::channel('App.Models.User.' . $threadId, function () use ($user, $threadId) {
+            \Broadcast::channel('App.Models.User.'.$threadId, function () {
                 return true;
             });
             try {
@@ -367,9 +379,10 @@ class ChatController extends Controller
                     $b->socket($request)->whisper('typing-stopped', ['thread_id' => $threadId, 'user_id' => $user->id]);
                 }
             } catch (\Throwable $e) {
-                \Log::warning('Broadcast whisper failed: ' . $e->getMessage());
+                \Log::warning('Broadcast whisper failed: '.$e->getMessage());
             }
         }
+
         return response()->json(['ok' => true]);
     }
 }
