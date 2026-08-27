@@ -21,11 +21,14 @@ class UploadController extends Controller
      */
     public function store(Request $request)
     {
-        $type = $request->get('type') ?: 'uploads';
+        // Whitelist allowed upload types/folders to prevent path traversal and arbitrary directory creation
+        $allowedTypes = ['image', 'audio', 'video', 'uploads'];
+        $rawType = strtolower((string) $request->get('type', 'uploads'));
+        $type = in_array($rawType, $allowedTypes, true) ? $rawType : 'uploads';
 
         // Set validation rules by declared type
         $rules = ['file' => 'required|file', 'type' => 'nullable|string'];
-        switch (strtolower($type)) {
+        switch ($type) {
             case 'image':
                 $rules['file'] = 'required|file|image|mimes:jpeg,png,jpg,gif|max:5120'; // 5 MB
                 break;
@@ -47,18 +50,14 @@ class UploadController extends Controller
         }
 
         $file = $request->file('file');
-        $type = $request->get('type') ?: 'uploads';
-
-        // sanitize type into folder name
-        $folder = preg_replace('/[^a-z0-9_\-]/i', '_', $type);
-        if (empty($folder)) $folder = 'uploads';
+        $folder = $type;
 
         $path = Storage::disk('public')->putFile($folder, $file);
         $url = url(Storage::url($path));
 
         return response()->json([
             'url' => $url,
-            'path' => $path
+            'path' => $path,
         ], 201);
     }
 }
