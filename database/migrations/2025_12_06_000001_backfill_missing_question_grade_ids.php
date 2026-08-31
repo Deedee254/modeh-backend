@@ -26,46 +26,69 @@ return new class extends Migration
         // Each statement only updates rows where the target column is NULL so it is safe
         // to re-run multiple times (idempotent).
         DB::transaction(function () {
-            // Strategy 1: Fill grade_id from quiz for questions that have a quiz_id but no grade_id
-            DB::statement("
-                UPDATE questions q
-                INNER JOIN quizzes ON q.quiz_id = quizzes.id
-                SET q.grade_id = quizzes.grade_id
-                WHERE q.quiz_id IS NOT NULL
-                AND q.grade_id IS NULL
-                AND quizzes.grade_id IS NOT NULL
-            ");
+            if (DB::getDriverName() === 'sqlite') {
+                DB::statement("
+                    UPDATE questions
+                    SET grade_id = (SELECT grade_id FROM quizzes WHERE quizzes.id = questions.quiz_id)
+                    WHERE quiz_id IS NOT NULL AND grade_id IS NULL AND EXISTS (SELECT 1 FROM quizzes WHERE quizzes.id = questions.quiz_id AND quizzes.grade_id IS NOT NULL)
+                ");
+                DB::statement("
+                    UPDATE questions
+                    SET grade_id = (SELECT grade_id FROM subjects WHERE subjects.id = questions.subject_id)
+                    WHERE subject_id IS NOT NULL AND grade_id IS NULL AND EXISTS (SELECT 1 FROM subjects WHERE subjects.id = questions.subject_id AND subjects.grade_id IS NOT NULL)
+                ");
+                DB::statement("
+                    UPDATE questions
+                    SET grade_id = (SELECT subjects.grade_id FROM topics INNER JOIN subjects ON topics.subject_id = subjects.id WHERE topics.id = questions.topic_id)
+                    WHERE topic_id IS NOT NULL AND grade_id IS NULL AND EXISTS (SELECT 1 FROM topics INNER JOIN subjects ON topics.subject_id = subjects.id WHERE topics.id = questions.topic_id AND subjects.grade_id IS NOT NULL)
+                ");
+                DB::statement("
+                    UPDATE questions
+                    SET level_id = (SELECT level_id FROM grades WHERE grades.id = questions.grade_id)
+                    WHERE grade_id IS NOT NULL AND level_id IS NULL AND EXISTS (SELECT 1 FROM grades WHERE grades.id = questions.grade_id AND grades.level_id IS NOT NULL)
+                ");
+            } else {
+                // Strategy 1: Fill grade_id from quiz for questions that have a quiz_id but no grade_id
+                DB::statement("
+                    UPDATE questions q
+                    INNER JOIN quizzes ON q.quiz_id = quizzes.id
+                    SET q.grade_id = quizzes.grade_id
+                    WHERE q.quiz_id IS NOT NULL
+                    AND q.grade_id IS NULL
+                    AND quizzes.grade_id IS NOT NULL
+                ");
 
-            // Strategy 2: Fill grade_id from subject for questions that have a subject_id but no grade_id
-            DB::statement("
-                UPDATE questions q
-                INNER JOIN subjects ON q.subject_id = subjects.id
-                SET q.grade_id = subjects.grade_id
-                WHERE q.subject_id IS NOT NULL
-                AND q.grade_id IS NULL
-                AND subjects.grade_id IS NOT NULL
-            ");
+                // Strategy 2: Fill grade_id from subject for questions that have a subject_id but no grade_id
+                DB::statement("
+                    UPDATE questions q
+                    INNER JOIN subjects ON q.subject_id = subjects.id
+                    SET q.grade_id = subjects.grade_id
+                    WHERE q.subject_id IS NOT NULL
+                    AND q.grade_id IS NULL
+                    AND subjects.grade_id IS NOT NULL
+                ");
 
-            // Strategy 3: Fill grade_id from topic's subject for questions that have a topic_id but no grade_id
-            DB::statement("
-                UPDATE questions q
-                INNER JOIN topics ON q.topic_id = topics.id
-                INNER JOIN subjects ON topics.subject_id = subjects.id
-                SET q.grade_id = subjects.grade_id
-                WHERE q.topic_id IS NOT NULL
-                AND q.grade_id IS NULL
-                AND subjects.grade_id IS NOT NULL
-            ");
+                // Strategy 3: Fill grade_id from topic's subject for questions that have a topic_id but no grade_id
+                DB::statement("
+                    UPDATE questions q
+                    INNER JOIN topics ON q.topic_id = topics.id
+                    INNER JOIN subjects ON topics.subject_id = subjects.id
+                    SET q.grade_id = subjects.grade_id
+                    WHERE q.topic_id IS NOT NULL
+                    AND q.grade_id IS NULL
+                    AND subjects.grade_id IS NOT NULL
+                ");
 
-            // Strategy 4: Fill level_id from grade for questions that have a grade_id but no level_id
-            DB::statement("
-                UPDATE questions q
-                INNER JOIN grades ON q.grade_id = grades.id
-                SET q.level_id = grades.level_id
-                WHERE q.grade_id IS NOT NULL
-                AND q.level_id IS NULL
-                AND grades.level_id IS NOT NULL
-            ");
+                // Strategy 4: Fill level_id from grade for questions that have a grade_id but no level_id
+                DB::statement("
+                    UPDATE questions q
+                    INNER JOIN grades ON q.grade_id = grades.id
+                    SET q.level_id = grades.level_id
+                    WHERE q.grade_id IS NOT NULL
+                    AND q.level_id IS NULL
+                    AND grades.level_id IS NOT NULL
+                ");
+            }
         });
 
         // Log summary of changes
