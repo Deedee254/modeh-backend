@@ -23,11 +23,12 @@ class UploadController extends Controller
     {
         $type = $request->get('type') ?: 'uploads';
 
-        // Set validation rules by declared type
+        // Security: Enforce strict mime type restrictions on all upload types to prevent
+        // unrestricted file upload vulnerabilities, Stored XSS via HTML/SVG files, or code execution.
         $rules = ['file' => 'required|file', 'type' => 'nullable|string'];
         switch (strtolower($type)) {
             case 'image':
-                $rules['file'] = 'required|file|image|mimes:jpeg,png,jpg,gif|max:5120'; // 5 MB
+                $rules['file'] = 'required|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120'; // 5 MB
                 break;
             case 'audio':
                 $rules['file'] = 'required|file|mimes:mp3,wav,ogg,m4a|max:15360'; // 15 MB
@@ -36,7 +37,8 @@ class UploadController extends Controller
                 $rules['file'] = 'required|file|mimes:mp4,webm,mov,ogg|max:51200'; // 50 MB
                 break;
             default:
-                $rules['file'] = 'required|file|max:10240'; // 10 MB default
+                // Restrict generic uploads to safe document/media formats only
+                $rules['file'] = 'required|file|mimes:jpeg,png,jpg,gif,webp,mp3,wav,ogg,m4a,mp4,webm,mov,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv|max:10240'; // 10 MB default
                 break;
         }
 
