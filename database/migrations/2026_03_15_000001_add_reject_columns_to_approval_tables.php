@@ -19,10 +19,10 @@ return new class extends Migration
         foreach ($tables as $table) {
             if (Schema::hasTable($table)) {
                 Schema::table($table, function (Blueprint $tableBlueprint) use ($table) {
-                    if (!Schema::hasColumn($table, 'reject_reason')) {
+                    if (! Schema::hasColumn($table, 'reject_reason')) {
                         $tableBlueprint->text('reject_reason')->nullable()->after('approval_requested_at')->comment('Optional admin-provided rejection reason');
                     }
-                    if (!Schema::hasColumn($table, 'rejected_at')) {
+                    if (! Schema::hasColumn($table, 'rejected_at')) {
                         $tableBlueprint->timestamp('rejected_at')->nullable()->after('reject_reason')->comment('When the resource was rejected');
                     }
                 });

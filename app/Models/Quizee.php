@@ -2,14 +2,13 @@
 
 namespace App\Models;
 
+use App\Relations\ArrayRelation;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Institution;
-use App\Relations\ArrayRelation;
 
 /**
  * Quizee model - represents quiz taker profile
- * 
+ *
  * @property int $id
  * @property int $user_id
  * @property string|null $first_name
@@ -117,8 +116,13 @@ class Quizee extends Model
      */
     public function getAvatarAttribute()
     {
-        if (!empty($this->profile)) return $this->profile;
-        if ($this->relationLoaded('user') && $this->user && !empty($this->user->avatar)) return $this->user->avatar;
+        if (! empty($this->profile)) {
+            return $this->profile;
+        }
+        if ($this->relationLoaded('user') && $this->user && ! empty($this->user->avatar)) {
+            return $this->user->avatar;
+        }
+
         return null;
     }
 
@@ -148,7 +152,7 @@ class Quizee extends Model
 
     public function parents()
     {
-        return $this->belongsToMany(Parent::class, 'parent_student')
+        return $this->belongsToMany(parent::class, 'parent_student')
             ->withPivot('student_invitation_id', 'package_assignment', 'connected_at')
             ->withTimestamps();
     }

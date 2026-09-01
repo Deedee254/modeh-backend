@@ -11,7 +11,7 @@ class SubscriptionApiController extends Controller
     {
         return response()->json([
             'ok' => false,
-            'message' => 'Direct personal subscription creation is deprecated. Use institution package purchase flow.'
+            'message' => 'Direct personal subscription creation is deprecated. Use institution package purchase flow.',
         ], 410);
     }
 }

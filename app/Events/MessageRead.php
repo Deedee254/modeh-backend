@@ -15,6 +15,7 @@ class MessageRead implements ShouldBroadcast
     public $afterCommit = true;
 
     public $senderId;
+
     public $recipientId;
 
     public function __construct($senderId, $recipientId)
@@ -34,7 +35,7 @@ class MessageRead implements ShouldBroadcast
     public function broadcastOn()
     {
         // Broadcast to the sender's private channel so they see ticks change
-        return new PrivateChannel('App.Models.User.' . $this->senderId);
+        return new PrivateChannel('App.Models.User.'.$this->senderId);
     }
 
     public function broadcastAs()

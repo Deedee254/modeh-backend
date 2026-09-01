@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\TournamentResource\RelationManagers;
 
+use Filament\Actions\DetachAction;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Actions\DetachAction;
 
 class QuestionsRelationManager extends RelationManager
 {
@@ -44,8 +44,8 @@ class QuestionsRelationManager extends RelationManager
         $tournament = $this->getOwnerRecord();
         $recommendations = $tournament->getQuestionRecommendations();
         $participantsRec = $tournament->getMaxParticipantsRecommendation();
-        
-        $statusIcon = match($recommendations['status']) {
+
+        $statusIcon = match ($recommendations['status']) {
             'excellent' => '✅',
             'good' => 'ℹ️',
             default => '⚠️'
@@ -54,4 +54,3 @@ class QuestionsRelationManager extends RelationManager
         return "Tournament Questions {$statusIcon} ({$recommendations['current']}/{$recommendations['optimum']} | Min: {$recommendations['minimum']} | Participants: {$participantsRec['recommended_min_max_participants']}-{$participantsRec['recommended_max_max_participants']})";
     }
 }
-

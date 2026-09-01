@@ -3,11 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Institution;
 use App\Models\InstitutionApprovalRequest;
 use App\Models\InstitutionMember;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
 
 class InstitutionController extends Controller
 {
@@ -17,7 +16,7 @@ class InstitutionController extends Controller
 
         $query = Institution::query();
         if ($request->filled('name')) {
-            $query->where('name', 'like', '%' . $request->query('name') . '%');
+            $query->where('name', 'like', '%'.$request->query('name').'%');
         }
 
         $institutions = $query->with('children', 'users')
@@ -47,15 +46,17 @@ class InstitutionController extends Controller
 
         // Resolve parent if provided (accept id or slug)
         $parentId = null;
-        if (!empty($data['parent'])) {
+        if (! empty($data['parent'])) {
             $p = $data['parent'];
             $q = Institution::query();
             if (ctype_digit(strval($p))) {
-                $q->orWhere('id', (int)$p);
+                $q->orWhere('id', (int) $p);
             }
             $q->orWhere('slug', $p);
             $parent = $q->first();
-            if ($parent) $parentId = $parent->id;
+            if ($parent) {
+                $parentId = $parent->id;
+            }
         }
 
         if (empty($data['slug'])) {
@@ -63,7 +64,7 @@ class InstitutionController extends Controller
             $originalSlug = $slug;
             $count = 1;
             while (Institution::where('slug', $slug)->exists()) {
-                $slug = $originalSlug . '-' . $count++;
+                $slug = $originalSlug.'-'.$count++;
             }
             $data['slug'] = $slug;
         }
@@ -82,14 +83,14 @@ class InstitutionController extends Controller
                 'invited_by' => null,
             ]);
         }
-        
+
         // Invalidate cache since institutions list has changed
         try {
             \App\Services\SessionUserCacheService::invalidateSessionCache($user->id, $request);
             \Illuminate\Support\Facades\Cache::forget("user_me_{$user->id}");
             $user->touch();
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Failed to invalidate user cache on institution creation: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::warning('Failed to invalidate user cache on institution creation: '.$e->getMessage());
         }
 
         return response()->json($institution, 201);
@@ -98,6 +99,7 @@ class InstitutionController extends Controller
     public function show(Institution $institution)
     {
         $institution->load('users', 'children');
+
         return response()->json($institution);
     }
 
@@ -106,7 +108,7 @@ class InstitutionController extends Controller
         // Only institution managers can update
         $user = $request->user();
         $isManager = $institution->users()->where('user_id', $user->id)->where('institution_user.role', 'institution-manager')->exists();
-        if (!$isManager && !($user && $user->isAdmin())) {
+        if (! $isManager && ! ($user && $user->isAdmin())) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -172,7 +174,7 @@ class InstitutionController extends Controller
         try {
             $institution = Institution::find($id);
 
-            if (!$institution) {
+            if (! $institution) {
                 return response()->json([
                     'ok' => false,
                     'message' => 'Institution not found',
@@ -271,7 +273,7 @@ class InstitutionController extends Controller
         try {
             $approvalRequest = InstitutionApprovalRequest::find($id);
 
-            if (!$approvalRequest) {
+            if (! $approvalRequest) {
                 return response()->json([
                     'ok' => false,
                     'message' => 'Request not found',
@@ -282,7 +284,7 @@ class InstitutionController extends Controller
             if ($approvalRequest->status !== 'pending') {
                 return response()->json([
                     'ok' => false,
-                    'message' => 'Request has already been ' . $approvalRequest->status,
+                    'message' => 'Request has already been '.$approvalRequest->status,
                 ], 422);
             }
 
@@ -318,14 +320,14 @@ class InstitutionController extends Controller
             );
 
             // Also attach via the users relation since that's how some queries work
-            if (!$institution->users()->where('users.id', $approvalRequest->user_id)->exists()) {
+            if (! $institution->users()->where('users.id', $approvalRequest->user_id)->exists()) {
                 $institution->users()->attach($approvalRequest->user_id, [
                     'role' => $role,
                     'status' => 'active',
                 ]);
             } else {
                 $institution->users()->updateExistingPivot($approvalRequest->user_id, [
-                    'role' => $role
+                    'role' => $role,
                 ]);
             }
 
@@ -365,7 +367,7 @@ class InstitutionController extends Controller
 
             $approvalRequest = InstitutionApprovalRequest::find($id);
 
-            if (!$approvalRequest) {
+            if (! $approvalRequest) {
                 return response()->json([
                     'ok' => false,
                     'message' => 'Request not found',
@@ -376,7 +378,7 @@ class InstitutionController extends Controller
             if ($approvalRequest->status !== 'pending') {
                 return response()->json([
                     'ok' => false,
-                    'message' => 'Request has already been ' . $approvalRequest->status,
+                    'message' => 'Request has already been '.$approvalRequest->status,
                 ], 422);
             }
 
@@ -437,7 +439,7 @@ class InstitutionController extends Controller
         // Only institution managers or admin can delete
         $user = $request->user();
         $isManager = $institution->users()->where('user_id', $user->id)->where('institution_user.role', 'institution-manager')->exists();
-        if (!$isManager && !($user && $user->isAdmin())) {
+        if (! $isManager && ! ($user && $user->isAdmin())) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -449,7 +451,7 @@ class InstitutionController extends Controller
             \Illuminate\Support\Facades\Cache::forget("user_me_{$user->id}");
             $user->touch();
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Failed to invalidate user cache on institution deletion: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::warning('Failed to invalidate user cache on institution deletion: '.$e->getMessage());
         }
 
         return response()->json(['ok' => true, 'message' => 'Institution deleted successfully']);

@@ -9,7 +9,7 @@ return new class extends Migration
     public function up()
     {
         Schema::table('subjects', function (Blueprint $table) {
-            if (!Schema::hasColumn('subjects', 'is_active')) {
+            if (! Schema::hasColumn('subjects', 'is_active')) {
                 $table->boolean('is_active')->default(true)->after('auto_approve');
             }
         });

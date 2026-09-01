@@ -26,7 +26,6 @@ class TopicResource extends JsonResource
     /**
      * Transform the resource into an array.
      *
-     * @param Request $request
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
@@ -60,7 +59,7 @@ class TopicResource extends JsonResource
         if ($this->image) {
             return Storage::url($this->image);
         }
-        
+
         return $this->quizzes_cover_image ?? null;
     }
 }

@@ -1,11 +1,10 @@
 <?php
 
+use App\Models\Grade;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
-use App\Services\SlugService;
-use App\Models\Grade;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -15,7 +14,7 @@ return new class extends Migration
         Schema::table('grades', function (Blueprint $table) {
             // Add the column if it doesn't exist. On some DB drivers change() or addColumn checks
             // may fail if column already present; this migration is intended to run once.
-            if (!Schema::hasColumn('grades', 'slug')) {
+            if (! Schema::hasColumn('grades', 'slug')) {
                 $table->string('slug', 191)->nullable();
             }
         });
@@ -34,7 +33,7 @@ return new class extends Migration
 
                 // Ensure uniqueness using DB queries
                 while (DB::table('grades')->where('slug', $slug)->where('id', '!=', $grade->id)->exists()) {
-                    $slug = $baseSlug . '-' . $count;
+                    $slug = $baseSlug.'-'.$count;
                     $count++;
                 }
 

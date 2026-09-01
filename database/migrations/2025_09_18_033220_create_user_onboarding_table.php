@@ -22,7 +22,7 @@ return new class extends Migration
             $table->json('completed_steps')->nullable();
             $table->timestamp('last_step_completed_at')->nullable();
             $table->timestamps();
-            
+
             $table->index(['user_id', 'profile_completed']);
         });
     }

@@ -4,24 +4,22 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\QuizeeLevelResource\Pages;
 use App\Models\QuizeeLevel;
-use Filament\Forms;
-use Filament\Schemas\Schema;
-use Filament\Tables\Table;
-use Filament\Resources\Resource;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
-use Filament\Tables\Columns\TextColumn;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\ColorColumn;
-use Illuminate\Database\Eloquent\Builder;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class QuizeeLevelResource extends Resource
 {
     protected static ?string $model = QuizeeLevel::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-chart-bar';
-    
+
     protected static \UnitEnum|string|null $navigationGroup = 'Gamification';
 
     protected static ?string $navigationLabel = 'Quizee Levels';
@@ -54,7 +52,7 @@ class QuizeeLevelResource extends Resource
                         ->numeric()
                         ->minValue(0)
                         ->helperText('Order in which levels appear'),
-                ])
+                ]),
         ]);
     }
 
@@ -87,14 +85,14 @@ class QuizeeLevelResource extends Resource
                 \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
-    
+
     public static function getRelations(): array
     {
         return [
             //
         ];
     }
-    
+
     public static function getPages(): array
     {
         return [
@@ -102,5 +100,5 @@ class QuizeeLevelResource extends Resource
             'create' => Pages\CreateQuizeeLevel::route('/create'),
             'edit' => Pages\EditQuizeeLevel::route('/{record}/edit'),
         ];
-    }    
+    }
 }

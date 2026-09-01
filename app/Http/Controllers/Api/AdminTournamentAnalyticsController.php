@@ -14,12 +14,15 @@ class AdminTournamentAnalyticsController extends Controller
         if (\Illuminate\Support\Facades\Gate::allows('viewFilament')) {
             return null;
         }
+
         return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
     }
 
     public function analytics(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -28,9 +31,11 @@ class AdminTournamentAnalyticsController extends Controller
 
         $to = isset($validated['to']) ? Carbon::parse($validated['to'])->toDateString() : now()->toDateString();
         $from = isset($validated['from']) ? Carbon::parse($validated['from'])->toDateString() : Carbon::parse($to)->subDays(29)->toDateString();
-        if ($from > $to) [$from, $to] = [$to, $from];
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        if ($from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $totalTournaments = (int) DB::table('tournaments')->count();
         $createdInRange = (int) DB::table('tournaments')->whereBetween('created_at', [$fromTs, $toTs])->count();
@@ -63,7 +68,9 @@ class AdminTournamentAnalyticsController extends Controller
         $fromDt = Carbon::parse($from);
         $toDt = Carbon::parse($to);
         $dates = [];
-        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) $dates[] = $d->toDateString();
+        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) {
+            $dates[] = $d->toDateString();
+        }
 
         $tRows = DB::table('tournaments')
             ->whereBetween('created_at', [$fromTs, $toTs])
@@ -72,7 +79,9 @@ class AdminTournamentAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $tByDate = [];
-        foreach ($tRows as $r) $tByDate[$r->date] = (int) $r->value;
+        foreach ($tRows as $r) {
+            $tByDate[$r->date] = (int) $r->value;
+        }
 
         $pRows = DB::table('tournament_participants')
             ->whereBetween('created_at', [$fromTs, $toTs])
@@ -81,7 +90,9 @@ class AdminTournamentAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $pByDate = [];
-        foreach ($pRows as $r) $pByDate[$r->date] = (int) $r->value;
+        foreach ($pRows as $r) {
+            $pByDate[$r->date] = (int) $r->value;
+        }
 
         $bRows = DB::table('tournament_battles')
             ->whereBetween('created_at', [$fromTs, $toTs])
@@ -90,7 +101,9 @@ class AdminTournamentAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $bByDate = [];
-        foreach ($bRows as $r) $bByDate[$r->date] = (int) $r->value;
+        foreach ($bRows as $r) {
+            $bByDate[$r->date] = (int) $r->value;
+        }
 
         $series = [
             'tournaments_created' => [],
@@ -130,7 +143,7 @@ class AdminTournamentAnalyticsController extends Controller
             ->orderByDesc('tournaments')
             ->limit(8)
             ->get()
-            ->map(fn($r) => ['id' => (int) $r->id, 'name' => $r->name, 'tournaments' => (int) $r->tournaments])
+            ->map(fn ($r) => ['id' => (int) $r->id, 'name' => $r->name, 'tournaments' => (int) $r->tournaments])
             ->values();
 
         return response()->json([
@@ -160,7 +173,9 @@ class AdminTournamentAnalyticsController extends Controller
 
     public function insights(Request $request, $id)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -169,9 +184,11 @@ class AdminTournamentAnalyticsController extends Controller
 
         $to = isset($validated['to']) ? Carbon::parse($validated['to'])->toDateString() : now()->toDateString();
         $from = isset($validated['from']) ? Carbon::parse($validated['from'])->toDateString() : Carbon::parse($to)->subDays(29)->toDateString();
-        if ($from > $to) [$from, $to] = [$to, $from];
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        if ($from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $t = DB::table('tournaments as t')
             ->leftJoin('subjects as s', 's.id', '=', 't.subject_id')
@@ -204,7 +221,9 @@ class AdminTournamentAnalyticsController extends Controller
                 DB::raw('COALESCE(w.avatar_url, w.social_avatar) as winner_avatar'),
             ]);
 
-        if (!$t) return response()->json(['ok' => false, 'message' => 'Tournament not found'], 404);
+        if (! $t) {
+            return response()->json(['ok' => false, 'message' => 'Tournament not found'], 404);
+        }
 
         $participantsQ = DB::table('tournament_participants as p')
             ->where('p.tournament_id', (int) $id);
@@ -230,7 +249,9 @@ class AdminTournamentAnalyticsController extends Controller
         $fromDt = Carbon::parse($from);
         $toDt = Carbon::parse($to);
         $dates = [];
-        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) $dates[] = $d->toDateString();
+        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) {
+            $dates[] = $d->toDateString();
+        }
 
         $regRows = (clone $participantsInRangeQ)
             ->selectRaw('DATE(p.created_at) as date, COUNT(*) as value')
@@ -238,7 +259,9 @@ class AdminTournamentAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $regByDate = [];
-        foreach ($regRows as $r) $regByDate[$r->date] = (int) ($r->value ?? 0);
+        foreach ($regRows as $r) {
+            $regByDate[$r->date] = (int) ($r->value ?? 0);
+        }
 
         $compRows = (clone $participantsInRangeQ)
             ->whereNotNull('p.completed_at')
@@ -247,7 +270,9 @@ class AdminTournamentAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $compByDate = [];
-        foreach ($compRows as $r) $compByDate[$r->date] = (int) ($r->value ?? 0);
+        foreach ($compRows as $r) {
+            $compByDate[$r->date] = (int) ($r->value ?? 0);
+        }
 
         $battleRows = (clone $battlesQ)
             ->whereBetween('b.created_at', [$fromTs, $toTs])
@@ -256,7 +281,9 @@ class AdminTournamentAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $battleByDate = [];
-        foreach ($battleRows as $r) $battleByDate[$r->date] = (int) ($r->value ?? 0);
+        foreach ($battleRows as $r) {
+            $battleByDate[$r->date] = (int) ($r->value ?? 0);
+        }
 
         $series = [
             'registrations' => [],

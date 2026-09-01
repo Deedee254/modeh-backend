@@ -2,14 +2,15 @@
 
 namespace App\Console\Commands;
 
+use App\Models\ChatMetricsSetting;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
-use App\Models\ChatMetricsSetting;
 
 class PruneChatMetricBuckets extends Command
 {
     protected $signature = 'metrics:prune-buckets {--days=30 : Number of days to retain}';
+
     protected $description = 'Prune chat_metric_buckets older than the given number of days';
 
     public function handle()

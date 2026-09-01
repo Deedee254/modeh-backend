@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Package Model
- * 
+ *
  * Represents subscription packages available for purchase
- * 
+ *
  * @property int $id
  * @property string $title
  * @property string $description
@@ -33,7 +33,8 @@ use Illuminate\Database\Eloquent\Model;
 class Package extends Model
 {
     use HasFactory;
-    protected $fillable = ['title','description','short_description','slug','price','currency','features','is_active','duration_days','seats','cover_image','is_default','audience'];
+
+    protected $fillable = ['title', 'description', 'short_description', 'slug', 'price', 'currency', 'features', 'is_active', 'duration_days', 'seats', 'cover_image', 'is_default', 'audience'];
 
     protected $casts = [
         'features' => 'array',
@@ -77,13 +78,19 @@ class Package extends Model
     public function getPriceDisplayAttribute()
     {
         // Example price display: KES 300.00 or Free
-    if (is_null($this->price) || $this->price == 0) return 'Free';
-    return ($this->currency ? $this->currency . ' ' : '') . number_format((float)$this->price, 2);
+        if (is_null($this->price) || $this->price == 0) {
+            return 'Free';
+        }
+
+        return ($this->currency ? $this->currency.' ' : '').number_format((float) $this->price, 2);
     }
 
     public function getMoreLinkAttribute()
     {
-        if ($this->slug) return '/packages/' . $this->slug;
+        if ($this->slug) {
+            return '/packages/'.$this->slug;
+        }
+
         return null;
     }
 }

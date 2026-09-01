@@ -21,16 +21,16 @@ class MpesaController extends Controller
     /**
      * Reconcile a pending M-PESA transaction by querying Daraja for current status.
      * Called manually by user/admin or by background job for retry.
-     * 
+     *
      * POST /api/mpesa/reconcile
      * Body: { "checkout_request_id": "...", "source": "user|admin|worker" }
-     * 
+     *
      * Returns normalized transaction state and processes idempotently.
      */
     public function reconcile(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
 
@@ -53,7 +53,7 @@ class MpesaController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
-        if (!$transaction) {
+        if (! $transaction) {
             return response()->json([
                 'ok' => false,
                 'message' => 'Transaction not found',
@@ -93,7 +93,7 @@ class MpesaController extends Controller
             'receipt' => $queryResult['mpesa_receipt'] ?? null,
         ]);
 
-        if (!$queryResult['ok']) {
+        if (! $queryResult['ok']) {
             Log::warning('[MPESA] Reconcile query failed', [
                 'trace_id' => $traceId,
                 'user_id' => $user->id,
@@ -169,7 +169,7 @@ class MpesaController extends Controller
 
             if ($newStatus === 'success') {
                 // Idempotency: check if receipt already processed
-                $existingReceipt = !empty($queryResult['mpesa_receipt'])
+                $existingReceipt = ! empty($queryResult['mpesa_receipt'])
                     ? MpesaTransaction::where('mpesa_receipt', $queryResult['mpesa_receipt'])
                         ->where('id', '!=', $transaction->id)
                         ->where('status', 'success')
@@ -242,7 +242,7 @@ class MpesaController extends Controller
 
             return response()->json([
                 'ok' => false,
-                'message' => 'Reconciliation failed: ' . $e->getMessage(),
+                'message' => 'Reconciliation failed: '.$e->getMessage(),
             ], 500);
         }
 
@@ -266,7 +266,7 @@ class MpesaController extends Controller
      */
     protected function processBillable(MpesaTransaction $transaction): void
     {
-        if (!$transaction->billable) {
+        if (! $transaction->billable) {
             return;
         }
 
@@ -283,8 +283,7 @@ class MpesaController extends Controller
 
     /**
      * Format transaction for API response
-     * 
-     * @param  MpesaTransaction $transaction
+     *
      * @property int $id
      * @property string $checkout_request_id
      * @property string $merchant_request_id
@@ -320,12 +319,12 @@ class MpesaController extends Controller
     protected function extractTraceId(MpesaTransaction $transaction): ?string
     {
         $raw = $transaction->raw_response;
-        if (is_array($raw) && !empty($raw['trace_id'])) {
+        if (is_array($raw) && ! empty($raw['trace_id'])) {
             return (string) $raw['trace_id'];
         }
 
         $billable = $transaction->billable;
-        if ($billable && isset($billable->gateway_meta) && is_array($billable->gateway_meta) && !empty($billable->gateway_meta['trace_id'])) {
+        if ($billable && isset($billable->gateway_meta) && is_array($billable->gateway_meta) && ! empty($billable->gateway_meta['trace_id'])) {
             return (string) $billable->gateway_meta['trace_id'];
         }
 

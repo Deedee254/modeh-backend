@@ -3,18 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Models\Package;
 use App\Models\ParentUser;
 use App\Models\QuizeeInvitation;
-use App\Models\Quizee;
 use App\Models\Subscription;
-use App\Models\Package;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Log;
 
 class ParentController extends Controller
 {
@@ -24,11 +23,12 @@ class ParentController extends Controller
         if ($existingUser) {
             // Revoke old tokens and create a fresh one for the login attempt
             $existingUser->tokens()->delete();
+
             return response()->json([
                 'message' => 'User already exists',
                 'user' => $existingUser,
                 'isNewUser' => false,
-                'token' => $existingUser->createToken('auth')->plainTextToken
+                'token' => $existingUser->createToken('auth')->plainTextToken,
             ], 409);
         }
 
@@ -65,7 +65,7 @@ class ParentController extends Controller
             // This requires the 'web' middleware on the registration route
             // Regenerate session to prevent session fixation attacks
             $request->session()->regenerate();
-            
+
             // Authenticate the user (establishes session)
             Auth::login($user, remember: false);
 
@@ -88,10 +88,11 @@ class ParentController extends Controller
                 'user' => $user,
                 'parent' => $parentProfile,
                 'message' => 'Registration successful. You are now logged in.',
-                'token' => $token
+                'token' => $token,
             ], 201);
         } catch (\Exception $e) {
             Log::error('Parent registration failed', ['error' => $e->getMessage()]);
+
             return response()->json(['message' => 'Registration failed'], 500);
         }
     }
@@ -99,12 +100,12 @@ class ParentController extends Controller
     public function dashboard()
     {
         $user = Auth::user();
-        if (!$user || $user->role !== 'parent') {
+        if (! $user || $user->role !== 'parent') {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $parent = ParentUser::where('user_id', $user->id)->first();
-        if (!$parent) {
+        if (! $parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
 
@@ -125,12 +126,12 @@ class ParentController extends Controller
     public function inviteQuizee(Request $request)
     {
         $user = Auth::user();
-        if (!$user || $user->role !== 'parent') {
+        if (! $user || $user->role !== 'parent') {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $parent = ParentUser::where('user_id', $user->id)->first();
-        if (!$parent) {
+        if (! $parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
 
@@ -149,7 +150,7 @@ class ParentController extends Controller
                 ->where('status', 'pending')
                 ->first();
 
-            if ($existingInvitation && !$existingInvitation->isExpired()) {
+            if ($existingInvitation && ! $existingInvitation->isExpired()) {
                 return response()->json([
                     'message' => 'Invitation already sent to this email',
                     'invitation' => $existingInvitation,
@@ -171,6 +172,7 @@ class ParentController extends Controller
             ], 201);
         } catch (\Exception $e) {
             Log::error('Quizee invitation failed', ['error' => $e->getMessage()]);
+
             return response()->json(['message' => 'Failed to send invitation'], 500);
         }
     }
@@ -178,12 +180,12 @@ class ParentController extends Controller
     public function getQuizees()
     {
         $user = Auth::user();
-        if (!$user || $user->role !== 'parent') {
+        if (! $user || $user->role !== 'parent') {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $parent = ParentUser::where('user_id', $user->id)->first();
-        if (!$parent) {
+        if (! $parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
 
@@ -211,17 +213,17 @@ class ParentController extends Controller
     public function getQuizeeAnalytics($quizeeId)
     {
         $user = Auth::user();
-        if (!$user || $user->role !== 'parent') {
+        if (! $user || $user->role !== 'parent') {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $parent = ParentUser::where('user_id', $user->id)->first();
-        if (!$parent) {
+        if (! $parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
 
         $quizee = $parent->quizees()->find($quizeeId);
-        if (!$quizee) {
+        if (! $quizee) {
             return response()->json(['message' => 'Quizee not found'], 404);
         }
 
@@ -252,25 +254,27 @@ class ParentController extends Controller
     public function removeQuizee($quizeeId)
     {
         $user = Auth::user();
-        if (!$user || $user->role !== 'parent') {
+        if (! $user || $user->role !== 'parent') {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $parent = ParentUser::where('user_id', $user->id)->first();
-        if (!$parent) {
+        if (! $parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
 
         $quizee = $parent->quizees()->find($quizeeId);
-        if (!$quizee) {
+        if (! $quizee) {
             return response()->json(['message' => 'Quizee not found'], 404);
         }
 
         try {
             $parent->quizees()->detach($quizeeId);
+
             return response()->json(['message' => 'Quizee removed successfully'], 200);
         } catch (\Exception $e) {
             Log::error('Failed to remove quizee', ['error' => $e->getMessage()]);
+
             return response()->json(['message' => 'Failed to remove quizee'], 500);
         }
     }
@@ -278,17 +282,17 @@ class ParentController extends Controller
     public function manageSubscription(Request $request, $quizeeId)
     {
         $user = Auth::user();
-        if (!$user || $user->role !== 'parent') {
+        if (! $user || $user->role !== 'parent') {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $parent = ParentUser::where('user_id', $user->id)->first();
-        if (!$parent) {
+        if (! $parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
 
         $quizee = $parent->quizees()->find($quizeeId);
-        if (!$quizee) {
+        if (! $quizee) {
             return response()->json(['message' => 'Quizee not found'], 404);
         }
 
@@ -322,6 +326,7 @@ class ParentController extends Controller
             ], 201);
         } catch (\Exception $e) {
             Log::error('Failed to create subscription', ['error' => $e->getMessage()]);
+
             return response()->json(['message' => 'Failed to create subscription'], 500);
         }
     }
@@ -329,12 +334,12 @@ class ParentController extends Controller
     public function getSubscriptions()
     {
         $user = Auth::user();
-        if (!$user || $user->role !== 'parent') {
+        if (! $user || $user->role !== 'parent') {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $parent = ParentUser::where('user_id', $user->id)->first();
-        if (!$parent) {
+        if (! $parent) {
             return response()->json(['message' => 'Parent profile not found'], 404);
         }
 

@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use App\Events\TestEchoEvent;
 use App\Services\Websockets;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class EchoTestController extends Controller
 {
@@ -41,7 +41,7 @@ class EchoTestController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Failed to send test message: ' . $e->getMessage(),
+                'message' => 'Failed to send test message: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -56,7 +56,7 @@ class EchoTestController extends Controller
             'pusher' => [
                 'app_id' => config('broadcasting.connections.pusher.app_id'),
                 'key' => config('broadcasting.connections.pusher.key'),
-                'secret' => '***' . substr(config('broadcasting.connections.pusher.secret'), -4),
+                'secret' => '***'.substr(config('broadcasting.connections.pusher.secret'), -4),
                 'cluster' => config('broadcasting.connections.pusher.options.cluster'),
             ],
             'database' => [
@@ -109,7 +109,7 @@ class EchoTestController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Failed to send generic broadcast: ' . $e->getMessage(),
+                'message' => 'Failed to send generic broadcast: '.$e->getMessage(),
             ], 500);
         }
     }

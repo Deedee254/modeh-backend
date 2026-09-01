@@ -3,18 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Invoice;
+use App\Models\MpesaTransaction;
+use App\Models\PaymentSetting;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\WithdrawalRequest;
-use App\Models\PaymentSetting;
-use App\Models\MpesaTransaction;
-use App\Models\Invoice;
-use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 class AdminController extends Controller
 {
@@ -46,7 +45,9 @@ class AdminController extends Controller
      */
     public function metrics()
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         // Get date range (last 30 days)
         $thirtyDaysAgo = now()->subDays(30);
@@ -91,7 +92,7 @@ class AdminController extends Controller
         $revenueShare = (float) PaymentSetting::platformRevenueSharePercent();
 
         // Dashboards extra widgets data
-        
+
         // 1. Latest Quizzes
         $latestQuizzes = \App\Models\QuizAttempt::with(['quiz:id,title', 'user:id,name,avatar_url'])
             ->orderBy('created_at', 'desc')
@@ -117,7 +118,7 @@ class AdminController extends Controller
 
         // 3. Top Quiz Masters (by revenue)
         $txStats = Transaction::query()
-            ->selectRaw("`quiz_master_id` as quiz_master_id")
+            ->selectRaw('`quiz_master_id` as quiz_master_id')
             ->selectRaw("SUM(CASE WHEN status = 'completed' THEN `quiz-master_share` ELSE 0 END) as total_earnings")
             ->groupBy(DB::raw('`quiz_master_id`'));
 
@@ -186,7 +187,9 @@ class AdminController extends Controller
      */
     public function transactions(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $query = Transaction::query()->with([
             'user:id,name,email,phone',
@@ -195,18 +198,18 @@ class AdminController extends Controller
 
         // Apply filters
         if ($request->filled('from')) {
-            $query->where('created_at', '>=', $request->input('from') . ' 00:00:00');
+            $query->where('created_at', '>=', $request->input('from').' 00:00:00');
         }
 
         if ($request->filled('to')) {
-            $query->where('created_at', '<=', $request->input('to') . ' 23:59:59');
+            $query->where('created_at', '<=', $request->input('to').' 23:59:59');
         }
 
         if ($request->filled('type')) {
             $type = $request->input('type');
             $query->whereJsonContains('meta->item_type', $type);
         }
-        
+
         if ($request->filled('tx_type')) {
             $query->where('type', $request->input('tx_type'));
         }
@@ -275,7 +278,9 @@ class AdminController extends Controller
      */
     public function users(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $query = User::query();
 
@@ -325,10 +330,12 @@ class AdminController extends Controller
      */
     public function quizMasters(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $stats = Transaction::query()
-            ->selectRaw("`quiz_master_id` as quiz_master_id")
+            ->selectRaw('`quiz_master_id` as quiz_master_id')
             ->selectRaw("SUM(CASE WHEN status = 'completed' THEN `quiz-master_share` ELSE 0 END) as total_earnings")
             ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as transaction_count")
             ->groupBy(DB::raw('`quiz_master_id`'));
@@ -403,7 +410,9 @@ class AdminController extends Controller
      */
     public function withdrawals(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $query = DB::table('withdrawal_requests')
             ->join('users', 'withdrawal_requests.quiz_master_id', '=', 'users.id')
@@ -443,7 +452,7 @@ class AdminController extends Controller
     {
         /** @var \App\Models\User|null $user */
         $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
+        if (! $user || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -451,7 +460,7 @@ class AdminController extends Controller
             ->where('id', $withdrawalId)
             ->first();
 
-        if (!$withdrawal) {
+        if (! $withdrawal) {
             return response()->json(['ok' => false, 'message' => 'Withdrawal not found'], 404);
         }
 
@@ -475,7 +484,7 @@ class AdminController extends Controller
     {
         /** @var \App\Models\User|null $user */
         $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
+        if (! $user || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -487,7 +496,7 @@ class AdminController extends Controller
             ->where('id', $withdrawalId)
             ->first();
 
-        if (!$withdrawal) {
+        if (! $withdrawal) {
             return response()->json(['ok' => false, 'message' => 'Withdrawal not found'], 404);
         }
 
@@ -500,7 +509,7 @@ class AdminController extends Controller
                 // Refund the amount back to available balance (not lifetime_earned)
                 Wallet::where('user_id', $withdrawal->{'quiz_master_id'})
                     ->increment('available', $withdrawal->amount);
-                
+
                 // Update withdrawal status to rejected
                 DB::table('withdrawal_requests')
                     ->where('id', $withdrawalId)
@@ -511,21 +520,22 @@ class AdminController extends Controller
                         'updated_at' => now(),
                     ]);
             });
-            
-            Log::channel('payment')->info("[Withdrawal] Request REJECTED and REFUNDED", [
+
+            Log::channel('payment')->info('[Withdrawal] Request REJECTED and REFUNDED', [
                 'withdrawal_id' => $withdrawalId,
                 'quiz_master_id' => $withdrawal->{'quiz_master_id'},
                 'amount' => $withdrawal->amount,
                 'reason' => $request->input('reason'),
                 'admin_id' => $user->id,
             ]);
-            
+
             return response()->json(['ok' => true, 'message' => 'Withdrawal rejected and refunded']);
         } catch (\Throwable $e) {
             Log::error('[Withdrawal] Failed to reject and refund', [
                 'withdrawal_id' => $withdrawalId,
                 'error' => $e->getMessage(),
             ]);
+
             return response()->json(['ok' => false, 'message' => 'Failed to reject withdrawal'], 500);
         }
     }
@@ -538,7 +548,7 @@ class AdminController extends Controller
     {
         /** @var \App\Models\User|null $user */
         $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
+        if (! $user || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -548,7 +558,7 @@ class AdminController extends Controller
 
         $withdrawal = WithdrawalRequest::find($withdrawalId);
 
-        if (!$withdrawal) {
+        if (! $withdrawal) {
             return response()->json(['ok' => false, 'message' => 'Withdrawal not found'], 404);
         }
 
@@ -562,22 +572,22 @@ class AdminController extends Controller
                 'paid_at' => now(),
                 'processed_by_admin_id' => $user->id,
             ]);
-            
+
             // If meta exists, store the transaction_id like M-PESA ref
             if ($request->filled('transaction_id')) {
                 $meta = $withdrawal->meta ?? [];
                 $meta['payment_transaction_id'] = $request->input('transaction_id');
                 $withdrawal->update(['meta' => $meta]);
             }
-            
-            Log::channel('payment')->info("[Withdrawal] Marked as PAID", [
+
+            Log::channel('payment')->info('[Withdrawal] Marked as PAID', [
                 'withdrawal_id' => $withdrawalId,
                 'quiz_master_id' => $withdrawal->{'quiz_master_id'},
                 'amount' => $withdrawal->amount,
                 'external_tx_id' => $request->input('transaction_id'),
                 'admin_id' => $user->id,
             ]);
-            
+
             return response()->json([
                 'ok' => true,
                 'message' => 'Withdrawal marked as paid',
@@ -588,11 +598,10 @@ class AdminController extends Controller
                 'withdrawal_id' => $withdrawalId,
                 'error' => $e->getMessage(),
             ]);
+
             return response()->json(['ok' => false, 'message' => 'Failed to mark withdrawal as paid'], 500);
         }
     }
-
-
 
     /**
      * Get/update global settings for approvals, payment revenue share, and quiz prices
@@ -604,7 +613,7 @@ class AdminController extends Controller
         if ($request->method() !== 'GET') {
             /** @var \App\Models\User|null $user */
             $user = auth()->user() ?? auth('sanctum')->user();
-            if (!$user || !$user->is_admin) {
+            if (! $user || ! $user->is_admin) {
                 return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
             }
         }
@@ -615,9 +624,9 @@ class AdminController extends Controller
             $revenueShare = $mpesaSetting ? (float) $mpesaSetting->revenue_share : null;
 
             $siteSetting = \App\Models\SiteSetting::current();
-            $auto_approve_topics = $siteSetting ? (boolean) $siteSetting->auto_approve_topics : true;
-            $auto_approve_quizzes = $siteSetting ? (boolean) $siteSetting->auto_approve_quizzes : true;
-            $auto_approve_questions = $siteSetting ? (boolean) $siteSetting->auto_approve_questions : true;
+            $auto_approve_topics = $siteSetting ? (bool) $siteSetting->auto_approve_topics : true;
+            $auto_approve_quizzes = $siteSetting ? (bool) $siteSetting->auto_approve_quizzes : true;
+            $auto_approve_questions = $siteSetting ? (bool) $siteSetting->auto_approve_questions : true;
 
             $defaultQuizPrice = 0.0;
             $defaultBattlePrice = 0.0;
@@ -638,10 +647,10 @@ class AdminController extends Controller
                     'auto_approve_topics' => $auto_approve_topics,
                     'auto_approve_quizzes' => $auto_approve_quizzes,
                     'auto_approve_questions' => $auto_approve_questions,
-                    'mpesa_active' => $mpesaSetting ? (boolean) ($mpesaSetting->is_active ?? true) : true,
+                    'mpesa_active' => $mpesaSetting ? (bool) ($mpesaSetting->is_active ?? true) : true,
                     'default_quiz_price' => $defaultQuizPrice,
                     'default_battle_price' => $defaultBattlePrice,
-                    'default_quiz_time_limit' => (integer) config('features.default_quiz_time_limit', 30),
+                    'default_quiz_time_limit' => (int) config('features.default_quiz_time_limit', 30),
                 ],
             ]);
         }
@@ -672,10 +681,16 @@ class AdminController extends Controller
             }
 
             if (isset($validated['auto_approve_topics']) || isset($validated['auto_approve_quizzes']) || isset($validated['auto_approve_questions'])) {
-                $siteSetting = \App\Models\SiteSetting::current() ?: new \App\Models\SiteSetting();
-                if (isset($validated['auto_approve_topics'])) $siteSetting->auto_approve_topics = $validated['auto_approve_topics'];
-                if (isset($validated['auto_approve_quizzes'])) $siteSetting->auto_approve_quizzes = $validated['auto_approve_quizzes'];
-                if (isset($validated['auto_approve_questions'])) $siteSetting->auto_approve_questions = $validated['auto_approve_questions'];
+                $siteSetting = \App\Models\SiteSetting::current() ?: new \App\Models\SiteSetting;
+                if (isset($validated['auto_approve_topics'])) {
+                    $siteSetting->auto_approve_topics = $validated['auto_approve_topics'];
+                }
+                if (isset($validated['auto_approve_quizzes'])) {
+                    $siteSetting->auto_approve_quizzes = $validated['auto_approve_quizzes'];
+                }
+                if (isset($validated['auto_approve_questions'])) {
+                    $siteSetting->auto_approve_questions = $validated['auto_approve_questions'];
+                }
                 $siteSetting->save();
             }
 
@@ -714,11 +729,11 @@ class AdminController extends Controller
                 'message' => 'Settings updated successfully',
                 'settings' => [
                     'revenue_share' => (float) ($validated['revenue_share'] ?? ($mpesaForResponse?->revenue_share ?? 0)),
-                    'approvals_enabled' => (boolean) ($validated['approvals_enabled'] ?? true),
-                    'mpesa_active' => (boolean) ($validated['mpesa_active'] ?? true),
+                    'approvals_enabled' => (bool) ($validated['approvals_enabled'] ?? true),
+                    'mpesa_active' => (bool) ($validated['mpesa_active'] ?? true),
                     'default_quiz_price' => (float) ($validated['default_quiz_price'] ?? ($pricingSnapshot?->default_quiz_one_off_price ?? 0)),
                     'default_battle_price' => (float) ($validated['default_battle_price'] ?? ($pricingSnapshot?->default_battle_one_off_price ?? 0)),
-                    'default_quiz_time_limit' => (integer) ($validated['default_quiz_time_limit'] ?? 30),
+                    'default_quiz_time_limit' => (int) ($validated['default_quiz_time_limit'] ?? 30),
                 ],
             ]);
         }
@@ -729,10 +744,13 @@ class AdminController extends Controller
      */
     public function quizees(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         // Force role filter to quizee (the `users` endpoint already supports `role`)
         $request->merge(['role' => 'quizee']);
+
         return $this->users($request);
     }
 
@@ -741,7 +759,9 @@ class AdminController extends Controller
      */
     public function tournaments(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $query = \App\Models\Tournament::query();
 
@@ -752,7 +772,7 @@ class AdminController extends Controller
 
         // Search by name
         if ($request->filled('search')) {
-            $query->where('name', 'like', '%' . $request->input('search') . '%');
+            $query->where('name', 'like', '%'.$request->input('search').'%');
         }
 
         // Pagination
@@ -807,7 +827,9 @@ class AdminController extends Controller
      */
     public function tournamentParticipants(Request $request, int $tournamentId)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $query = \App\Models\TournamentParticipant::where('tournament_id', $tournamentId)
             ->with(['user', 'attempts'])
@@ -822,8 +844,8 @@ class AdminController extends Controller
         if ($request->filled('search')) {
             $searchTerm = $request->input('search');
             $query->whereHas('user', function ($q) use ($searchTerm) {
-                $q->where('name', 'like', '%' . $searchTerm . '%')
-                  ->orWhere('email', 'like', '%' . $searchTerm . '%');
+                $q->where('name', 'like', '%'.$searchTerm.'%')
+                    ->orWhere('email', 'like', '%'.$searchTerm.'%');
             });
         }
 
@@ -883,17 +905,19 @@ class AdminController extends Controller
      */
     public function mpesaTransactions(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $query = \App\Models\MpesaTransaction::query();
 
         // Apply filters
         if ($request->filled('from')) {
-            $query->where('created_at', '>=', $request->input('from') . ' 00:00:00');
+            $query->where('created_at', '>=', $request->input('from').' 00:00:00');
         }
 
         if ($request->filled('to')) {
-            $query->where('created_at', '<=', $request->input('to') . ' 23:59:59');
+            $query->where('created_at', '<=', $request->input('to').' 23:59:59');
         }
 
         if ($request->filled('status')) {
@@ -943,7 +967,7 @@ class AdminController extends Controller
                     'result_desc' => $tx->result_desc,
                     'transaction_date' => $tx->transaction_date,
                     'created_at' => $tx->created_at,
-                    'has_invoice' => $billableModel instanceof \App\Models\OneOffPurchase 
+                    'has_invoice' => $billableModel instanceof \App\Models\OneOffPurchase
                         ? \App\Models\Invoice::where('invoiceable_type', 'App\Models\OneOffPurchase')
                             ->where('invoiceable_id', $tx->billable_id)
                             ->exists()
@@ -965,24 +989,26 @@ class AdminController extends Controller
      */
     public function createMpesaInvoice(Request $request, int|string $transactionId)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         try {
             $transaction = MpesaTransaction::findOrFail($transactionId);
-            
+
             // Only create invoices for one-off purchases
             if ($transaction->billable_type !== 'App\Models\OneOffPurchase') {
                 return response()->json([
                     'ok' => false,
-                    'message' => 'Can only create invoices for one-off purchases'
+                    'message' => 'Can only create invoices for one-off purchases',
                 ], 400);
             }
 
             $purchase = $transaction->billable;
-            if (!$purchase) {
+            if (! $purchase) {
                 return response()->json([
                     'ok' => false,
-                    'message' => 'Associated purchase not found'
+                    'message' => 'Associated purchase not found',
                 ], 404);
             }
 
@@ -999,7 +1025,7 @@ class AdminController extends Controller
                         'id' => $existingInvoice->id,
                         'invoice_number' => $existingInvoice->invoice_number,
                         'download_url' => route('invoices.download', $existingInvoice->id),
-                    ]
+                    ],
                 ]);
             }
 
@@ -1009,15 +1035,15 @@ class AdminController extends Controller
                 'invoiceable_id' => $purchase->id,
                 'user_id' => $purchase->user_id,
                 'amount' => $transaction->amount,
-                'description' => ucfirst($purchase->item_type) . ' Unlock - ' . $purchase->item_name,
+                'description' => ucfirst($purchase->item_type).' Unlock - '.$purchase->item_name,
             ]);
 
             // Send notification email
             try {
                 $purchase->user->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
             } catch (\Throwable $e) {
-                Log::warning('Failed to send invoice notification for transaction ' . $transactionId, [
-                    'error' => $e->getMessage()
+                Log::warning('Failed to send invoice notification for transaction '.$transactionId, [
+                    'error' => $e->getMessage(),
                 ]);
             }
 
@@ -1028,7 +1054,7 @@ class AdminController extends Controller
                     'id' => $invoice->id,
                     'invoice_number' => $invoice->invoice_number,
                     'download_url' => route('invoices.download', $invoice->id),
-                ]
+                ],
             ]);
         } catch (\Illuminate\Database\QueryException $e) {
             if (strpos($e->getMessage(), 'UNIQUE constraint') !== false) {
@@ -1037,7 +1063,7 @@ class AdminController extends Controller
                     $invoice = Invoice::where('invoiceable_type', 'App\Models\OneOffPurchase')
                         ->where('invoiceable_id', $transactionId)
                         ->first();
-                    
+
                     if ($invoice) {
                         return response()->json([
                             'ok' => true,
@@ -1046,37 +1072,37 @@ class AdminController extends Controller
                                 'id' => $invoice->id,
                                 'invoice_number' => $invoice->invoice_number,
                                 'download_url' => route('invoices.download', $invoice->id),
-                            ]
+                            ],
                         ]);
                     }
                 } catch (\Throwable $_) {
                     // Continue to error response
                 }
-                
+
                 return response()->json([
                     'ok' => false,
-                    'message' => 'Invoice number conflict - unable to create'
+                    'message' => 'Invoice number conflict - unable to create',
                 ], 409);
             }
 
             Log::error('Failed to create invoice for M-Pesa transaction', [
                 'transaction_id' => $transactionId,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json([
                 'ok' => false,
-                'message' => 'Failed to create invoice'
+                'message' => 'Failed to create invoice',
             ], 500);
         } catch (\Throwable $e) {
             Log::error('Unexpected error creating M-Pesa invoice', [
                 'transaction_id' => $transactionId,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json([
                 'ok' => false,
-                'message' => 'An unexpected error occurred'
+                'message' => 'An unexpected error occurred',
             ], 500);
         }
     }
@@ -1086,7 +1112,9 @@ class AdminController extends Controller
      */
     public function getMpesaInvoice(Request $request, int|string $transactionId)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         try {
             $transaction = MpesaTransaction::findOrFail($transactionId);
@@ -1094,7 +1122,7 @@ class AdminController extends Controller
             if ($transaction->billable_type !== 'App\Models\OneOffPurchase') {
                 return response()->json([
                     'ok' => false,
-                    'message' => 'No invoice for this transaction type'
+                    'message' => 'No invoice for this transaction type',
                 ], 404);
             }
 
@@ -1102,10 +1130,10 @@ class AdminController extends Controller
                 ->where('invoiceable_id', $transaction->billable_id)
                 ->first();
 
-            if (!$invoice) {
+            if (! $invoice) {
                 return response()->json([
                     'ok' => false,
-                    'message' => 'Invoice not found'
+                    'message' => 'Invoice not found',
                 ], 404);
             }
 
@@ -1116,18 +1144,13 @@ class AdminController extends Controller
                     'id' => $invoice->id,
                     'invoice_number' => $invoice->invoice_number,
                     'download_url' => route('invoices.download', $invoice->id),
-                ]
+                ],
             ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Failed to retrieve invoice'
+                'message' => 'Failed to retrieve invoice',
             ], 500);
         }
     }
 }
-
-
-
-
-

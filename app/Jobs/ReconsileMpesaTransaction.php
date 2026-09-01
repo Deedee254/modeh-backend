@@ -17,6 +17,7 @@ class ReconsileMpesaTransaction implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected $transactionId;
+
     protected $mpesaService;
 
     public function __construct(int $transactionId)
@@ -31,8 +32,9 @@ class ReconsileMpesaTransaction implements ShouldQueue
     {
         $transaction = MpesaTransaction::find($this->transactionId);
 
-        if (!$transaction) {
+        if (! $transaction) {
             Log::warning('[MPESA Job] Transaction not found', ['transaction_id' => $this->transactionId]);
+
             return;
         }
 
@@ -42,6 +44,7 @@ class ReconsileMpesaTransaction implements ShouldQueue
                 'transaction_id' => $transaction->id,
                 'status' => $transaction->status,
             ]);
+
             return;
         }
 
@@ -49,18 +52,20 @@ class ReconsileMpesaTransaction implements ShouldQueue
         if ($transaction->retry_count >= 20) {
             Log::warning('[MPESA Job] Max retries exceeded, marking failed', ['transaction_id' => $transaction->id]);
             $transaction->markFailed(null, 'Max retries exceeded without resolution');
+
             return;
         }
 
         // Query Daraja
         $queryResult = $mpesaService->queryStkPush($transaction->checkout_request_id);
 
-        if (!$queryResult['ok']) {
+        if (! $queryResult['ok']) {
             Log::warning('[MPESA Job] Query failed, will retry', [
                 'transaction_id' => $transaction->id,
                 'error' => $queryResult['message'],
             ]);
             $transaction->scheduleRetry();
+
             return;
         }
 
@@ -78,14 +83,14 @@ class ReconsileMpesaTransaction implements ShouldQueue
 
             if ($newStatus === 'success') {
                 // Check for duplicate receipt
-                $existingReceipt = !empty($queryResult['mpesa_receipt'])
+                $existingReceipt = ! empty($queryResult['mpesa_receipt'])
                     ? MpesaTransaction::where('mpesa_receipt', $queryResult['mpesa_receipt'])
                         ->where('id', '!=', $transaction->id)
                         ->where('status', 'success')
                         ->exists()
                     : false;
 
-                if (!$existingReceipt) {
+                if (! $existingReceipt) {
                     $transaction->markSuccess(
                         $queryResult['mpesa_receipt'],
                         $queryResult['result_desc'],

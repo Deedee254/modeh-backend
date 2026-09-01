@@ -16,7 +16,7 @@ class ListTournaments extends ListRecords
             CreateAction::make(),
         ];
     }
-    
+
     protected function getDefaultTableSortColumn(): ?string
     {
         return 'created_at';

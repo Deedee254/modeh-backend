@@ -27,7 +27,7 @@ return new class extends Migration
             $table->integer('progress')->default(0);
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
-            
+
             $table->unique(['user_id', 'achievement_id']);
         });
     }

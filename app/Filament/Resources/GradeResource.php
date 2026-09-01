@@ -4,24 +4,24 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\GradeResource\Pages;
 use App\Models\Grade;
+use BackedEnum;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use BackedEnum;
 
 class GradeResource extends Resource
 {
     protected static ?string $model = Grade::class;
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-academic-cap';
+
     protected static ?int $navigationSort = 1;
 
     public static function getNavigationGroup(): ?string
     {
         return 'Content Management';
     }
-    
 
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
@@ -43,12 +43,11 @@ class GradeResource extends Resource
                         ->label('Type')
                         ->options([
                             'grade' => 'Grade',
-                            'course' => 'Course (Tertiary)'
+                            'course' => 'Course (Tertiary)',
                         ])
                         ->default('grade')
                         ->required(),
 
-                    
                     Forms\Components\TextInput::make('display_name')
                         ->required()
                         ->maxLength(255),
@@ -65,7 +64,7 @@ class GradeResource extends Resource
                         ->directory('grades')
                         ->columnSpanFull(),
                 ])
-                ->columns(2)
+                ->columns(2),
         ]);
     }
 
@@ -78,7 +77,7 @@ class GradeResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
-                    
+
                 Tables\Columns\TextColumn::make('display_name')
                     ->searchable()
                     ->sortable(),

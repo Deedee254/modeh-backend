@@ -18,8 +18,8 @@ class DailyChallengeBaker
         $date ??= now()->toDateString();
         $level ??= $grade->level;
 
-        if (!$level) {
-            throw new Exception("Grade must have an associated level");
+        if (! $level) {
+            throw new Exception('Grade must have an associated level');
         }
 
         $cache = DailyChallengeCache::where('level_id', $level->id)
@@ -40,8 +40,8 @@ class DailyChallengeBaker
 
         // Validate we have at least 5 questions
         if (count($questionIds) < 5) {
-            \Log::error("Cannot create daily challenge: only " . count($questionIds) . " questions available for grade {$grade->id} (level {$level->id})");
-            throw new Exception("Insufficient questions available for this grade. Need at least 5 questions.");
+            \Log::error('Cannot create daily challenge: only '.count($questionIds)." questions available for grade {$grade->id} (level {$level->id})");
+            throw new Exception('Insufficient questions available for this grade. Need at least 5 questions.');
         }
 
         return DailyChallengeCache::create([

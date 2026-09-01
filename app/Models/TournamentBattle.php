@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use App\Events\Tournament\BattleStarted;
+use App\Events\Tournament\BattleCancelled;
 use App\Events\Tournament\BattleCompleted;
 use App\Events\Tournament\BattleForfeited;
-use App\Events\Tournament\BattleCancelled;
+use App\Events\Tournament\BattleStarted;
 use App\Services\AfterCommitDispatcher;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Class TournamentBattle
@@ -42,7 +42,7 @@ class TournamentBattle extends Model
         'tournament_id',
         'round',
         'player1_id',
-        'player2_id', 
+        'player2_id',
         'winner_id',
         'player1_score',
         'player2_score',
@@ -53,7 +53,7 @@ class TournamentBattle extends Model
         'forfeit_reason',
         'is_draw',
         'timeout_at',
-        'battle_duration'
+        'battle_duration',
     ];
 
     protected $casts = [
@@ -64,21 +64,26 @@ class TournamentBattle extends Model
         'player1_score' => 'float',
         'player2_score' => 'float',
         'is_draw' => 'boolean',
-        'battle_duration' => 'integer'
+        'battle_duration' => 'integer',
     ];
 
     protected $appends = [
         'is_active',
         'can_start',
         'time_remaining',
-        'has_timed_out'
+        'has_timed_out',
     ];
 
     const STATUS_SCHEDULED = 'scheduled';
+
     const STATUS_IN_PROGRESS = 'in_progress';
+
     const STATUS_COMPLETED = 'completed';
+
     const STATUS_FORFEITED = 'forfeited';
+
     const STATUS_CANCELLED = 'cancelled';
+
     const STATUS_BYE = 'bye';  // Bye status for auto-advanced players
 
     const VALID_STATUSES = [
@@ -87,7 +92,7 @@ class TournamentBattle extends Model
         self::STATUS_COMPLETED,
         self::STATUS_FORFEITED,
         self::STATUS_CANCELLED,
-        self::STATUS_BYE
+        self::STATUS_BYE,
     ];
 
     public function tournament()
@@ -102,7 +107,7 @@ class TournamentBattle extends Model
 
     public function player2()
     {
-        return $this->belongsTo(User::class, 'player2_id'); 
+        return $this->belongsTo(User::class, 'player2_id');
     }
 
     public function winner()
@@ -126,24 +131,25 @@ class TournamentBattle extends Model
 
     public function getTimeRemainingAttribute()
     {
-        if (!$this->is_active || !$this->timeout_at) {
+        if (! $this->is_active || ! $this->timeout_at) {
             return null;
         }
 
         $remaining = $this->timeout_at->diffInSeconds(now(), false);
+
         return $remaining > 0 ? $remaining : 0;
     }
 
     public function getHasTimedOutAttribute()
     {
-        return $this->is_active && 
-               $this->timeout_at && 
+        return $this->is_active &&
+               $this->timeout_at &&
                now()->gte($this->timeout_at);
     }
 
     public function start()
     {
-        if (!$this->can_start) {
+        if (! $this->can_start) {
             throw new \Exception('Battle cannot be started');
         }
 

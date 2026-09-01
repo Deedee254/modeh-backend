@@ -31,7 +31,7 @@ class QuestionFlagController extends Controller
 
         if ($pendingFlagsCount >= 3) {
             $question->update(['is_approved' => false]);
-            
+
             // Notify quiz master about auto-unapproval
             if ($question->creator) {
                 $question->creator->notify(new \App\Notifications\QuestionAutoUnapproved($question));
@@ -50,7 +50,7 @@ class QuestionFlagController extends Controller
         return response()->json([
             'message' => 'Question flagged successfully.',
             'flag' => $flag,
-            'auto_unapproved' => $pendingFlagsCount >= 3
+            'auto_unapproved' => $pendingFlagsCount >= 3,
         ]);
     }
 
@@ -60,7 +60,7 @@ class QuestionFlagController extends Controller
         $flags = $question->flags()->with('user:id,name,email')->latest()->get();
 
         return response()->json([
-            'flags' => $flags
+            'flags' => $flags,
         ]);
     }
 
@@ -77,14 +77,14 @@ class QuestionFlagController extends Controller
             $query->whereHas('question', function ($q) use ($user) {
                 $q->where('created_by', $user->id);
             });
-        } elseif (!$user->isAdmin()) {
+        } elseif (! $user->isAdmin()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         $flags = $query->limit(10)->get();
 
         return response()->json([
-            'flags' => $flags
+            'flags' => $flags,
         ]);
     }
 
@@ -98,8 +98,8 @@ class QuestionFlagController extends Controller
         // Admin or creator of the question can resolve flags
         $isCreator = $question->created_by === ($user->id ?? null);
         $isAdmin = isset($user->is_admin) && $user->is_admin;
-        
-        if (!$isCreator && !$isAdmin && method_exists($user, 'isAdmin') && !$user->isAdmin()) {
+
+        if (! $isCreator && ! $isAdmin && method_exists($user, 'isAdmin') && ! $user->isAdmin()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -112,8 +112,7 @@ class QuestionFlagController extends Controller
         return response()->json([
             'message' => 'Question flags resolved successfully.',
             'resolved_count' => $resolvedCount,
-            'question' => $question->fresh(['pendingFlags'])
+            'question' => $question->fresh(['pendingFlags']),
         ]);
     }
 }
-

@@ -4,35 +4,36 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Affiliate;
+use App\Models\AffiliateLinkClick;
 use App\Models\AffiliatePayout;
 use App\Models\AffiliateReferral;
-use App\Models\AffiliateLinkClick;
-use App\Models\Wallet;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
 
 class AffiliateController extends Controller
 {
     private function requireAdmin()
     {
         $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
+        if (! $user || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
+
         return null;
     }
 
     public function me(Request $request)
     {
         $user = $request->user();
-        if (!$user) return response()->json(null, 401);
+        if (! $user) {
+            return response()->json(null, 401);
+        }
 
         $affiliate = $user->affiliate()->first();
 
         // Return a consistent shape when no affiliate exists so frontends don't get `null`.
         // Frontend expects at least the referral_code attribute; return it as null if absent.
-        if (!$affiliate) {
+        if (! $affiliate) {
             return response()->json(['referral_code' => null], 200);
         }
 
@@ -42,17 +43,17 @@ class AffiliateController extends Controller
     public function stats(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $affiliate = $user->affiliate()->first();
-        if (!$affiliate) {
+        if (! $affiliate) {
             return response()->json([
                 'totalEarned' => 0,
                 'pendingPayouts' => 0,
                 'activeReferrals' => 0,
-                'conversionRate' => 0
+                'conversionRate' => 0,
             ]);
         }
 
@@ -67,19 +68,19 @@ class AffiliateController extends Controller
             'totalEarned' => $totalEarned,
             'pendingPayouts' => $pendingPayouts,
             'activeReferrals' => $activeReferrals,
-            'conversionRate' => round($conversionRate, 2)
+            'conversionRate' => round($conversionRate, 2),
         ]);
     }
 
     public function referrals(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $affiliate = $user->affiliate()->first();
-        if (!$affiliate) {
+        if (! $affiliate) {
             return response()->json([]);
         }
 
@@ -94,7 +95,7 @@ class AffiliateController extends Controller
                     'type' => $referral->type ?? 'signup',
                     'earnings' => $referral->earnings ?? 0,
                     'status' => $referral->status,
-                    'created_at' => $referral->created_at
+                    'created_at' => $referral->created_at,
                 ];
             });
 
@@ -104,7 +105,7 @@ class AffiliateController extends Controller
     public function generateCode(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -113,7 +114,7 @@ class AffiliateController extends Controller
         if ($affiliate && $affiliate->referral_code) {
             return response()->json([
                 'message' => 'Affiliate code already exists',
-                'referral_code' => $affiliate->referral_code
+                'referral_code' => $affiliate->referral_code,
             ]);
         }
 
@@ -124,36 +125,36 @@ class AffiliateController extends Controller
         }
 
         // Create or update affiliate record
-        if (!$affiliate) {
-            $affiliate = new Affiliate();
+        if (! $affiliate) {
+            $affiliate = new Affiliate;
             $affiliate->fill([
                 'referral_code' => $code,
                 'commission_rate' => 10.00, // Default 10% commission
-                'status' => 'active'
+                'status' => 'active',
             ]);
             $user->affiliate()->save($affiliate);
         } else {
             $affiliate->update([
                 'referral_code' => $code,
-                'status' => 'active'
+                'status' => 'active',
             ]);
         }
 
         return response()->json([
             'message' => 'Affiliate code generated successfully',
-            'referral_code' => $code
+            'referral_code' => $code,
         ]);
     }
 
     public function payoutRequest(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $affiliate = $user->affiliate()->first();
-        if (!$affiliate) {
+        if (! $affiliate) {
             return response()->json(['error' => 'User has no affiliate account'], 404);
         }
 
@@ -163,7 +164,7 @@ class AffiliateController extends Controller
             return response()->json([
                 'error' => 'Minimum payout threshold is 1000 KES',
                 'current_earnings' => $totalEarned,
-                'required' => 1000
+                'required' => 1000,
             ], 422);
         }
 
@@ -175,7 +176,7 @@ class AffiliateController extends Controller
         if ($existingPending) {
             return response()->json([
                 'error' => 'You have a pending payout request already',
-                'payout_id' => $existingPending->id
+                'payout_id' => $existingPending->id,
             ], 422);
         }
 
@@ -193,8 +194,8 @@ class AffiliateController extends Controller
                 'id' => $payout->id,
                 'amount' => $payout->amount,
                 'status' => $payout->status,
-                'created_at' => $payout->created_at
-            ]
+                'created_at' => $payout->created_at,
+            ],
         ]);
     }
 
@@ -205,10 +206,12 @@ class AffiliateController extends Controller
     public function sendInvite(Request $request)
     {
         $user = $request->user();
-        if (! $user) return response()->json(['error' => 'Unauthorized'], 401);
+        if (! $user) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
 
         $data = $request->validate([
-            'email' => 'required|email'
+            'email' => 'required|email',
         ]);
 
         // Ensure affiliate code exists (reuse generateCode logic)
@@ -220,11 +223,11 @@ class AffiliateController extends Controller
                 $code = strtoupper(Str::random(8));
             }
             if (! $affiliate) {
-                $affiliate = new \App\Models\Affiliate();
+                $affiliate = new \App\Models\Affiliate;
                 $affiliate->fill([
                     'referral_code' => $code,
                     'commission_rate' => 10.00,
-                    'status' => 'active'
+                    'status' => 'active',
                 ]);
                 $user->affiliate()->save($affiliate);
             } else {
@@ -237,6 +240,7 @@ class AffiliateController extends Controller
             \Mail::to($data['email'])->send(new \App\Mail\AffiliateInvitationEmail($user, $data['email'], $affiliate->referral_code));
         } catch (\Throwable $e) {
             \Log::error('Failed to send affiliate invitation', ['to' => $data['email'], 'error' => $e->getMessage()]);
+
             return response()->json(['ok' => false, 'message' => 'Failed to send email'], 500);
         }
 
@@ -248,7 +252,9 @@ class AffiliateController extends Controller
      */
     public function adminIndex(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         try {
             $affiliates = Affiliate::with(['user'])
@@ -289,7 +295,9 @@ class AffiliateController extends Controller
      */
     public function adminReferrals(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         try {
             $query = AffiliateReferral::with(['affiliate.user', 'user']);
@@ -346,7 +354,9 @@ class AffiliateController extends Controller
      */
     public function adminClicks(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         try {
             $query = AffiliateLinkClick::with(['affiliate.user']);
@@ -395,7 +405,9 @@ class AffiliateController extends Controller
      */
     public function adminMetrics(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         try {
             $totalAffiliates = Affiliate::count();
@@ -403,8 +415,8 @@ class AffiliateController extends Controller
             $totalClicks = AffiliateLinkClick::count();
             $totalEarnings = AffiliateReferral::sum('earnings') ?? 0;
 
-            $conversionRate = $totalClicks > 0 
-                ? ($totalReferrals / $totalClicks) * 100 
+            $conversionRate = $totalClicks > 0
+                ? ($totalReferrals / $totalClicks) * 100
                 : 0;
 
             return response()->json([
@@ -426,14 +438,14 @@ class AffiliateController extends Controller
         }
     }
 
-
-
     /**
      * ADMIN METHODS - Update affiliate commission rate (percentage)
      */
     public function updateCommissionRate(Request $request, $affiliateId): \Illuminate\Http\JsonResponse
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validated = $request->validate([
             'commission_rate' => 'required|numeric|min:0|max:100',

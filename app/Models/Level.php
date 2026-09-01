@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Level model - represents learning levels (e.g., beginner, intermediate, advanced)
- * 
+ *
  * @property int $id
  * @property string $name
  * @property string|null $slug
@@ -28,13 +28,13 @@ class Level extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            if (empty($model->slug) && !empty($model->name)) {
+            if (empty($model->slug) && ! empty($model->name)) {
                 $model->slug = \App\Services\SlugService::makeUniqueSlug($model->name, static::class);
             }
         });
 
         static::updating(function ($model) {
-            if ($model->isDirty('name') && !empty($model->name)) {
+            if ($model->isDirty('name') && ! empty($model->name)) {
                 $model->slug = \App\Services\SlugService::makeUniqueSlug($model->name, static::class, $model->id);
             }
         });

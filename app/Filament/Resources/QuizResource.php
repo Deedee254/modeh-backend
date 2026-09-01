@@ -4,18 +4,19 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\QuizResource\Pages;
 use App\Models\Quiz;
-use Filament\Resources\Resource;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
-// Note: don't import Tables\Actions to avoid alias conflicts; use fully-qualified names below
 use BackedEnum;
+use Filament\Resources\Resource;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+// Note: don't import Tables\Actions to avoid alias conflicts; use fully-qualified names below
+use Filament\Tables\Table;
 
 class QuizResource extends Resource
 {
     protected static ?string $model = Quiz::class;
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-rectangle-stack';
+
     protected static ?int $navigationSort = 4;
 
     public static function getNavigationGroup(): ?string
@@ -108,7 +109,7 @@ class QuizResource extends Resource
                 TextColumn::make('topic.name')->label('Topic'),
                 TextColumn::make('one_off_price')
                     ->label('One-off Price')
-                    ->formatStateUsing(fn($state) => $state !== null ? number_format($state, 2) : '-')
+                    ->formatStateUsing(fn ($state) => $state !== null ? number_format($state, 2) : '-')
                     ->sortable(),
                 IconColumn::make('is_approved')->boolean()->label('Approved'),
             ])

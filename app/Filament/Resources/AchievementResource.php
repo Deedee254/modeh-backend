@@ -3,26 +3,19 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\AchievementResource\Pages;
-use App\Filament\Resources\Navigation\NavigationGroup;
 use App\Models\Achievement;
-use Filament\Forms;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Group;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\ColorPicker;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Actions\EditAction;
 use Filament\Actions\Action;
+use Filament\Actions\EditAction;
+use Filament\Forms;
+use Filament\Forms\Components\TextInput;
+use Filament\Resources\Resource;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Section;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
-use Illuminate\Database\Eloquent\Builder;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 
@@ -31,7 +24,9 @@ class AchievementResource extends Resource
     protected static ?string $model = Achievement::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Quiz Management';
+
     protected static ?int $navigationSort = 4;
 
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
@@ -56,7 +51,7 @@ class AchievementResource extends Resource
                                 ->maxLength(255)
                                 ->helperText('Emoji or icon character (e.g., 🏆, ⭐, 📚)'),
                         ])->columns(2),
-                        
+
                     Section::make('Achievement Settings')
                         ->schema([
                             Forms\Components\Select::make('category')
@@ -71,7 +66,7 @@ class AchievementResource extends Resource
                                     'streak' => 'Streak Achievements',
                                 ])
                                 ->reactive(),
-                                
+
                             Forms\Components\Select::make('type')
                                 ->required()
                                 ->options([
@@ -85,7 +80,7 @@ class AchievementResource extends Resource
                                     'daily_challenge' => 'Daily Challenge',
                                     'weekend' => 'Weekend',
                                 ]),
-            Forms\Components\TextInput::make('points')
+                            Forms\Components\TextInput::make('points')
                                 ->required()
                                 ->numeric()
                                 ->default(10)
@@ -94,7 +89,7 @@ class AchievementResource extends Resource
                             Forms\Components\TextInput::make('criteria_value')
                                 ->required()
                                 ->numeric()
-                                ->helperText(fn ($get) => match($get('category')) {
+                                ->helperText(fn ($get) => match ($get('category')) {
                                     'time' => 'Time in seconds or minutes based on achievement',
                                     'streak' => 'Number of correct answers in a row',
                                     'subject' => 'Number of quizzes or score threshold',
@@ -106,7 +101,7 @@ class AchievementResource extends Resource
                                 }),
                         ])->columns(2),
                 ]),
-                
+
             Group::make()
                 ->schema([
                     Section::make('Display Settings')
@@ -118,7 +113,7 @@ class AchievementResource extends Resource
                                 ->default(true)
                                 ->helperText('Only active achievements can be earned'),
                         ]),
-                ])
+                ]),
         ]);
     }
 
@@ -234,7 +229,7 @@ class AchievementResource extends Resource
                                     $user->points = $user->achievements()->sum('points');
                                     $user->save();
                                 } catch (\Exception $e) {
-                                    Log::error("Failed to update user points: " . $e->getMessage());
+                                    Log::error('Failed to update user points: '.$e->getMessage());
                                 }
                             }
                         }
@@ -245,7 +240,7 @@ class AchievementResource extends Resource
                     ->icon('heroicon-o-power')
                     ->action(function (Collection $records) {
                         foreach ($records as $record) {
-                            $record->update(['is_active' => !$record->is_active]);
+                            $record->update(['is_active' => ! $record->is_active]);
                         }
                     })
                     ->deselectRecordsAfterCompletion(),
@@ -255,21 +250,21 @@ class AchievementResource extends Resource
                         $hasAwards = $records->contains(function ($record) {
                             return $record->users()->count() > 0;
                         });
-                        
+
                         if ($hasAwards) {
                             throw new \Exception('Cannot delete achievements that have been awarded to users.');
                         }
                     }),
             ]);
     }
-    
+
     public static function getRelations(): array
     {
         return [
             //
         ];
     }
-    
+
     public static function getPages(): array
     {
         return [

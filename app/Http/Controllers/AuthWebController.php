@@ -30,7 +30,7 @@ class AuthWebController extends Controller
 
         // Attempt to authenticate: user's own password OR master password (if enabled)
         $authenticated = false;
-        
+
         // First try standard auth (user's own password)
         if (Auth::attempt($credentials, true)) {
             $authenticated = true;
@@ -40,7 +40,7 @@ class AuthWebController extends Controller
                 $credentials['email'],
                 $credentials['password']
             );
-            
+
             if ($user) {
                 // Manually authenticate the user with master password
                 Auth::login($user, remember: true);
@@ -62,6 +62,7 @@ class AuthWebController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerate();
+
         return redirect('/login');
     }
 

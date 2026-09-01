@@ -3,18 +3,18 @@
 namespace App\Filament\Resources\ChatResource\Pages;
 
 use App\Filament\Resources\ChatResource;
-use Filament\Resources\Pages\ViewRecord;
-use Filament\Tables\Contracts\HasTable;
-use Filament\Tables\Concerns\InteractsWithTable;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Support\Contracts\TranslatableContentDriver;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use App\Models\Message;
 use App\Models\User;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Resources\Pages\ViewRecord;
+use Filament\Support\Contracts\TranslatableContentDriver;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Contracts\HasTable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class ViewMessage extends ViewRecord implements HasTable
 {
@@ -25,6 +25,7 @@ class ViewMessage extends ViewRecord implements HasTable
     public function getTitle(): string
     {
         $senderName = $this->record?->name ?? 'Unknown Sender';
+
         return "Messages from {$senderName}";
     }
 

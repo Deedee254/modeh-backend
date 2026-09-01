@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Models\UserOnboarding;
-use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -24,15 +23,15 @@ class SocialAuthService
                 // For existing users with verified emails, link the social account
                 // For existing users with unverified emails, we still link to prevent duplicate accounts
                 // The social provider's email verification serves as verification
-                if (!$user) {
+                if (! $user) {
                     $email = $socialUser->getEmail();
                     if ($email) {
                         // First try to find user with verified email
                         $user = User::whereEmail($email)->whereNotNull('email_verified_at')->first();
-                        
+
                         // If no verified user found, check for unverified user
                         // Link to prevent duplicate accounts - social provider email is considered verified
-                        if (!$user) {
+                        if (! $user) {
                             $existingUser = User::whereEmail($email)->first();
                             if ($existingUser) {
                                 // Link social account to existing user and mark email as verified
@@ -46,7 +45,7 @@ class SocialAuthService
                     }
                 }
 
-                if (!$user) {
+                if (! $user) {
                     // Create new user if they don't exist. Provide a random
                     // password as a fallback for non-nullable password column.
                     $user = User::create([
@@ -71,7 +70,7 @@ class SocialAuthService
                         'subject_selected' => false,
                         'grade_selected' => false,
                         'completed_steps' => ['social_auth'],
-                        'last_step_completed_at' => now()
+                        'last_step_completed_at' => now(),
                     ]);
                 } else {
                     // Update or attach social fields to the existing user (found
@@ -104,10 +103,10 @@ class SocialAuthService
      */
     public function revokeAllTokens($user)
     {
-        if (!$user || !$user->id) {
+        if (! $user || ! $user->id) {
             return;
         }
-        
+
         // Delete all personal access tokens for this user
         $user->tokens()->delete();
     }

@@ -5,24 +5,28 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\PricingSettingResource\Pages;
 use App\Models\PricingSetting;
 use BackedEnum;
-use UnitEnum;
-use Filament\Resources\Resource;
-use Filament\Tables\Table;
-use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Components\Section;
-use Filament\Tables\Columns\TextColumn;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
-use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\TextInput;
+use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use UnitEnum;
 
 class PricingSettingResource extends Resource
 {
     protected static ?string $model = PricingSetting::class;
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-tag';
+
     protected static UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
+
     protected static ?int $navigationSort = 2;
+
     protected static ?string $label = 'Default Pricing';
+
     protected static ?string $pluralLabel = 'Default Pricing';
 
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
@@ -38,7 +42,7 @@ class PricingSettingResource extends Resource
                         ->step(0.01)
                         ->placeholder('e.g., 500')
                         ->helperText('Used when a quiz has no price set. Leave blank for free.'),
-                    
+
                     TextInput::make('default_battle_one_off_price')
                         ->label('Default Battle One-Off Price')
                         ->numeric()
@@ -57,11 +61,11 @@ class PricingSettingResource extends Resource
             ->columns([
                 TextColumn::make('default_quiz_one_off_price')
                     ->label('Default Quiz Price')
-                    ->formatStateUsing(fn($state) => $state ? number_format($state, 2) : '—')
+                    ->formatStateUsing(fn ($state) => $state ? number_format($state, 2) : '—')
                     ->sortable(),
                 TextColumn::make('default_battle_one_off_price')
                     ->label('Default Battle Price')
-                    ->formatStateUsing(fn($state) => $state ? number_format($state, 2) : '—')
+                    ->formatStateUsing(fn ($state) => $state ? number_format($state, 2) : '—')
                     ->sortable(),
                 TextColumn::make('updated_at')
                     ->label('Last Updated')

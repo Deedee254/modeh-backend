@@ -23,7 +23,7 @@ class DashboardAnalyticsController extends Controller
         // Ensure user is a quiz master
         $user = $request->user();
         // The User model does not provide an `isQuizMaster()` helper. Check the role field instead.
-        if (!$user || (string)($user->role ?? '') !== 'quiz-master') {
+        if (! $user || (string) ($user->role ?? '') !== 'quiz-master') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -70,7 +70,7 @@ class DashboardAnalyticsController extends Controller
                 ],
                 'series' => [],
                 'distribution' => $this->emptyDistribution(),
-                'top_quizzes' => []
+                'top_quizzes' => [],
             ]);
         }
 
@@ -79,8 +79,8 @@ class DashboardAnalyticsController extends Controller
         $totalAttempts = $attempts->count();
         $avgScore = round($attempts->whereNotNull('score')->avg('score') ?? 0, 1);
         $completions = $attempts->whereNotNull('score')->count();
-        $completionRate = $totalAttempts > 0 
-            ? round(($completions / $totalAttempts) * 100, 1) 
+        $completionRate = $totalAttempts > 0
+            ? round(($completions / $totalAttempts) * 100, 1)
             : 0;
 
         // Trend data - compare to previous period
@@ -97,8 +97,8 @@ class DashboardAnalyticsController extends Controller
             ->whereNotNull('score')
             ->count();
         $currentTotal = $attempts->where('created_at', '>=', $thirtyDaysAgo)->count();
-        $currentCompletionRate = $currentTotal > 0 
-            ? round(($currentCompletions / $currentTotal) * 100, 1) 
+        $currentCompletionRate = $currentTotal > 0
+            ? round(($currentCompletions / $currentTotal) * 100, 1)
             : 0;
 
         // Previous period stats
@@ -110,28 +110,32 @@ class DashboardAnalyticsController extends Controller
             ->whereNotNull('score')
             ->count();
         $previousTotal = $attempts->whereBetween('created_at', [$sixtyDaysAgo, $thirtyDaysAgo])->count();
-        $previousCompletionRate = $previousTotal > 0 
-            ? round(($previousCompletions / $previousTotal) * 100, 1) 
+        $previousCompletionRate = $previousTotal > 0
+            ? round(($previousCompletions / $previousTotal) * 100, 1)
             : 0;
 
         // Calculate trends (percentage change)
-        $currentQuizzes = Quiz::where(function ($q) use ($user) { $q->where('user_id', $user->id)->orWhere('created_by', $user->id); })->where('created_at', '>=', $thirtyDaysAgo)->count();
-        $previousQuizzes = Quiz::where(function ($q) use ($user) { $q->where('user_id', $user->id)->orWhere('created_by', $user->id); })->whereBetween('created_at', [$sixtyDaysAgo, $thirtyDaysAgo])->count();
-        
+        $currentQuizzes = Quiz::where(function ($q) use ($user) {
+            $q->where('user_id', $user->id)->orWhere('created_by', $user->id);
+        })->where('created_at', '>=', $thirtyDaysAgo)->count();
+        $previousQuizzes = Quiz::where(function ($q) use ($user) {
+            $q->where('user_id', $user->id)->orWhere('created_by', $user->id);
+        })->whereBetween('created_at', [$sixtyDaysAgo, $thirtyDaysAgo])->count();
+
         $quizzesTrend = $previousQuizzes > 0
             ? round((($currentQuizzes - $previousQuizzes) / $previousQuizzes) * 100, 1)
             : null;
 
-        $attemptsTrend = $previousAttempts > 0 
-            ? round((($currentAttempts - $previousAttempts) / $previousAttempts) * 100, 1) 
+        $attemptsTrend = $previousAttempts > 0
+            ? round((($currentAttempts - $previousAttempts) / $previousAttempts) * 100, 1)
             : null;
-        $scoreTrend = $previousAvgScore > 0 
-            ? round((($currentAvgScore - $previousAvgScore) / $previousAvgScore) * 100, 1) 
+        $scoreTrend = $previousAvgScore > 0
+            ? round((($currentAvgScore - $previousAvgScore) / $previousAvgScore) * 100, 1)
             : null;
-        $completionTrend = $previousCompletionRate > 0 
-            ? round((($currentCompletionRate - $previousCompletionRate) / $previousCompletionRate) * 100, 1) 
+        $completionTrend = $previousCompletionRate > 0
+            ? round((($currentCompletionRate - $previousCompletionRate) / $previousCompletionRate) * 100, 1)
             : null;
-        
+
         // Attempts series (last 30 days)
         $series = $this->getAttemptsSeries($quizzes);
 
@@ -150,7 +154,7 @@ class DashboardAnalyticsController extends Controller
                     'id' => $quiz->id,
                     'title' => $quiz->title,
                     'attempts' => $quiz->attempts_count,
-                    'score' => round($quiz->avg_score ?? 0, 1)
+                    'score' => round($quiz->avg_score ?? 0, 1),
                 ];
             });
 
@@ -165,18 +169,18 @@ class DashboardAnalyticsController extends Controller
                 'totalQuizzesTrend' => $quizzesTrend,
                 'totalAttemptsTrend' => $attemptsTrend,
                 'avgScoreTrend' => $scoreTrend,
-                'completionRateTrend' => $completionTrend
+                'completionRateTrend' => $completionTrend,
             ],
             'series' => $series,
             'distribution' => $distribution,
-            'top_quizzes' => $topQuizzes
+            'top_quizzes' => $topQuizzes,
         ]);
     }
 
     private function getAttemptsSeries($quizIds)
     {
         $startDate = now()->subDays(29)->startOfDay();
-        
+
         // Get daily counts
         $dailyCounts = DB::table('quiz_attempts')
             ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
@@ -194,7 +198,7 @@ class DashboardAnalyticsController extends Controller
             $date = $startDate->copy()->addDays($i)->format('Y-m-d');
             $series[] = [
                 'date' => $date,
-                'value' => $dailyCounts[$date] ?? 0
+                'value' => $dailyCounts[$date] ?? 0,
             ];
         }
 
@@ -210,8 +214,8 @@ class DashboardAnalyticsController extends Controller
 
         $distribution = array_fill(0, 10, 0);
         foreach ($scores as $attempt) {
-            $score = (int)round($attempt->score);
-            $bucket = min(9, (int)floor($score / 10));
+            $score = (int) round($attempt->score);
+            $bucket = min(9, (int) floor($score / 10));
             $distribution[$bucket]++;
         }
 
@@ -233,7 +237,7 @@ class DashboardAnalyticsController extends Controller
             return [
                 'label' => sprintf('%d-%d%%', $index * 10, ($index * 10) + 9),
                 'value' => $count,
-                'color' => $colors[$index]
+                'color' => $colors[$index],
             ];
         }, $distribution, array_keys($distribution));
     }
@@ -242,14 +246,14 @@ class DashboardAnalyticsController extends Controller
     {
         $colors = [
             '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16',
-            '#22C55E', '#10B981', '#14B8A6', '#06B6D4', '#0EA5E9'
+            '#22C55E', '#10B981', '#14B8A6', '#06B6D4', '#0EA5E9',
         ];
 
         return array_map(function ($index) use ($colors) {
             return [
                 'label' => sprintf('%d-%d%%', $index * 10, ($index * 10) + 9),
                 'value' => 0,
-                'color' => $colors[$index]
+                'color' => $colors[$index],
             ];
         }, range(0, 9));
     }

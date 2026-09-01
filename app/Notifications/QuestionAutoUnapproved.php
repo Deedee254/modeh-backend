@@ -4,8 +4,8 @@ namespace App\Notifications;
 
 use App\Models\Question;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Notification;
 use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Notifications\Notification;
 
 class QuestionAutoUnapproved extends Notification
 {
@@ -39,7 +39,7 @@ class QuestionAutoUnapproved extends Notification
         return (new MailMessage)
             ->subject('Question Automatically Unapproved')
             ->line("Your question \"{$this->question->body}\" has been automatically unapproved due to multiple student reports.")
-            ->action('Review Question', url(config('app.frontend_url') . "/quiz-master/questions/{$this->question->id}/edit"))
+            ->action('Review Question', url(config('app.frontend_url')."/quiz-master/questions/{$this->question->id}/edit"))
             ->line('Please ensure the question and answers are accurate to maintain your quality score.');
     }
 }

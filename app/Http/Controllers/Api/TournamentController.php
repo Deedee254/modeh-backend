@@ -16,6 +16,7 @@ class TournamentController extends Controller
     private const SIMPLE_FLOW_MAX_ATTEMPTS = 1;
 
     protected AchievementService $achievementService;
+
     protected QuestionMarkingService $markingService;
 
     public function __construct(AchievementService $achievementService, QuestionMarkingService $markingService)
@@ -51,20 +52,21 @@ class TournamentController extends Controller
         if ($targetGradeId) {
             $query->where(function ($q) use ($targetGradeId) {
                 $q->where('grade_id', $targetGradeId)
-                  ->orWhereNull('grade_id');
+                    ->orWhereNull('grade_id');
             });
         }
 
         if ($targetLevelId) {
             $query->where(function ($q) use ($targetLevelId) {
                 $q->where('level_id', $targetLevelId)
-                  ->orWhereHas('grade', function ($gQ) use ($targetLevelId) {
-                      $gQ->where('level_id', $targetLevelId);
-                  });
+                    ->orWhereHas('grade', function ($gQ) use ($targetLevelId) {
+                        $gQ->where('level_id', $targetLevelId);
+                    });
             });
         }
 
         $tournaments = $query->withCount('participants')->latest()->paginate(20);
+
         return response()->json($tournaments);
     }
 
@@ -75,20 +77,18 @@ class TournamentController extends Controller
         $tournament->load(['subject', 'topic', 'grade', 'level', 'participants', 'questions', 'winner', 'sponsor']);
         $user = Auth::user() ?? Auth::guard('sanctum')->user();
 
-
-
         $isParticipant = $user ? $tournament->participants()->where('user_id', $user->id)->exists() : false;
         $tournament->is_participant = $isParticipant;
 
         if (request()->query('start_attempt') && $user) {
             $participant = $tournament->participants()->where('user_id', $user->id)->first();
             $isPaid = $participant && ($participant->pivot->status ?? 'pending_payment') === 'paid';
-            
+
             if ($isPaid) {
                 $attemptsUsed = \App\Models\TournamentAttempt::where('tournament_id', $tournament->id)
                     ->where('user_id', $user->id)
                     ->count();
-                
+
                 if ($attemptsUsed < self::SIMPLE_FLOW_MAX_ATTEMPTS) {
                     $cacheKey = "t_attempt_started_{$tournament->id}_{$user->id}";
                     // Store start time only if it doesn't already exist to prevent resetting on page refreshes
@@ -135,14 +135,14 @@ class TournamentController extends Controller
                     }
                 }
 
-                if (!empty($opts)) {
+                if (! empty($opts)) {
                     $correctValues = [];
                     $isMcq = $q->type === 'mcq';
                     $isMulti = $q->type === 'multi';
 
-                    if ($isMcq && !is_null($q->correct) && isset($opts[$q->correct])) {
+                    if ($isMcq && ! is_null($q->correct) && isset($opts[$q->correct])) {
                         $correctValues[] = $opts[$q->correct];
-                    } elseif ($isMulti && !empty($q->corrects)) {
+                    } elseif ($isMulti && ! empty($q->corrects)) {
                         $indices = is_array($q->corrects) ? $q->corrects : (is_string($q->corrects) ? json_decode((string) $q->corrects, true) : []);
                         if (is_array($indices)) {
                             foreach ($indices as $idx) {
@@ -153,15 +153,15 @@ class TournamentController extends Controller
                         }
                     }
 
-                    $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
+                    $shuffled = $this->seededShuffle($opts, $shuffleSeed.'::'.$q->id);
                     $q->options = $shuffled;
 
-                    if ($isMcq && !empty($correctValues)) {
+                    if ($isMcq && ! empty($correctValues)) {
                         $newIdx = array_search($correctValues[0], $shuffled);
                         if ($newIdx !== false) {
                             $q->correct = $newIdx;
                         }
-                    } elseif ($isMulti && !empty($correctValues)) {
+                    } elseif ($isMulti && ! empty($correctValues)) {
                         $newIndices = [];
                         foreach ($correctValues as $val) {
                             $newIdx = array_search($val, $shuffled);
@@ -239,7 +239,7 @@ class TournamentController extends Controller
                 }
             }
 
-            if (!$hasOneOff) {
+            if (! $hasOneOff) {
                 $hasOneOff = \App\Models\OneOffPurchase::where('user_id', $user->id)
                     ->where('item_type', 'tournament')
                     ->where('item_id', $lockedTournament->id)
@@ -247,7 +247,7 @@ class TournamentController extends Controller
                     ->exists();
             }
 
-            $isPaid = !$fee || $hasOneOff || ($activeSub && (bool) ($lockedTournament->open_to_subscribers ?? false));
+            $isPaid = ! $fee || $hasOneOff || ($activeSub && (bool) ($lockedTournament->open_to_subscribers ?? false));
 
             $existingParticipant = DB::table('tournament_participants')
                 ->where('tournament_id', $lockedTournament->id)
@@ -277,6 +277,7 @@ class TournamentController extends Controller
 
                         return response()->json(['message' => 'Successfully joined tournament', 'status' => 'paid']);
                     }
+
                     return response()->json(['message' => 'Registration pending payment', 'status' => 'pending_payment'], 202);
                 }
                 if ($existingParticipant->status === 'rejected') {
@@ -320,7 +321,7 @@ class TournamentController extends Controller
     {
         $this->authorize('approveRegistration', Tournament::class);
 
-        if (!$tournament->participants()->where('user_id', $userId)->exists()) {
+        if (! $tournament->participants()->where('user_id', $userId)->exists()) {
             return response()->json(['message' => 'Registration not found'], 404);
         }
 
@@ -346,7 +347,7 @@ class TournamentController extends Controller
     {
         $this->authorize('rejectRegistration', Tournament::class);
 
-        if (!$tournament->participants()->where('user_id', $userId)->exists()) {
+        if (! $tournament->participants()->where('user_id', $userId)->exists()) {
             return response()->json(['message' => 'Registration not found'], 404);
         }
 
@@ -403,9 +404,11 @@ class TournamentController extends Controller
         $institutionsMap = [];
         foreach ($leaderboard as $entry) {
             $instName = $entry['institution_name'];
-            if (!$instName) continue;
-            
-            if (!isset($institutionsMap[$instName])) {
+            if (! $instName) {
+                continue;
+            }
+
+            if (! isset($institutionsMap[$instName])) {
                 $institutionsMap[$instName] = [
                     'id' => md5($instName), // pseudo-id
                     'name' => $instName,
@@ -416,12 +419,13 @@ class TournamentController extends Controller
             $institutionsMap[$instName]['points'] += $entry['points'];
             $institutionsMap[$instName]['participants_count']++;
         }
-        
+
         $institutionsLeaderboard = collect(array_values($institutionsMap))
             ->sortByDesc('points')
             ->values()
             ->map(function ($inst, $index) {
                 $inst['rank'] = $index + 1;
+
                 return $inst;
             })
             ->toArray();
@@ -486,7 +490,7 @@ class TournamentController extends Controller
     public function downloadReport(Request $request, Tournament $tournament, $attemptId = null)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
@@ -499,7 +503,7 @@ class TournamentController extends Controller
 
         $attempt = $attemptQuery->latest('id')->first();
 
-        if (!$attempt) {
+        if (! $attempt) {
             return response()->json(['message' => 'Attempt not found'], 404);
         }
 
@@ -515,7 +519,7 @@ class TournamentController extends Controller
             'brandColor' => '#7c3aed',
         ])->render();
 
-        $options = new \Dompdf\Options();
+        $options = new \Dompdf\Options;
         $options->set('isRemoteEnabled', true);
         $dompdf = new \Dompdf\Dompdf($options);
         $dompdf->loadHtml($html);
@@ -523,9 +527,10 @@ class TournamentController extends Controller
         $dompdf->render();
 
         $filename = "tournament-report-attempt-{$attempt->id}.pdf";
+
         return response($dompdf->output(), 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => "attachment; filename={$filename}"
+            'Content-Disposition' => "attachment; filename={$filename}",
         ]);
     }
 
@@ -534,7 +539,7 @@ class TournamentController extends Controller
         $this->maybeFinalizeSimpleFlowTournament($tournament);
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json([
                 'qualified' => false,
                 'attempt' => null,
@@ -553,7 +558,7 @@ class TournamentController extends Controller
             ->orderByDesc('id')
             ->first();
 
-        if (!$attempt) {
+        if (! $attempt) {
             return response()->json([
                 'qualified' => false,
                 'attempt' => null,
@@ -592,7 +597,7 @@ class TournamentController extends Controller
     {
         $this->maybeFinalizeSimpleFlowTournament($tournament);
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
@@ -633,7 +638,7 @@ class TournamentController extends Controller
 
         $cacheKey = "t_attempt_started_{$tournament->id}_{$user->id}";
         $startedAt = \Illuminate\Support\Facades\Cache::get($cacheKey);
-        
+
         if ($startedAt) {
             $startedAt = \Illuminate\Support\Carbon::parse($startedAt);
             $durationSeconds = now()->diffInSeconds($startedAt);
@@ -651,7 +656,7 @@ class TournamentController extends Controller
             'score' => round($computedScore, 2),
             'answers' => $answersToStore,
             'duration_seconds' => $durationSeconds,
-            'per_question_time' => !empty($perQuestionTime) ? $perQuestionTime : null,
+            'per_question_time' => ! empty($perQuestionTime) ? $perQuestionTime : null,
         ]);
 
         // Resolve answer text for the response payload
@@ -691,14 +696,14 @@ class TournamentController extends Controller
                 }
             }
 
-            if (!empty($opts)) {
+            if (! empty($opts)) {
                 $correctValues = [];
                 $isMcq = $q->type === 'mcq';
                 $isMulti = $q->type === 'multi';
 
-                if ($isMcq && !is_null($q->correct) && isset($opts[$q->correct])) {
+                if ($isMcq && ! is_null($q->correct) && isset($opts[$q->correct])) {
                     $correctValues[] = $opts[$q->correct];
-                } elseif ($isMulti && !empty($q->corrects)) {
+                } elseif ($isMulti && ! empty($q->corrects)) {
                     $indices = is_array($q->corrects) ? $q->corrects : (is_string($q->corrects) ? json_decode((string) $q->corrects, true) : []);
                     if (is_array($indices)) {
                         foreach ($indices as $idx) {
@@ -709,15 +714,15 @@ class TournamentController extends Controller
                     }
                 }
 
-                $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $q->id);
+                $shuffled = $this->seededShuffle($opts, $shuffleSeed.'::'.$q->id);
                 $q->options = $shuffled;
 
-                if ($isMcq && !empty($correctValues)) {
+                if ($isMcq && ! empty($correctValues)) {
                     $newIdx = array_search($correctValues[0], $shuffled);
                     if ($newIdx !== false) {
                         $q->correct = $newIdx;
                     }
-                } elseif ($isMulti && !empty($correctValues)) {
+                } elseif ($isMulti && ! empty($correctValues)) {
                     $newIndices = [];
                     foreach ($correctValues as $val) {
                         $newIdx = array_search($val, $shuffled);
@@ -729,8 +734,9 @@ class TournamentController extends Controller
                     $q->corrects = $newIndices;
                 }
             }
-            
+
             $q->makeVisible(['correct', 'corrects', 'answers', 'explanation']);
+
             return $q;
         })->toArray();
         $questionsWithAnswers = $this->seededShuffle($mappedQuestions, $shuffleSeed);
@@ -750,12 +756,12 @@ class TournamentController extends Controller
     public function registrationStatus(Request $request, Tournament $tournament)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['isRegistered' => false]);
         }
 
         $participant = $tournament->participants()->where('user_id', $user->id)->first();
-        if (!$participant) {
+        if (! $participant) {
             return response()->json(['isRegistered' => false]);
         }
 
@@ -772,12 +778,12 @@ class TournamentController extends Controller
         if ($tournament->status !== 'active' && $tournament->start_date && $now->lt($tournament->start_date)) {
             return response()->json(['message' => 'Tournament has not started'], 400);
         }
-        if (!in_array($tournament->status, ['upcoming', 'active'], true)) {
+        if (! in_array($tournament->status, ['upcoming', 'active'], true)) {
             return response()->json(['message' => 'Tournament is not accepting attempts'], 400);
         }
 
         $participant = $tournament->participants()->where('user_id', $user->id)->first();
-        if (!$participant || ($participant->pivot->status ?? 'pending_payment') !== 'paid') {
+        if (! $participant || ($participant->pivot->status ?? 'pending_payment') !== 'paid') {
             return response()->json(['message' => 'You must be registered and payment must be confirmed before submitting your tournament attempt'], 403);
         }
 
@@ -796,12 +802,12 @@ class TournamentController extends Controller
         $qId = (int) ($answerInput['question_id'] ?? 0);
         $given = $answerInput['answer'] ?? null;
 
-        if (!$questions->has($qId)) {
+        if (! $questions->has($qId)) {
             return ['error' => "Question {$qId} not found for this tournament"];
         }
 
         $q = $questions->get($qId);
-        if ($shuffleSeed && !empty($q->options)) {
+        if ($shuffleSeed && ! empty($q->options)) {
             $given = $this->unmapShuffledAnswer($given, $q, $shuffleSeed);
         }
 
@@ -824,7 +830,7 @@ class TournamentController extends Controller
             return $given;
         }
 
-        $shuffled = $this->seededShuffle($opts, $shuffleSeed . '::' . $question->id);
+        $shuffled = $this->seededShuffle($opts, $shuffleSeed.'::'.$question->id);
         if (is_array($given)) {
             return $this->unmapArrayAnswer($given, $shuffled);
         }
@@ -843,6 +849,7 @@ class TournamentController extends Controller
                 return $decoded;
             }
         }
+
         return [];
     }
 
@@ -856,6 +863,7 @@ class TournamentController extends Controller
                 $mapped[] = $g;
             }
         }
+
         return $mapped;
     }
 
@@ -864,6 +872,7 @@ class TournamentController extends Controller
         if (is_numeric($given) && isset($shuffled[(int) $given])) {
             return $this->extractOptionValue($shuffled[(int) $given]);
         }
+
         return $given;
     }
 
@@ -872,6 +881,7 @@ class TournamentController extends Controller
         if (is_array($option)) {
             return $option['id'] ?? $option['text'] ?? $option['body'] ?? $option;
         }
+
         return $option;
     }
 
@@ -880,9 +890,9 @@ class TournamentController extends Controller
         $correctAnswers = [];
 
         if ($question->type === 'mcq') {
-            if (!is_null($question->correct)) {
+            if (! is_null($question->correct)) {
                 $correctAnswers = [(string) $question->correct];
-            } elseif (!empty($question->answers)) {
+            } elseif (! empty($question->answers)) {
                 $correctAnswers = is_array($question->answers) ? $question->answers : [$question->answers];
             }
         } elseif ($question->type === 'multi') {
@@ -988,7 +998,7 @@ class TournamentController extends Controller
             }
         } else {
             // Only finalize if end_date has passed
-            if (!$tournament->end_date || now()->lt($tournament->end_date)) {
+            if (! $tournament->end_date || now()->lt($tournament->end_date)) {
                 return;
             }
         }
@@ -1009,7 +1019,8 @@ class TournamentController extends Controller
         $copy = array_values($items);
         $state = crc32($seed) & 0xFFFFFFFF;
         $lcg = function () use (&$state) {
-            $state = (1103515245 * $state + 12345) & 0x7fffffff;
+            $state = (1103515245 * $state + 12345) & 0x7FFFFFFF;
+
             return $state / 2147483647;
         };
 

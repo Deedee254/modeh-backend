@@ -3,17 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\Quiz;
 use App\Models\GuestQuizAttempt;
-use App\Models\OneOffPurchase;
 use App\Models\GuestUnlockToken;
-use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
-
-use Illuminate\Support\Facades\Storage;
+use App\Models\Quiz;
 use App\Services\QuestionMarkingService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class GuestQuizController extends Controller
 {
@@ -23,11 +19,11 @@ class GuestQuizController extends Controller
     {
         $this->markingService = $markingService;
     }
+
     /**
      * Get quiz questions for guest (excludes is_correct from options)
      * Only allow free quizzes
      *
-     * @param  \App\Models\Quiz $quiz
      * @return \Illuminate\Http\JsonResponse
      */
     public function getQuestions(Request $request, Quiz $quiz)
@@ -35,17 +31,17 @@ class GuestQuizController extends Controller
         // Guests can never take institutional quizzes.
         if ($quiz->is_institutional) {
             $user = auth('sanctum')->user();
-            if (!$user) {
+            if (! $user) {
                 return response()->json([
                     'error' => 'This quiz requires authentication. Please login or register to continue.',
-                    'code' => 'INSTITUTIONAL_QUIZ'
+                    'code' => 'INSTITUTIONAL_QUIZ',
                 ], 403);
             }
             $accessResult = \App\Services\QuizAccessService::checkAccess($quiz, $user);
             if (empty($accessResult['can_access'])) {
                 return response()->json([
                     'error' => $accessResult['message'] ?? 'You do not have access to this institutional quiz.',
-                    'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED'
+                    'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED',
                 ], 403);
             }
         }
@@ -54,7 +50,7 @@ class GuestQuizController extends Controller
         $quiz->load(['questions', 'topic.subject', 'subject', 'grade.level']);
 
         // Prepare questions (apply shuffling if configured)
-        $shuffleSeed = (string)$request->input('shuffle_seed', bin2hex(random_bytes(4)));
+        $shuffleSeed = (string) $request->input('shuffle_seed', bin2hex(random_bytes(4)));
         $prepared = $quiz->getPreparedQuestions($shuffleSeed);
 
         // expose taxonomy objects in the public payload (level may be nested under grade)
@@ -68,13 +64,13 @@ class GuestQuizController extends Controller
                 'description' => $quiz->description,
                 'timer_seconds' => $quiz->timer_seconds,
                 'per_question_seconds' => $quiz->per_question_seconds,
-                'use_per_question_timer' => (bool)$quiz->use_per_question_timer,
+                'use_per_question_timer' => (bool) $quiz->use_per_question_timer,
                 'attempts_allowed' => $quiz->attempts_allowed,
-                'shuffle_questions' => (bool)$quiz->shuffle_questions,
-                'shuffle_answers' => (bool)$quiz->shuffle_answers,
+                'shuffle_questions' => (bool) $quiz->shuffle_questions,
+                'shuffle_answers' => (bool) $quiz->shuffle_answers,
                 'shuffle_seed' => $shuffleSeed,
                 'access' => $quiz->is_paid ? 'paywall' : 'free',
-                'is_paid' => (bool)$quiz->is_paid,
+                'is_paid' => (bool) $quiz->is_paid,
                 'one_off_price' => $quiz->one_off_price,
                 'price' => $quiz->price,
                 'questions' => $prepared,
@@ -87,7 +83,7 @@ class GuestQuizController extends Controller
                 'grade_id' => $quiz->grade_id,
                 'subject_id' => $quiz->subject_id,
                 'topic_id' => $quiz->topic_id,
-            ]
+            ],
         ]);
     }
 
@@ -95,8 +91,6 @@ class GuestQuizController extends Controller
      * Submit guest quiz answers and get results with server-side marking
      * Only allow free quizzes
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \App\Models\Quiz  $quiz
      * @return \Illuminate\Http\JsonResponse
      */
     public function submit(Request $request, Quiz $quiz)
@@ -104,17 +98,17 @@ class GuestQuizController extends Controller
         // Guests can never submit institutional quizzes.
         if ($quiz->is_institutional) {
             $user = auth('sanctum')->user();
-            if (!$user) {
+            if (! $user) {
                 return response()->json([
                     'error' => 'This quiz requires authentication. Please login or register to continue.',
-                    'code' => 'INSTITUTIONAL_QUIZ'
+                    'code' => 'INSTITUTIONAL_QUIZ',
                 ], 403);
             }
             $accessResult = \App\Services\QuizAccessService::checkAccess($quiz, $user);
             if (empty($accessResult['can_access'])) {
                 return response()->json([
                     'error' => $accessResult['message'] ?? 'You do not have access to this institutional quiz.',
-                    'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED'
+                    'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED',
                 ], 403);
             }
         }
@@ -134,7 +128,7 @@ class GuestQuizController extends Controller
             Log::warning('Guest quiz submission validation failed', [
                 'quiz_id' => $quiz->id,
                 'errors' => $e->errors(),
-                'payload_sample' => $request->get('answers') ? array_slice($request->get('answers'), 0, 1) : null
+                'payload_sample' => $request->get('answers') ? array_slice($request->get('answers'), 0, 1) : null,
             ]);
             throw $e;
         }
@@ -144,21 +138,21 @@ class GuestQuizController extends Controller
 
         // Calculate score using service (handles answer unmapping internally if shuffle_seed is provided)
         $shuffleSeed = $validated['shuffle_seed'] ?? null;
-        $scoringResult = $this->markingService->calculateScore($validated['answers'], $questions, true, (string)$shuffleSeed);
+        $scoringResult = $this->markingService->calculateScore($validated['answers'], $questions, true, (string) $shuffleSeed);
 
         $price = $quiz->price;
         $requiresPayment = ((bool) $quiz->is_paid) || ($price > 0);
-        
+
         // If the request is authenticated, check if the user has subscription/institutional access
         if ($user = auth('sanctum')->user()) {
             $accessResult = \App\Services\QuizAccessService::checkAccess($quiz, $user);
-            if (!empty($accessResult['can_access']) && !empty($accessResult['is_free'])) {
+            if (! empty($accessResult['can_access']) && ! empty($accessResult['is_free'])) {
                 $requiresPayment = false;
             }
         }
 
         // Payment is per-attempt. New attempts are always locked if payment is required.
-        $isUnlocked = !$requiresPayment;
+        $isUnlocked = ! $requiresPayment;
 
         // Prepare minimal result payload for guests
         // Use quiz questions count as total so omitted answers are treated as incorrect
@@ -180,7 +174,7 @@ class GuestQuizController extends Controller
             'attempted_at' => now()->toIso8601String(),
             'price' => $price,
             'requires_payment' => $requiresPayment,
-            'locked' => !$isUnlocked,
+            'locked' => ! $isUnlocked,
         ];
 
         // Persist guest attempt so unlocked results can be fetched after payment/login.
@@ -194,11 +188,11 @@ class GuestQuizController extends Controller
             'skipped_count' => 0,
             'time_taken' => (int) ($validated['time_taken'] ?? 0),
             'results' => $scoringResult['results'] ?? [],
-            'is_locked' => !$isUnlocked,
+            'is_locked' => ! $isUnlocked,
             'unlocked_at' => $isUnlocked ? now() : null,
         ]);
 
-        if (!$isUnlocked) {
+        if (! $isUnlocked) {
             // Do not expose detailed per-question marking before purchase.
             $result['results'] = [];
         } else {
@@ -209,9 +203,9 @@ class GuestQuizController extends Controller
             'success' => true,
             'attempt_id' => $guestAttempt->id,
             'requires_payment' => $requiresPayment,
-            'locked' => !$isUnlocked,
+            'locked' => ! $isUnlocked,
             'price' => $price,
-            'attempt' => $result
+            'attempt' => $result,
         ]);
     }
 
@@ -223,17 +217,17 @@ class GuestQuizController extends Controller
     {
         if ($quiz->is_institutional) {
             $user = auth('sanctum')->user();
-            if (!$user) {
+            if (! $user) {
                 return response()->json([
                     'error' => 'This quiz requires authentication. Please login or register to continue.',
-                    'code' => 'INSTITUTIONAL_QUIZ'
+                    'code' => 'INSTITUTIONAL_QUIZ',
                 ], 403);
             }
             $accessResult = \App\Services\QuizAccessService::checkAccess($quiz, $user);
             if (empty($accessResult['can_access'])) {
                 return response()->json([
                     'error' => $accessResult['message'] ?? 'You do not have access to this institutional quiz.',
-                    'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED'
+                    'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED',
                 ], 403);
             }
         }
@@ -245,7 +239,7 @@ class GuestQuizController extends Controller
         ]);
 
         $question = $quiz->questions()->find($validated['question_id']);
-        if (!$question) {
+        if (! $question) {
             return response()->json(['error' => 'Question not found'], 404);
         }
 
@@ -274,7 +268,7 @@ class GuestQuizController extends Controller
     public function showAttempt(Request $request, string $attemptId)
     {
         $attempt = GuestQuizAttempt::with('quiz')->find($attemptId);
-        if (!$attempt || !$attempt->quiz) {
+        if (! $attempt || ! $attempt->quiz) {
             return response()->json(['ok' => false, 'message' => 'Attempt not found'], 404);
         }
 
@@ -282,17 +276,17 @@ class GuestQuizController extends Controller
         $unlockToken = (string) $request->query('unlock_token', '');
         $price = $attempt->quiz->price;
         $requiresPayment = ((bool) $attempt->quiz->is_paid) || ($price > 0);
-        
+
         if ($user = auth('sanctum')->user()) {
             $accessResult = \App\Services\QuizAccessService::checkAccess($attempt->quiz, $user);
-            if (!empty($accessResult['can_access']) && !empty($accessResult['is_free'])) {
+            if (! empty($accessResult['can_access']) && ! empty($accessResult['is_free'])) {
                 $requiresPayment = false;
             }
         }
 
-        $isUnlocked = !$requiresPayment || !$attempt->is_locked;
+        $isUnlocked = ! $requiresPayment || ! $attempt->is_locked;
 
-        if (!$isUnlocked) {
+        if (! $isUnlocked) {
             $hasUnlockToken = false;
             if ($unlockToken !== '') {
                 $token = GuestUnlockToken::where('token', $unlockToken)
@@ -325,16 +319,17 @@ class GuestQuizController extends Controller
             'attempted_at' => optional($attempt->created_at)->toIso8601String(),
             'price' => $price,
             'one_off_price' => $attempt->quiz->one_off_price ?? null,
-            'default_quiz_one_off_price' => (function () use ($attempt) {
+            'default_quiz_one_off_price' => (function () {
                 try {
                     $setting = \App\Models\PricingSetting::singleton();
+
                     return (float) ($setting->default_quiz_one_off_price ?? 0);
                 } catch (\Throwable $_) {
                     return 0.0;
                 }
             })(),
             'requires_payment' => $requiresPayment,
-            'locked' => !$isUnlocked,
+            'locked' => ! $isUnlocked,
             'results' => [],
         ];
 
@@ -360,7 +355,7 @@ class GuestQuizController extends Controller
                         $result['body'] = $q->body ?? $q->text ?? $result['body'] ?? '';
                         $result['correct'] = isset($result['is_correct']) ? $result['is_correct'] : (isset($result['correct']) ? $result['correct'] : false);
                         $result['is_correct'] = $result['correct'];
-                        if (!isset($result['correct_answers']) && isset($result['correct_answer'])) {
+                        if (! isset($result['correct_answers']) && isset($result['correct_answer'])) {
                             $result['correct_answers'] = $result['correct_answer'];
                         }
                     }
@@ -382,9 +377,7 @@ class GuestQuizController extends Controller
     /**
      * Format results with question details and explanations
      *
-     * @param  array  $results
      * @param  \Illuminate\Database\Eloquent\Collection  $questions
-     * @return array
      */
     private function formatResultsWithExplanations(array $results, $questions): array
     {
@@ -393,7 +386,9 @@ class GuestQuizController extends Controller
 
         foreach ($results as $result) {
             $question = $questionMap->get($result['question_id']);
-            if (!$question) continue;
+            if (! $question) {
+                continue;
+            }
 
             $optionMap = $this->markingService->buildOptionMap($question);
             $provided = $result['selected'] ?? null;
@@ -406,7 +401,7 @@ class GuestQuizController extends Controller
                 'body' => $question->body ?? $question->text ?? '',
                 'is_correct' => $isCorrect,
                 'correct' => $isCorrect,
-                'marks_earned' => $result['marks'] ?? (float)($question->marks ?: 1),
+                'marks_earned' => $result['marks'] ?? (float) ($question->marks ?: 1),
                 'explanation' => $question->explanation ?? null,
                 'provided' => $this->markingService->formatExplanationAnswers($provided, $optionMap),
                 'correct_answer' => $this->markingService->formatExplanationAnswers($question->answers, $optionMap),
@@ -425,8 +420,6 @@ class GuestQuizController extends Controller
      * Format answer for display
      *
      * @param  mixed  $answer
-     * @param  array  $optionMap
-     * @return string
      */
     private function formatAnswer($answer, array $optionMap = []): string
     {
@@ -436,9 +429,7 @@ class GuestQuizController extends Controller
     /**
      * Calculate score for guest submission
      *
-     * @param  array  $answers
      * @param  \Illuminate\Database\Eloquent\Collection  $questions
-     * @return array
      */
     private function calculateScore(array $answers, $questions): array
     {
@@ -453,7 +444,7 @@ class GuestQuizController extends Controller
             $selected = $a['selected'] ?? null;
             $q = $questionMap->get($qid);
 
-            if (!$q) {
+            if (! $q) {
                 continue;
             }
 
@@ -494,7 +485,7 @@ class GuestQuizController extends Controller
             $results[] = [
                 'question_id' => $qid,
                 'correct' => $isCorrect,
-                'marks' => $isCorrect ? $weight : 0
+                'marks' => $isCorrect ? $weight : 0,
             ];
         }
 
@@ -511,7 +502,7 @@ class GuestQuizController extends Controller
             'correct_count' => $correctCount,
             'score' => $score,
             'earned_marks' => $earnedMarks,
-            'total_marks' => $totalQuizMarks
+            'total_marks' => $totalQuizMarks,
         ];
     }
 
@@ -535,11 +526,11 @@ class GuestQuizController extends Controller
         } elseif ($subjectId) {
             $query->where('subject_id', $subjectId);
         } elseif ($gradeId) {
-            $query->whereHas('topic.subject', function($q) use ($gradeId) {
+            $query->whereHas('topic.subject', function ($q) use ($gradeId) {
                 $q->where('grade_id', $gradeId);
             });
         } elseif ($levelId) {
-            $query->whereHas('topic.subject.grade', function($q) use ($levelId) {
+            $query->whereHas('topic.subject.grade', function ($q) use ($levelId) {
                 $q->where('level_id', $levelId);
             });
         }
@@ -603,7 +594,7 @@ class GuestQuizController extends Controller
         });
 
         return response()->json([
-            'questions' => $formatted
+            'questions' => $formatted,
         ]);
     }
 }

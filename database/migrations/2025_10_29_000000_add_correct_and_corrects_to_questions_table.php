@@ -14,10 +14,10 @@ return new class extends Migration
     public function up()
     {
         Schema::table('questions', function (Blueprint $table) {
-            if (!Schema::hasColumn('questions', 'correct')) {
+            if (! Schema::hasColumn('questions', 'correct')) {
                 $table->integer('correct')->nullable()->after('answers');
             }
-            if (!Schema::hasColumn('questions', 'corrects')) {
+            if (! Schema::hasColumn('questions', 'corrects')) {
                 $table->json('corrects')->nullable()->after('correct');
             }
         });

@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
@@ -18,14 +18,13 @@ use Illuminate\Support\Str;
  * @property int $incorrect_count Number of incorrect answers
  * @property int $skipped_count Number of skipped questions
  * @property int $time_taken Time taken in seconds
-     * @property array $results Detailed results for each question
-     * @property bool $is_locked Whether result viewing requires one-off payment
-     * @property \DateTimeInterface|null $unlocked_at
-     * @property int|null $unlock_purchase_id
-     * @property int|null $user_id User ID if guest converted to user
+ * @property array $results Detailed results for each question
+ * @property bool $is_locked Whether result viewing requires one-off payment
+ * @property \DateTimeInterface|null $unlocked_at
+ * @property int|null $unlock_purchase_id
+ * @property int|null $user_id User ID if guest converted to user
  * @property \DateTimeInterface $created_at
  * @property \DateTimeInterface $updated_at
- *
  * @property-read \App\Models\Quiz $quiz
  * @property-read \App\Models\User|null $user
  */
@@ -34,7 +33,9 @@ class GuestQuizAttempt extends Model
     use HasFactory;
 
     protected $table = 'guest_quiz_attempts';
+
     protected $keyType = 'string';
+
     public $incrementing = false;
 
     protected $fillable = [

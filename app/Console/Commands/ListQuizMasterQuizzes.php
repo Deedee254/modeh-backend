@@ -2,10 +2,10 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Quiz;
-use App\Models\User;
 use App\Models\Question;
+use App\Models\Quiz;
 use App\Models\Transaction;
+use App\Models\User;
 use App\Models\Wallet;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
@@ -44,7 +44,7 @@ class ListQuizMasterQuizzes extends Command
             $this->option('quiz-master-name')
         );
 
-        if (!$quizMaster) {
+        if (! $quizMaster) {
             return 1;
         }
 
@@ -53,6 +53,7 @@ class ListQuizMasterQuizzes extends Command
 
         if ($quizzes->isEmpty()) {
             $this->warn("No quizzes found for {$quizMaster->name}");
+
             return 0;
         }
 
@@ -66,6 +67,7 @@ class ListQuizMasterQuizzes extends Command
         $this->displayWalletInformation($quizMaster);
 
         $this->info('Lookup completed successfully!');
+
         return 0;
     }
 
@@ -78,20 +80,23 @@ class ListQuizMasterQuizzes extends Command
 
         if ($id) {
             $user = User::find($id);
-            if (!$user) {
+            if (! $user) {
                 $this->error("Quiz-master user #{$id} not found.");
+
                 return null;
             }
         } elseif ($name) {
             $user = User::where('name', 'like', "%{$name}%")
                 ->orWhere('email', 'like', "%{$name}%")
                 ->first();
-            if (!$user) {
+            if (! $user) {
                 $this->error("Quiz-master matching '{$name}' not found.");
+
                 return null;
             }
         } else {
             $this->error('Please provide either --quiz-master-id or --quiz-master-name');
+
             return null;
         }
 
@@ -107,7 +112,7 @@ class ListQuizMasterQuizzes extends Command
     private function fetchQuizzes(User $quizMaster, int $limit): Collection
     {
         $this->info('Step 2: Fetching quizzes...');
-        
+
         $quizzes = Quiz::where('user_id', $quizMaster->id)
             ->orderBy('created_at', 'desc')
             ->limit($limit)
@@ -127,7 +132,7 @@ class ListQuizMasterQuizzes extends Command
     private function displayQuizDetails(Collection $quizzes): void
     {
         $this->info('Step 3: Quiz Details:');
-        
+
         $quizData = $quizzes->map(function ($quiz) {
             return [
                 'ID' => $quiz->id,
@@ -153,8 +158,8 @@ class ListQuizMasterQuizzes extends Command
     private function displaySummaryStatistics(Collection $quizzes): void
     {
         $this->info('Step 4: Summary Statistics:');
-        
-        $totalQuestions = $quizzes->sum(fn($q) => $q->questions_count ?? Question::where('quiz_id', $q->id)->count());
+
+        $totalQuestions = $quizzes->sum(fn ($q) => $q->questions_count ?? Question::where('quiz_id', $q->id)->count());
         $paidQuizzes = $quizzes->where('is_paid', true)->count();
         $freeQuizzes = $quizzes->where('is_paid', false)->count();
 
@@ -176,7 +181,7 @@ class ListQuizMasterQuizzes extends Command
     private function displayTransactionSummary(User $quizMaster): void
     {
         $this->info('Step 5: Transaction Summary:');
-        
+
         $transactions = Transaction::where('quiz_master_id', $quizMaster->id)
             ->get();
 
@@ -200,7 +205,7 @@ class ListQuizMasterQuizzes extends Command
             // Show recent transactions
             $this->info('Recent Transactions:');
             $recentTransactions = $transactions->sortByDesc('created_at')->take(10);
-            
+
             $transactionData = $recentTransactions->map(function ($tx) {
                 return [
                     'ID' => $tx->id,
@@ -227,7 +232,7 @@ class ListQuizMasterQuizzes extends Command
     private function displayWalletInformation(User $quizMaster): void
     {
         $this->info('Step 6: Wallet Information:');
-        
+
         $wallet = Wallet::firstOrCreate(
             ['user_id' => $quizMaster->id],
             ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]

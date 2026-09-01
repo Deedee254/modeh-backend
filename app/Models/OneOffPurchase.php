@@ -7,17 +7,17 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * OneOffPurchase Model
- * 
+ *
  * Represents one-time purchases (not subscriptions)
  * Uses polymorphic relationships for item_type/item_id
- * 
+ *
  * Status lifecycle: pending → confirmed → completed
  * - pending: Initial state, awaiting payment
  * - confirmed: Payment received from gateway (M-PESA receipt confirmed)
  * - completed: Transaction records created and distributed
  * - failed: Payment failed or declined
  * - cancelled: User cancelled the payment
- * 
+ *
  * @property int $id
  * @property int|null $user_id
  * @property string|null $guest_identifier
@@ -77,8 +77,9 @@ class OneOffPurchase extends Model
                     $itemName = $item->title ?? $item->name ?? $itemName;
                 }
             }
-        } catch (\Throwable $e) {}
-        
+        } catch (\Throwable $e) {
+        }
+
         return $itemName;
     }
 }

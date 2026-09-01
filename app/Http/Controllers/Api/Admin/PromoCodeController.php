@@ -11,6 +11,7 @@ class PromoCodeController extends Controller
     public function index()
     {
         $promoCodes = PromoCode::withCount('usages')->orderBy('created_at', 'desc')->paginate(20);
+
         return response()->json($promoCodes);
     }
 
@@ -40,7 +41,7 @@ class PromoCodeController extends Controller
     public function update(Request $request, PromoCode $promoCode)
     {
         $validated = $request->validate([
-            'code' => 'sometimes|string|unique:promo_codes,code,' . $promoCode->id,
+            'code' => 'sometimes|string|unique:promo_codes,code,'.$promoCode->id,
             'discount_type' => 'sometimes|in:fixed,percentage',
             'discount_amount' => 'sometimes|numeric|min:0',
             'max_uses_overall' => 'nullable|integer|min:1',
@@ -58,6 +59,7 @@ class PromoCodeController extends Controller
     public function destroy(PromoCode $promoCode)
     {
         $promoCode->delete();
+
         return response()->json(['message' => 'Promo code deleted successfully']);
     }
 }

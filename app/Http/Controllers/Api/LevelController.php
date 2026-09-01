@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Level;
 use App\Http\Resources\LevelResource;
+use App\Models\Level;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -30,12 +30,12 @@ class LevelController extends Controller
             // Try to store in cache, but don't fail if it's too large
             try {
                 Cache::put($key, $data, $ttl);
-                } catch (\Exception $e) {
+            } catch (\Exception $e) {
                 // Log the error but continue without caching
                 Log::warning('Failed to cache data', [
                     'key' => $key,
                     'error' => $e->getMessage(),
-                    'error_type' => get_class($e)
+                    'error_type' => get_class($e),
                 ]);
             }
 
@@ -44,8 +44,9 @@ class LevelController extends Controller
             // If cache retrieval fails, just execute the callback
             Log::warning('Cache operation failed, falling back to direct query', [
                 'key' => $key,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return $callback();
         }
     }
@@ -54,17 +55,17 @@ class LevelController extends Controller
     // OPTIMIZED: Strategy B - Selective fields, Strategy A - Counts only
     public function index(Request $request)
     {
-        $cacheKey = 'levels_index_' . md5(serialize($request->all()));
+        $cacheKey = 'levels_index_'.md5(serialize($request->all()));
         $compact = $request->boolean('compact');
 
-        $levels = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function() use ($compact) {
+        $levels = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($compact) {
             if ($compact) {
                 // Compact payload: only top-level level fields and light grade metadata
                 return Level::select('id', 'name', 'slug', 'order', 'description')
-                    ->with(['grades' => function($q) {
+                    ->with(['grades' => function ($q) {
                         $q->select('id', 'name', 'slug', 'level_id')
-                          ->withCount('subjects')
-                          ->withCount('quizzes');
+                            ->withCount('subjects')
+                            ->withCount('quizzes');
                     }])
                     ->orderBy('order')
                     ->get();
@@ -72,32 +73,32 @@ class LevelController extends Controller
 
             // Default: more detailed but still selective fields
             return Level::select('id', 'name', 'slug', 'order', 'description')
-                ->with(['grades' => function($q) {
+                ->with(['grades' => function ($q) {
                     $q->select('id', 'name', 'slug', 'level_id', 'description', 'type', 'display_name')
-                      ->withCount('subjects')
-                      ->with(['subjects' => function($s) {
-                          $s->select('id', 'name', 'slug', 'grade_id', 'description', 'is_approved')
-                            ->where('is_approved', true)
-                            ->withCount('topics')
-                            ->with(['topics' => function($t) { 
-                                $t->select('id', 'name', 'slug', 'subject_id')
-                                  ->withCount('quizzes'); 
-                            }]);
-                      }]);
+                        ->withCount('subjects')
+                        ->with(['subjects' => function ($s) {
+                            $s->select('id', 'name', 'slug', 'grade_id', 'description', 'is_approved')
+                                ->where('is_approved', true)
+                                ->withCount('topics')
+                                ->with(['topics' => function ($t) {
+                                    $t->select('id', 'name', 'slug', 'subject_id')
+                                        ->withCount('quizzes');
+                                }]);
+                        }]);
                 }])
                 ->orderBy('order')
                 ->get();
         });
 
         if ($compact) {
-            $out = $levels->map(function($level) {
+            $out = $levels->map(function ($level) {
                 return [
                     'id' => $level->id,
                     'name' => $level->name,
                     'slug' => $level->slug,
                     'order' => $level->order,
                     'description' => $level->description,
-                    'grades' => collect($level->grades)->map(function($g) {
+                    'grades' => collect($level->grades)->map(function ($g) {
                         return [
                             'id' => $g->id,
                             'name' => $g->name,
@@ -118,9 +119,9 @@ class LevelController extends Controller
 
         // Return wrapped response for consistency with frontend expectations
         return response()->json([
-            'data' => $levels->map(fn($level) => new LevelResource($level)),
+            'data' => $levels->map(fn ($level) => new LevelResource($level)),
             'total' => count($levels),
-            'count' => count($levels)
+            'count' => count($levels),
         ]);
     }
 
@@ -145,23 +146,24 @@ class LevelController extends Controller
             return response()->json(['message' => 'Level not found'], 404);
         }
 
-        $cacheKey = 'level_show_' . $level->id;
+        $cacheKey = 'level_show_'.$level->id;
 
-        $level = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function() use ($level) {
+        $level = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($level) {
             // Strategy B: Load only essential fields
-            $level->load(['grades' => function($q) {
+            $level->load(['grades' => function ($q) {
                 $q->select('id', 'name', 'slug', 'level_id', 'description', 'type', 'display_name')
-                  ->withCount('subjects')
-                  ->with(['subjects' => function($s) {
-                      $s->select('id', 'name', 'slug', 'grade_id', 'description', 'is_approved')
-                        ->where('is_approved', true)
-                        ->withCount('topics')
-                        ->with(['topics' => function($t) { 
-                            $t->select('id', 'name', 'slug', 'subject_id')
-                              ->withCount('quizzes'); 
-                        }]);
-                  }]);
+                    ->withCount('subjects')
+                    ->with(['subjects' => function ($s) {
+                        $s->select('id', 'name', 'slug', 'grade_id', 'description', 'is_approved')
+                            ->where('is_approved', true)
+                            ->withCount('topics')
+                            ->with(['topics' => function ($t) {
+                                $t->select('id', 'name', 'slug', 'subject_id')
+                                    ->withCount('quizzes');
+                            }]);
+                    }]);
             }]);
+
             return $level;
         });
 
@@ -177,13 +179,16 @@ class LevelController extends Controller
             'order' => 'nullable|integer',
             'description' => 'nullable|string',
         ]);
-        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
 
         $data = $request->only(['name', 'slug', 'order', 'description']);
         if (empty($data['slug'])) {
             $data['slug'] = Str::slug($data['name']);
         }
         $level = Level::create($data);
+
         return response()->json(['level' => $level], 201);
     }
 
@@ -195,15 +200,19 @@ class LevelController extends Controller
             'order' => 'sometimes|nullable|integer',
             'description' => 'sometimes|nullable|string',
         ]);
-        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
 
         $level->update($request->only(['name', 'slug', 'order', 'description']));
+
         return response()->json(['level' => $level]);
     }
 
     public function destroy(Level $level)
     {
         $level->delete();
+
         return response()->json(['deleted' => true]);
     }
 }

@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\TestimonialResource\Pages;
 
 use App\Filament\Resources\TestimonialResource;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateTestimonial extends CreateRecord

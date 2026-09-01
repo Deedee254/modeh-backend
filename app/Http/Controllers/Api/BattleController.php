@@ -2,38 +2,35 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\BattleParticipantJoined;
+use App\Events\BattleStatusUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Battle;
-use App\Models\Question;
-use App\Models\DailyUsageTracking;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use App\Models\BattleSubmission;
+use App\Models\Grade;
+use App\Models\OneOffPurchase;
+use App\Models\Question;
 use App\Models\Transaction;
-use App\Models\Wallet;
-use App\Models\Quiz;
 use App\Models\User;
 use App\Services\AchievementService;
 use App\Services\QuestionMarkingService;
-use App\Models\OneOffPurchase;
-use App\Models\Grade;
-use App\Events\BattleParticipantJoined;
-use App\Events\BattleStatusUpdated;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class BattleController extends Controller
 {
     protected $achievementService;
+
     protected $questionMarkingService;
 
     public function __construct(AchievementService $achievementService)
     {
         $this->achievementService = $achievementService;
-        $this->questionMarkingService = new QuestionMarkingService();
+        $this->questionMarkingService = new QuestionMarkingService;
     }
-
 
     private function userHasBattlePurchase($user, Battle $battle): bool
     {
@@ -43,6 +40,7 @@ class BattleController extends Controller
             ->whereIn('status', ['confirmed', 'completed'])
             ->exists();
     }
+
     public function store(Request $request)
     {
         $user = $request->user();
@@ -67,11 +65,11 @@ class BattleController extends Controller
 
             // Calculate timing once based on actual attached questions or provided count
             $settings = is_array($battle->settings) ? $battle->settings : [];
-            $totalTime = $request->input('settings.time_total_seconds') 
-                ?? $request->input('settings.total_time_seconds') 
-                ?? $request->input('time_total_seconds') 
+            $totalTime = $request->input('settings.time_total_seconds')
+                ?? $request->input('settings.total_time_seconds')
+                ?? $request->input('time_total_seconds')
                 ?? null;
-            
+
             $questionCount = $battle->questions()->count();
             if ($totalTime && $questionCount > 0) {
                 $per = (int) floor(intval($totalTime) / $questionCount);
@@ -99,7 +97,7 @@ class BattleController extends Controller
             ->where(function ($query) {
                 // A battle is joinable if opponent_id is null, or if it's the same as initiator_id (placeholder)
                 $query->whereNull('opponent_id')
-                      ->orWhereColumn('opponent_id', 'initiator_id');
+                    ->orWhereColumn('opponent_id', 'initiator_id');
             })
             ->latest()
             ->limit(20)
@@ -108,9 +106,13 @@ class BattleController extends Controller
         // Build a simple players collection from initiator/opponent for frontend compatibility
         $battles->each(function (Battle $battle) {
             $players = collect();
-            if ($battle->initiator) $players->push($battle->initiator);
+            if ($battle->initiator) {
+                $players->push($battle->initiator);
+            }
             // If opponent is set and not just the placeholder equal to initiator, include it
-            if ($battle->opponent && $battle->opponent_id !== $battle->initiator_id) $players->push($battle->opponent);
+            if ($battle->opponent && $battle->opponent_id !== $battle->initiator_id) {
+                $players->push($battle->opponent);
+            }
             // set as a loaded relation so JSON serialization includes it
             $battle->setRelation('players', $players);
         });
@@ -125,6 +127,7 @@ class BattleController extends Controller
             ->orWhere('opponent_id', $user->id)
             ->with(['initiator:id,first_name,profile', 'opponent:id,first_name,profile'])
             ->latest()->paginate(15);
+
         return response()->json($battles);
     }
 
@@ -140,6 +143,7 @@ class BattleController extends Controller
             $battle->time_per_question = $settings['time_per_question'];
         }
         $battle->one_off_price = $battle->price;
+
         return response()->json($battle);
     }
 
@@ -150,7 +154,9 @@ class BattleController extends Controller
     public function join(Request $request, Battle $battle)
     {
         $user = $request->user();
-        if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+        if (! $user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
         // If user is already a participant, return
         if (in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
@@ -179,10 +185,12 @@ class BattleController extends Controller
     public function startSolo(Request $request, Battle $battle)
     {
         $user = $request->user();
-        if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+        if (! $user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
         // Only a participant can start solo mode (initiator or opponent who joined)
-        if (!in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
+        if (! in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
             return response()->json(['message' => 'Only battle participants can start solo mode'], 403);
         }
 
@@ -218,7 +226,7 @@ class BattleController extends Controller
         if ($battle->questions()->exists()) {
             return response()->json([
                 'message' => 'Questions are already attached to this battle',
-                'attached_count' => $battle->questions()->count()
+                'attached_count' => $battle->questions()->count(),
             ], 409);
         }
 
@@ -228,7 +236,7 @@ class BattleController extends Controller
         return response()->json([
             'ok' => true,
             'attached' => count($questions),
-            'questions' => $questions
+            'questions' => $questions,
         ]);
     }
 
@@ -236,8 +244,6 @@ class BattleController extends Controller
      * Select questions based on params and attach them to the battle (persisted order).
      * Returns the selected collection.
      *
-     * @param \App\Models\Battle $battle
-     * @param array $params
      * @return \Illuminate\Database\Eloquent\Collection
      */
     private function selectAndAttachQuestions(Battle $battle, array $params)
@@ -249,7 +255,7 @@ class BattleController extends Controller
         $topic = $params['topic_id'] ?? $settings['topic_id'] ?? $params['topic'] ?? $settings['topic'] ?? null;
         $difficulty = $params['difficulty'] ?? $settings['difficulty'] ?? null;
         $grade = $params['grade_id'] ?? $settings['grade_id'] ?? $params['grade'] ?? $settings['grade'] ?? null;
-    $level = $params['level_id'] ?? $settings['level_id'] ?? null;
+        $level = $params['level_id'] ?? $settings['level_id'] ?? null;
         $subject = $params['subject_id'] ?? $settings['subject_id'] ?? null;
         $random = $params['random'] ?? $settings['random'] ?? 1;
 
@@ -262,25 +268,35 @@ class BattleController extends Controller
             'difficulty' => $difficulty,
             'question_count' => $perPage,
             'random' => (bool) $random,
-        ], function ($v) { return $v !== null && $v !== ''; });
-        if (!empty($persistable)) {
+        ], function ($v) {
+            return $v !== null && $v !== '';
+        });
+        if (! empty($persistable)) {
             $battle->settings = array_merge(is_array($battle->settings) ? $battle->settings : [], $persistable);
             $battle->save();
         }
 
-    $q = Question::query();
+        $q = Question::query();
         // We no longer use `for_battle` filter: the bank determines eligibility.
-    if ($topic && Schema::hasColumn('questions', 'topic_id')) $q->where('topic_id', $topic);
-    if ($subject && Schema::hasColumn('questions', 'subject_id')) $q->where('subject_id', $subject);
-    if ($difficulty && Schema::hasColumn('questions', 'difficulty')) $q->where('difficulty', $difficulty);
-    if ($grade && Schema::hasColumn('questions', 'grade_id')) $q->where('grade_id', $grade);
+        if ($topic && Schema::hasColumn('questions', 'topic_id')) {
+            $q->where('topic_id', $topic);
+        }
+        if ($subject && Schema::hasColumn('questions', 'subject_id')) {
+            $q->where('subject_id', $subject);
+        }
+        if ($difficulty && Schema::hasColumn('questions', 'difficulty')) {
+            $q->where('difficulty', $difficulty);
+        }
+        if ($grade && Schema::hasColumn('questions', 'grade_id')) {
+            $q->where('grade_id', $grade);
+        }
 
         // If level filter provided, constrain questions to grades that belong to that level
         if ($level) {
             try {
                 if (Schema::hasTable('grades') && Schema::hasColumn('grades', 'level_id') && Schema::hasColumn('questions', 'grade_id')) {
                     $gradeIds = Grade::where('level_id', $level)->pluck('id')->toArray();
-                    if (!empty($gradeIds)) {
+                    if (! empty($gradeIds)) {
                         $q->whereIn('grade_id', $gradeIds);
                     } else {
                         // no grades found for level — ensure no results to respect the filter
@@ -305,7 +321,7 @@ class BattleController extends Controller
                 'filters' => compact('grade', 'subject', 'topic', 'difficulty', 'level'),
                 'perPage' => $perPage,
             ]);
-            
+
             abort(response()->json([
                 'ok' => false,
                 'message' => 'No questions found matching your filters. Please adjust them and try again.',
@@ -323,17 +339,17 @@ class BattleController extends Controller
         $battle->questions()->detach();
         $attachData = [];
         $seenIds = [];
-        
+
         foreach ($questions as $i => $question) {
-            if (!in_array($question->id, $seenIds)) {
+            if (! in_array($question->id, $seenIds)) {
                 $attachData[$question->id] = ['position' => count($seenIds)];
                 $seenIds[] = $question->id;
             }
         }
 
-        if (!empty($attachData)) {
+        if (! empty($attachData)) {
             $battle->questions()->attach($attachData);
-            
+
             // Log the action
             Log::info('Battle questions attached', [
                 'battle_id' => $battle->id,
@@ -371,9 +387,9 @@ class BattleController extends Controller
         ];
 
         // require at least one of these when attaching
-    $hasFilter = isset($data['grade_id']) || isset($data['subject_id']) || isset($data['topic_id']) || isset($data['difficulty']) || isset($data['topic']) || isset($data['grade']) || isset($data['level_id']);
+        $hasFilter = isset($data['grade_id']) || isset($data['subject_id']) || isset($data['topic_id']) || isset($data['difficulty']) || isset($data['topic']) || isset($data['grade']) || isset($data['level_id']);
 
-        if (!$hasFilter) {
+        if (! $hasFilter) {
             abort(response()->json(['message' => 'At least one filter (grade_id, subject_id, topic_id or difficulty) is required to attach questions'], 422));
         }
 
@@ -390,14 +406,21 @@ class BattleController extends Controller
      */
     private function normalizeAnswers($answers): array
     {
-        if (is_array($answers)) return $answers;
+        if (is_array($answers)) {
+            return $answers;
+        }
         if (is_object($answers) && method_exists($answers, 'toArray')) {
-            try { return $answers->toArray(); } catch (\Throwable $_) { /* fall through */ }
+            try {
+                return $answers->toArray();
+            } catch (\Throwable $_) { /* fall through */
+            }
         }
         if (is_string($answers)) {
             $decoded = json_decode($answers, true);
+
             return is_array($decoded) ? $decoded : [];
         }
+
         // Fallback safely to array cast
         return is_array($answers) ? $answers : (array) $answers;
     }
@@ -409,7 +432,9 @@ class BattleController extends Controller
     public function submit(Request $request, Battle $battle)
     {
         $user = $request->user();
-        if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+        if (! $user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
         // Use the admin user as the configured bot opponent (explicit requirement).
         // Pick the first user with role 'admin' (if any).
@@ -417,18 +442,18 @@ class BattleController extends Controller
         $botUserId = $admin ? $admin->id : null;
 
         // ensure the user is a participant
-        if (!in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
+        if (! in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-    $payload = $request->validate(['answers' => 'required|array', 'meta' => 'nullable|array']);
-    $answers = $payload['answers'] ?? [];
-    $defer = $request->boolean('defer_marking', false);
+        $payload = $request->validate(['answers' => 'required|array', 'meta' => 'nullable|array']);
+        $answers = $payload['answers'] ?? [];
+        $defer = $request->boolean('defer_marking', false);
 
         // If this participant already submitted, return existing battle result (idempotent)
         $isInitiator = $user->id === $battle->initiator_id;
         $pointsField = $isInitiator ? 'initiator_points' : 'opponent_points';
-        if (!is_null($battle->{$pointsField})) {
+        if (! is_null($battle->{$pointsField})) {
             return response()->json(['ok' => true, 'battle' => $battle]);
         }
 
@@ -445,7 +470,9 @@ class BattleController extends Controller
                 $selected = $a['selected'] ?? null;
                 $timeTaken = $a['time_taken'] ?? null;
                 $q = $questionMap->get($qid) ?? Question::find($qid);
-                if (!$q) return;
+                if (! $q) {
+                    return;
+                }
 
                 // Use shared QuestionMarkingService to determine correctness (handles indices/texts/arrays)
                 $isCorrect = $this->questionMarkingService->isAnswerCorrect($selected, $q->answers ?? [], $q);
@@ -464,7 +491,9 @@ class BattleController extends Controller
                     'correct_flag' => $defer ? null : $isCorrect,
                 ]);
 
-                if ($isCorrect && !$defer) $correct++;
+                if ($isCorrect && ! $defer) {
+                    $correct++;
+                }
                 $optionMap = $this->questionMarkingService->buildOptionMap($q);
                 $detailed[] = [
                     'question_id' => $qid,
@@ -477,7 +506,7 @@ class BattleController extends Controller
             }
 
             // If not deferring, recompute aggregated points from persisted submissions for both participants
-            if (!$defer) {
+            if (! $defer) {
                 $initiatorCorrect = $battle->submissions()->where('user_id', $battle->initiator_id)->where('correct_flag', true)->count();
                 $opponentCorrect = $battle->submissions()->where('user_id', $battle->opponent_id)->where('correct_flag', true)->count();
 
@@ -485,10 +514,14 @@ class BattleController extends Controller
                 $battle->opponent_points = $opponentCorrect;
 
                 // If both sides have now submitted (or opponent already had points), determine winner
-                if (!is_null($battle->initiator_points) && !is_null($battle->opponent_points)) {
-                    if ($battle->initiator_points > $battle->opponent_points) $battle->winner_id = $battle->initiator_id;
-                    elseif ($battle->opponent_points > $battle->initiator_points) $battle->winner_id = $battle->opponent_id;
-                    else $battle->winner_id = null; // tie
+                if (! is_null($battle->initiator_points) && ! is_null($battle->opponent_points)) {
+                    if ($battle->initiator_points > $battle->opponent_points) {
+                        $battle->winner_id = $battle->initiator_id;
+                    } elseif ($battle->opponent_points > $battle->initiator_points) {
+                        $battle->winner_id = $battle->opponent_id;
+                    } else {
+                        $battle->winner_id = null;
+                    } // tie
                     $battle->status = 'completed';
                     $battle->completed_at = now();
                 } else {
@@ -510,24 +543,28 @@ class BattleController extends Controller
                 // Skip awarding achievements to the configured bot user
                 if (intval($battle->winner_id) !== intval($botUserId)) {
                     $this->achievementService->checkAchievements($battle->winner_id, [
-                    'type' => 'battle_won',
-                    'score' => $battle->winner_id === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points,
-                    'total' => $total
+                        'type' => 'battle_won',
+                        'score' => $battle->winner_id === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points,
+                        'total' => $total,
                     ]);
                 }
             }
-            
+
             // Check achievements for both participants
             foreach ([$battle->initiator_id, $battle->opponent_id] as $userId) {
                 // skip bot user
-                if (intval($userId) === intval($botUserId)) continue;
+                if (intval($userId) === intval($botUserId)) {
+                    continue;
+                }
                 $userPoints = $userId === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points;
                 $aw = $this->achievementService->checkAchievements($userId, [
-                    'type' => 'battle_completed', 
+                    'type' => 'battle_completed',
                     'score' => $userPoints,
-                    'total' => $total
+                    'total' => $total,
                 ]);
-                if (is_array($aw) && count($aw)) $awarded = array_merge($awarded, $aw);
+                if (is_array($aw) && count($aw)) {
+                    $awarded = array_merge($awarded, $aw);
+                }
             }
         }
 
@@ -553,37 +590,48 @@ class BattleController extends Controller
             }
 
             // If both sides now have points, determine winner and complete the battle
-            if (!is_null($battle->initiator_points) && !is_null($battle->opponent_points)) {
-                if ($battle->initiator_points > $battle->opponent_points) $battle->winner_id = $battle->initiator_id;
-                elseif ($battle->opponent_points > $battle->initiator_points) $battle->winner_id = $battle->opponent_id;
-                else $battle->winner_id = null;
+            if (! is_null($battle->initiator_points) && ! is_null($battle->opponent_points)) {
+                if ($battle->initiator_points > $battle->opponent_points) {
+                    $battle->winner_id = $battle->initiator_id;
+                } elseif ($battle->opponent_points > $battle->initiator_points) {
+                    $battle->winner_id = $battle->opponent_id;
+                } else {
+                    $battle->winner_id = null;
+                }
                 $battle->status = 'completed';
                 $battle->completed_at = now();
                 $shouldSave = true;
             } else {
                 // keep in-progress if only one side has submitted/persisted
                 $battle->status = 'in_progress';
-                if ($shouldSave) $battle->completed_at = null;
+                if ($shouldSave) {
+                    $battle->completed_at = null;
+                }
             }
 
-            if ($shouldSave) $battle->save();
+            if ($shouldSave) {
+                $battle->save();
+            }
         }
 
         // Build a response-battle shape that may include non-persisted client scores when requested
         $responseBattle = $battle;
         // If client provided a score but did not request persistence, inject into the response only
-        if ($clientScore !== null && !$persistInitiator) {
+        if ($clientScore !== null && ! $persistInitiator) {
             $copy = $battle->toArray();
             $copy['initiator_points'] = intval($clientScore);
             $responseBattle = $copy;
         }
-        if ($clientOpponentScore !== null && !$persistOpponent) {
-            if (!is_array($responseBattle)) $responseBattle = $responseBattle->toArray();
+        if ($clientOpponentScore !== null && ! $persistOpponent) {
+            if (! is_array($responseBattle)) {
+                $responseBattle = $responseBattle->toArray();
+            }
             $responseBattle['opponent_points'] = intval($clientOpponentScore);
         }
 
         // Include any awarded achievements and refreshed user (requesting user)
         $refreshedUser = $user->fresh()->load('achievements');
+
         return response()->json(['ok' => true, 'result' => ['score' => $scorePercent, 'correct' => $correct, 'total' => $total, 'questions' => $detailed], 'battle' => $responseBattle, 'deferred' => $defer, 'awarded_achievements' => $awarded, 'user' => $refreshedUser]);
     }
 
@@ -593,22 +641,24 @@ class BattleController extends Controller
     public function mark(Request $request, Battle $battle)
     {
         $user = $request->user();
-        if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+        if (! $user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
         // Only allow participants
-        if (!in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
+        if (! in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $price = $battle->price;
-        if ($price > 0 && !$this->userHasBattlePurchase($user, $battle)) {
+        if ($price > 0 && ! $this->userHasBattlePurchase($user, $battle)) {
             return response()->json([
                 'ok' => false,
                 'requires_payment' => true,
                 'price' => $price,
                 'currency' => 'KES',
                 'message' => 'Payment required to view battle results',
-                'checkout_url' => '/quizee/payments/checkout?type=battle&id=' . $battle->getKey(),
+                'checkout_url' => '/quizee/payments/checkout?type=battle&id='.$battle->getKey(),
             ], 403);
         }
 
@@ -621,7 +671,9 @@ class BattleController extends Controller
 
             foreach ($submissions as $s) {
                 $q = $questionMap->get($s->question_id) ?? Question::find($s->question_id);
-                if (!$q) continue;
+                if (! $q) {
+                    continue;
+                }
 
                 // Use shared service for correctness
                 $isCorrect = $this->questionMarkingService->isAnswerCorrect($s->selected, $q->answers ?? [], $q);
@@ -644,7 +696,7 @@ class BattleController extends Controller
             } else {
                 $battle->winner_id = null; // tie
             }
-            
+
             $battle->status = 'completed';
             $battle->completed_at = now();
 
@@ -654,10 +706,16 @@ class BattleController extends Controller
             $initUser = User::find($battle->initiator_id);
             $oppUser = User::find($battle->opponent_id);
             if ($initUser && method_exists($initUser, 'increment')) {
-                try { $initUser->increment('points', $battle->initiator_points); } catch (\Throwable $_) {}
+                try {
+                    $initUser->increment('points', $battle->initiator_points);
+                } catch (\Throwable $_) {
+                }
             }
             if ($oppUser && method_exists($oppUser, 'increment')) {
-                try { $oppUser->increment('points', $battle->opponent_points); } catch (\Throwable $_) {}
+                try {
+                    $oppUser->increment('points', $battle->opponent_points);
+                } catch (\Throwable $_) {
+                }
             }
 
             // Check achievements for the current user
@@ -667,14 +725,20 @@ class BattleController extends Controller
                 'type' => 'battle_completed',
                 'score' => $userPoints,
                 'total' => $battle->questions()->count(),
-                'battle_id' => $battle->id
+                'battle_id' => $battle->id,
             ]);
-            if (is_array($aw) && count($aw)) $awarded = $aw;
+            if (is_array($aw) && count($aw)) {
+                $awarded = $aw;
+            }
 
             DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();
-            try { Log::error('Failed marking battle: '.$e->getMessage()); } catch (\Throwable $_) {}
+            try {
+                Log::error('Failed marking battle: '.$e->getMessage());
+            } catch (\Throwable $_) {
+            }
+
             return response()->json(['ok' => false, 'message' => 'Failed to mark battle'], 500);
         }
 
@@ -689,7 +753,9 @@ class BattleController extends Controller
     public function soloComplete(Request $request, Battle $battle)
     {
         $user = $request->user();
-        if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+        if (! $user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
         // Only initiator can perform solo complete
         if ($battle->initiator_id !== $user->id) {
@@ -720,7 +786,9 @@ class BattleController extends Controller
                 $selected = $a['selected'] ?? null;
                 $timeTaken = $a['time_taken'] ?? null;
                 $q = $questionMap->get($qid) ?? Question::find($qid);
-                if (!$q) continue;
+                if (! $q) {
+                    continue;
+                }
 
                 // Use shared QuestionMarkingService for solo completion mark
                 $isCorrect = $this->questionMarkingService->isAnswerCorrect($selected, $q->answers ?? [], $q);
@@ -736,7 +804,9 @@ class BattleController extends Controller
                     'correct_flag' => $isCorrect,
                 ]);
 
-                if ($isCorrect) $correct++;
+                if ($isCorrect) {
+                    $correct++;
+                }
                 $optionMap = $this->questionMarkingService->buildOptionMap($q);
                 $detailed[] = [
                     'question_id' => $qid,
@@ -759,14 +829,17 @@ class BattleController extends Controller
                 $botAccuracy = 0.6;
                 try {
                     $settings = is_array($battle->settings) ? $battle->settings : (array) ($battle->settings ?? []);
-                    if (isset($settings['bot_accuracy'])) $botAccuracy = floatval($settings['bot_accuracy']);
-                } catch (\Throwable $_) {}
+                    if (isset($settings['bot_accuracy'])) {
+                        $botAccuracy = floatval($settings['bot_accuracy']);
+                    }
+                } catch (\Throwable $_) {
+                }
 
                 $seed = crc32($battle->uuid ?? $battle->id);
                 $synthOpponentCorrect = 0;
                 foreach ($battle->questions as $q) {
                     $qid = $q->id;
-                    $r = (crc32($seed . '|' . $qid) % 100) / 100;
+                    $r = (crc32($seed.'|'.$qid) % 100) / 100;
                     $isCorrect = $r < $botAccuracy;
                     $correctAnswers = $this->normalizeAnswers($q->answers);
                     if ($isCorrect) {
@@ -776,11 +849,14 @@ class BattleController extends Controller
                         $opts = $q->getAllOptionTexts();
                         $selected = null;
                         foreach ($opts as $opt) {
-                            if (!in_array($opt, (array) $correctAnswers, true)) { $selected = $opt; break; }
+                            if (! in_array($opt, (array) $correctAnswers, true)) {
+                                $selected = $opt;
+                                break;
+                            }
                         }
                     }
                     $per = intval($settings['time_per_question'] ?? $battle->time_per_question ?? 20);
-                    $tt = 1 + (crc32($seed . ':t:' . $qid) % max(1, $per));
+                    $tt = 1 + (crc32($seed.':t:'.$qid) % max(1, $per));
 
                     // persist a submission record for the bot user
                     BattleSubmission::updateOrCreate([
@@ -802,9 +878,13 @@ class BattleController extends Controller
             }
 
             // determine winner
-            if ($battle->initiator_points > $battle->opponent_points) $battle->winner_id = $battle->initiator_id;
-            elseif ($battle->opponent_points > $battle->initiator_points) $battle->winner_id = $battle->opponent_id;
-            else $battle->winner_id = null;
+            if ($battle->initiator_points > $battle->opponent_points) {
+                $battle->winner_id = $battle->initiator_id;
+            } elseif ($battle->opponent_points > $battle->initiator_points) {
+                $battle->winner_id = $battle->opponent_id;
+            } else {
+                $battle->winner_id = null;
+            }
 
             $battle->status = 'completed';
             $battle->completed_at = now();
@@ -819,9 +899,11 @@ class BattleController extends Controller
             $aw = $this->achievementService->checkAchievements($battle->winner_id, [
                 'type' => 'battle_won',
                 'score' => $battle->winner_id === $battle->initiator_id ? $battle->initiator_points : $battle->opponent_points,
-                'total' => $total
+                'total' => $total,
             ]);
-            if (is_array($aw) && count($aw)) $awarded = array_merge($awarded, $aw);
+            if (is_array($aw) && count($aw)) {
+                $awarded = array_merge($awarded, $aw);
+            }
         }
 
         $refreshedUser = $request->user()->fresh()->load('achievements');
@@ -835,23 +917,23 @@ class BattleController extends Controller
     public function result(Request $request, Battle $battle)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        if (!in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
+        if (! in_array($user->id, [$battle->initiator_id, $battle->opponent_id])) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $price = $battle->price;
-        if ($price > 0 && !$this->userHasBattlePurchase($user, $battle)) {
+        if ($price > 0 && ! $this->userHasBattlePurchase($user, $battle)) {
             return response()->json([
                 'ok' => false,
                 'requires_payment' => true,
                 'price' => $price,
                 'currency' => 'KES',
                 'message' => 'Payment required to view battle results',
-                'checkout_url' => '/quizee/payments/checkout?type=battle&id=' . $battle->getKey(),
+                'checkout_url' => '/quizee/payments/checkout?type=battle&id='.$battle->getKey(),
             ], 403);
         }
 
@@ -871,9 +953,15 @@ class BattleController extends Controller
         $opponentHasSubmissions = false;
         $initiatorHasSubmissions = false;
         foreach ($subs as $s) {
-            if ($s->user_id && $opponentId && intval($s->user_id) === intval($opponentId)) { $opponentHasSubmissions = true; }
-            if ($s->user_id && $initiatorId && intval($s->user_id) === intval($initiatorId)) { $initiatorHasSubmissions = true; }
-            if ($opponentHasSubmissions && $initiatorHasSubmissions) break;
+            if ($s->user_id && $opponentId && intval($s->user_id) === intval($opponentId)) {
+                $opponentHasSubmissions = true;
+            }
+            if ($s->user_id && $initiatorId && intval($s->user_id) === intval($initiatorId)) {
+                $initiatorHasSubmissions = true;
+            }
+            if ($opponentHasSubmissions && $initiatorHasSubmissions) {
+                break;
+            }
         }
 
         // If battle not completed yet, still return present points if any
@@ -886,14 +974,17 @@ class BattleController extends Controller
         $botAccuracy = 0.6;
         try {
             $settings = is_array($battle->settings) ? $battle->settings : (array) ($battle->settings ?? []);
-            if (isset($settings['bot_accuracy'])) $botAccuracy = floatval($settings['bot_accuracy']);
-        } catch (\Throwable $_) {}
+            if (isset($settings['bot_accuracy'])) {
+                $botAccuracy = floatval($settings['bot_accuracy']);
+            }
+        } catch (\Throwable $_) {
+        }
 
         $seed = crc32($battle->uuid ?? $battle->id);
-    $synthOpponentPoints = 0;
-    $synthInitiatorPoints = 0;
-    $computedInitiatorPoints = 0;
-    $computedOpponentPoints = 0;
+        $synthOpponentPoints = 0;
+        $synthInitiatorPoints = 0;
+        $computedInitiatorPoints = 0;
+        $computedOpponentPoints = 0;
 
         foreach ($battle->questions as $q) {
             $qid = $q->id;
@@ -904,9 +995,9 @@ class BattleController extends Controller
 
             // Prepare initiator payload: use real submission if present, otherwise synthesize
             $initiatorPayload = null;
-            if (!$initiatorHasSubmissions) {
+            if (! $initiatorHasSubmissions) {
                 // synthesize initiator answer deterministically
-                $ri = (crc32($seed . 'i|' . $qid) % 100) / 100;
+                $ri = (crc32($seed.'i|'.$qid) % 100) / 100;
                 $isCorrectI = $ri < $botAccuracy;
                 if ($isCorrectI) {
                     $selectedI = $correctAnswers;
@@ -914,17 +1005,22 @@ class BattleController extends Controller
                     $optsI = $q->getAllOptionTexts();
                     $selectedI = null;
                     foreach ($optsI as $opt) {
-                        if (!in_array($opt, (array) $correctAnswers, true)) { $selectedI = $opt; break; }
+                        if (! in_array($opt, (array) $correctAnswers, true)) {
+                            $selectedI = $opt;
+                            break;
+                        }
                     }
                 }
                 $perI = intval($settings['time_per_question'] ?? $battle->time_per_question ?? 20);
-                $tti = 1 + (crc32($seed . ':ti:' . $qid) % max(1, $perI));
+                $tti = 1 + (crc32($seed.':ti:'.$qid) % max(1, $perI));
                 $initiatorPayload = [
                     'selected' => $selectedI,
                     'time_taken' => $tti,
                     'correct_flag' => $isCorrectI,
                 ];
-                if ($isCorrectI) $synthInitiatorPoints++;
+                if ($isCorrectI) {
+                    $synthInitiatorPoints++;
+                }
             } else {
                 if ($initiatorSub) {
                     $initiatorPayload = [
@@ -932,15 +1028,17 @@ class BattleController extends Controller
                         'time_taken' => $initiatorSub->time_taken,
                         'correct_flag' => (bool) $initiatorSub->correct_flag,
                     ];
-                    if ($initiatorSub->correct_flag) $computedInitiatorPoints++;
+                    if ($initiatorSub->correct_flag) {
+                        $computedInitiatorPoints++;
+                    }
                 }
             }
 
             // Prepare opponent payload: use real submission if present, otherwise synthesize
             $opponentPayload = null;
-            if (!$opponentHasSubmissions) {
+            if (! $opponentHasSubmissions) {
                 // deterministic pseudo-random using crc32
-                $r = (crc32($seed . '|' . $qid) % 100) / 100;
+                $r = (crc32($seed.'|'.$qid) % 100) / 100;
                 $isCorrect = $r < $botAccuracy;
 
                 // choose a selected payload: prefer the canonical correct answers when correct
@@ -951,12 +1049,15 @@ class BattleController extends Controller
                     $opts = $q->getAllOptionTexts();
                     $selected = null;
                     foreach ($opts as $opt) {
-                        if (!in_array($opt, (array) $correctAnswers, true)) { $selected = $opt; break; }
+                        if (! in_array($opt, (array) $correctAnswers, true)) {
+                            $selected = $opt;
+                            break;
+                        }
                     }
                 }
 
                 $per = intval($settings['time_per_question'] ?? $battle->time_per_question ?? 20);
-                $tt = 1 + (crc32($seed . ':t:' . $qid) % max(1, $per));
+                $tt = 1 + (crc32($seed.':t:'.$qid) % max(1, $per));
 
                 $opponentPayload = [
                     'selected' => $selected,
@@ -964,7 +1065,9 @@ class BattleController extends Controller
                     'correct_flag' => $isCorrect,
                 ];
 
-                if ($isCorrect) $synthOpponentPoints++;
+                if ($isCorrect) {
+                    $synthOpponentPoints++;
+                }
             } else {
                 // Use real opponent submission if present
                 if ($opponentSub) {
@@ -973,7 +1076,9 @@ class BattleController extends Controller
                         'time_taken' => $opponentSub->time_taken,
                         'correct_flag' => (bool) $opponentSub->correct_flag,
                     ];
-                    if ($opponentSub->correct_flag) $computedOpponentPoints++;
+                    if ($opponentSub->correct_flag) {
+                        $computedOpponentPoints++;
+                    }
                 } else {
                     $opponentPayload = null;
                 }
@@ -1032,10 +1137,13 @@ class BattleController extends Controller
                 'type' => 'battle_completed',
                 'score' => $userPoints,
                 'total' => count($questions),
-                'battle_id' => $battle->id
+                'battle_id' => $battle->id,
             ]);
         } catch (\Throwable $e) {
-            try { Log::warning('Failed to check achievements in result: '.$e->getMessage()); } catch (\Throwable $_) {}
+            try {
+                Log::warning('Failed to check achievements in result: '.$e->getMessage());
+            } catch (\Throwable $_) {
+            }
         }
 
         // Calculate total points earned (from correct answers * marks)
@@ -1045,7 +1153,7 @@ class BattleController extends Controller
         // Pay-per-view model: expose attempt counts instead of subscription limits.
         $battleAttemptsCount = Battle::where(function ($q) use ($user) {
             $q->where('initiator_id', $user->id)
-              ->orWhere('opponent_id', $user->id);
+                ->orWhere('opponent_id', $user->id);
         })->count();
 
         $result = [
@@ -1065,12 +1173,13 @@ class BattleController extends Controller
             $admin = User::where('role', 'admin')->orderBy('id')->first();
             $botUserId = $admin ? $admin->id : null;
             $result['opponent_is_bot'] = ($botUserId && $battle->opponent_id && intval($battle->opponent_id) === intval($botUserId));
-            
+
             // Set convenience flags on the battle model object
-            try { 
+            try {
                 $battle->opponent_is_bot = $result['opponent_is_bot'];
                 $battle->winner_id = $winnerId;
-            } catch (\Throwable $_) {}
+            } catch (\Throwable $_) {
+            }
         } catch (\Throwable $_) {
             // ignore failures here; it's just a convenience flag for the frontend
             $result['opponent_is_bot'] = false;
@@ -1089,7 +1198,7 @@ class BattleController extends Controller
     public function downloadReport(Request $request, Battle $battle)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
@@ -1102,7 +1211,7 @@ class BattleController extends Controller
         $perQuestionTime = [];
         $correctCount = 0;
         $totalTime = 0;
-        
+
         foreach ($submissions as $sub) {
             $answers[] = [
                 'question_id' => $sub->question_id,
@@ -1118,28 +1227,28 @@ class BattleController extends Controller
         $isInitiator = $battle->initiator_id === $user->id;
         $score = $isInitiator ? $battle->initiator_points : $battle->opponent_points;
 
-        $fakeAttempt = new \stdClass();
+        $fakeAttempt = new \stdClass;
         $fakeAttempt->id = $battle->id;
         $fakeAttempt->answers = $answers;
         $fakeAttempt->per_question_time = $perQuestionTime;
         $fakeAttempt->score = $score;
         $fakeAttempt->correct_count = $correctCount;
         $fakeAttempt->total_time_seconds = ceil($totalTime);
-        $fakeAttempt->battle = $battle; 
+        $fakeAttempt->battle = $battle;
 
         // Generate report using the generic logic in PerformanceReportController
         $reportController = new \App\Http\Controllers\Api\PerformanceReportController(app(\App\Services\QuizMarkingService::class));
         $report = $reportController->generateAnalysis($fakeAttempt);
 
         $html = view('reports.performance_report_pdf', [
-            'attempt' => (object)['id' => $battle->id],
+            'attempt' => (object) ['id' => $battle->id],
             'report' => $report,
             'user' => $user,
-            'title' => 'Battle against ' . ($isInitiator ? ($battle->opponent->name ?? 'Opponent') : ($battle->initiator->name ?? 'Opponent')),
+            'title' => 'Battle against '.($isInitiator ? ($battle->opponent->name ?? 'Opponent') : ($battle->initiator->name ?? 'Opponent')),
             'brandColor' => '#7c3aed',
         ])->render();
 
-        $options = new \Dompdf\Options();
+        $options = new \Dompdf\Options;
         $options->set('isRemoteEnabled', true);
         $dompdf = new \Dompdf\Dompdf($options);
         $dompdf->loadHtml($html);
@@ -1147,9 +1256,10 @@ class BattleController extends Controller
         $dompdf->render();
 
         $filename = "battle-report-{$battle->id}.pdf";
+
         return response($dompdf->output(), 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => "attachment; filename={$filename}"
+            'Content-Disposition' => "attachment; filename={$filename}",
         ]);
     }
 }

@@ -13,9 +13,7 @@ class AffiliateInvitationEmail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public $inviter, public $email, public $referralCode)
-    {
-    }
+    public function __construct(public $inviter, public $email, public $referralCode) {}
 
     public function envelope(): Envelope
     {
@@ -27,7 +25,7 @@ class AffiliateInvitationEmail extends Mailable implements ShouldQueue
     public function content(): Content
     {
         $frontend = env('FRONTEND_URL', config('app.url'));
-        $inviteUrl = $frontend . '/register?ref=' . urlencode($this->referralCode);
+        $inviteUrl = $frontend.'/register?ref='.urlencode($this->referralCode);
 
         return new Content(
             markdown: 'emails.affiliate-invite',

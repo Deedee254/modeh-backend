@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Filament\Resources\AffiliatePayoutResource\Pages;
 
 use App\Filament\Resources\AffiliatePayoutResource;

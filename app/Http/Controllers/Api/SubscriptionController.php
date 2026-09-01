@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Subscription;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 /**
  * SubscriptionController
- * 
+ *
  * Handles institution package subscriptions.
  * NOTE: Individual quizees do NOT have subscriptions - they use one-off purchases.
  * Only institution members have access via institution package subscriptions.
@@ -23,7 +23,9 @@ class SubscriptionController extends Controller
     public function mine(Request $request)
     {
         $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false], 401);
+        if (! $user) {
+            return response()->json(['ok' => false], 401);
+        }
 
         $user->loadMissing('institutions');
 
@@ -41,7 +43,7 @@ class SubscriptionController extends Controller
                     'status' => $sub->status,
                     'renews_at' => $sub->ends_at,
                     'limit' => self::getPackageLimit($sub->package, 'quiz_results'),
-                    'type' => 'personal'
+                    'type' => 'personal',
                 ];
             });
 
@@ -64,7 +66,7 @@ class SubscriptionController extends Controller
                         'status' => $instSub->status,
                         'renews_at' => $instSub->ends_at,
                         'limit' => self::getPackageLimit($instSub->package, 'quiz_results'),
-                        'type' => 'institution'
+                        'type' => 'institution',
                     ];
                 }
             }
@@ -90,30 +92,35 @@ class SubscriptionController extends Controller
             'personal_subscriptions' => $personalSubs,
             'institution_subscriptions' => $institutionSubs,
             'has_subscription' => count($allSubs) > 0,
-            'has_institution' => count($institutionSubs) > 0
+            'has_institution' => count($institutionSubs) > 0,
         ]);
     }
-    
+
     /**
      * Get limit from package features, handle unlimited (null)
      */
     private static function getPackageLimit($package, $limitKey = 'quiz_results')
     {
-        if (!$package) return 10; // default
-        if (!is_array($package->features)) return 10;
-        
+        if (! $package) {
+            return 10;
+        } // default
+        if (! is_array($package->features)) {
+            return 10;
+        }
+
         $limits = $package->features['limits'] ?? [];
         $limit = $limits[$limitKey] ?? 10;
-        
+
         return $limit; // null = unlimited, number = limit
     }
-    
+
     /**
      * Count how many results were revealed today
      */
     private function countTodayUsage($userId)
     {
         $today = now()->startOfDay();
+
         return \App\Models\QuizAttempt::where('user_id', $userId)
             ->whereNotNull('score')
             ->where('created_at', '>=', $today)
@@ -124,9 +131,14 @@ class SubscriptionController extends Controller
     public function statusByTx(Request $request)
     {
         $tx = $request->query('tx');
-        if (!$tx) return response()->json(['ok' => false, 'message' => 'tx required'], 400);
+        if (! $tx) {
+            return response()->json(['ok' => false, 'message' => 'tx required'], 400);
+        }
         $sub = Subscription::where('gateway_meta->tx', $tx)->with('package')->first();
-        if (!$sub) return response()->json(['ok' => false, 'message' => 'subscription not found'], 404);
+        if (! $sub) {
+            return response()->json(['ok' => false, 'message' => 'subscription not found'], 404);
+        }
+
         return response()->json(['ok' => true, 'subscription' => $sub, 'status' => $sub->status]);
     }
 
@@ -135,7 +147,9 @@ class SubscriptionController extends Controller
     {
         $user = Auth::user();
 
-        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        if (! $user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
+        }
 
         $isOwner = ((int) $subscription->user_id === (int) $user->id);
         $isInstitutionMember = false;
@@ -145,7 +159,7 @@ class SubscriptionController extends Controller
                 ->exists();
         }
 
-        if (!$isOwner && !$isInstitutionMember) {
+        if (! $isOwner && ! $isInstitutionMember) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 

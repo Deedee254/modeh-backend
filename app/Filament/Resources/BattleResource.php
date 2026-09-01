@@ -4,24 +4,24 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\BattleResource\Pages;
 use App\Models\Battle;
-use BackedEnum;
-use Filament\Resources\Resource;
-use Filament\Forms\Form;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\BadgeColumn;
-// use Filament\Tables\Actions; (not used; action classes come from Filament\Actions)
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\DateTimePicker;
-use Filament\Tables\Filters\SelectFilter;
+// use Filament\Tables\Actions; (not used; action classes come from Filament\Actions)
+use Filament\Resources\Resource;
+use Filament\Tables\Columns\BadgeColumn;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
-use Filament\Forms\Components\DatePicker;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
 
 class BattleResource extends Resource
 {
     protected static ?string $model = Battle::class;
+
     protected static \UnitEnum|string|null $navigationGroup = 'User Engagement';
+
     protected static ?int $navigationSort = 1;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-sparkles';
@@ -62,7 +62,7 @@ class BattleResource extends Resource
                 TextColumn::make('opponent.id')->label('Opponent')->searchable(),
                 TextColumn::make('one_off_price')
                     ->label('One-off Price')
-                    ->formatStateUsing(fn($state) => $state !== null ? number_format($state, 2) : '-')
+                    ->formatStateUsing(fn ($state) => $state !== null ? number_format($state, 2) : '-')
                     ->sortable(),
                 BadgeColumn::make('status')
                     ->colors([

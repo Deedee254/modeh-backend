@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\QuizMasters\Schemas;
 
-use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 
 class QuizMasterForm
 {
@@ -33,7 +33,7 @@ class QuizMasterForm
                                 'English' => 'English',
                                 'History' => 'History',
                                 'Geography' => 'Geography',
-                                'Computer Science' => 'Computer Science'
+                                'Computer Science' => 'Computer Science',
                             ])
                             ->required(),
                         \Filament\Forms\Components\TextInput::make('phone')
@@ -53,7 +53,7 @@ class QuizMasterForm
                         \Filament\Forms\Components\Toggle::make('user.is_profile_completed')
                             ->label('Profile Completed')
                             ->disabled(),
-                    ])
+                    ]),
             ]);
     }
 }

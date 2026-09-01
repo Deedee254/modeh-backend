@@ -2,10 +2,8 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\Tournament;
-use App\Models\TournamentBattle;
-use Illuminate\Support\Carbon;
+use Illuminate\Console\Command;
 
 class CheckTournamentRoundCompletion extends Command
 {
@@ -27,6 +25,7 @@ class CheckTournamentRoundCompletion extends Command
     {
         // Deprecated: round-based tournament processing has been removed.
         $this->info('tournaments:check-rounds is deprecated. Tournament flow is now qualifier-only.');
+
         return 0;
     }
 }

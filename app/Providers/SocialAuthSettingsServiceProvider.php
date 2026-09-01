@@ -21,7 +21,7 @@ class SocialAuthSettingsServiceProvider extends ServiceProvider
     {
         try {
             // Only try to load settings if the database table exists
-            if (!\Schema::hasTable('social_auth_settings')) {
+            if (! \Schema::hasTable('social_auth_settings')) {
                 return;
             }
 
@@ -37,12 +37,13 @@ class SocialAuthSettingsServiceProvider extends ServiceProvider
                         'client_id' => $setting->client_id,
                         'client_secret' => $setting->client_secret,
                         'redirect' => $redirectUrl,
-                    ]
+                    ],
                 ]);
             }
         } catch (\Exception $e) {
             // Log error but don't crash the application (guards artisan and other CLI commands)
-            \Log::error('Failed to load social auth settings: ' . $e->getMessage());
+            \Log::error('Failed to load social auth settings: '.$e->getMessage());
+
             return;
         }
     }

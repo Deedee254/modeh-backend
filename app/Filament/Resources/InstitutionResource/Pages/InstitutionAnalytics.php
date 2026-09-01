@@ -2,18 +2,21 @@
 
 namespace App\Filament\Resources\InstitutionResource\Pages;
 
+use App\Filament\Resources\InstitutionResource;
 use App\Models\Institution;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Facades\DB;
-use App\Filament\Resources\InstitutionResource;
 
 class InstitutionAnalytics extends Page
 {
     protected static string $resource = InstitutionResource::class;
+
     protected string $view = 'filament.resources.institution-resource.pages.institution-analytics';
+
     protected static ?string $title = 'Institution Analytics';
-    
+
     public Institution $institution;
+
     public array $analyticsData = [];
 
     public function mount($record): void
@@ -66,18 +69,18 @@ class InstitutionAnalytics extends Page
                     'quizees' => $quizees,
                     'quiz_masters' => $quizMasters,
                     'active_today' => $activeToday,
-                    'active_this_week' => $activeThisWeek
+                    'active_this_week' => $activeThisWeek,
                 ],
                 'quizzes' => [
                     'total_attempts' => $totalAttempts,
-                    'avg_score' => $avgScore
+                    'avg_score' => $avgScore,
                 ],
                 'subscription' => [
                     'seats_total' => $seatsTotal,
                     'seats_assigned' => $seatsAssigned,
                     'seats_available' => $seatsAvailable,
-                    'utilization_rate' => $utilizationRate
-                ]
+                    'utilization_rate' => $utilizationRate,
+                ],
             ];
         } catch (\Exception $e) {
             \Filament\Notifications\Notification::make()
@@ -90,6 +93,6 @@ class InstitutionAnalytics extends Page
 
     public function getHeading(): string
     {
-        return 'Analytics: ' . $this->institution->name;
+        return 'Analytics: '.$this->institution->name;
     }
 }

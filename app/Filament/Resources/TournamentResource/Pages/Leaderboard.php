@@ -4,12 +4,12 @@ namespace App\Filament\Resources\TournamentResource\Pages;
 
 use App\Filament\Resources\TournamentResource;
 use App\Models\Tournament;
+use Filament\Forms;
 use Filament\Resources\Pages\Page;
+use Filament\Tables;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
-use Filament\Tables;
-use Filament\Forms;
 use Illuminate\Database\Eloquent\Builder;
 
 class Leaderboard extends Page implements HasTable

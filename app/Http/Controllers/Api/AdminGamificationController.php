@@ -7,10 +7,10 @@ use App\Models\Achievement;
 use App\Models\Badge;
 use App\Models\QuizeeLevel;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class AdminGamificationController extends Controller
 {
@@ -18,10 +18,16 @@ class AdminGamificationController extends Controller
     {
         /** @var \App\Models\User|null $user */
         $user = auth()->user() ?? auth('sanctum')->user();
-        if ($user && ($user->is_admin ?? false)) return null;
+        if ($user && ($user->is_admin ?? false)) {
+            return null;
+        }
         try {
-            if (Gate::allows('viewFilament')) return null;
-        } catch (\Throwable $_) {}
+            if (Gate::allows('viewFilament')) {
+                return null;
+            }
+        } catch (\Throwable $_) {
+        }
+
         return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
     }
 
@@ -31,14 +37,19 @@ class AdminGamificationController extends Controller
 
     public function getQuizeeLevels()
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
         $levels = QuizeeLevel::orderBy('order')->get();
+
         return response()->json(['ok' => true, 'quizee_levels' => $levels]);
     }
 
     public function storeQuizeeLevel(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
@@ -55,15 +66,20 @@ class AdminGamificationController extends Controller
         }
 
         $level = QuizeeLevel::create($validator->validated());
+
         return response()->json(['ok' => true, 'quizee_level' => $level]);
     }
 
     public function updateQuizeeLevel(Request $request, $id)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $level = QuizeeLevel::find($id);
-        if (!$level) return response()->json(['ok' => false, 'message' => 'Level not found'], 404);
+        if (! $level) {
+            return response()->json(['ok' => false, 'message' => 'Level not found'], 404);
+        }
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
@@ -80,17 +96,23 @@ class AdminGamificationController extends Controller
         }
 
         $level->update($validator->validated());
+
         return response()->json(['ok' => true, 'quizee_level' => $level]);
     }
 
     public function destroyQuizeeLevel($id)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $level = QuizeeLevel::find($id);
-        if (!$level) return response()->json(['ok' => false, 'message' => 'Level not found'], 404);
+        if (! $level) {
+            return response()->json(['ok' => false, 'message' => 'Level not found'], 404);
+        }
 
         $level->delete();
+
         return response()->json(['ok' => true, 'message' => 'Deleted successfully']);
     }
 
@@ -100,14 +122,19 @@ class AdminGamificationController extends Controller
 
     public function getBadges()
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
         $badges = Badge::orderBy('created_at', 'desc')->get();
+
         return response()->json(['ok' => true, 'badges' => $badges]);
     }
 
     public function storeBadge(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
@@ -123,18 +150,25 @@ class AdminGamificationController extends Controller
         }
 
         $data = $validator->validated();
-        if (!isset($data['points_reward'])) $data['points_reward'] = 0;
-        
+        if (! isset($data['points_reward'])) {
+            $data['points_reward'] = 0;
+        }
+
         $badge = Badge::create($data);
+
         return response()->json(['ok' => true, 'badge' => $badge]);
     }
 
     public function updateBadge(Request $request, $id)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $badge = Badge::find($id);
-        if (!$badge) return response()->json(['ok' => false, 'message' => 'Badge not found'], 404);
+        if (! $badge) {
+            return response()->json(['ok' => false, 'message' => 'Badge not found'], 404);
+        }
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
@@ -150,20 +184,28 @@ class AdminGamificationController extends Controller
         }
 
         $data = $validator->validated();
-        if (!isset($data['points_reward'])) $data['points_reward'] = 0;
+        if (! isset($data['points_reward'])) {
+            $data['points_reward'] = 0;
+        }
 
         $badge->update($data);
+
         return response()->json(['ok' => true, 'badge' => $badge]);
     }
 
     public function destroyBadge($id)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $badge = Badge::find($id);
-        if (!$badge) return response()->json(['ok' => false, 'message' => 'Badge not found'], 404);
+        if (! $badge) {
+            return response()->json(['ok' => false, 'message' => 'Badge not found'], 404);
+        }
 
         $badge->delete();
+
         return response()->json(['ok' => true, 'message' => 'Deleted successfully']);
     }
 
@@ -173,24 +215,28 @@ class AdminGamificationController extends Controller
 
     public function getAchievements()
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
         // Include usage count if applicable. But let's just get the list first.
         $achievements = Achievement::withCount('users')->orderBy('points', 'desc')->get();
-        
+
         $stats = [
             'total_achievements' => Achievement::count(),
             'active_achievements' => Achievement::where('is_active', true)->count(),
             'total_awarded' => DB::table('achievement_user')->count() ?? 0,
             'badges_count' => Badge::count(),
-            'quizee_levels_count' => QuizeeLevel::count()
+            'quizee_levels_count' => QuizeeLevel::count(),
         ];
-        
+
         return response()->json(['ok' => true, 'achievements' => $achievements, 'stats' => $stats]);
     }
 
     public function storeAchievement(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
@@ -210,18 +256,25 @@ class AdminGamificationController extends Controller
         }
 
         $data = $validator->validated();
-        if (!isset($data['is_active'])) $data['is_active'] = true;
+        if (! isset($data['is_active'])) {
+            $data['is_active'] = true;
+        }
 
         $achievement = Achievement::create($data);
+
         return response()->json(['ok' => true, 'achievement' => $achievement]);
     }
 
     public function updateAchievement(Request $request, $id)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $achievement = Achievement::find($id);
-        if (!$achievement) return response()->json(['ok' => false, 'message' => 'Achievement not found'], 404);
+        if (! $achievement) {
+            return response()->json(['ok' => false, 'message' => 'Achievement not found'], 404);
+        }
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
@@ -241,8 +294,10 @@ class AdminGamificationController extends Controller
         }
 
         $data = $validator->validated();
-        if (!isset($data['is_active'])) $data['is_active'] = false;
-        
+        if (! isset($data['is_active'])) {
+            $data['is_active'] = false;
+        }
+
         $oldPoints = $achievement->points;
         $achievement->update($data);
 
@@ -255,7 +310,7 @@ class AdminGamificationController extends Controller
                     $u->save();
                 }
             } catch (\Exception $e) {
-                Log::error("Failed to update user points: " . $e->getMessage());
+                Log::error('Failed to update user points: '.$e->getMessage());
             }
         }
 
@@ -264,16 +319,21 @@ class AdminGamificationController extends Controller
 
     public function destroyAchievement($id)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $achievement = Achievement::find($id);
-        if (!$achievement) return response()->json(['ok' => false, 'message' => 'Achievement not found'], 404);
+        if (! $achievement) {
+            return response()->json(['ok' => false, 'message' => 'Achievement not found'], 404);
+        }
 
         if ($achievement->users()->count() > 0) {
             return response()->json(['ok' => false, 'message' => 'Cannot delete achievements that have been awarded to users.'], 400);
         }
 
         $achievement->delete();
+
         return response()->json(['ok' => true, 'message' => 'Deleted successfully']);
     }
 }

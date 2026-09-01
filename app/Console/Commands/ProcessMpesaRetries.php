@@ -27,7 +27,7 @@ class ProcessMpesaRetries extends Command
      */
     public function handle()
     {
-        $limit = (int)$this->option('limit');
+        $limit = (int) $this->option('limit');
 
         // Find pending transactions ready for retry
         $transactions = MpesaTransaction::pendingRetry()
@@ -36,6 +36,7 @@ class ProcessMpesaRetries extends Command
 
         if ($transactions->isEmpty()) {
             $this->info('No pending M-PESA transactions to retry.');
+
             return 0;
         }
 
@@ -48,6 +49,7 @@ class ProcessMpesaRetries extends Command
         }
 
         $this->info('All retry jobs processed.');
+
         return 0;
     }
 }

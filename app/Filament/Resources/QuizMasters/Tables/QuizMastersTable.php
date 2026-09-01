@@ -56,7 +56,7 @@ class QuizMastersTable
                         'English' => 'English',
                         'History' => 'History',
                         'Geography' => 'Geography',
-                        'Computer Science' => 'Computer Science'
+                        'Computer Science' => 'Computer Science',
                     ]),
                 \Filament\Tables\Filters\SelectFilter::make('social_provider')
                     ->options([

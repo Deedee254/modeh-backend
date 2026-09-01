@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\QuizAttempt;
 use App\Models\Question;
+use App\Models\QuizAttempt;
 use App\Services\QuestionMarkingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -23,7 +23,7 @@ class PerformanceAnalyticsController extends Controller
     {
         try {
             $user = $request->user();
-            
+
             // 1. Basic Stats
             $attempts = QuizAttempt::where('user_id', $user->id)
                 ->whereNotNull('score')
@@ -37,7 +37,7 @@ class PerformanceAnalyticsController extends Controller
                         'total_quizzes' => 0,
                         'avg_score' => 0,
                         'total_time' => 0,
-                    ]
+                    ],
                 ]);
             }
 
@@ -46,7 +46,7 @@ class PerformanceAnalyticsController extends Controller
             $totalTimeSeconds = $attempts->sum('total_time_seconds');
 
             // 2. Score Trend
-            $scoreTrend = $attempts->take(-20)->map(function($a) {
+            $scoreTrend = $attempts->take(-20)->map(function ($a) {
                 return [
                     'date' => $a->created_at->format('M d'),
                     'score' => round($a->score, 1),
@@ -59,7 +59,9 @@ class PerformanceAnalyticsController extends Controller
             $allQuestionIds = [];
             foreach ($attempts as $attempt) {
                 $answers = $attempt->answers ?? [];
-                if (!is_array($answers)) continue;
+                if (! is_array($answers)) {
+                    continue;
+                }
                 foreach ($answers as $ans) {
                     if (isset($ans['question_id'])) {
                         $allQuestionIds[] = $ans['question_id'];
@@ -76,19 +78,25 @@ class PerformanceAnalyticsController extends Controller
 
             $topicStats = [];
             $subjectStats = [];
-            $markingService = new QuestionMarkingService();
+            $markingService = new QuestionMarkingService;
             $totalQuestionsProcessed = 0;
 
             foreach ($attempts as $attempt) {
                 $answers = $attempt->answers ?? [];
-                if (!is_array($answers)) continue;
+                if (! is_array($answers)) {
+                    continue;
+                }
 
                 foreach ($answers as $ans) {
                     $qid = $ans['question_id'] ?? null;
-                    if (!$qid) continue;
+                    if (! $qid) {
+                        continue;
+                    }
 
                     $question = $questionsMap->get($qid);
-                    if (!$question) continue;
+                    if (! $question) {
+                        continue;
+                    }
 
                     $isCorrect = $markingService->isAnswerCorrect($ans['selected'] ?? null, $question->answers, $question);
                     $totalQuestionsProcessed++;
@@ -96,7 +104,7 @@ class PerformanceAnalyticsController extends Controller
                     // Track by Topic (Singular in this DB schema)
                     if ($question->topic) {
                         $topic = $question->topic;
-                        if (!isset($topicStats[$topic->id])) {
+                        if (! isset($topicStats[$topic->id])) {
                             $topicStats[$topic->id] = [
                                 'id' => $topic->id,
                                 'name' => $topic->name,
@@ -105,13 +113,15 @@ class PerformanceAnalyticsController extends Controller
                             ];
                         }
                         $topicStats[$topic->id]['total']++;
-                        if ($isCorrect) $topicStats[$topic->id]['correct']++;
+                        if ($isCorrect) {
+                            $topicStats[$topic->id]['correct']++;
+                        }
                     }
 
                     // Track by Subject (Singular in this DB schema)
                     if ($question->subject) {
                         $subject = $question->subject;
-                        if (!isset($subjectStats[$subject->id])) {
+                        if (! isset($subjectStats[$subject->id])) {
                             $subjectStats[$subject->id] = [
                                 'id' => $subject->id,
                                 'name' => $subject->name,
@@ -120,19 +130,23 @@ class PerformanceAnalyticsController extends Controller
                             ];
                         }
                         $subjectStats[$subject->id]['total']++;
-                        if ($isCorrect) $subjectStats[$subject->id]['correct']++;
+                        if ($isCorrect) {
+                            $subjectStats[$subject->id]['correct']++;
+                        }
                     }
                 }
             }
 
             // Calculate percentages and sort
-            $formattedTopics = collect($topicStats)->map(function($item) {
+            $formattedTopics = collect($topicStats)->map(function ($item) {
                 $item['percentage'] = round(($item['correct'] / $item['total']) * 100, 1);
+
                 return $item;
             })->values();
 
-            $formattedSubjects = collect($subjectStats)->map(function($item) {
+            $formattedSubjects = collect($subjectStats)->map(function ($item) {
                 $item['percentage'] = round(($item['correct'] / $item['total']) * 100, 1);
+
                 return $item;
             })->values();
 
@@ -164,48 +178,66 @@ class PerformanceAnalyticsController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Performance Analytics Error: ' . $e->getMessage(), [
+            Log::error('Performance Analytics Error: '.$e->getMessage(), [
                 'user_id' => $user->id ?? null,
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
-            
+
             return response()->json([
                 'message' => 'An error occurred while generating your performance analytics.',
-                'error' => config('app.debug') ? $e->getMessage() : null
+                'error' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }
 
     private function calculateProficiencyLevel($score)
     {
-        if ($score >= 80) return ['label' => 'Exceptional', 'grade' => 'A+', 'color' => '#10b981'];
-        if ($score >= 70) return ['label' => 'Distinction', 'grade' => 'A', 'color' => '#059669'];
-        if ($score >= 60) return ['label' => 'Merit', 'grade' => 'B', 'color' => '#3b82f6'];
-        if ($score >= 50) return ['label' => 'Satisfactory', 'grade' => 'C', 'color' => '#f59e0b'];
+        if ($score >= 80) {
+            return ['label' => 'Exceptional', 'grade' => 'A+', 'color' => '#10b981'];
+        }
+        if ($score >= 70) {
+            return ['label' => 'Distinction', 'grade' => 'A', 'color' => '#059669'];
+        }
+        if ($score >= 60) {
+            return ['label' => 'Merit', 'grade' => 'B', 'color' => '#3b82f6'];
+        }
+        if ($score >= 50) {
+            return ['label' => 'Satisfactory', 'grade' => 'C', 'color' => '#f59e0b'];
+        }
+
         return ['label' => 'Developing', 'grade' => 'D', 'color' => '#ef4444'];
     }
 
     private function calculateConsistencyScore($attempts)
     {
-        if ($attempts->count() < 3) return 0;
-        
-        $daysWorked = $attempts->groupBy(fn($a) => $a->created_at->format('Y-m-d'))->count();
+        if ($attempts->count() < 3) {
+            return 0;
+        }
+
+        $daysWorked = $attempts->groupBy(fn ($a) => $a->created_at->format('Y-m-d'))->count();
         $totalDays = $attempts->first()->created_at->diffInDays(now()) ?: 1;
-        
+
         // Ratio of active days to total days in period, scaled to 100
         return min(100, round(($daysWorked / min(30, $totalDays)) * 100));
     }
 
     private function calculateLearningVelocity($attempts)
     {
-        if ($attempts->count() < 5) return 'Stable';
-        
+        if ($attempts->count() < 5) {
+            return 'Stable';
+        }
+
         $firstHalf = $attempts->take($attempts->count() / 2)->avg('score');
         $secondHalf = $attempts->take(-($attempts->count() / 2))->avg('score');
-        
+
         $diff = $secondHalf - $firstHalf;
-        if ($diff > 5) return 'Improving';
-        if ($diff < -5) return 'Declining';
+        if ($diff > 5) {
+            return 'Improving';
+        }
+        if ($diff < -5) {
+            return 'Declining';
+        }
+
         return 'Stable';
     }
 
@@ -215,8 +247,8 @@ class PerformanceAnalyticsController extends Controller
     public function download(Request $request)
     {
         $data = $this->overview($request)->getData(true);
-        
-        if (!($data['has_data'] ?? false)) {
+
+        if (! ($data['has_data'] ?? false)) {
             return response()->json(['message' => 'No data available to generate report'], 404);
         }
 
@@ -226,17 +258,18 @@ class PerformanceAnalyticsController extends Controller
             'brandColor' => '#7c3aed',
         ])->render();
 
-        $options = new \Dompdf\Options();
+        $options = new \Dompdf\Options;
         $options->set('isRemoteEnabled', true);
         $dompdf = new \Dompdf\Dompdf($options);
         $dompdf->loadHtml($html);
         $dompdf->setPaper('A4', 'portrait');
         $dompdf->render();
-        
-        $filename = "performance-overview-" . now()->format('Y-m-d') . ".pdf";
+
+        $filename = 'performance-overview-'.now()->format('Y-m-d').'.pdf';
+
         return response($dompdf->output(), 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => "attachment; filename={$filename}"
+            'Content-Disposition' => "attachment; filename={$filename}",
         ]);
     }
 }

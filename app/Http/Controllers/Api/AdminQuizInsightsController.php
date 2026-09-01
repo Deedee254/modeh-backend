@@ -35,11 +35,15 @@ class AdminQuizInsightsController extends Controller
 
     public function show(Request $request, Quiz $quiz)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         // Ensure the current auth user used by policy checks matches the one we validated
         $user = auth()->user() ?? auth('sanctum')->user();
-        if ($user) auth()->setUser($user);
+        if ($user) {
+            auth()->setUser($user);
+        }
 
         // Load all relations needed by the admin editor
         $quiz->load([
@@ -56,11 +60,15 @@ class AdminQuizInsightsController extends Controller
 
     public function insightsBySlug(Request $request, string $slug)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         // Ensure the current auth user used by policy checks matches the one we validated
         $user = auth()->user() ?? auth('sanctum')->user();
-        if ($user) auth()->setUser($user);
+        if ($user) {
+            auth()->setUser($user);
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -79,14 +87,14 @@ class AdminQuizInsightsController extends Controller
             ])
             ->first();
 
-        if (!$quiz) {
+        if (! $quiz) {
             return response()->json(['ok' => false, 'message' => 'Quiz not found'], 404);
         }
 
         // Also enforce the same policy used by QuizAnalyticsController
         $user = auth()->user() ?? auth('sanctum')->user();
         try {
-            if ($user && !\Illuminate\Support\Facades\Gate::forUser($user)->allows('viewAnalytics', $quiz)) {
+            if ($user && ! \Illuminate\Support\Facades\Gate::forUser($user)->allows('viewAnalytics', $quiz)) {
                 return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
             }
         } catch (\Throwable $_) {
@@ -96,9 +104,11 @@ class AdminQuizInsightsController extends Controller
 
         $to = isset($validated['to']) ? Carbon::parse($validated['to'])->toDateString() : now()->toDateString();
         $from = isset($validated['from']) ? Carbon::parse($validated['from'])->toDateString() : Carbon::parse($to)->subDays(29)->toDateString();
-        if ($from > $to) [$from, $to] = [$to, $from];
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        if ($from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $attemptBase = DB::table('quiz_attempts as a')
             ->where('a.quiz_id', $quiz->id)
@@ -138,7 +148,9 @@ class AdminQuizInsightsController extends Controller
         $fromDt = Carbon::parse($from);
         $toDt = Carbon::parse($to);
         $dates = [];
-        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) $dates[] = $d->toDateString();
+        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) {
+            $dates[] = $d->toDateString();
+        }
 
         $aRows = (clone $attemptBase)
             ->selectRaw('DATE(a.created_at) as date')
@@ -149,7 +161,9 @@ class AdminQuizInsightsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $aByDate = [];
-        foreach ($aRows as $r) $aByDate[$r->date] = $r;
+        foreach ($aRows as $r) {
+            $aByDate[$r->date] = $r;
+        }
 
         $lRows = (clone $likesBase)
             ->selectRaw('DATE(l.created_at) as date, COUNT(*) as value')
@@ -157,7 +171,9 @@ class AdminQuizInsightsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $lByDate = [];
-        foreach ($lRows as $r) $lByDate[$r->date] = (int) ($r->value ?? 0);
+        foreach ($lRows as $r) {
+            $lByDate[$r->date] = (int) ($r->value ?? 0);
+        }
 
         $rRows = (clone $txBase)
             ->selectRaw('DATE(t.created_at) as date')
@@ -169,7 +185,9 @@ class AdminQuizInsightsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $revByDate = [];
-        foreach ($rRows as $r) $revByDate[$r->date] = $r;
+        foreach ($rRows as $r) {
+            $revByDate[$r->date] = $r;
+        }
 
         $series = [
             'attempts' => [],
@@ -244,4 +262,3 @@ class AdminQuizInsightsController extends Controller
         ]);
     }
 }
-

@@ -5,15 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Question;
 use App\Models\Quiz;
-use App\Services\MediaMetadataService;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use App\Models\User;
 use App\Notifications\ResourceRejected;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class QuestionController extends Controller
 {
@@ -22,8 +21,8 @@ class QuestionController extends Controller
         $this->middleware('auth:sanctum');
     }
 
-	    public function index(Request $request)
-	    {
+    public function index(Request $request)
+    {
         // Return questions. By default return questions created by user unless
         // the request explicitly asks for banked/random questions (used by
         // battles/daily-challenge). When `for_battle=1` or `random=1` or
@@ -37,8 +36,8 @@ class QuestionController extends Controller
             $query->where('quiz_id', $quizId);
         } else {
             $isBankQuery = $request->boolean('random') || $request->boolean('banked');
-            if (!$isBankQuery && !$request->boolean('all')) {
-                if (!isset($user->is_admin) || !$user->is_admin) {
+            if (! $isBankQuery && ! $request->boolean('all')) {
+                if (! isset($user->is_admin) || ! $user->is_admin) {
                     $query->where('created_by', $user->id);
                 }
             }
@@ -71,66 +70,68 @@ class QuestionController extends Controller
         }
 
         // Return all matching questions (frontend will handle pagination)
-    $results = $query->get();
-    // Return canonical API resource shape
-	    return response()->json(['questions' => \App\Http\Resources\QuestionResource::collection($results)]);
-	    }
+        $results = $query->get();
 
-	    /**
-	     * Lightweight question summaries for UI (e.g. wallet transaction drilldowns).
-	     * Only returns questions owned by the current user unless admin.
-	     *
-	     * GET /api/questions/summary?ids=1,2,3
-	     */
-	    public function summary(Request $request)
-	    {
-	        $user = $request->user();
-	        $raw = $request->input('ids', '');
+        // Return canonical API resource shape
+        return response()->json(['questions' => \App\Http\Resources\QuestionResource::collection($results)]);
+    }
 
-	        $ids = [];
-	        if (is_array($raw)) {
-	            $ids = $raw;
-	        } elseif (is_string($raw)) {
-	            $ids = array_filter(array_map('trim', explode(',', $raw)));
-	        }
+    /**
+     * Lightweight question summaries for UI (e.g. wallet transaction drilldowns).
+     * Only returns questions owned by the current user unless admin.
+     *
+     * GET /api/questions/summary?ids=1,2,3
+     */
+    public function summary(Request $request)
+    {
+        $user = $request->user();
+        $raw = $request->input('ids', '');
 
-	        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn ($v) => $v > 0)));
-	        if (empty($ids)) {
-	            return response()->json(['ok' => true, 'questions' => []]);
-	        }
-	        if (count($ids) > 200) {
-	            return response()->json(['ok' => false, 'message' => 'Too many ids (max 200)'], 422);
-	        }
+        $ids = [];
+        if (is_array($raw)) {
+            $ids = $raw;
+        } elseif (is_string($raw)) {
+            $ids = array_filter(array_map('trim', explode(',', $raw)));
+        }
 
-	        $isAdmin = isset($user->is_admin) && $user->is_admin;
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn ($v) => $v > 0)));
+        if (empty($ids)) {
+            return response()->json(['ok' => true, 'questions' => []]);
+        }
+        if (count($ids) > 200) {
+            return response()->json(['ok' => false, 'message' => 'Too many ids (max 200)'], 422);
+        }
 
-	        $q = Question::query()->whereIn('id', $ids);
-	        if (!$isAdmin) {
-	            $q->where('created_by', $user->id);
-	        }
+        $isAdmin = isset($user->is_admin) && $user->is_admin;
 
-	        $questions = $q
-	            ->select(['id', 'created_by', 'quiz_id', 'type', 'body', 'marks'])
-	            ->get()
-	            ->map(function ($question) {
-	                $body = is_string($question->body) ? $question->body : '';
-	                $plain = trim(strip_tags($body));
-	                return [
-	                    'id' => $question->id,
-	                    'quiz_id' => $question->quiz_id,
-	                    'type' => $question->type,
-	                    'marks' => $question->marks,
-	                    'body_preview' => Str::limit($plain, 160, '…'),
-	                ];
-	            })
-	            ->values();
+        $q = Question::query()->whereIn('id', $ids);
+        if (! $isAdmin) {
+            $q->where('created_by', $user->id);
+        }
 
-	        return response()->json(['ok' => true, 'questions' => $questions]);
-	    }
+        $questions = $q
+            ->select(['id', 'created_by', 'quiz_id', 'type', 'body', 'marks'])
+            ->get()
+            ->map(function ($question) {
+                $body = is_string($question->body) ? $question->body : '';
+                $plain = trim(strip_tags($body));
 
-	    /**
-	     * Public question bank endpoint: returns global banked/random questions
-	     * with optional filters. This keeps quiz-master listing (`index`) separate.
+                return [
+                    'id' => $question->id,
+                    'quiz_id' => $question->quiz_id,
+                    'type' => $question->type,
+                    'marks' => $question->marks,
+                    'body_preview' => Str::limit($plain, 160, '…'),
+                ];
+            })
+            ->values();
+
+        return response()->json(['ok' => true, 'questions' => $questions]);
+    }
+
+    /**
+     * Public question bank endpoint: returns global banked/random questions
+     * with optional filters. This keeps quiz-master listing (`index`) separate.
      */
     public function bank(Request $request)
     {
@@ -144,14 +145,18 @@ class QuestionController extends Controller
         $subject = $request->get('subject_id') ?? $request->get('subject');
         $topic = $request->get('topic_id') ?? $request->get('topic');
         $difficulty = $request->get('difficulty');
-        if ($grade)
+        if ($grade) {
             $baseQuery->where('grade_id', $grade);
-        if ($subject)
+        }
+        if ($subject) {
             $baseQuery->where('subject_id', $subject);
-        if ($topic)
+        }
+        if ($topic) {
             $baseQuery->where('topic_id', $topic);
-        if ($difficulty)
+        }
+        if ($difficulty) {
             $baseQuery->where('difficulty', $difficulty);
+        }
 
         // Support filtering by level (frontend may send `level` or `level_id`). If provided,
         // constrain questions to grades that belong to that level (if grades table has level_id).
@@ -160,7 +165,7 @@ class QuestionController extends Controller
             try {
                 if (Schema::hasTable('grades') && Schema::hasColumn('grades', 'level_id') && Schema::hasColumn('questions', 'grade_id')) {
                     $gradeIds = \App\Models\Grade::where('level_id', $level)->pluck('id')->toArray();
-                    if (!empty($gradeIds)) {
+                    if (! empty($gradeIds)) {
                         $baseQuery->whereIn('grade_id', $gradeIds);
                     } else {
                         // no grades found for level — ensure no results
@@ -257,7 +262,7 @@ class QuestionController extends Controller
                 'per_page' => $perPage,
                 'current_page' => $page,
                 'last_page' => $lastPage,
-            ]
+            ],
         ]);
     }
 
@@ -265,7 +270,7 @@ class QuestionController extends Controller
     {
         $v = Validator::make($request->all(), [
             'quiz_id' => 'nullable|exists:quizzes,id',
-            'type' => 'required|string|in:' . implode(',', array_keys(Question::getAllowedTypes())),
+            'type' => 'required|string|in:'.implode(',', array_keys(Question::getAllowedTypes())),
             'body' => 'required|string',
             'explanation' => 'nullable|string',
             'options' => 'nullable|array',
@@ -350,10 +355,10 @@ class QuestionController extends Controller
 
         // Normalize answers based on question type
         if ($payloadType === 'fill_blank') {
-            if (!is_array($answers)) {
+            if (! is_array($answers)) {
                 $answers = $answers ? [$answers] : [];
             }
-            if (!is_array($fillParts)) {
+            if (! is_array($fillParts)) {
                 $fillParts = is_array($request->get('parts')) ? $request->get('parts') : [];
             }
             $fillParts = array_values(array_map(static function ($part) {
@@ -365,8 +370,8 @@ class QuestionController extends Controller
         } else {
             // For all other types, ensure answers is an array of the correct values
             if (is_array($answers)) {
-                $answers = array_values(array_map(static fn($ans) => is_null($ans) ? null : (string) $ans, $answers));
-            } elseif (!is_null($answers)) {
+                $answers = array_values(array_map(static fn ($ans) => is_null($ans) ? null : (string) $ans, $answers));
+            } elseif (! is_null($answers)) {
                 $answers = [(string) $answers];
             } else {
                 $answers = [];
@@ -375,7 +380,7 @@ class QuestionController extends Controller
 
         $parts = $request->get('parts');
         if ($payloadType === 'math') {
-            if (!is_array($parts)) {
+            if (! is_array($parts)) {
                 $parts = [];
             }
             $parts = array_values(array_map(function ($part) {
@@ -385,7 +390,7 @@ class QuestionController extends Controller
                         'marks' => isset($part['marks']) && is_numeric($part['marks']) ? (float) $part['marks'] : 0,
                         'part_type' => isset($part['part_type']) ? (string) $part['part_type'] : 'text',  // text | mcq | multi
                     ];
-                    
+
                     // If part_type is not 'text' and has options, include them
                     if ($partData['part_type'] !== 'text' && isset($part['options']) && is_array($part['options'])) {
                         $partData['options'] = array_values(array_map(function ($opt, $idx) use ($part) {
@@ -394,19 +399,19 @@ class QuestionController extends Controller
                             } else {
                                 $text = is_string($opt) ? $opt : '';
                             }
-                            
+
                             // Set is_correct based on answers array if provided
                             $isCorrect = false;
                             if (isset($part['answers']) && is_array($part['answers'])) {
                                 $isCorrect = in_array((string) $idx, $part['answers'], true);
                             }
-                            
+
                             return [
                                 'text' => $text,
                                 'is_correct' => $isCorrect,
                             ];
                         }, $part['options'], array_keys($part['options'])));
-                        
+
                         // Include answers for MCQ/Multi parts
                         if (isset($part['answers']) && is_array($part['answers'])) {
                             $partData['answers'] = array_values(array_map(function ($ans) {
@@ -414,16 +419,17 @@ class QuestionController extends Controller
                             }, $part['answers']));
                         }
                     }
-                    
+
                     return $partData;
                 }
+
                 return [
                     'text' => is_string($part) ? $part : '',
                     'marks' => 0,
                     'part_type' => 'text',
                 ];
             }, $parts));
-        } elseif (!is_array($parts)) {
+        } elseif (! is_array($parts)) {
             $parts = [];
         }
 
@@ -455,9 +461,9 @@ class QuestionController extends Controller
         }
 
         $marks = $request->get('marks');
-        if (!is_null($marks) && !is_numeric($marks)) {
+        if (! is_null($marks) && ! is_numeric($marks)) {
             $marks = null;
-        } elseif (!is_null($marks)) {
+        } elseif (! is_null($marks)) {
             $marks = (float) $marks;
         }
 
@@ -503,8 +509,9 @@ class QuestionController extends Controller
         if ($question->quiz_id) {
             try {
                 $quiz = Quiz::find($question->quiz_id);
-                if ($quiz)
+                if ($quiz) {
                     $quiz->recalcDifficulty();
+                }
             } catch (\Exception $e) {
                 // ignore
             }
@@ -516,7 +523,7 @@ class QuestionController extends Controller
         } catch (\Throwable $_) {
         }
 
-    return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)], 201);
+        return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)], 201);
     }
 
     /**
@@ -526,7 +533,7 @@ class QuestionController extends Controller
     {
         $user = $request->user();
         // allow owner or admin to fetch full question data
-        if ($question->created_by && $question->created_by !== ($user->id ?? null) && !($user->is_admin ?? false)) {
+        if ($question->created_by && $question->created_by !== ($user->id ?? null) && ! ($user->is_admin ?? false)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -535,7 +542,8 @@ class QuestionController extends Controller
             $question->load(['grade.level', 'subject', 'topic', 'quiz', 'tournaments']);
         } catch (\Throwable $_) {
         }
-    return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
+
+        return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
     }
 
     /**
@@ -564,6 +572,7 @@ class QuestionController extends Controller
                 Log::error('QuestionController@storeForQuiz failed', ['quiz_id' => $quiz->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             } catch (\Throwable $_) {
             }
+
             return response()->json(['message' => 'Failed to store question for quiz'], 500);
         }
 
@@ -575,8 +584,9 @@ class QuestionController extends Controller
     private function canBulkUpdateQuiz(Request $request, Quiz $quiz)
     {
         $user = $request->user();
+
         // minimal auth: only quiz owner or admin may bulk update
-        return !($quiz->created_by && $quiz->created_by !== $user->id && !($user->is_admin ?? false));
+        return ! ($quiz->created_by && $quiz->created_by !== $user->id && ! ($user->is_admin ?? false));
     }
 
     /**
@@ -594,7 +604,7 @@ class QuestionController extends Controller
 
         // Validate 'questions' without throwing so we can log payload on failure
         $validator = Validator::make($request->all(), [
-            'questions' => 'required|array'
+            'questions' => 'required|array',
         ]);
 
         if ($validator->fails()) {
@@ -628,8 +638,9 @@ class QuestionController extends Controller
         // Fallback: ensure we still handle when request->get returned something unexpected
         if (empty($items) && $request->has('questions')) {
             $maybe = $request->get('questions');
-            if (is_array($maybe) && array_values($maybe) === $maybe)
+            if (is_array($maybe) && array_values($maybe) === $maybe) {
                 $items = $maybe;
+            }
         }
 
         return $items;
@@ -665,13 +676,13 @@ class QuestionController extends Controller
                 $rawFillParts = $q['fill_parts'] ?? null;
 
                 if ($type === 'fill_blank') {
-                    if (!is_array($rawAnswers)) {
+                    if (! is_array($rawAnswers)) {
                         $rawAnswers = $rawAnswers ? [$rawAnswers] : [];
                     }
                     $rawAnswers = array_values(array_map(static function ($ans) {
                         return is_null($ans) ? '' : (string) $ans;
                     }, $rawAnswers));
-                    if (!is_array($rawFillParts)) {
+                    if (! is_array($rawFillParts)) {
                         $rawFillParts = is_array($rawParts) ? $rawParts : [];
                     }
                     $rawFillParts = array_values(array_map(static function ($part) {
@@ -680,7 +691,7 @@ class QuestionController extends Controller
                 }
 
                 if ($type === 'math') {
-                    if (!is_array($rawParts)) {
+                    if (! is_array($rawParts)) {
                         $rawParts = [];
                     }
                     $rawParts = array_values(array_map(static function ($part) {
@@ -690,13 +701,14 @@ class QuestionController extends Controller
                                 'marks' => isset($part['marks']) && is_numeric($part['marks']) ? (float) $part['marks'] : 0,
                             ];
                         }
+
                         return [
                             'text' => is_string($part) ? $part : '',
                             'marks' => 0,
                         ];
                     }, $rawParts));
                 } else {
-                    if (!is_array($rawParts)) {
+                    if (! is_array($rawParts)) {
                         $rawParts = [];
                     }
                 }
@@ -725,9 +737,9 @@ class QuestionController extends Controller
                 }
 
                 $marks = $q['marks'] ?? null;
-                if (!is_null($marks) && !is_numeric($marks)) {
+                if (! is_null($marks) && ! is_numeric($marks)) {
                     $marks = null;
-                } elseif (!is_null($marks)) {
+                } elseif (! is_null($marks)) {
                     $marks = (float) $marks;
                 }
 
@@ -738,7 +750,7 @@ class QuestionController extends Controller
                     'body' => $q['text'] ?? ($q['body'] ?? ''),
                     'explanation' => $q['explanation'] ?? null,
                     'options' => $rawOptions,
-                    'answers' => $type === 'fill_blank' ? $rawAnswers : (is_array($rawAnswers) ? array_values(array_map(static fn($ans) => is_null($ans) ? null : (string) $ans, $rawAnswers)) : (!is_null($rawAnswers) ? [(string) $rawAnswers] : [])),
+                    'answers' => $type === 'fill_blank' ? $rawAnswers : (is_array($rawAnswers) ? array_values(array_map(static fn ($ans) => is_null($ans) ? null : (string) $ans, $rawAnswers)) : (! is_null($rawAnswers) ? [(string) $rawAnswers] : [])),
                     'parts' => $type === 'fill_blank' ? $rawFillParts : $rawParts,
                     'marks' => $marks,
                     'difficulty' => $q['difficulty'] ?? 3,
@@ -766,12 +778,13 @@ class QuestionController extends Controller
                         $mediaPath = Storage::url($mPath);
                         $mime = $file->getClientMimeType();
                         $mediaType = null;
-                        if (strpos($mime, 'image/') === 0)
+                        if (strpos($mime, 'image/') === 0) {
                             $mediaType = 'image';
-                        elseif (strpos($mime, 'audio/') === 0)
+                        } elseif (strpos($mime, 'audio/') === 0) {
                             $mediaType = 'audio';
-                        elseif (strpos($mime, 'video/') === 0)
+                        } elseif (strpos($mime, 'video/') === 0) {
                             $mediaType = 'video';
+                        }
                         if ($mediaPath) {
                             $qData['media_path'] = $mediaPath;
                             $qData['media_type'] = $mediaType;
@@ -785,18 +798,21 @@ class QuestionController extends Controller
                 }
 
                 // If the question has an id, attempt update
-                if (!empty($q['id'])) {
+                if (! empty($q['id'])) {
                     $existing = Question::where('id', $q['id'])->where('quiz_id', $quiz->id)->first();
                     if ($existing) {
                         $existing->fill($qData);
                         $incomingIds[] = $existing->id;
                         // If we stored media above, ensure existing question gets the path
-                        if (isset($qData['media_path']))
+                        if (isset($qData['media_path'])) {
                             $existing->media_path = $qData['media_path'];
-                        if (isset($qData['media_type']))
+                        }
+                        if (isset($qData['media_type'])) {
                             $existing->media_type = $qData['media_type'];
+                        }
                         $existing->save();
                         $saved[] = $existing;
+
                         continue;
                     }
                 }
@@ -835,7 +851,7 @@ class QuestionController extends Controller
         // Delete questions that were part of the quiz but not in the incoming payload
         $existingIds = $quiz->questions()->pluck('id')->all();
         $toDeleteIds = array_diff($existingIds, $incomingIds);
-        if (!empty($toDeleteIds)) {
+        if (! empty($toDeleteIds)) {
             Question::whereIn('id', $toDeleteIds)->where('quiz_id', $quiz->id)->delete();
         }
 
@@ -856,7 +872,7 @@ class QuestionController extends Controller
      */
     public function bulkUpdateForQuiz(Request $request, Quiz $quiz)
     {
-        if (!$this->canBulkUpdateQuiz($request, $quiz)) {
+        if (! $this->canBulkUpdateQuiz($request, $quiz)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -875,13 +891,13 @@ class QuestionController extends Controller
 
         $this->cleanupAfterBulkUpdate($saved, $incomingIds, $quiz);
 
-    return response()->json(['questions' => \App\Http\Resources\QuestionResource::collection($saved)]);
+        return response()->json(['questions' => \App\Http\Resources\QuestionResource::collection($saved)]);
     }
 
     public function update(Request $request, Question $question)
     {
         $user = $request->user();
-        if ($question->created_by !== $user->id && (!isset($user->is_admin) || !$user->is_admin)) {
+        if ($question->created_by !== $user->id && (! isset($user->is_admin) || ! $user->is_admin)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -956,7 +972,7 @@ class QuestionController extends Controller
 
         $answersInput = $request->has('answers') ? $request->input('answers') : $question->answers;
         if ($payloadType === 'fill_blank') {
-            if (!is_array($answersInput)) {
+            if (! is_array($answersInput)) {
                 $answersInput = $answersInput ? [$answersInput] : [];
             }
             $answersNormalized = array_values(array_map(static function ($ans) {
@@ -964,8 +980,8 @@ class QuestionController extends Controller
             }, $answersInput ?? []));
         } else {
             if (is_array($answersInput)) {
-                $answersNormalized = array_values(array_map(static fn($ans) => is_null($ans) ? null : (string) $ans, $answersInput));
-            } elseif (!is_null($answersInput)) {
+                $answersNormalized = array_values(array_map(static fn ($ans) => is_null($ans) ? null : (string) $ans, $answersInput));
+            } elseif (! is_null($answersInput)) {
                 $answersNormalized = [(string) $answersInput];
             } else {
                 $answersNormalized = $question->answers ?? [];
@@ -974,7 +990,7 @@ class QuestionController extends Controller
 
         $fillPartsInput = $request->has('fill_parts') ? $request->input('fill_parts') : ($payloadType === 'fill_blank' ? ($question->fill_parts ?? $question->parts ?? []) : null);
         if ($payloadType === 'fill_blank') {
-            if (!is_array($fillPartsInput)) {
+            if (! is_array($fillPartsInput)) {
                 $fallbackParts = $request->has('parts') ? $request->input('parts') : $question->fill_parts;
                 $fillPartsInput = is_array($fallbackParts) ? $fallbackParts : [];
             }
@@ -982,6 +998,7 @@ class QuestionController extends Controller
                 if (is_array($part) && isset($part['text'])) {
                     return (string) $part['text'];
                 }
+
                 return is_string($part) ? $part : '';
             }, $fillPartsInput));
         } else {
@@ -992,17 +1009,17 @@ class QuestionController extends Controller
         if ($payloadType === 'fill_blank') {
             $partsNormalized = $fillPartsNormalized ?? [];
         } elseif ($payloadType === 'math') {
-            if (!is_array($partsInput)) {
+            if (! is_array($partsInput)) {
                 $partsInput = [];
             }
-            $partsNormalized = array_values(array_map(static function ($part) use ($answersNormalized) {
+            $partsNormalized = array_values(array_map(static function ($part) {
                 if (is_array($part)) {
                     $partData = [
                         'text' => isset($part['text']) ? (string) $part['text'] : '',
                         'marks' => isset($part['marks']) && is_numeric($part['marks']) ? (float) $part['marks'] : 0,
                         'part_type' => isset($part['part_type']) ? (string) $part['part_type'] : 'text',  // text | mcq | multi
                     ];
-                    
+
                     // If part_type is not 'text' and has options, include them
                     if ($partData['part_type'] !== 'text' && isset($part['options']) && is_array($part['options'])) {
                         $partData['options'] = array_values(array_map(function ($opt, $idx) use ($part) {
@@ -1011,19 +1028,19 @@ class QuestionController extends Controller
                             } else {
                                 $text = is_string($opt) ? $opt : '';
                             }
-                            
+
                             // Set is_correct based on answers array if provided
                             $isCorrect = false;
                             if (isset($part['answers']) && is_array($part['answers'])) {
                                 $isCorrect = in_array((string) $idx, $part['answers'], true);
                             }
-                            
+
                             return [
                                 'text' => $text,
                                 'is_correct' => $isCorrect,
                             ];
                         }, $part['options'], array_keys($part['options'])));
-                        
+
                         // Include answers for MCQ/Multi parts
                         if (isset($part['answers']) && is_array($part['answers'])) {
                             $partData['answers'] = array_values(array_map(function ($ans) {
@@ -1031,9 +1048,10 @@ class QuestionController extends Controller
                             }, $part['answers']));
                         }
                     }
-                    
+
                     return $partData;
                 }
+
                 return [
                     'text' => is_string($part) ? $part : '',
                     'marks' => 0,
@@ -1041,13 +1059,14 @@ class QuestionController extends Controller
                 ];
             }, $partsInput));
         } else {
-            if (!is_array($partsInput)) {
+            if (! is_array($partsInput)) {
                 $partsInput = [];
             }
             $partsNormalized = array_values(array_map(static function ($part) {
                 if (is_array($part) && isset($part['text'])) {
                     return (string) $part['text'];
                 }
+
                 return is_string($part) ? $part : '';
             }, $partsInput));
         }
@@ -1116,7 +1135,7 @@ class QuestionController extends Controller
         if ($request->has('is_approved') && $user->isAdmin()) {
             $question->is_approved = $request->boolean('is_approved');
         }
-        
+
         if ($question->is_approved || $request->boolean('resolve_flags')) {
             $question->pendingFlags()->update(['status' => 'resolved']);
         }
@@ -1135,7 +1154,8 @@ class QuestionController extends Controller
             $question->load(['grade.level', 'subject', 'topic', 'quiz']);
         } catch (\Throwable $_) {
         }
-    return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
+
+        return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
     }
 
     /**
@@ -1146,7 +1166,7 @@ class QuestionController extends Controller
         $user = $request->user();
         // Prefer a dedicated isAdmin method, fallback to role column
         $isAdmin = method_exists($user, 'isAdmin') ? $user->isAdmin() : (($user->role ?? '') === 'admin');
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -1161,7 +1181,7 @@ class QuestionController extends Controller
         // Resolve all pending flags for this question
         $question->pendingFlags()->update(['status' => 'resolved']);
 
-    return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
+        return response()->json(['question' => new \App\Http\Resources\QuestionResource($question)]);
     }
 
     /**
@@ -1171,7 +1191,7 @@ class QuestionController extends Controller
     {
         $user = $request->user();
         $isAdmin = method_exists($user, 'isAdmin') ? $user->isAdmin() : (($user->role ?? '') === 'admin');
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -1210,18 +1230,20 @@ class QuestionController extends Controller
     public function destroy(Request $request, Question $question)
     {
         $user = $request->user();
-        if ($question->created_by !== $user->id && (!isset($user->is_admin) || !$user->is_admin)) {
+        if ($question->created_by !== $user->id && (! isset($user->is_admin) || ! $user->is_admin)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         try {
             $question->delete();
+
             return response()->json(['message' => 'Deleted'], 200);
         } catch (\Throwable $e) {
             try {
                 Log::error('QuestionController@destroy failed', ['question_id' => $question->id ?? null, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             } catch (\Throwable $_) {
             }
+
             return response()->json(['message' => 'Failed to delete'], 500);
         }
     }

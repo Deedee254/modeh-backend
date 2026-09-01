@@ -18,13 +18,13 @@ return new class extends Migration
 
         Schema::table('wallets', function (Blueprint $table) {
             // Add new balance states if they don't exist
-            if (!Schema::hasColumn('wallets', 'withdrawn_pending')) {
+            if (! Schema::hasColumn('wallets', 'withdrawn_pending')) {
                 $table->decimal('withdrawn_pending', 15, 2)->default(0)->after('available')->comment('Awaiting admin approval');
             }
-            if (!Schema::hasColumn('wallets', 'settled')) {
+            if (! Schema::hasColumn('wallets', 'settled')) {
                 $table->decimal('settled', 15, 2)->default(0)->after('withdrawn_pending')->comment('Admin confirmed payout');
             }
-            if (!Schema::hasColumn('wallets', 'earned_this_month')) {
+            if (! Schema::hasColumn('wallets', 'earned_this_month')) {
                 $table->decimal('earned_this_month', 15, 2)->default(0)->after('lifetime_earned')->comment('Monthly earnings');
             }
         });
@@ -33,7 +33,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('wallets', function (Blueprint $table) {
-            if (!Schema::hasColumn('wallets', 'pending')) {
+            if (! Schema::hasColumn('wallets', 'pending')) {
                 $table->decimal('pending', 15, 2)->default(0)->after('available');
             }
         });

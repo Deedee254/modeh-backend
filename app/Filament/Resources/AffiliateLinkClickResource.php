@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Filament\Resources;
 
 use App\Models\AffiliateLinkClick;
@@ -8,7 +9,9 @@ use Filament\Tables;
 class AffiliateLinkClickResource extends Resource
 {
     protected static ?string $model = AffiliateLinkClick::class;
+
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-link';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Affiliate Management';
 
     public static function table(Tables\Table $table): Tables\Table

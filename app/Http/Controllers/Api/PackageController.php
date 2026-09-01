@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Models\MpesaTransaction;
 use App\Models\Package;
 use App\Models\Subscription;
-use App\Models\MpesaTransaction;
-use Illuminate\Support\Facades\Auth;
 use App\Services\MpesaService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class PackageController extends Controller
@@ -23,6 +23,7 @@ class PackageController extends Controller
         $packages = $q->get()->map(function ($p) {
             return $this->transformPackage($p);
         });
+
         return response()->json(['packages' => $packages]);
     }
 
@@ -55,7 +56,7 @@ class PackageController extends Controller
     public function subscribe(Request $request, Package $package)
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
 
@@ -80,7 +81,7 @@ class PackageController extends Controller
         $packagePrice = $package->price ?? 0;
 
         // Handle free packages
-        if ((float)$packagePrice === 0.0 || $gateway === 'free') {
+        if ((float) $packagePrice === 0.0 || $gateway === 'free') {
             return $this->handleFreeSubscription($user, $ownerType, $ownerId, $package, $request, $previousSubscription);
         }
 
@@ -95,13 +96,13 @@ class PackageController extends Controller
 
     /**
      * Resolve the subscription owner (user or institution)
-     * 
+     *
      * @return array [string $ownerType, int $ownerId] or ['error' => array, 'status' => int]
      */
     private function resolveSubscriptionOwner(Request $request, $user): array
     {
         $requestOwnerType = $request->input('owner_type');
-        
+
         // If owner_type is specified and is an institution, resolve it
         if ($requestOwnerType === 'institution' || ($requestOwnerType && \str_contains((string) $requestOwnerType, 'Institution'))) {
             $institutionId = $request->input('owner_id');
@@ -109,7 +110,7 @@ class PackageController extends Controller
             if ($institutionId) {
                 $instQuery = \App\Models\Institution::query();
                 if (\ctype_digit(\strval($institutionId))) {
-                    $instQuery->where('id', (int)$institutionId);
+                    $instQuery->where('id', (int) $institutionId);
                 } else {
                     $instQuery->where('slug', $institutionId);
                 }
@@ -123,15 +124,15 @@ class PackageController extends Controller
                 } elseif ($managed->count() > 1) {
                     return [
                         'error' => ['ok' => false, 'message' => 'owner_id is required when managing multiple institutions'],
-                        'status' => 422
+                        'status' => 422,
                     ];
                 }
             }
 
-            if (!$institution) {
+            if (! $institution) {
                 return [
                     'error' => ['ok' => false, 'message' => 'Institution not found'],
-                    'status' => 404
+                    'status' => 404,
                 ];
             }
 
@@ -141,10 +142,10 @@ class PackageController extends Controller
                 ->wherePivot('role', 'institution-manager')
                 ->exists();
 
-            if (!$isManager) {
+            if (! $isManager) {
                 return [
                     'error' => ['ok' => false, 'message' => 'Forbidden: must be an institution-manager to subscribe on behalf of institution'],
-                    'status' => 403
+                    'status' => 403,
                 ];
             }
 
@@ -188,7 +189,7 @@ class PackageController extends Controller
             try {
                 $previous->update([
                     'status' => 'cancelled',
-                    'ends_at' => now()
+                    'ends_at' => now(),
                 ]);
             } catch (\Throwable $_) {
                 // Ignore errors when cancelling previous subscription
@@ -222,7 +223,7 @@ class PackageController extends Controller
             'ok' => true,
             'subscription' => $subscription,
             'previous_subscription' => $previousSubscription,
-            'package' => $this->formatPackageResponse($package)
+            'package' => $this->formatPackageResponse($package),
         ]);
     }
 
@@ -237,10 +238,10 @@ class PackageController extends Controller
                 $subscription,
                 "Subscription: {$package->name} (Free)"
             );
-            
+
             $invoice->update(['status' => 'paid', 'paid_at' => now()]);
             $subscription->user->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
-            
+
             Log::info('[Payment] Free subscription invoice created and email sent', [
                 'invoice_id' => $invoice->id,
                 'subscription_id' => $subscription->id,
@@ -260,8 +261,8 @@ class PackageController extends Controller
     private function handleMpesaSubscription($user, string $ownerType, int $ownerId, Package $package, Request $request, ?Subscription $previousSubscription)
     {
         $phone = $request->input('phone') ?? $user->phone ?? null;
-        
-        if (!$phone || !\is_string($phone) || \trim($phone) === '') {
+
+        if (! $phone || ! \is_string($phone) || \trim($phone) === '') {
             return response()->json([
                 'ok' => false,
                 'require_phone' => true,
@@ -280,19 +281,19 @@ class PackageController extends Controller
             $config = config('services.mpesa');
             $service = new MpesaService($config);
             $amount = $package->price ?? 0;
-            
+
             Log::info('[Payment] Initiating MPESA STK push', [
                 'user_id' => $user->id,
                 'package_id' => $package->id,
                 'phone' => $phone,
                 'amount' => $amount,
             ]);
-            
+
             $result = $service->initiateStkPush($phone, $amount, 'Subscription-temp');
-            
+
             if ($result['ok']) {
                 $checkoutRequestId = $result['tx'];  // M-PESA's CheckoutRequestID
-                
+
                 $subscription = Subscription::create([
                     'user_id' => $user->id,
                     'owner_type' => $ownerType,
@@ -304,10 +305,10 @@ class PackageController extends Controller
                         'phone' => $phone,
                         'tx' => $checkoutRequestId,
                         'checkout_request_id' => $checkoutRequestId,
-                        'initiated_at' => now()
+                        'initiated_at' => now(),
                     ],
                 ]);
-                
+
                 // Create MpesaTransaction record for reconciliation
                 MpesaTransaction::create([
                     'user_id' => $user->id,
@@ -320,7 +321,7 @@ class PackageController extends Controller
                     'billable_id' => $subscription->id,
                     'raw_response' => json_encode($result['body'] ?? []),
                 ]);
-                
+
                 Log::info('[Payment] STK push initiated successfully', [
                     'subscription_id' => $subscription->id,
                     'user_id' => $user->id,
@@ -328,7 +329,7 @@ class PackageController extends Controller
                     'tx' => $checkoutRequestId,
                     'phone' => $phone,
                 ]);
-                
+
                 return response()->json([
                     'ok' => true,
                     'subscription' => $subscription,
@@ -355,10 +356,11 @@ class PackageController extends Controller
             ], 500);
 
         } catch (\Throwable $e) {
-            Log::error('Mpesa initiate error: ' . $e->getMessage());
+            Log::error('Mpesa initiate error: '.$e->getMessage());
+
             return response()->json([
                 'ok' => false,
-                'message' => 'mpesa initiation error: ' . $e->getMessage(),
+                'message' => 'mpesa initiation error: '.$e->getMessage(),
                 'package' => $this->formatPackageResponse($package),
             ], 500);
         }
@@ -371,16 +373,17 @@ class PackageController extends Controller
     {
         $config = config('services.mpesa');
         $requiredKeys = ['consumer_key', 'consumer_secret', 'shortcode', 'passkey', 'callback_url'];
-        
+
         $missing = [];
         foreach ($requiredKeys as $key) {
             if (empty($config[$key])) {
                 $missing[] = $key;
             }
         }
-        
-        if (!empty($missing)) {
-            Log::error('MpesaService: missing config keys: ' . \implode(',', $missing));
+
+        if (! empty($missing)) {
+            Log::error('MpesaService: missing config keys: '.\implode(',', $missing));
+
             return [
                 'ok' => false,
                 'code' => 'gateway_not_configured',
@@ -435,16 +438,16 @@ class PackageController extends Controller
     public function renew(Request $request, Subscription $subscription)
     {
         $user = Auth::user();
-        if (!$user || $subscription->user_id !== $user->id) {
+        if (! $user || $subscription->user_id !== $user->id) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
         $package = $subscription->package;
-        if (!$package) {
+        if (! $package) {
             return response()->json(['ok' => false, 'message' => 'Package not found'], 404);
         }
 
-        $pkgPrice = (float)$package->price;
+        $pkgPrice = (float) $package->price;
         if ($pkgPrice === 0.0) {
             // Free renewal: just extend the ends_at date
             $days = $package->duration_days ?? 30;

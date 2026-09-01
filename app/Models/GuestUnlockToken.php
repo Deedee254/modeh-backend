@@ -31,4 +31,3 @@ class GuestUnlockToken extends Model
         return $this->belongsTo(OneOffPurchase::class, 'purchase_id');
     }
 }
-

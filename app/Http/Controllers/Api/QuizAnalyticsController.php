@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class QuizAnalyticsController extends Controller
 {
@@ -56,17 +55,23 @@ class QuizAnalyticsController extends Controller
         $attempts = QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('answers')->get();
         foreach ($attempts as $a) {
             $answers = $a->answers ?? [];
-            if (!is_array($answers)) continue;
+            if (! is_array($answers)) {
+                continue;
+            }
             foreach ($answers as $ans) {
                 // ans expected shape: ['question_id' => x, 'selected' => ...]
                 $qid = intval($ans['question_id'] ?? 0);
-                if (!$qid || !isset($perQuestion[$qid])) continue;
+                if (! $qid || ! isset($perQuestion[$qid])) {
+                    continue;
+                }
                 $perQuestion[$qid]['attempts_count'] += 1;
 
                 $selected = $ans['selected'] ?? null;
                 // find question model
                 $qModel = $questions->firstWhere('id', $qid);
-                if (!$qModel) continue;
+                if (! $qModel) {
+                    continue;
+                }
                 $correctAnswers = is_array($qModel->answers) ? $qModel->answers : json_decode((string) $qModel->answers, true) ?? [];
 
                 // Build option map (id/index -> text) to resolve numeric references and normalize for comparison
@@ -75,33 +80,37 @@ class QuizAnalyticsController extends Controller
                     foreach ($qModel->options as $idx => $opt) {
                         if (is_array($opt)) {
                             if (isset($opt['id'])) {
-                                $optionMap[(string)$opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
+                                $optionMap[(string) $opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
                             }
                             if (isset($opt['text']) || isset($opt['body'])) {
-                                $optionMap[(string)$idx] = $opt['text'] ?? $opt['body'] ?? null;
+                                $optionMap[(string) $idx] = $opt['text'] ?? $opt['body'] ?? null;
                             }
                         }
                     }
                 }
 
-                $normalizeForCompare = function($val) use ($optionMap) {
+                $normalizeForCompare = function ($val) use ($optionMap) {
                     if (is_array($val) && (isset($val['body']) || isset($val['text']))) {
                         $text = $val['text'] ?? $val['body'] ?? '';
                     } else {
-                        $key = (string)$val;
+                        $key = (string) $val;
                         if ($key !== '' && isset($optionMap[$key])) {
                             $text = $optionMap[$key];
                         } else {
-                            $text = (string)$val;
+                            $text = (string) $val;
                         }
                     }
-                    return strtolower(trim((string)$text));
+
+                    return strtolower(trim((string) $text));
                 };
 
-                $normalizeArray = function($arr) use ($normalizeForCompare) {
+                $normalizeArray = function ($arr) use ($normalizeForCompare) {
                     $normalized = array_map($normalizeForCompare, $arr ?: []);
-                    $normalized = array_filter($normalized, function ($v) { return $v !== null && $v !== ''; });
+                    $normalized = array_filter($normalized, function ($v) {
+                        return $v !== null && $v !== '';
+                    });
                     sort($normalized);
+
                     return array_values($normalized);
                 };
 
@@ -116,7 +125,9 @@ class QuizAnalyticsController extends Controller
                     $isCorrect = in_array($submitted, $correct);
                 }
 
-                if ($isCorrect) $perQuestion[$qid]['correct_count'] += 1;
+                if ($isCorrect) {
+                    $perQuestion[$qid]['correct_count'] += 1;
+                }
             }
         }
 
@@ -133,15 +144,15 @@ class QuizAnalyticsController extends Controller
         $distribution = array_fill(0, 11, 0);
         $scoreRows = QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('score')->get(['score']);
         foreach ($scoreRows as $r) {
-            $s = (int)round($r->score);
-            $bucket = min(10, (int)floor($s / 10));
+            $s = (int) round($r->score);
+            $bucket = min(10, (int) floor($s / 10));
             $distribution[$bucket]++;
         }
 
         // Attempts trend (last 30 days)
         $trendStart = now()->subDays(29)->startOfDay();
         $rawTrend = \DB::table('quiz_attempts')
-            ->select(\DB::raw("DATE(created_at) as day"), \DB::raw('count(*) as cnt'))
+            ->select(\DB::raw('DATE(created_at) as day'), \DB::raw('count(*) as cnt'))
             ->where('quiz_id', $quiz->id)
             ->where('created_at', '>=', $trendStart)
             ->groupBy('day')
@@ -153,12 +164,15 @@ class QuizAnalyticsController extends Controller
         $trend = [];
         for ($i = 0; $i < 30; $i++) {
             $d = $trendStart->copy()->addDays($i)->format('Y-m-d');
-            $trend[] = isset($rawTrend[$d]) ? (int)$rawTrend[$d] : 0;
+            $trend[] = isset($rawTrend[$d]) ? (int) $rawTrend[$d] : 0;
         }
 
         // Top missed questions (lowest correct rate)
-        usort($perQuestionFlat, function($a, $b) {
-            $ra = $a['correct_rate'] ?? 0; $rb = $b['correct_rate'] ?? 0; return $ra <=> $rb;
+        usort($perQuestionFlat, function ($a, $b) {
+            $ra = $a['correct_rate'] ?? 0;
+            $rb = $b['correct_rate'] ?? 0;
+
+            return $ra <=> $rb;
         });
         $topMissed = array_slice($perQuestionFlat, 0, 5);
 
@@ -181,20 +195,23 @@ class QuizAnalyticsController extends Controller
         $filename = "quiz-{$quiz->id}-analytics.csv";
         $headers = [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename={$filename}"
+            'Content-Disposition' => "attachment; filename={$filename}",
         ];
 
         $rows = [];
-        $rows[] = ['question_id','question','attempts','correct','correct_rate'];
+        $rows[] = ['question_id', 'question', 'attempts', 'correct', 'correct_rate'];
         foreach ($quiz->questions as $q) {
             // compute stats on the fly (reuse logic from show)
             $attempts = QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('answers')->get();
-            $attemptCount = 0; $correctCount = 0;
+            $attemptCount = 0;
+            $correctCount = 0;
             foreach ($attempts as $a) {
                 $answers = $a->answers ?? [];
                 foreach ($answers as $ans) {
                     $qid = intval($ans['question_id'] ?? 0);
-                    if ($qid !== $q->id) continue;
+                    if ($qid !== $q->id) {
+                        continue;
+                    }
                     $attemptCount++;
                     $selected = $ans['selected'] ?? null;
                     $correctAnswers = is_array($q->answers) ? $q->answers : json_decode((string) $q->answers, true) ?? [];
@@ -204,33 +221,37 @@ class QuizAnalyticsController extends Controller
                         foreach ($q->options as $idx => $opt) {
                             if (is_array($opt)) {
                                 if (isset($opt['id'])) {
-                                    $optionMap[(string)$opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
+                                    $optionMap[(string) $opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
                                 }
                                 if (isset($opt['text']) || isset($opt['body'])) {
-                                    $optionMap[(string)$idx] = $opt['text'] ?? $opt['body'] ?? null;
+                                    $optionMap[(string) $idx] = $opt['text'] ?? $opt['body'] ?? null;
                                 }
                             }
                         }
                     }
 
-                    $normalizeForCompare = function($val) use ($optionMap) {
+                    $normalizeForCompare = function ($val) use ($optionMap) {
                         if (is_array($val) && (isset($val['body']) || isset($val['text']))) {
                             $text = $val['text'] ?? $val['body'] ?? '';
                         } else {
-                            $key = (string)$val;
+                            $key = (string) $val;
                             if ($key !== '' && isset($optionMap[$key])) {
                                 $text = $optionMap[$key];
                             } else {
-                                $text = (string)$val;
+                                $text = (string) $val;
                             }
                         }
-                        return strtolower(trim((string)$text));
+
+                        return strtolower(trim((string) $text));
                     };
 
-                    $normalizeArray = function($arr) use ($normalizeForCompare) {
+                    $normalizeArray = function ($arr) use ($normalizeForCompare) {
                         $normalized = array_map($normalizeForCompare, $arr ?: []);
-                        $normalized = array_filter($normalized, function ($v) { return $v !== null && $v !== ''; });
+                        $normalized = array_filter($normalized, function ($v) {
+                            return $v !== null && $v !== '';
+                        });
                         sort($normalized);
+
                         return array_values($normalized);
                     };
 
@@ -244,14 +265,16 @@ class QuizAnalyticsController extends Controller
                         $normCorrect = $normalizeArray($correctAnswers);
                         $isCorrect = in_array($submitted, $normCorrect);
                     }
-                    if ($isCorrect) $correctCount++;
+                    if ($isCorrect) {
+                        $correctCount++;
+                    }
                 }
             }
             $rate = $attemptCount ? round($correctCount / $attemptCount, 3) : '';
             $rows[] = [$q->id, $q->body, $attemptCount, $correctCount, $rate];
         }
 
-        $callback = function() use ($rows) {
+        $callback = function () use ($rows) {
             $FH = fopen('php://output', 'w');
             foreach ($rows as $r) {
                 fputcsv($FH, $r);
@@ -286,7 +309,9 @@ class QuizAnalyticsController extends Controller
         $logoData = null;
         $logoIsSvg = false;
         foreach ($candidates as $p) {
-            if (!$p) continue;
+            if (! $p) {
+                continue;
+            }
             if (file_exists($p) && is_readable($p)) {
                 $type = strtolower(pathinfo($p, PATHINFO_EXTENSION));
                 $data = @file_get_contents($p);
@@ -316,7 +341,7 @@ class QuizAnalyticsController extends Controller
         ])->render();
 
         // Enable remote assets just in case, and render
-        $options = new \Dompdf\Options();
+        $options = new \Dompdf\Options;
         $options->set('isRemoteEnabled', true);
         $dompdf = new \Dompdf\Dompdf($options);
         $dompdf->loadHtml($html);
@@ -325,9 +350,10 @@ class QuizAnalyticsController extends Controller
         $pdf = $dompdf->output();
 
         $filename = "quiz-{$quiz->id}-analytics.pdf";
+
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => "attachment; filename={$filename}"
+            'Content-Disposition' => "attachment; filename={$filename}",
         ]);
     }
 }

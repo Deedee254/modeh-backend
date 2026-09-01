@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Filament\Resources\AffiliateResource\Pages;
 
 use App\Filament\Resources\AffiliateResource;

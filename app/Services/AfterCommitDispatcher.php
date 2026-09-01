@@ -14,8 +14,7 @@ class AfterCommitDispatcher
     /**
      * Dispatch an event after current DB transaction commits.
      *
-     * @param mixed $event
-     * @return void
+     * @param  mixed  $event
      */
     public static function dispatch($event): void
     {

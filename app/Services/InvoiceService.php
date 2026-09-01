@@ -22,6 +22,7 @@ class InvoiceService
                 'invoice_id' => $existingInvoice->id,
                 'subscription_id' => $sub->id,
             ]);
+
             return $existingInvoice;
         }
 
@@ -32,7 +33,7 @@ class InvoiceService
                 'invoiceable_id' => $sub->id,
                 'amount' => $sub->package->price ?? 0,
                 'currency' => $sub->package->currency ?? 'KES',
-                'description' => $description ?? ($sub->package->name . ' Subscription'),
+                'description' => $description ?? ($sub->package->name.' Subscription'),
                 'status' => 'pending',
                 'due_at' => now()->addDays(30),
                 'meta' => [
@@ -63,6 +64,7 @@ class InvoiceService
                     'invoice_id' => $invoice->id,
                     'subscription_id' => $sub->id,
                 ]);
+
                 return $invoice;
             }
 
@@ -97,7 +99,7 @@ class InvoiceService
     {
         $company = config('app.name');
         $invoiceableModel = $invoice->invoiceable;
-        
+
         return view('invoices.template', [
             'invoice' => $invoice,
             'company' => $company,
@@ -113,14 +115,16 @@ class InvoiceService
     public function generatePdf(Invoice $invoice)
     {
         $html = $this->generateHtml($invoice);
-        
+
         // If DomPDF is not installed, log warning and return null
-        if (!class_exists('Barryvdh\DomPDF\Facade\Pdf')) {
+        if (! class_exists('Barryvdh\DomPDF\Facade\Pdf')) {
             Log::warning('[Invoice] DomPDF not installed, returning null');
+
             return null;
         }
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html);
+
         return $pdf->download("invoice-{$invoice->invoice_number}.pdf");
     }
 }

@@ -2,7 +2,6 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -13,9 +12,11 @@ class WithdrawalRequestUpdated implements ShouldBroadcast
     use InteractsWithSockets, SerializesModels;
 
     public $withdrawal;
+
     public $userId;
-       // Ensure broadcasting happens after DB transaction commit
-       public $afterCommit = true;
+
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
 
     public function __construct($userId, $withdrawal)
     {
@@ -25,7 +26,7 @@ class WithdrawalRequestUpdated implements ShouldBroadcast
 
     public function broadcastOn()
     {
-        return new PrivateChannel('user.' . $this->userId);
+        return new PrivateChannel('user.'.$this->userId);
     }
 
     public function broadcastWith()

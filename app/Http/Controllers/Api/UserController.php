@@ -3,24 +3,23 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Http\Resources\UserResource;
 use App\Models\User;
-use App\Services\OnboardingService;
 use App\Services\MpesaService;
 use App\Services\SessionUserCacheService;
-use App\Http\Resources\UserResource;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class UserController extends Controller
 {
     public function me(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
@@ -28,7 +27,7 @@ class UserController extends Controller
         // If the user is authenticated via Bearer token but the session is empty,
         // we establish the session so stateful features like Laravel Echo or
         // session-based preferences work correctly.
-        if ($request->hasSession() && !Auth::guard('web')->check()) {
+        if ($request->hasSession() && ! Auth::guard('web')->check()) {
             Auth::guard('web')->login($user);
         }
 
@@ -36,12 +35,13 @@ class UserController extends Controller
         // 1. Check session cache first (fastest, 5-10ms, no DB hit)
         // 2. Fall back to Redis cache (fast, 20-50ms, no DB hit)
         // 3. Fall back to database query (slow, 100-150ms, DB hit)
-        
+
         // Level 1: Session Cache (15 minute TTL)
         $cachedData = SessionUserCacheService::getUserFromSessionCache($user, $request);
         if ($cachedData !== null) {
             $response = response()->json($cachedData);
-            return $response->header('X-User-ID', (string)$user->id)
+
+            return $response->header('X-User-ID', (string) $user->id)
                 ->header('X-User-Email', $user->email)
                 ->header('X-Cache-Source', 'session');
         }
@@ -69,6 +69,7 @@ class UserController extends Controller
             }
 
             $user->loadMissing($relations);
+
             return $user;
         });
 
@@ -79,16 +80,17 @@ class UserController extends Controller
         // X-User-ID and X-User-Email allow frontend to detect JWT user_id mismatches
         // Convert resource to array to avoid double-wrapping by response()->json()
         $userArray = UserResource::make($userData)->toArray($request);
-        
+
         Log::debug('me: returning user data', [
             'user_id' => $user->id,
             'user_email' => $user->email,
             'response_user_id' => $userArray['id'] ?? 'missing',
             'response_email' => $userArray['email'] ?? 'missing',
         ]);
-        
+
         $response = response()->json($userArray);
-        return $response->header('X-User-ID', (string)$user->id)
+
+        return $response->header('X-User-ID', (string) $user->id)
             ->header('X-User-Email', $user->email)
             ->header('X-Cache-Source', 'redis-or-db');
     }
@@ -96,8 +98,9 @@ class UserController extends Controller
     public function search(Request $request)
     {
         $q = $request->get('q');
-        if (!$q)
+        if (! $q) {
             return response()->json(['users' => []]);
+        }
 
         $users = User::where('email', 'like', "%{$q}%")
             ->orWhere('name', 'like', "%{$q}%")
@@ -110,12 +113,15 @@ class UserController extends Controller
     public function findByEmail(Request $request)
     {
         $email = $request->get('email');
-        if (!$email)
+        if (! $email) {
             return response()->json(['message' => 'email required'], 400);
+        }
 
         $user = User::where('email', $email)->first(['id', 'name', 'email', 'avatar_url', 'social_avatar']);
-        if (!$user)
+        if (! $user) {
             return response()->json(['message' => 'not found'], 404);
+        }
+
         return response()->json(['user' => $user]);
     }
 
@@ -125,11 +131,12 @@ class UserController extends Controller
     public function badges(Request $request)
     {
         $user = $request->user();
-        if (!$user)
+        if (! $user) {
             return response()->json(['ok' => false], 401);
+        }
 
         // If user has badges relation, return paginated list
-        if (!method_exists($user, 'badges')) {
+        if (! method_exists($user, 'badges')) {
             return response()->json(['ok' => true, 'badges' => []]);
         }
 
@@ -169,7 +176,7 @@ class UserController extends Controller
         if ($request->hasFile('avatar')) {
             $file = $request->file('avatar');
             $path = $file->store('avatars', 'public');
-            $user->avatar_url = '/storage/' . $path;
+            $user->avatar_url = '/storage/'.$path;
         }
 
         // Only update fields that were actually provided
@@ -185,7 +192,7 @@ class UserController extends Controller
                 $user->phone = null;
             } else {
                 $normalizedPhone = $mpesa->normalizePhone((string) $rawPhone);
-                if (!$normalizedPhone) {
+                if (! $normalizedPhone) {
                     return response()->json(['errors' => ['phone' => ['Invalid phone number. Use 2547XXXXXXXX or 07XXXXXXXX']]], 422);
                 }
                 $user->phone = $normalizedPhone;
@@ -233,7 +240,7 @@ class UserController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        if (!Hash::check($data['current_password'], $user->password)) {
+        if (! Hash::check($data['current_password'], $user->password)) {
             return response()->json(['message' => 'Current password is incorrect'], 403);
         }
 
@@ -274,6 +281,7 @@ class UserController extends Controller
     public function getTheme(Request $request)
     {
         $theme = $request->session()->get('theme', null);
+
         return response()->json(['theme' => $theme]);
     }
 
@@ -283,11 +291,11 @@ class UserController extends Controller
     public function show(User $user)
     {
         $user->loadMissing(['quizeeProfile.grade', 'quizeeProfile.level', 'badges']);
-        
+
         // Use the QuizeeProfile points if available, otherwise User points
-        $points = $user->quizeeProfile ? (int)$user->quizeeProfile->points : (int)($user->points ?? 0);
+        $points = $user->quizeeProfile ? (int) $user->quizeeProfile->points : (int) ($user->points ?? 0);
         $level = \App\Models\QuizeeLevel::getLevel($points);
-        
+
         // Calculate quizzes taken
         $quizzesTaken = \App\Models\QuizAttempt::where('user_id', $user->id)->count();
 
@@ -307,8 +315,7 @@ class UserController extends Controller
                 'quizzes_taken' => $quizzesTaken,
                 'subject_models' => $user->quizeeProfile?->subjectModels ?? [],
             ],
-            'badges' => $user->badges ?? []
+            'badges' => $user->badges ?? [],
         ]);
     }
 }
-

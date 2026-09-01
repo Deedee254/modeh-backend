@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $status
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
- * 
  * @property-read \App\Models\Question $question
  * @property-read \App\Models\User $user
  */

@@ -9,22 +9,21 @@ class MediaMetadataService
     /**
      * Extract audio metadata (duration) from an uploaded file
      *
-     * @param UploadedFile $file
      * @return array metadata array with 'duration' key if available
      */
     public static function extractAudioMetadata(UploadedFile $file): array
     {
         $metadata = [];
-        
+
         try {
             // Suppress deprecated PHP function warnings from getID3
             $errorLevel = error_reporting();
             error_reporting($errorLevel & ~E_DEPRECATED);
-            
+
             try {
-                $getID3 = new \getID3();
+                $getID3 = new \getID3;
                 $fileInfo = $getID3->analyze($file->getPathname());
-                
+
                 if (isset($fileInfo['playtime_seconds'])) {
                     $metadata['duration'] = $fileInfo['playtime_seconds'];
                 }
@@ -38,26 +37,25 @@ class MediaMetadataService
                 'file' => $file->getClientOriginalName(),
             ]);
         }
-        
+
         return $metadata;
     }
 
     /**
      * Extract video metadata (duration) from an uploaded file
      *
-     * @param UploadedFile $file
      * @return array metadata array with 'duration' key if available
      */
     public static function extractVideoMetadata(UploadedFile $file): array
     {
         $metadata = [];
-        
+
         try {
             $ffprobe = \FFMpeg\FFProbe::create();
             $duration = $ffprobe
                 ->format($file->getPathname())
                 ->get('duration');
-            
+
             if ($duration) {
                 $metadata['duration'] = floatval($duration);
             }
@@ -67,20 +65,19 @@ class MediaMetadataService
                 'file' => $file->getClientOriginalName(),
             ]);
         }
-        
+
         return $metadata;
     }
 
     /**
      * Extract image metadata (dimensions) from an uploaded file
      *
-     * @param UploadedFile $file
      * @return array metadata array with 'width' and 'height' keys if available
      */
     public static function extractImageMetadata(UploadedFile $file): array
     {
         $metadata = [];
-        
+
         try {
             $dimensions = getimagesize($file->getPathname());
             if ($dimensions) {
@@ -93,7 +90,7 @@ class MediaMetadataService
                 'file' => $file->getClientOriginalName(),
             ]);
         }
-        
+
         return $metadata;
     }
 }

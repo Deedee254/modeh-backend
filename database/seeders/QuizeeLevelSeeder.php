@@ -17,7 +17,7 @@ class QuizeeLevelSeeder extends Seeder
                 'icon' => '🌱',
                 'description' => 'Beginning your journey of knowledge',
                 'color_scheme' => '#4CAF50',
-                'order' => 1
+                'order' => 1,
             ],
             [
                 'name' => 'Explorer',
@@ -26,7 +26,7 @@ class QuizeeLevelSeeder extends Seeder
                 'icon' => '🗺️',
                 'description' => 'Venturing into new realms of learning',
                 'color_scheme' => '#2196F3',
-                'order' => 2
+                'order' => 2,
             ],
             [
                 'name' => 'Scholar',
@@ -35,7 +35,7 @@ class QuizeeLevelSeeder extends Seeder
                 'icon' => '📚',
                 'description' => 'Mastering diverse subjects',
                 'color_scheme' => '#9C27B0',
-                'order' => 3
+                'order' => 3,
             ],
             [
                 'name' => 'Master',
@@ -44,7 +44,7 @@ class QuizeeLevelSeeder extends Seeder
                 'icon' => '🎓',
                 'description' => 'A true master of knowledge',
                 'color_scheme' => '#FF9800',
-                'order' => 4
+                'order' => 4,
             ],
             [
                 'name' => 'Grand Master',
@@ -53,7 +53,7 @@ class QuizeeLevelSeeder extends Seeder
                 'icon' => '👑',
                 'description' => 'Among the elite few',
                 'color_scheme' => '#F44336',
-                'order' => 5
+                'order' => 5,
             ],
             [
                 'name' => 'Sage',
@@ -62,7 +62,7 @@ class QuizeeLevelSeeder extends Seeder
                 'icon' => '🔮',
                 'description' => 'Wisdom incarnate',
                 'color_scheme' => '#673AB7',
-                'order' => 6
+                'order' => 6,
             ],
             [
                 'name' => 'Legend',
@@ -71,7 +71,7 @@ class QuizeeLevelSeeder extends Seeder
                 'icon' => '⭐',
                 'description' => 'Your name echoes through the halls of knowledge',
                 'color_scheme' => '#FFC107',
-                'order' => 7
+                'order' => 7,
             ],
             [
                 'name' => 'Mythic',
@@ -80,7 +80,7 @@ class QuizeeLevelSeeder extends Seeder
                 'icon' => '🌟',
                 'description' => 'Achieved mythical status',
                 'color_scheme' => '#E91E63',
-                'order' => 8
+                'order' => 8,
             ],
             [
                 'name' => 'King/Queen',
@@ -89,7 +89,7 @@ class QuizeeLevelSeeder extends Seeder
                 'icon' => '👑',
                 'description' => 'The pinnacle of achievement',
                 'color_scheme' => '#FFD700',
-                'order' => 9
+                'order' => 9,
             ],
         ];
 

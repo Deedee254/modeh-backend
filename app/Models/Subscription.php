@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -28,7 +27,7 @@ class Subscription extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id','owner_type','owner_id','package_id','status','gateway','gateway_meta','started_at','ends_at'];
+    protected $fillable = ['user_id', 'owner_type', 'owner_id', 'package_id', 'status', 'gateway', 'gateway_meta', 'started_at', 'ends_at'];
 
     protected $casts = [
         'gateway_meta' => 'array',
@@ -40,6 +39,7 @@ class Subscription extends Model
     {
         return $this->belongsTo(Package::class);
     }
+
     /**
      * Backwards-compatible: keep user() relation for existing code.
      */
@@ -55,12 +55,11 @@ class Subscription extends Model
     {
         return $this->morphTo();
     }
-    
+
     public function activate(
         ?DateTimeInterface $startsAt = null,
         ?DateTimeInterface $endsAt = null
-    ): self
-    {
+    ): self {
         $this->status = 'active';
         $this->started_at = $startsAt ?? now();
         $this->ends_at = $endsAt ?? now()->addDays(optional($this->package)->duration_days ?? 30);
@@ -91,9 +90,12 @@ class Subscription extends Model
     public function availableSeats()
     {
         $seats = optional($this->package)->seats;
-        if (is_null($seats)) return null; // unlimited
+        if (is_null($seats)) {
+            return null;
+        } // unlimited
         $assigned = $this->assignments()->whereNull('revoked_at')->count();
-        return max(0, (int)$seats - (int)$assigned);
+
+        return max(0, (int) $seats - (int) $assigned);
     }
 
     /**
@@ -103,7 +105,7 @@ class Subscription extends Model
     {
         // If package has no seat limit, allow assignment
         $seats = optional($this->package)->seats;
-        if (!is_null($seats)) {
+        if (! is_null($seats)) {
             $available = $this->availableSeats();
             if ($available <= 0) {
                 return null; // no seats

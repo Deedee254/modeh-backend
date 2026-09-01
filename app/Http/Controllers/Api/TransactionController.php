@@ -69,9 +69,9 @@ class TransactionController extends Controller
             'days_ahead' => 'integer|min:1|max:365',
         ]);
 
-    // Ensure daysAhead is numeric (validation ensures integer-like input, but it may be a string)
-    $daysAhead = isset($validated['days_ahead']) ? (int) $validated['days_ahead'] : 30;
-    $cutoffDate = now()->addDays($daysAhead);
+        // Ensure daysAhead is numeric (validation ensures integer-like input, but it may be a string)
+        $daysAhead = isset($validated['days_ahead']) ? (int) $validated['days_ahead'] : 30;
+        $cutoffDate = now()->addDays($daysAhead);
 
         // Get active subscriptions renewing soon based on ends_at date
         $renewals = Invoice::where('user_id', (auth()->id() ?? auth('sanctum')->id()))
@@ -81,9 +81,10 @@ class TransactionController extends Controller
             ->get()
             ->filter(function ($invoice) use ($cutoffDate) {
                 $sub = $invoice->invoiceable;
-                if (!$sub || !$sub->ends_at || $sub->status !== 'active') {
+                if (! $sub || ! $sub->ends_at || $sub->status !== 'active') {
                     return false;
                 }
+
                 // Show subscriptions ending between now and cutoffDate
                 return $sub->ends_at <= $cutoffDate && $sub->ends_at >= now();
             })
@@ -101,13 +102,13 @@ class TransactionController extends Controller
     public function show(Invoice $invoice)
     {
         $user = auth('sanctum')->user() ?? auth()->user();
-        
-        if (!$user) {
+
+        if (! $user) {
             return response()->json(['error' => 'Unauthenticated'], 401);
         }
 
         // Ensure user owns this invoice or is admin
-        if ($invoice->user_id !== $user->id && !$user->isAdmin()) {
+        if ($invoice->user_id !== $user->id && ! $user->isAdmin()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -122,13 +123,13 @@ class TransactionController extends Controller
     public function download(Invoice $invoice)
     {
         $user = auth('sanctum')->user() ?? auth()->user();
-        
-        if (!$user) {
+
+        if (! $user) {
             return response()->json(['error' => 'Unauthenticated'], 401);
         }
 
         // Ensure user owns this invoice or is admin
-        if ($invoice->user_id !== $user->id && !$user->isAdmin()) {
+        if ($invoice->user_id !== $user->id && ! $user->isAdmin()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 

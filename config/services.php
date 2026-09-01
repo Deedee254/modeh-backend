@@ -49,7 +49,7 @@ return [
         'till_number' => env('MPESA_TILL_NUMBER'),
         'passkey' => env('MPESA_PASSKEY'),
         // Allow explicit override via MPESA_CALLBACK_URL, otherwise fallback to APP_URL + route
-        'callback_url' => env('MPESA_CALLBACK_URL', rtrim(env('APP_URL', ''), '/') . '/api/payments/mpesa/callback'),
+        'callback_url' => env('MPESA_CALLBACK_URL', rtrim(env('APP_URL', ''), '/').'/api/payments/mpesa/callback'),
     ],
 
 ];

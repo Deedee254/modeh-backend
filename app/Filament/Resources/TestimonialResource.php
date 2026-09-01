@@ -13,8 +13,11 @@ class TestimonialResource extends Resource
     protected static ?string $model = Testimonial::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-chat-bubble-left-ellipsis';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Community';
+
     protected static ?int $navigationSort = 2;
+
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([

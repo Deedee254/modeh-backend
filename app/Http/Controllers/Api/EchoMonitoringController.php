@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\ChatMetric;
+use Illuminate\Http\Request;
 
 class EchoMonitoringController extends Controller
 {
@@ -36,8 +36,12 @@ class EchoMonitoringController extends Controller
 
         // support both ?window=minutes (preferred) and ?minutes=minutes (backward compatible)
         $minutes = intval($request->get('window', $request->get('minutes', 10)));
-        if ($minutes < 1) { $minutes = 10; }
-        if ($minutes > 240) { $minutes = 240; }
+        if ($minutes < 1) {
+            $minutes = 10;
+        }
+        if ($minutes > 240) {
+            $minutes = 240;
+        }
 
         $buckets = [];
         for ($i = $minutes - 1; $i >= 0; $i--) {
@@ -58,9 +62,10 @@ class EchoMonitoringController extends Controller
         return response()->json([
             'messages_total' => $messagesTotal ? intval($messagesTotal->value) : 0,
             'messages_per_minute_series' => $series,
-            'messages_per_minute_labels' => array_map(function($b){
+            'messages_per_minute_labels' => array_map(function ($b) {
                 // label as HH:MM
                 $dt = \DateTime::createFromFormat('YmdHi', $b);
+
                 return $dt ? $dt->format('H:i') : $b;
             }, $buckets),
             'errors' => $errors ? intval($errors->value) : 0,

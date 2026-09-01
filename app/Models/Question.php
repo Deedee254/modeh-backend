@@ -50,24 +50,31 @@ class Question extends Model
 
     /**
      * Get the text of the correct option(s) for MCQ/multi questions
-     * 
+     *
      * @return string|array The text of the correct option(s)
      */
     public function getCorrectOptionText()
     {
-        if (!$this->options || empty($this->options) || !isset($this->answers) || !is_array($this->answers)) {
+        if (! $this->options || empty($this->options) || ! isset($this->answers) || ! is_array($this->answers)) {
             return null;
         }
 
         $correctTexts = collect($this->answers)
-            ->map(function($answerIndex) {
+            ->map(function ($answerIndex) {
                 $idx = (int) $answerIndex;
                 $opt = $this->options[$idx] ?? null;
-                if ($opt === null) return null;
-                
-                if (is_array($opt) && array_key_exists('text', $opt)) return $opt['text'];
-                if (is_object($opt) && property_exists($opt, 'text')) return $opt->text;
-                return is_string($opt) ? $opt : (string)$opt;
+                if ($opt === null) {
+                    return null;
+                }
+
+                if (is_array($opt) && array_key_exists('text', $opt)) {
+                    return $opt['text'];
+                }
+                if (is_object($opt) && property_exists($opt, 'text')) {
+                    return $opt->text;
+                }
+
+                return is_string($opt) ? $opt : (string) $opt;
             })
             ->filter()
             ->values();
@@ -81,36 +88,50 @@ class Question extends Model
 
     /**
      * Get the text of a specific option by its index
-     * 
-     * @param int $index The index of the option
+     *
+     * @param  int  $index  The index of the option
      * @return string|null The text of the option
      */
     public function getOptionText($index)
     {
         $opt = $this->options[$index] ?? null;
-        if ($opt === null) return null;
-        if (is_array($opt) && array_key_exists('text', $opt)) return $opt['text'];
-        if (is_object($opt) && property_exists($opt, 'text')) return $opt->text;
-        return is_string($opt) ? $opt : (string)$opt;
+        if ($opt === null) {
+            return null;
+        }
+        if (is_array($opt) && array_key_exists('text', $opt)) {
+            return $opt['text'];
+        }
+        if (is_object($opt) && property_exists($opt, 'text')) {
+            return $opt->text;
+        }
+
+        return is_string($opt) ? $opt : (string) $opt;
     }
 
     /**
      * Get all options as an array of text values
-     * 
+     *
      * @return array Array of option texts
      */
     public function getAllOptionTexts()
     {
-        if (!$this->options) {
+        if (! $this->options) {
             return [];
         }
-        
+
         return collect($this->options)
-            ->map(function($opt) {
-                if ($opt === null) return null;
-                if (is_array($opt) && array_key_exists('text', $opt)) return $opt['text'];
-                if (is_object($opt) && property_exists($opt, 'text')) return $opt->text;
-                return is_string($opt) ? $opt : (string)$opt;
+            ->map(function ($opt) {
+                if ($opt === null) {
+                    return null;
+                }
+                if (is_array($opt) && array_key_exists('text', $opt)) {
+                    return $opt['text'];
+                }
+                if (is_object($opt) && property_exists($opt, 'text')) {
+                    return $opt->text;
+                }
+
+                return is_string($opt) ? $opt : (string) $opt;
             })
             ->filter()
             ->values()
@@ -119,13 +140,13 @@ class Question extends Model
 
     /**
      * Find the index of an option by its text
-     * 
-     * @param string $text The text to search for
+     *
+     * @param  string  $text  The text to search for
      * @return int|null The index of the option or null if not found
      */
     public function findOptionIndexByText($text)
     {
-        if (!$this->options) {
+        if (! $this->options) {
             return null;
         }
 
@@ -139,7 +160,7 @@ class Question extends Model
                 $optText = $option;
             }
 
-            if ($optText !== null && trim((string)$optText) === trim((string)$text)) {
+            if ($optText !== null && trim((string) $optText) === trim((string) $text)) {
                 return $index;
             }
         }
@@ -148,15 +169,15 @@ class Question extends Model
     }
 
     protected $fillable = [
-        'quiz_id', 'created_by', 'type', 'body', 'options', 'answers', 
+        'quiz_id', 'created_by', 'type', 'body', 'options', 'answers',
         'media_path', 'media_type', 'youtube_url', 'media_metadata',
         'explanation',
         'parts', 'fill_parts',
         'correct', 'corrects',
         'marks',
-        'difficulty', 'is_quiz-master_marked', 'is_approved', 'is_banked', 
+        'difficulty', 'is_quiz-master_marked', 'is_approved', 'is_banked',
         // taxonomy references
-        'subject_id', 'topic_id', 'grade_id', 'level_id'
+        'subject_id', 'topic_id', 'grade_id', 'level_id',
     ];
 
     protected $casts = [
@@ -202,7 +223,7 @@ class Question extends Model
             $this->parts = $value;
         }
     }
-    
+
     /**
      * Get the allowed question types
      */
@@ -297,8 +318,8 @@ class Question extends Model
             'media_metadata' => $this->media_metadata,
             'youtube_url' => $this->youtube_url,
             'explanation' => $this->explanation,
-            'difficulty' => (int)($this->difficulty ?? 3),
-            'marks' => (float)($this->marks ?? 1.0),
+            'difficulty' => (int) ($this->difficulty ?? 3),
+            'marks' => (float) ($this->marks ?? 1.0),
             'parts' => $this->parts,
             'fill_parts' => $this->fill_parts,
             'topic_id' => $this->topic_id,

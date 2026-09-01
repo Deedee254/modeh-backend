@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\Wallet;
 use App\Models\Transaction;
+use App\Models\Wallet;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -12,14 +12,14 @@ use Illuminate\Support\Facades\Log;
  *
  * Comprehensive Wallet Architecture:
  * - Platform Wallet (user_id=0): Receives all incoming money, distributes to others
- * - Admin Wallet: Net earnings after all payouts  
+ * - Admin Wallet: Net earnings after all payouts
  * - Quiz Master Wallet: Earnings from quizzes and affiliates
  * - Quizee Wallet: Earnings from affiliates, tournaments, battles, subscriptions
  *
  * Multi-Source Earnings:
  * 1. Quiz Completion: Quiz Master + Affiliate get shares, platform keeps remainder
  * 2. Tournament Winnings: Direct credit to quizee
- * 3. Battle Rewards: Direct credit to quizee  
+ * 3. Battle Rewards: Direct credit to quizee
  * 4. Subscription Revenue: Credited to platform wallet
  * 5. Affiliate Commissions: Direct credit to affiliate wallet
  *
@@ -34,15 +34,13 @@ class WalletService
      * Credit a user's wallet with the given amount.
      * Amount is added to 'pending' balance by default (awaiting settlement).
      *
-     * @param int $userId
-     * @param float $amount
-     * @param string|null $description Optional description for logging
-     * @return Wallet|null
+     * @param  string|null  $description  Optional description for logging
      */
     public function credit(int $userId, float $amount, ?string $description = null): ?Wallet
     {
         if ($amount <= 0) {
-            Log::warning("Wallet credit amount must be positive", ['user_id' => $userId, 'amount' => $amount]);
+            Log::warning('Wallet credit amount must be positive', ['user_id' => $userId, 'amount' => $amount]);
+
             return null;
         }
 
@@ -56,13 +54,13 @@ class WalletService
                     );
 
                 // Add to available balance (immediate payout)
-                $wallet->available = bcadd((string)$wallet->available, (string)$amount, 2);
+                $wallet->available = bcadd((string) $wallet->available, (string) $amount, 2);
                 // Track total earned over time
-                $wallet->lifetime_earned = bcadd((string)$wallet->lifetime_earned, (string)$amount, 2);
+                $wallet->lifetime_earned = bcadd((string) $wallet->lifetime_earned, (string) $amount, 2);
                 $wallet->save();
 
                 // Log the transaction
-                Log::info("Wallet credited", [
+                Log::info('Wallet credited', [
                     'user_id' => $userId,
                     'amount' => $amount,
                     'new_available' => $wallet->available,
@@ -75,28 +73,24 @@ class WalletService
                 return $wallet;
             });
         } catch (\Throwable $e) {
-            Log::error("Wallet credit failed", [
+            Log::error('Wallet credit failed', [
                 'user_id' => $userId,
                 'amount' => $amount,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }
 
-
-
     /**
      * Debit from available balance (for withdrawals).
-     *
-     * @param int $userId
-     * @param float $amount
-     * @return Wallet|null
      */
     public function debit(int $userId, float $amount): ?Wallet
     {
         if ($amount <= 0) {
-            Log::warning("Debit amount must be positive", ['user_id' => $userId, 'amount' => $amount]);
+            Log::warning('Debit amount must be positive', ['user_id' => $userId, 'amount' => $amount]);
+
             return null;
         }
 
@@ -106,24 +100,26 @@ class WalletService
                     ->lockForUpdate()
                     ->first();
 
-                if (!$wallet) {
-                    Log::warning("Wallet not found for debit", ['user_id' => $userId]);
+                if (! $wallet) {
+                    Log::warning('Wallet not found for debit', ['user_id' => $userId]);
+
                     return null;
                 }
 
                 if ($amount > $wallet->available) {
-                    Log::warning("Insufficient available balance for debit", [
+                    Log::warning('Insufficient available balance for debit', [
                         'user_id' => $userId,
                         'requested' => $amount,
                         'available' => $wallet->available,
                     ]);
+
                     return null;
                 }
 
-                $wallet->available = bcsub((string)$wallet->available, (string)$amount, 2);
+                $wallet->available = bcsub((string) $wallet->available, (string) $amount, 2);
                 $wallet->save();
 
-                Log::info("Wallet debited", [
+                Log::info('Wallet debited', [
                     'user_id' => $userId,
                     'amount' => $amount,
                     'new_available' => $wallet->available,
@@ -134,20 +130,18 @@ class WalletService
                 return $wallet;
             });
         } catch (\Throwable $e) {
-            Log::error("Wallet debit failed", [
+            Log::error('Wallet debit failed', [
                 'user_id' => $userId,
                 'amount' => $amount,
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }
 
     /**
      * Get or create a user's wallet.
-     *
-     * @param int $userId
-     * @return Wallet
      */
     public function getOrCreate(int $userId): Wallet
     {
@@ -159,9 +153,6 @@ class WalletService
 
     /**
      * Get a user's wallet (read-only).
-     *
-     * @param int $userId
-     * @return Wallet|null
      */
     public function get(int $userId): ?Wallet
     {
@@ -171,9 +162,6 @@ class WalletService
     /**
      * Get total earnings from all sources for a user.
      * Includes all transaction quiz_master_shares.
-     *
-     * @param int $userId
-     * @return float
      */
     public function getTotalEarnings(int $userId): float
     {
@@ -181,14 +169,11 @@ class WalletService
             ->where('status', Transaction::STATUS_COMPLETED)
             ->sum('quiz-master_share');
 
-        return (float)($total ?? 0);
+        return (float) ($total ?? 0);
     }
 
     /**
      * Get earnings breakdown by type (quiz, battle, subscription, etc).
-     *
-     * @param int $userId
-     * @return array
      */
     public function getEarningsBreakdown(int $userId): array
     {
@@ -213,10 +198,6 @@ class WalletService
 
     /**
      * Get recent transactions for a user.
-     *
-     * @param int $userId
-     * @param int $limit
-     * @return array
      */
     public function getRecentTransactions(int $userId, int $limit = 20): array
     {
@@ -230,30 +211,24 @@ class WalletService
 
     /**
      * Validate that wallet can debit the given amount.
-     *
-     * @param int $userId
-     * @param float $amount
-     * @return bool
      */
     public function canDebit(int $userId, float $amount): bool
     {
         $wallet = $this->get($userId);
-        if (!$wallet) {
+        if (! $wallet) {
             return false;
         }
-        return $amount > 0 && $amount <= (float)$wallet->available;
+
+        return $amount > 0 && $amount <= (float) $wallet->available;
     }
 
     /**
      * Get wallet statistics for analytics.
-     *
-     * @param int $userId
-     * @return array
      */
     public function getStats(int $userId): array
     {
         $wallet = $this->get($userId);
-        if (!$wallet) {
+        if (! $wallet) {
             $wallet = $this->getOrCreate($userId);
         }
 
@@ -266,16 +241,16 @@ class WalletService
             ->sum('quiz-master_share');
 
         // Reconciliation: compare recorded lifetime_earned with computed total from transactions
-        $difference = $totalEarnings - (float)$wallet->lifetime_earned;
+        $difference = $totalEarnings - (float) $wallet->lifetime_earned;
 
         // Monthly breakdown (last 6 months)
         $monthly = $this->getMonthlyEarnings($userId, 6);
         $topQuizzes = $this->getTopQuizzes($userId, 10);
 
         return [
-            'available' => (float)$wallet->available,
-            'pending' => (float)$wallet->pending,
-            'lifetime_earned' => (float)$wallet->lifetime_earned,
+            'available' => (float) $wallet->available,
+            'pending' => (float) $wallet->pending,
+            'lifetime_earned' => (float) $wallet->lifetime_earned,
             'earned_this_month' => $earnedThisMonth,
             'monthly_breakdown' => $monthly,
             'top_quizzes' => $topQuizzes,
@@ -287,10 +262,6 @@ class WalletService
     /**
      * Get monthly earnings for the past N months (including current month).
      * Returns array of ['month' => 'YYYY-MM', 'label' => 'Mar 2026', 'amount' => float]
-     *
-     * @param int $userId
-     * @param int $months
-     * @return array
      */
     public function getMonthlyEarnings(int $userId, int $months = 6): array
     {
@@ -301,7 +272,7 @@ class WalletService
             $start = now()->subMonths($i)->startOfMonth();
             $end = now()->subMonths($i)->endOfMonth();
 
-                $sum = (float) Transaction::where('quiz_master_id', $userId)
+            $sum = (float) Transaction::where('quiz_master_id', $userId)
                 ->where('status', Transaction::STATUS_COMPLETED)
                 ->whereBetween('created_at', [$start, $end])
                 ->sum('quiz-master_share');
@@ -319,10 +290,6 @@ class WalletService
     /**
      * Get top performing quizzes for a quiz-master by quiz_master_share sums.
      * Returns array of ['quiz_id' => int, 'title' => string, 'amount' => float]
-     *
-     * @param int $userId
-     * @param int $limit
-     * @return array
      */
     public function getTopQuizzes(int $userId, int $limit = 10): array
     {
@@ -339,9 +306,9 @@ class WalletService
         foreach ($rows as $r) {
             $quiz = \App\Models\Quiz::find($r->quiz_id);
             $results[] = [
-                'quiz_id' => (int)$r->quiz_id,
+                'quiz_id' => (int) $r->quiz_id,
                 'title' => $quiz?->title ?? 'Unknown',
-                'amount' => (float)$r->total,
+                'amount' => (float) $r->total,
             ];
         }
 
@@ -357,10 +324,10 @@ class WalletService
      * Process quiz completion with full payout distribution.
      * Flow: Money in â†’ Affiliate gets share â†’ Quiz Master gets share â†’ Platform keeps remainder
      *
-     * @param int $quizMasterId Creator of the quiz
-     * @param float $amount Total amount from quizee payment
-     * @param string|null $referralCode Affiliate referral code (optional)
-     * @param int|null $quizId Quiz ID reference
+     * @param  int  $quizMasterId  Creator of the quiz
+     * @param  float  $amount  Total amount from quizee payment
+     * @param  string|null  $referralCode  Affiliate referral code (optional)
+     * @param  int|null  $quizId  Quiz ID reference
      * @return array Distribution summary
      */
     public static function processQuizPayout(
@@ -390,7 +357,7 @@ class WalletService
             $platformWallet->save();
 
             $distribution['platform_debit'] = [
-                'amount' => (float)$amount,
+                'amount' => (float) $amount,
                 'type' => 'platform_debit',
                 'description' => 'Quiz payment received',
             ];
@@ -416,9 +383,9 @@ class WalletService
 
                     $distribution['affiliate_credit'] = [
                         'user_id' => $affiliate->user_id,
-                        'amount' => (float)$affiliateShare,
+                        'amount' => (float) $affiliateShare,
                         'type' => 'affiliate_payout',
-                        'description' => "Affiliate commission ({$affiliate->commission_rate}% of " . number_format($amount, 2) . ")",
+                        'description' => "Affiliate commission ({$affiliate->commission_rate}% of ".number_format($amount, 2).')',
                     ];
 
                     Log::info('Affiliate paid from quiz', [
@@ -446,9 +413,9 @@ class WalletService
 
             $distribution['qm_credit'] = [
                 'user_id' => $quizMasterId,
-                'amount' => (float)$qmShare,
+                'amount' => (float) $qmShare,
                 'type' => 'quiz_master_payout',
-                'description' => "Quiz master commission ({$qmCommissionRate}% of remaining " . number_format($qmShare + $remaining, 2) . ")",
+                'description' => "Quiz master commission ({$qmCommissionRate}% of remaining ".number_format($qmShare + $remaining, 2).')',
             ];
 
             Log::info('Quiz master paid', [
@@ -460,7 +427,7 @@ class WalletService
             // 4. Platform keeps remainder
             $platformShare = $remaining;
             $distribution['platform_credit'] = [
-                'amount' => (float)$platformShare,
+                'amount' => (float) $platformShare,
                 'type' => 'platform_credit',
                 'description' => 'Platform operating fund',
                 'percentage' => round(($platformShare / $amount) * 100, 2),
@@ -499,10 +466,10 @@ class WalletService
                 'transaction_id' => $mainTx->id,
                 'distribution' => $distribution,
                 'summary' => [
-                    'total_in' => (float)$amount,
-                    'affiliate_share' => (float)$affiliateShare,
-                    'quiz_master_share' => (float)$qmShare,
-                    'platform_share' => (float)$platformShare,
+                    'total_in' => (float) $amount,
+                    'affiliate_share' => (float) $affiliateShare,
+                    'quiz_master_share' => (float) $qmShare,
+                    'platform_share' => (float) $platformShare,
                 ],
             ];
         });
@@ -532,7 +499,7 @@ class WalletService
     }
 
     /**
-     * Record battle reward for quizee  
+     * Record battle reward for quizee
      */
     public static function recordBattleReward(
         int $quizeeId,
@@ -577,7 +544,7 @@ class WalletService
 
             return [
                 'success' => true,
-                'platform_credited' => (float)$amount,
+                'platform_credited' => (float) $amount,
                 'plan' => $planName,
             ];
         });
@@ -604,15 +571,15 @@ class WalletService
             'platform_wallet' => $platformWallet?->getSummary() ?? [],
             'admin_wallet' => $adminWallet?->getSummary() ?? [],
             'revenue' => [
-                'all_time_payments' => (float)$paymentTxs,
-                'last_30_days' => (float)$last30Days,
+                'all_time_payments' => (float) $paymentTxs,
+                'last_30_days' => (float) $last30Days,
             ],
             'payouts' => [
-                'affiliates_total' => (float)$affiliatePayouts,
-                'quiz_masters_total' => (float)$qmPayouts,
-                'total_distributed' => (float)bcadd($affiliatePayouts, $qmPayouts, 2),
+                'affiliates_total' => (float) $affiliatePayouts,
+                'quiz_masters_total' => (float) $qmPayouts,
+                'total_distributed' => (float) bcadd($affiliatePayouts, $qmPayouts, 2),
             ],
-            'platform_profit' => (float)bcsub(
+            'platform_profit' => (float) bcsub(
                 $paymentTxs,
                 bcadd($affiliatePayouts, $qmPayouts, 2),
                 2

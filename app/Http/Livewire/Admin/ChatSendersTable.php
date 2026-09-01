@@ -2,11 +2,10 @@
 
 namespace App\Http\Livewire\Admin;
 
-use Livewire\Component;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use App\Models\User;
 use App\Models\Message;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Livewire\Component;
 
 class ChatSendersTable extends Component
 {

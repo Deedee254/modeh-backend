@@ -24,16 +24,18 @@ class ApprovalRequestController extends Controller
             'questions' => \App\Models\Question::class,
         ];
 
-        if (!isset($map[$resource])) {
+        if (! isset($map[$resource])) {
             return response()->json(['message' => 'Resource not found'], 404);
         }
 
         $modelClass = $map[$resource];
         $item = $modelClass::find($id);
-        if (!$item) return response()->json(['message' => 'Not found'], 404);
+        if (! $item) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
 
         // only owner or admin can request
-        if (!isset($user->is_admin) || !$user->is_admin) {
+        if (! isset($user->is_admin) || ! $user->is_admin) {
             if ($item->created_by !== $user->id) {
                 return response()->json(['message' => 'Forbidden'], 403);
             }

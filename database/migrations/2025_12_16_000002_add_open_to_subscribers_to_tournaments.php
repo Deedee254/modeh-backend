@@ -9,7 +9,7 @@ return new class extends Migration
     public function up()
     {
         Schema::table('tournaments', function (Blueprint $table) {
-            if (!Schema::hasColumn('tournaments', 'open_to_subscribers')) {
+            if (! Schema::hasColumn('tournaments', 'open_to_subscribers')) {
                 $table->boolean('open_to_subscribers')->default(false)->after('entry_fee');
             }
         });
@@ -17,10 +17,15 @@ return new class extends Migration
 
     public function down()
     {
-        if (!Schema::hasTable('tournaments')) return;
+        if (! Schema::hasTable('tournaments')) {
+            return;
+        }
         Schema::table('tournaments', function (Blueprint $table) {
             if (Schema::hasColumn('tournaments', 'open_to_subscribers')) {
-                try { $table->dropColumn('open_to_subscribers'); } catch (\Throwable $e) {}
+                try {
+                    $table->dropColumn('open_to_subscribers');
+                } catch (\Throwable $e) {
+                }
             }
         });
     }

@@ -43,10 +43,10 @@ class QuizeeInvitation extends Model
     protected static function booted()
     {
         static::creating(function ($model) {
-            if (!$model->token) {
+            if (! $model->token) {
                 $model->token = Str::random(32);
             }
-            if (!$model->expires_at) {
+            if (! $model->expires_at) {
                 $model->expires_at = now()->addDays(7);
             }
         });
@@ -54,7 +54,7 @@ class QuizeeInvitation extends Model
 
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(Parent::class);
+        return $this->belongsTo(parent::class);
     }
 
     public function quizee(): BelongsTo
@@ -69,7 +69,7 @@ class QuizeeInvitation extends Model
 
     public function isPending(): bool
     {
-        return $this->status === 'pending' && !$this->isExpired();
+        return $this->status === 'pending' && ! $this->isExpired();
     }
 
     public function accept(Quizee $quizee): void

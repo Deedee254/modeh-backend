@@ -9,17 +9,17 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('transactions', function (Blueprint $table) {
-            if (!Schema::hasColumn('transactions', 'payment_status')) {
+            if (! Schema::hasColumn('transactions', 'payment_status')) {
                 $table->enum('payment_status', [
                     'paid',
                     'pending_payment',
                     'payment_overdue',
                     'refunded',
-                    'disputed'
+                    'disputed',
                 ])->default('paid')->after('status');
             }
 
-            if (!Schema::hasColumn('transactions', 'pending_payment_id')) {
+            if (! Schema::hasColumn('transactions', 'pending_payment_id')) {
                 $table->foreignId('pending_payment_id')
                     ->nullable()
                     ->constrained('pending_quiz_payments')

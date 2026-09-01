@@ -9,7 +9,7 @@ return new class extends Migration
     public function up()
     {
         Schema::table('battles', function (Blueprint $table) {
-            if (!Schema::hasColumn('battles', 'settings')) {
+            if (! Schema::hasColumn('battles', 'settings')) {
                 // place after opponent_id which exists on the original table
                 $table->json('settings')->nullable()->after('opponent_id');
             }

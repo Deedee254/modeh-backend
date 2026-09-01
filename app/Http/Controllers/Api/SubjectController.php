@@ -3,19 +3,19 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Subject;
-use App\Models\Grade;
-use App\Models\Quiz;
 use App\Http\Resources\SubjectResource;
 use App\Http\Resources\TopicResource;
+use App\Models\Grade;
+use App\Models\Quiz;
+use App\Models\Subject;
+use App\Models\User;
+use App\Notifications\ResourceRejected;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use App\Models\User;
-use App\Notifications\ResourceRejected;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 
 class SubjectController extends Controller
 {
@@ -47,7 +47,7 @@ class SubjectController extends Controller
                 Log::warning('Failed to cache data', [
                     'key' => $key,
                     'error' => $e->getMessage(),
-                    'error_type' => get_class($e)
+                    'error_type' => get_class($e),
                 ]);
             }
 
@@ -56,8 +56,9 @@ class SubjectController extends Controller
             // If cache retrieval fails, just execute the callback
             Log::warning('Cache operation failed, falling back to direct query', [
                 'key' => $key,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return $callback();
         }
     }
@@ -65,7 +66,7 @@ class SubjectController extends Controller
     // List subjects with pagination, search and quizzes_count
     public function index(Request $request)
     {
-        $cacheKey = 'subjects_index_' . md5(serialize($request->all()));
+        $cacheKey = 'subjects_index_'.md5(serialize($request->all()));
 
         $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($request) {
             // OPTIMIZED: Strategy B - Selective fields, Strategy A - Counts only
@@ -82,7 +83,7 @@ class SubjectController extends Controller
                         $q->select('id', 'name', 'slug', 'subject_id', 'is_approved')
                             ->where('is_approved', true)
                             ->withCount('quizzes');
-                    }
+                    },
                 ]);
 
             if ($q = $request->get('q')) {
@@ -125,7 +126,7 @@ class SubjectController extends Controller
     // Show a single subject with topics and representative image
     public function show(Subject $subject)
     {
-        $cacheKey = 'subject_show_' . $subject->id;
+        $cacheKey = 'subject_show_'.$subject->id;
 
         $subject = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($subject) {
             // OPTIMIZED: Strategy B - Selective fields, Strategy D - Individual item cache
@@ -136,7 +137,7 @@ class SubjectController extends Controller
                     $q->select('id', 'name', 'slug', 'subject_id', 'is_approved', 'description', 'image')
                         ->where('is_approved', true)
                         ->withCount('quizzes');
-                }
+                },
             ]);
 
             $subject->quizzes_count = $subject->topics->sum('quizzes_count');
@@ -185,7 +186,7 @@ class SubjectController extends Controller
     public function approve(Request $request, Subject $subject)
     {
         $user = $request->user();
-        if (!method_exists($user, 'isAdmin') && !$user->is_admin) {
+        if (! method_exists($user, 'isAdmin') && ! $user->is_admin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -212,7 +213,7 @@ class SubjectController extends Controller
     public function reject(Request $request, Subject $subject)
     {
         $user = $request->user();
-        if (!method_exists($user, 'isAdmin') && !$user->is_admin) {
+        if (! method_exists($user, 'isAdmin') && ! $user->is_admin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -236,8 +237,9 @@ class SubjectController extends Controller
     public function uploadIcon(Request $request, Subject $subject)
     {
         $user = $request->user();
-        if (!$user)
+        if (! $user) {
             return response()->json(['message' => 'Unauthorized'], 401);
+        }
         // Use getAttribute to avoid PHP notices if the attribute is missing
         $subjectOwner = $subject->getAttribute('created_by');
         if ((string) ($subjectOwner ?? '') !== (string) ($user->id ?? '') && empty($user->is_admin)) {
@@ -245,10 +247,11 @@ class SubjectController extends Controller
         }
 
         $v = Validator::make($request->all(), [
-            'icon' => 'required|file|image|max:2048'
+            'icon' => 'required|file|image|max:2048',
         ]);
-        if ($v->fails())
+        if ($v->fails()) {
             return response()->json(['errors' => $v->errors()], 422);
+        }
 
         $path = $request->file('icon')->store('subjects/icons', 'public');
         $subject->icon = $path;
@@ -261,7 +264,7 @@ class SubjectController extends Controller
     public function topics(Request $request, Subject $subject)
     {
         $user = $request->user() ?? auth('sanctum')->user();
-        $cacheKey = 'subject_topics_' . $subject->id . '_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
+        $cacheKey = 'subject_topics_'.$subject->id.'_'.md5(serialize($request->all()).($user ? $user->id : 'guest'));
 
         return $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($request, $subject, $user) {
             // OPTIMIZED: Strategy B - Selective fields, Strategy C - Pagination limits
@@ -273,11 +276,11 @@ class SubjectController extends Controller
             if ($request->has('approved')) {
                 $query->where('is_approved', (bool) $request->get('approved'));
             } else {
-                if (!$user) {
+                if (! $user) {
                     $query->where('is_approved', true);
                 } else {
                     $isQuizMaster = ($user->role === 'quiz-master') || (method_exists($user, 'quizMasterProfile') && $user->quizMasterProfile()->exists());
-                    if (!$user->is_admin && !$isQuizMaster) {
+                    if (! $user->is_admin && ! $isQuizMaster) {
                         $query->where(function ($q) use ($user) {
                             $q->where('is_approved', true)
                                 ->orWhere('created_by', $user->id);
@@ -298,7 +301,7 @@ class SubjectController extends Controller
             });
 
             return [
-                'topics' => TopicResource::collection($data)->response()->getData(true)
+                'topics' => TopicResource::collection($data)->response()->getData(true),
             ];
         });
     }

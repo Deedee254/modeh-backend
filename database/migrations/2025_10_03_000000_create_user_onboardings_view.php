@@ -13,13 +13,13 @@ return new class extends Migration
     {
         // Create or replace a view; fallback to creating a table copy if the DB doesn't support views
         try {
-            DB::statement(/** @lang sql */ "CREATE OR REPLACE VIEW `user_onboardings` AS SELECT * FROM `user_onboarding`;");
+            DB::statement(/** @lang sql */ 'CREATE OR REPLACE VIEW `user_onboardings` AS SELECT * FROM `user_onboarding`;');
         } catch (\Exception $e) {
             // If view creation fails (e.g., SQLite in-memory for tests), create a table alias if not exists
             try {
                 if (DB::getDriverName() === 'sqlite') {
                     // For sqlite, create a table snapshot if it doesn't exist
-                    DB::statement("CREATE TABLE IF NOT EXISTS user_onboardings AS SELECT * FROM user_onboarding;");
+                    DB::statement('CREATE TABLE IF NOT EXISTS user_onboardings AS SELECT * FROM user_onboarding;');
                 }
             } catch (\Exception $inner) {
                 // swallow

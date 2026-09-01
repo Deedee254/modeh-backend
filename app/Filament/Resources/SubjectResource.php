@@ -4,23 +4,23 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\SubjectResource\Pages;
 use App\Models\Subject;
-use Filament\Schemas\Schema;
-use Filament\Forms;
-use Filament\Tables\Table;
 use Filament\Actions;
+use Filament\Forms;
 use Filament\Resources\Resource;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\FileUpload;
-use Filament\Tables\Columns\TextColumn;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class SubjectResource extends Resource
 {
     protected static ?string $model = Subject::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-s-book-open';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Content Management';
+
     protected static ?int $navigationSort = 2;
 
     public static function table(Table $table): Table
@@ -33,11 +33,11 @@ class SubjectResource extends Resource
                 TextColumn::make('grade.name')->label('Grade'),
                 IconColumn::make('is_approved')->boolean()->label('Approved'),
             ])
-                ->actions([
-                        Actions\ViewAction::make(),
-                        Actions\EditAction::make(),
-                        Actions\DeleteAction::make(),
-                ]);
+            ->actions([
+                Actions\ViewAction::make(),
+                Actions\EditAction::make(),
+                Actions\DeleteAction::make(),
+            ]);
     }
 
     public static function form(Schema $schema): Schema

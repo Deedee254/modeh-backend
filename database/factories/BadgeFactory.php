@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Models\Badge;
+use Illuminate\Database\Eloquent\Factories\Factory;
 
 class BadgeFactory extends Factory
 {
@@ -12,9 +12,10 @@ class BadgeFactory extends Factory
     public function definition(): array
     {
         $name = fake()->word();
+
         return [
             'name' => $name,
-            'slug' => \Str::slug($name) . '-' . fake()->randomNumber(3),
+            'slug' => \Str::slug($name).'-'.fake()->randomNumber(3),
             'description' => fake()->sentence(),
             'icon' => null,
             'criteria_type' => 'quiz_score',

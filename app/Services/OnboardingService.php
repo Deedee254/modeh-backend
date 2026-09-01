@@ -2,11 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\User;
-use App\Models\UserOnboarding;
 use App\Models\Grade;
 use App\Models\Institution;
 use App\Models\InstitutionApprovalRequest;
+use App\Models\User;
+use App\Models\UserOnboarding;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -19,7 +19,7 @@ class OnboardingService
     public function completeStep(User $user, string $step, array $data = [])
     {
         return DB::transaction(function () use ($user, $step, $data) {
-            $skipped = !empty($data['skipped']) && $data['skipped'] === true;
+            $skipped = ! empty($data['skipped']) && $data['skipped'] === true;
 
             $onboarding = UserOnboarding::firstOrCreate(
                 ['user_id' => $user->id],
@@ -34,7 +34,7 @@ class OnboardingService
             );
 
             $completed = $onboarding->completed_steps ?? [];
-            if (!in_array($step, $completed)) {
+            if (! in_array($step, $completed)) {
                 $completed[] = $step;
                 $onboarding->completed_steps = $completed;
             }
@@ -53,7 +53,7 @@ class OnboardingService
                     $onboarding->role_selected = true;
                     if (! $skipped) {
                         // Role selection step: update user's role and optional password
-                        if (!empty($data['role'])) {
+                        if (! empty($data['role'])) {
                             $user->role = $data['role'];
                         } else {
                             // Fallback based on step name
@@ -67,16 +67,16 @@ class OnboardingService
                         }
 
                         // If a password is provided, set it (User model casts 'password' => 'hashed')
-                        if (!empty($data['password'])) {
+                        if (! empty($data['password'])) {
                             $user->forceFill(['password' => bcrypt($data['password'])])->save();
                         }
 
                         $user->save();
 
                         // Create the corresponding profile for the selected role
-                        if ($user->role === 'quiz-master' && !$user->quizMasterProfile) {
+                        if ($user->role === 'quiz-master' && ! $user->quizMasterProfile) {
                             $user->quizMasterProfile()->create([]);
-                        } elseif ($user->role === 'quizee' && !$user->quizeeProfile) {
+                        } elseif ($user->role === 'quizee' && ! $user->quizeeProfile) {
                             $user->quizeeProfile()->create([]);
                         }
 
@@ -91,7 +91,7 @@ class OnboardingService
                 case 'grade':
                     $onboarding->grade_selected = true;
                     if (! $skipped) {
-                        if (!empty($data['grade_id'])) {
+                        if (! empty($data['grade_id'])) {
                             $grade = Grade::find($data['grade_id']);
                             $update = ['grade_id' => $data['grade_id']];
                             if ($grade && isset($grade->level_id)) {
@@ -118,7 +118,7 @@ class OnboardingService
                 case 'subjects':
                     $onboarding->subject_selected = true;
                     if (! $skipped) {
-                        if (!empty($data['subjects'])) {
+                        if (! empty($data['subjects'])) {
                             // If role known, update corresponding profile; otherwise preserve subjects on both profiles
                             if ($user->role === 'quiz-master') {
                                 $profile = $user->quizMasterProfile ?? $user->quizMasterProfile()->create([]);
@@ -153,14 +153,14 @@ class OnboardingService
             } elseif ($user->role === 'quizee') {
                 // Quizees must have: institution, role, and grade
                 // Auto-detect role selection if role is set on the user model
-                $roleSelected = $onboarding->role_selected || !empty($user->role);
+                $roleSelected = $onboarding->role_selected || ! empty($user->role);
                 $isComplete = $onboarding->institution_added &&
                               $roleSelected &&
                               $onboarding->grade_selected;
             } elseif ($user->role === 'quiz-master') {
                 // Quiz masters must have: institution, role, and subjects
                 // Auto-detect role selection if role is set on the user model
-                $roleSelected = $onboarding->role_selected || !empty($user->role);
+                $roleSelected = $onboarding->role_selected || ! empty($user->role);
                 $isComplete = $onboarding->institution_added &&
                               $roleSelected &&
                               $onboarding->subject_selected;
@@ -171,7 +171,7 @@ class OnboardingService
             }
 
             // If complete, set user flag as well
-            if ($isComplete && !$user->is_profile_completed) {
+            if ($isComplete && ! $user->is_profile_completed) {
                 $user->is_profile_completed = true;
                 $user->save();
             }
@@ -181,46 +181,46 @@ class OnboardingService
     }
 
     /**
-     * Re-evaluates and updates the user's is_profile_completed flag based on 
-     * their role and profile data. This is useful when the profile is updated 
+     * Re-evaluates and updates the user's is_profile_completed flag based on
+     * their role and profile data. This is useful when the profile is updated
      * outside the onboarding flow (e.g. via settings).
      */
     public function syncProfileCompletionStatus(User $user)
     {
         $user->loadMissing(['quizeeProfile', 'quizMasterProfile', 'institutions', 'onboarding']);
-        
+
         $onboarding = $user->onboarding ?? $user->onboarding()->create([]);
-        
+
         $hasInstitution = false;
         if ($user->institutions()->count() > 0 || ($onboarding && $onboarding->institution_added)) {
             $hasInstitution = true;
         } else {
             $quizee = $user->quizeeProfile;
             $quizMaster = $user->quizMasterProfile;
-            
+
             if ($user->role === 'quizee' && $quizee) {
-                $hasInstitution = !empty($quizee->institution) || !empty($quizee->institution_id) || !empty($quizee->verified_institution_id);
+                $hasInstitution = ! empty($quizee->institution) || ! empty($quizee->institution_id) || ! empty($quizee->verified_institution_id);
             } elseif ($user->role === 'quiz-master' && $quizMaster) {
-                $hasInstitution = !empty($quizMaster->institution) || !empty($quizMaster->institution_id) || !empty($quizMaster->verified_institution_id);
+                $hasInstitution = ! empty($quizMaster->institution) || ! empty($quizMaster->institution_id) || ! empty($quizMaster->verified_institution_id);
             }
         }
 
         // Update onboarding flags based on current state
         $onboarding->institution_added = $hasInstitution;
-        
+
         if ($user->role) {
             $onboarding->role_selected = true;
         }
 
         if ($user->role === 'quizee') {
-            $onboarding->grade_selected = !empty(optional($user->quizeeProfile)->grade_id);
+            $onboarding->grade_selected = ! empty(optional($user->quizeeProfile)->grade_id);
             // Subjects are optional for completion but we sync the flag if present
             $subjects = optional($user->quizeeProfile)->subjects;
-            $onboarding->subject_selected = !empty($subjects) && is_array($subjects) && count($subjects) > 0;
+            $onboarding->subject_selected = ! empty($subjects) && is_array($subjects) && count($subjects) > 0;
         } elseif ($user->role === 'quiz-master') {
-            $onboarding->grade_selected = !empty(optional($user->quizMasterProfile)->grade_id);
+            $onboarding->grade_selected = ! empty(optional($user->quizMasterProfile)->grade_id);
             $subjects = optional($user->quizMasterProfile)->subjects;
-            $onboarding->subject_selected = !empty($subjects) && is_array($subjects) && count($subjects) > 0;
+            $onboarding->subject_selected = ! empty($subjects) && is_array($subjects) && count($subjects) > 0;
         }
 
         $onboarding->save();
@@ -244,7 +244,7 @@ class OnboardingService
         }
 
         // If newly complete, we could also update profile_completed on onboarding model
-        if ($isComplete && !$onboarding->profile_completed) {
+        if ($isComplete && ! $onboarding->profile_completed) {
             $onboarding->profile_completed = true;
             $onboarding->save();
         }
@@ -270,6 +270,7 @@ class OnboardingService
         if ($existingInstitution) {
             // Institution exists - automatically link it
             $profile->update(['institution_id' => $existingInstitution->id]);
+
             return;
         }
 
@@ -283,6 +284,7 @@ class OnboardingService
             if ($existingRequest->institution_name !== $institutionText) {
                 $existingRequest->update(['institution_name' => $institutionText]);
             }
+
             return;  // Already submitted and now updated
         }
 
@@ -318,12 +320,12 @@ class OnboardingService
         // Link to existing institution or store as text
         if ($institutionId) {
             $updateData = ['institution_id' => $institutionId];
-            
+
             // If branch_id is provided, also store it (for multi-branch institutions)
             if ($branchId) {
                 $updateData['branch_id'] = $branchId;
             }
-            
+
             $profile->update($updateData);
         } elseif ($institutionText) {
             $profile->update(['institution' => $institutionText]);

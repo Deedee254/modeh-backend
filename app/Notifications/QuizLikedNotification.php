@@ -2,17 +2,18 @@
 
 namespace App\Notifications;
 
-use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Notification;
-use Illuminate\Notifications\Messages\BroadcastMessage;
 use App\Models\Quiz;
 use App\Models\User;
+use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\BroadcastMessage;
+use Illuminate\Notifications\Notification;
 
 class QuizLikedNotification extends Notification
 {
     use Queueable;
 
     public $quiz;
+
     public $liker;
 
     public function __construct(Quiz $quiz, User $liker)
@@ -36,6 +37,7 @@ class QuizLikedNotification extends Notification
                 if (isset($pref->preferences['via']) && is_array($pref->preferences['via'])) {
                     return $pref->preferences['via'];
                 }
+
                 return $pref->preferences;
             }
         } catch (\Exception $e) {

@@ -6,11 +6,11 @@ use App\Filament\Resources\InstitutionResource\Pages;
 use App\Models\Institution;
 use Filament\Forms;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Schemas\Schema;
-use Filament\Schemas\Components\Section;
 
 class InstitutionResource extends Resource
 {

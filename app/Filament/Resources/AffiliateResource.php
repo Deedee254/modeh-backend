@@ -1,16 +1,19 @@
 <?php
+
 namespace App\Filament\Resources;
 
 use App\Models\Affiliate;
 use Filament\Forms;
-use Filament\Schemas\Schema;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 
 class AffiliateResource extends Resource
 {
     protected static ?string $model = Affiliate::class;
+
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-user-group';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Affiliate Management';
 
     public static function form(Schema $schema): Schema

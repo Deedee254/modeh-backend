@@ -10,7 +10,6 @@ class SessionService
     /**
      * Create a new session for the given user.
      *
-     * @param  \App\Models\User  $user
      * @param  bool  $remember
      * @return void
      */

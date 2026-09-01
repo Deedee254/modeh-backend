@@ -3,27 +3,28 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Quiz;
-use App\Services\AchievementService;
-use App\Models\Topic;
-use App\Models\Subject;
-use App\Models\Grade;
-use App\Models\SiteSetting;
-use App\Models\Question;
 use App\Http\Resources\QuizResource;
+use App\Models\Grade;
+use App\Models\Question;
+use App\Models\Quiz;
+use App\Models\SiteSetting;
+use App\Models\Subject;
+use App\Models\Topic;
+use App\Models\User;
+use App\Notifications\ResourceRejected;
+use App\Services\AchievementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
-use App\Models\User;
-use App\Notifications\ResourceRejected;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 
 class QuizController extends Controller
 {
     protected array $questionColumnCache = [];
+
     protected $achievementService;
 
     public function __construct()
@@ -56,7 +57,7 @@ class QuizController extends Controller
                 Log::warning('Failed to cache data', [
                     'key' => $key,
                     'error' => $e->getMessage(),
-                    'error_type' => get_class($e)
+                    'error_type' => get_class($e),
                 ]);
             }
 
@@ -65,8 +66,9 @@ class QuizController extends Controller
             // If cache retrieval fails, just execute the callback
             Log::warning('Cache operation failed, falling back to direct query', [
                 'key' => $key,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return $callback();
         }
     }
@@ -78,7 +80,7 @@ class QuizController extends Controller
         // Only allow owner or admin to update — check both user_id and created_by
         $isOwner = ((int) ($quiz->user_id ?? 0) === (int) $user->id)
                 || ((int) ($quiz->created_by ?? 0) === (int) $user->id);
-        if (!$isOwner && !$user->is_admin) {
+        if (! $isOwner && ! $user->is_admin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -93,6 +95,7 @@ class QuizController extends Controller
                 Log::error('QuizController@update validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]);
             } catch (\Throwable $_) {
             }
+
             return response()->json(['errors' => $v->errors()], 422);
         }
 
@@ -126,17 +129,17 @@ class QuizController extends Controller
             if ($user) {
                 // Clear various possible index variations for this user
                 // (This is a bit broad but effective for standard dashboard filters)
-                Cache::forget('quizzes_index_' . md5(serialize(['mine' => '1']) . $user->id));
-                Cache::forget('quizzes_index_' . md5(serialize(['mine' => 1]) . $user->id));
-                Cache::forget('quizzes_index_' . md5(serialize([]) . $user->id));
+                Cache::forget('quizzes_index_'.md5(serialize(['mine' => '1']).$user->id));
+                Cache::forget('quizzes_index_'.md5(serialize(['mine' => 1]).$user->id));
+                Cache::forget('quizzes_index_'.md5(serialize([]).$user->id));
             }
             // Also clear guest cache for public listings if needed
-            Cache::forget('quizzes_index_' . md5(serialize([]) . 'guest'));
-            
+            Cache::forget('quizzes_index_'.md5(serialize([]).'guest'));
+
             // Log cache clearing for debugging
             Log::info('Quiz cache invalidated', ['user_id' => $user?->id]);
         } catch (\Throwable $e) {
-            Log::warning('Failed to clear quiz cache: ' . $e->getMessage());
+            Log::warning('Failed to clear quiz cache: '.$e->getMessage());
         }
     }
 
@@ -217,10 +220,10 @@ class QuizController extends Controller
         $newTopic = null;
 
         // Ensure quiz has required relationships loaded for safe access
-        if (!$quiz->relationLoaded('subject')) {
+        if (! $quiz->relationLoaded('subject')) {
             $quiz->load('subject.grade');
         }
-        if (!$quiz->relationLoaded('topic')) {
+        if (! $quiz->relationLoaded('topic')) {
             $quiz->load('topic.subject');
         }
 
@@ -233,7 +236,7 @@ class QuizController extends Controller
             }
             // Load subject->grade to allow safe inference of subject/grade/level
             $newTopic = Topic::with(['subject.grade'])->find($request->get('topic_id'));
-            if (!$newTopic) {
+            if (! $newTopic) {
                 return response()->json(['message' => 'Topic not found'], 422);
             }
             // If the caller also supplied a subject_id, ensure it matches the topic's subject
@@ -244,25 +247,30 @@ class QuizController extends Controller
             $quiz->topic_id = $newTopic->id;
             // Use explicit FK if present, otherwise fall back to loaded relation ids
             // Direct assignment from payload as single source of truth - no inference fallbacks
-            if ($request->has('subject_id'))
+            if ($request->has('subject_id')) {
                 $quiz->subject_id = $request->get('subject_id');
-            if ($request->has('grade_id'))
+            }
+            if ($request->has('grade_id')) {
                 $quiz->grade_id = $request->get('grade_id');
-            if ($request->has('level_id'))
+            }
+            if ($request->has('level_id')) {
                 $quiz->level_id = $request->get('level_id');
+            }
         } elseif ($request->has('subject_id')) {
             // prefer imported Subject model (avoids fully-qualified names)
             $newSubject = Subject::find($request->get('subject_id'));
-            if (!$newSubject) {
+            if (! $newSubject) {
                 return response()->json(['message' => 'Subject not found'], 422);
             }
             $quiz->subject_id = $newSubject->id;
 
             // Direct assignment from payload as single source of truth - no inference fallbacks
-            if ($request->has('grade_id'))
+            if ($request->has('grade_id')) {
                 $quiz->grade_id = $request->get('grade_id');
-            if ($request->has('level_id'))
+            }
+            if ($request->has('level_id')) {
                 $quiz->level_id = $request->get('level_id');
+            }
 
             // If the new subject is different from the old one, nullify the topic
             if ($quiz->topic && (($quiz->topic->subject_id ?? $quiz->topic->subject?->id ?? null) !== $newSubject->id)) {
@@ -270,7 +278,7 @@ class QuizController extends Controller
             }
         } elseif ($request->has('grade_id')) {
             $newGrade = Grade::find($request->get('grade_id'));
-            if (!$newGrade) {
+            if (! $newGrade) {
                 return response()->json(['message' => 'Grade not found'], 422);
             }
             $quiz->grade_id = $newGrade->id;
@@ -297,7 +305,7 @@ class QuizController extends Controller
 
     private function processQuestionsForUpdate(Quiz $quiz, $user, Request $request, $topic): void
     {
-        if (!$request->filled('questions') || !is_array($request->questions)) {
+        if (! $request->filled('questions') || ! is_array($request->questions)) {
             return;
         }
 
@@ -343,7 +351,7 @@ class QuizController extends Controller
 
         // Delete questions that were not in the incoming payload (user deleted them)
         $questionsToDelete = array_diff($existingQuestionIds, $incomingQuestionIds);
-        if (!empty($questionsToDelete)) {
+        if (! empty($questionsToDelete)) {
             Question::whereIn('id', $questionsToDelete)->delete();
         }
 
@@ -403,7 +411,7 @@ class QuizController extends Controller
         if (isset($q['corrects']) && is_array($q['corrects'])) {
             $qCorrects = array_values(array_filter(array_map(static function ($c) {
                 return is_numeric($c) ? (int) $c : null;
-            }, $q['corrects']), static fn($v) => $v !== null));
+            }, $q['corrects']), static fn ($v) => $v !== null));
         }
 
         $questionData = [
@@ -455,14 +463,15 @@ class QuizController extends Controller
     private function updateQuestionForUpdate(Quiz $quiz, $user, array $q, $index, array $mediaFiles, $topic): void
     {
         $questionId = $q['id'] ?? null;
-        if (!$questionId) {
+        if (! $questionId) {
             return;
         }
 
         $question = Question::find($questionId);
-        if (!$question || $question->quiz_id !== $quiz->id) {
+        if (! $question || $question->quiz_id !== $quiz->id) {
             // Question doesn't exist or doesn't belong to this quiz, create it instead
             $this->createQuestionForUpdate($quiz, $user, $q, $index, $mediaFiles, $topic);
+
             return;
         }
 
@@ -504,7 +513,7 @@ class QuizController extends Controller
         if (isset($q['corrects']) && is_array($q['corrects'])) {
             $qCorrects = array_values(array_filter(array_map(static function ($c) {
                 return is_numeric($c) ? (int) $c : null;
-            }, $q['corrects']), static fn($v) => $v !== null));
+            }, $q['corrects']), static fn ($v) => $v !== null));
         }
 
         $updateData = [
@@ -543,7 +552,6 @@ class QuizController extends Controller
         }
     }
 
-
     private function finalizeQuizUpdate(Quiz $quiz): void
     {
         $quiz->save();
@@ -578,7 +586,7 @@ class QuizController extends Controller
                 'topic:id,name,slug,subject_id',
                 'topic.subject:id,name,slug,grade_id',
                 'grade:id,name,slug,level_id',
-                'level:id,name,slug'
+                'level:id,name,slug',
             ])
             ->withCount(['questions', 'attempts']);
 
@@ -587,7 +595,7 @@ class QuizController extends Controller
                 ->withExists([
                     'likes as liked' => function ($q) use ($user) {
                         $q->where('user_id', $user->id);
-                    }
+                    },
                 ]);
         }
 
@@ -602,12 +610,12 @@ class QuizController extends Controller
         }
 
         // If the request is anonymous, show only approved & published quizzes
-        if (!$user) {
+        if (! $user) {
             $query->where('is_approved', true)->where('visibility', 'published');
         } else {
             // Check if requesting only own quizzes (mine=1)
             $requestingOwnQuizzesOnly = $request->boolean('mine') || $request->get('mine') === '1' || $request->get('mine') === 1;
-            
+
             if ($requestingOwnQuizzesOnly) {
                 // When viewing own quizzes, show ALL quizzes created by this user (all statuses)
                 // This is the quiz-master dashboard view, so strict filtering by owner
@@ -616,7 +624,7 @@ class QuizController extends Controller
                     $q->where('user_id', $user->id)
                         ->orWhere('created_by', $user->id);
                 });
-            } else if (!$user->is_admin) {
+            } elseif (! $user->is_admin) {
                 // By default for non-admins (not requesting own), show their own OR any approved/published ones
                 $query->where(function ($q) use ($user) {
                     $q->where(function ($mq) use ($user) {
@@ -634,7 +642,7 @@ class QuizController extends Controller
         // filter by topic or approved (explicit query overrides defaults)
         if ($topic = $request->get('topic_id')) {
             $query->where('topic_id', $topic);
-        } else if ($topicSlug = $request->get('topic')) {
+        } elseif ($topicSlug = $request->get('topic')) {
             $query->whereHas('topic', function ($q) use ($topicSlug) {
                 $q->where('slug', $topicSlug);
             });
@@ -644,29 +652,29 @@ class QuizController extends Controller
         if ($subjectIds = $request->get('subject_ids')) {
             // subject_ids is a comma-separated list of IDs
             $ids = array_filter(array_map('trim', explode(',', $subjectIds)));
-            if (!empty($ids)) {
+            if (! empty($ids)) {
                 $query->where(function ($q) use ($ids) {
                     $q->whereIn('subject_id', $ids)
-                      ->orWhereHas('topic.subject', function ($sq) use ($ids) {
-                          $sq->whereIn('id', $ids);
-                      });
+                        ->orWhereHas('topic.subject', function ($sq) use ($ids) {
+                            $sq->whereIn('id', $ids);
+                        });
                 });
             }
         } elseif ($subjectId = $request->get('subject_id')) {
             $query->where(function ($q) use ($subjectId) {
                 $q->where('subject_id', $subjectId)
-                  ->orWhereHas('topic.subject', function ($sq) use ($subjectId) {
-                      $sq->where('id', $subjectId);
-                  });
+                    ->orWhereHas('topic.subject', function ($sq) use ($subjectId) {
+                        $sq->where('id', $subjectId);
+                    });
             });
-        } else if ($subjectSlug = $request->get('subject')) {
+        } elseif ($subjectSlug = $request->get('subject')) {
             $query->where(function ($q) use ($subjectSlug) {
                 $q->whereHas('subject', function ($sq) use ($subjectSlug) {
                     $sq->where('slug', $subjectSlug);
                 })
-                  ->orWhereHas('topic.subject', function ($sq) use ($subjectSlug) {
-                      $sq->where('slug', $subjectSlug);
-                  });
+                    ->orWhereHas('topic.subject', function ($sq) use ($subjectSlug) {
+                        $sq->where('slug', $subjectSlug);
+                    });
             });
         }
 
@@ -674,25 +682,25 @@ class QuizController extends Controller
         if ($levelId = $request->get('level_id')) {
             $query->where(function ($q) use ($levelId) {
                 $q->where('level_id', $levelId)
-                  ->orWhereHas('grade.level', function ($sq) use ($levelId) {
-                      $sq->where('id', $levelId);
-                  });
+                    ->orWhereHas('grade.level', function ($sq) use ($levelId) {
+                        $sq->where('id', $levelId);
+                    });
             });
-        } else if ($levelSlug = $request->get('level')) {
+        } elseif ($levelSlug = $request->get('level')) {
             $query->where(function ($q) use ($levelSlug) {
                 $q->whereHas('level', function ($sq) use ($levelSlug) {
                     $sq->where('slug', $levelSlug);
                 })
-                  ->orWhereHas('grade.level', function ($sq) use ($levelSlug) {
-                      $sq->where('slug', $levelSlug);
-                  });
+                    ->orWhereHas('grade.level', function ($sq) use ($levelSlug) {
+                        $sq->where('slug', $levelSlug);
+                    });
             });
         }
 
         // filter by grade_id explicitly
         if ($gradeId = $request->get('grade_id')) {
             $query->where('grade_id', $gradeId);
-        } else if ($gradeSlug = $request->get('grade')) {
+        } elseif ($gradeSlug = $request->get('grade')) {
             $query->whereHas('grade', function ($q) use ($gradeSlug) {
                 $q->where('slug', $gradeSlug);
             });
@@ -701,7 +709,7 @@ class QuizController extends Controller
         if ($request->has('is_paid')) {
             $query->where('is_paid', $request->boolean('is_paid'));
         }
-        if (!is_null($request->get('approved'))) {
+        if (! is_null($request->get('approved'))) {
             $query->where('is_approved', (bool) $request->get('approved'));
         }
 
@@ -751,7 +759,7 @@ class QuizController extends Controller
             // Do not cache the dynamic management view for the quiz master's own quizzes
             $data = $query->paginate($perPage);
         } else {
-            $cacheKey = 'quizzes_index_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
+            $cacheKey = 'quizzes_index_'.md5(serialize($request->all()).($user ? $user->id : 'guest'));
             $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(5), function () use ($query, $perPage) {
                 return $query->paginate($perPage);
             });
@@ -763,7 +771,7 @@ class QuizController extends Controller
     private function normalizeBooleanInputs(Request $request, array $keys): void
     {
         foreach ($keys as $key) {
-            if (!$request->has($key)) {
+            if (! $request->has($key)) {
                 continue;
             }
 
@@ -771,6 +779,7 @@ class QuizController extends Controller
 
             if ($value === '' || $value === null) {
                 $request->merge([$key => null]);
+
                 continue;
             }
 
@@ -780,6 +789,7 @@ class QuizController extends Controller
 
             if (is_numeric($value)) {
                 $request->merge([$key => (bool) (int) $value]);
+
                 continue;
             }
 
@@ -788,16 +798,19 @@ class QuizController extends Controller
 
                 if (in_array($normalized, ['true', '1', 'yes', 'on'], true)) {
                     $request->merge([$key => true]);
+
                     continue;
                 }
 
                 if (in_array($normalized, ['false', '0', 'no', 'off'], true)) {
                     $request->merge([$key => false]);
+
                     continue;
                 }
 
                 if ($normalized === 'null') {
                     $request->merge([$key => null]);
+
                     continue;
                 }
             }
@@ -806,7 +819,7 @@ class QuizController extends Controller
 
     private function questionsTableHasColumn(string $column): bool
     {
-        if (!array_key_exists($column, $this->questionColumnCache)) {
+        if (! array_key_exists($column, $this->questionColumnCache)) {
             $this->questionColumnCache[$column] = Schema::hasColumn('questions', $column);
         }
 
@@ -866,11 +879,12 @@ class QuizController extends Controller
                 Log::error('QuizController@store validation failed', ['errors' => $v->errors()->toArray(), 'payload' => $request->all()]);
             } catch (\Throwable $_) {
             }
+
             return response()->json(['errors' => $v->errors()], 422);
         }
 
         $topic = Topic::find($request->topic_id);
-        if (!$topic || !$topic->is_approved) {
+        if (! $topic || ! $topic->is_approved) {
             return response()->json(['message' => 'Topic is not approved or does not exist'], 403);
         }
 
@@ -890,7 +904,7 @@ class QuizController extends Controller
         $subject = null;
         if ($request->has('subject_id')) {
             $subject = Subject::find($request->get('subject_id'));
-            if (!$subject) {
+            if (! $subject) {
                 return response()->json(['message' => 'Subject not found'], 422);
             }
             if ($request->has('grade_id')) {
@@ -911,18 +925,19 @@ class QuizController extends Controller
 
     private function normalizeVideoUrlInput(Request $request, string $key): void
     {
-        if (!$request->has($key)) {
+        if (! $request->has($key)) {
             return;
         }
 
         $value = $request->get($key);
-        if (!is_string($value)) {
+        if (! is_string($value)) {
             return;
         }
 
         $value = trim($value);
         if ($value === '') {
             $request->merge([$key => null]);
+
             return;
         }
 
@@ -934,6 +949,7 @@ class QuizController extends Controller
         $value = trim($value);
         if ($value === '') {
             $request->merge([$key => null]);
+
             return;
         }
 
@@ -947,6 +963,7 @@ class QuizController extends Controller
             $file = $request->file('cover');
             $coverPath = Storage::disk('public')->putFile('covers', $file);
         }
+
         return $coverPath;
     }
 
@@ -982,7 +999,7 @@ class QuizController extends Controller
         ]);
 
         // If level_id wasn't supplied explicitly, try to infer from grade
-        if (!$quiz->level_id && $quiz->grade_id) {
+        if (! $quiz->level_id && $quiz->grade_id) {
             try {
                 $quiz->level_id = Grade::find($quiz->grade_id)->level_id ?? null;
                 $quiz->save();
@@ -1017,7 +1034,7 @@ class QuizController extends Controller
 
     private function createQuestionsForQuiz($quiz, $user, Request $request): void
     {
-        if (!$request->filled('questions') || !is_array($request->questions)) {
+        if (! $request->filled('questions') || ! is_array($request->questions)) {
             return;
         }
 
@@ -1055,7 +1072,7 @@ class QuizController extends Controller
                 if (isset($q['corrects']) && is_array($q['corrects'])) {
                     $qCorrects = array_values(array_filter(array_map(static function ($c) {
                         return is_numeric($c) ? (int) $c : null;
-                    }, $q['corrects']), static fn($v) => $v !== null));
+                    }, $q['corrects']), static fn ($v) => $v !== null));
                 }
 
                 $questionData = [
@@ -1073,11 +1090,12 @@ class QuizController extends Controller
                     'difficulty' => $q['difficulty'] ?? 3,
                     'marks' => isset($q['marks']) ? $q['marks'] : null,
                     'is_quiz-master_marked' => true,
-                    'is_approved' => (function() use ($quiz) {
+                    'is_approved' => (function () use ($quiz) {
                         try {
                             $siteSettings = \App\Models\SiteSetting::current();
                             $siteAutoQuestions = $siteSettings ? (bool) $siteSettings->auto_approve_questions : true;
                             $topic = $quiz->topic ?? \App\Models\Topic::with('subject')->find($quiz->topic_id);
+
                             return $siteAutoQuestions || ($topic && $topic->subject && (bool) ($topic->subject->auto_approve ?? false));
                         } catch (\Throwable $_) {
                             return false;
@@ -1150,7 +1168,7 @@ class QuizController extends Controller
         $this->createQuestionsForQuiz($quiz, $user, $request);
 
         // If this is not a draft and not auto-approved, mark as approval requested
-        if (!$quiz->is_draft && !$quiz->is_approved) {
+        if (! $quiz->is_draft && ! $quiz->is_approved) {
             $quiz->approval_requested_at = now();
             $quiz->save();
         }
@@ -1165,7 +1183,7 @@ class QuizController extends Controller
     {
         $user = $request->user();
         // minimal role check: assume User model has is_admin flag
-        if (!method_exists($user, 'isAdmin') && !$user->is_admin) {
+        if (! method_exists($user, 'isAdmin') && ! $user->is_admin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -1181,7 +1199,7 @@ class QuizController extends Controller
     public function reject(Request $request, Quiz $quiz)
     {
         $user = $request->user();
-        if (!method_exists($user, 'isAdmin') && !$user->is_admin) {
+        if (! method_exists($user, 'isAdmin') && ! $user->is_admin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -1225,14 +1243,14 @@ class QuizController extends Controller
     public function markInstitutional(Request $request, Quiz $quiz)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
 
         // Only allow owner or admin to update — check both user_id and created_by
         $isOwner = ((int) ($quiz->user_id ?? 0) === (int) $user->id)
                 || ((int) ($quiz->created_by ?? 0) === (int) $user->id);
-        if (!$isOwner && !$user->is_admin) {
+        if (! $isOwner && ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
@@ -1242,16 +1260,16 @@ class QuizController extends Controller
         ]);
 
         // If the quiz creator is not part of this institution, reject
-        if (!$user->is_admin) {
+        if (! $user->is_admin) {
             $inInstitution = \App\Models\Institution::find($validated['institution_id'])
                 ->users()
                 ->where('user_id', $user->id)
                 ->exists();
 
-            if (!$inInstitution) {
+            if (! $inInstitution) {
                 return response()->json([
                     'ok' => false,
-                    'message' => 'You must be a member of this institution to mark quizzes as institutional'
+                    'message' => 'You must be a member of this institution to mark quizzes as institutional',
                 ], 403);
             }
         }
@@ -1263,9 +1281,9 @@ class QuizController extends Controller
         return response()->json([
             'ok' => true,
             'quiz' => $quiz,
-            'message' => $validated['is_institutional'] 
-                ? 'Quiz marked as institutional' 
-                : 'Quiz unmarked as institutional'
+            'message' => $validated['is_institutional']
+                ? 'Quiz marked as institutional'
+                : 'Quiz unmarked as institutional',
         ]);
     }
 }

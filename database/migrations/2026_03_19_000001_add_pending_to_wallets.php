@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('wallets', function (Blueprint $table) {
-            if (!Schema::hasColumn('wallets', 'pending')) {
+            if (! Schema::hasColumn('wallets', 'pending')) {
                 $table->decimal('pending', 15, 2)->default(0)->after('available')->comment('Pending earnings awaiting settlement');
             }
         });

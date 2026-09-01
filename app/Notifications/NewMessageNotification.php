@@ -3,8 +3,8 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Notification;
 use Illuminate\Notifications\Messages\BroadcastMessage;
+use Illuminate\Notifications\Notification;
 
 class NewMessageNotification extends Notification
 {
@@ -27,6 +27,7 @@ class NewMessageNotification extends Notification
                 if (isset($pref->preferences['via']) && is_array($pref->preferences['via'])) {
                     return $pref->preferences['via'];
                 }
+
                 return $pref->preferences;
             }
         } catch (\Exception $e) {
@@ -53,7 +54,7 @@ class NewMessageNotification extends Notification
                 'sender_id' => $this->message->sender_id,
                 'content' => $this->message->content,
                 'created_at' => $this->message->created_at,
-            ]
+            ],
         ]);
     }
 }

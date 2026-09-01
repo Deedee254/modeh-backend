@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Package;
+use Illuminate\Database\Seeder;
 
 class PackageSeeder extends Seeder
 {
@@ -21,8 +21,8 @@ class PackageSeeder extends Seeder
                 'limits' => [
                     // small limits as example
                     'quiz_results' => 5,
-                    'battle_results' => 2
-                ]
+                    'battle_results' => 2,
+                ],
             ],
             'is_active' => true,
             'is_default' => true,
@@ -40,8 +40,8 @@ class PackageSeeder extends Seeder
                 'display' => ['Unlimited quizzes', 'Detailed analytics', 'Priority support'],
                 'limits' => [
                     'quiz_results' => null, // null === unlimited
-                    'battle_results' => null
-                ]
+                    'battle_results' => null,
+                ],
             ],
             'is_active' => true,
             'duration_days' => 30,

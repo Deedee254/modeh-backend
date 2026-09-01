@@ -24,7 +24,6 @@ class QuizResource extends JsonResource
     /**
      * Transform the resource into an array.
      *
-     * @param Request $request
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
@@ -36,7 +35,7 @@ class QuizResource extends JsonResource
             'description' => $this->description,
             'youtube_url' => $this->youtube_url,
             'video_url' => $this->video_url,
-            'cover_image' => $this->cover_image ? (\Illuminate\Support\Str::startsWith($this->cover_image, ['http://', 'https://', '/storage']) ? $this->cover_image : url('storage/' . $this->cover_image)) : null,
+            'cover_image' => $this->cover_image ? (\Illuminate\Support\Str::startsWith($this->cover_image, ['http://', 'https://', '/storage']) ? $this->cover_image : url('storage/'.$this->cover_image)) : null,
             'created_by' => [
                 'id' => $this->author?->id,
                 'name' => $this->author?->name,
@@ -64,6 +63,7 @@ class QuizResource extends JsonResource
                 if (isset($this->liked)) {
                     return (bool) $this->liked;
                 }
+
                 return $this->likes()->where('user_id', auth('sanctum')->id())->exists();
             }, false),
             'questions_count' => $this->questions_count,
@@ -101,6 +101,7 @@ class QuizResource extends JsonResource
     {
         try {
             $setting = \App\Models\PricingSetting::singleton();
+
             return (float) ($setting->default_quiz_one_off_price ?? 0) ?: null;
         } catch (\Throwable $e) {
             return null;

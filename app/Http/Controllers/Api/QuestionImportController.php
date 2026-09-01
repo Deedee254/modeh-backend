@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Services\TournamentQuestionService;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class QuestionImportController
@@ -25,7 +25,7 @@ class QuestionImportController
             $ext = strtolower($file->getClientOriginalExtension());
 
             // Reuse the existing parsing logic from TournamentQuestionService
-            $service = new TournamentQuestionService();
+            $service = new TournamentQuestionService;
             [$headers, $rows] = $service->parseCsv($path, $ext);
 
             if (empty($headers)) {
@@ -49,7 +49,7 @@ class QuestionImportController
             ]);
 
             return response()->json(
-                ['error' => 'Failed to parse file: ' . $e->getMessage()],
+                ['error' => 'Failed to parse file: '.$e->getMessage()],
                 400
             );
         }

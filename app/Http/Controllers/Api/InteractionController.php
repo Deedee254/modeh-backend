@@ -2,17 +2,17 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\QuizLiked;
+use App\Events\QuizMasterFollowed;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Quiz;
 use App\Models\QuizMaster;
 use App\Models\User;
+use App\Notifications\QuizLikedNotification;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
-use App\Events\QuizLiked;
-use App\Events\QuizMasterFollowed;
-use App\Notifications\QuizLikedNotification;
 
 class InteractionController extends Controller
 {
@@ -60,6 +60,7 @@ class InteractionController extends Controller
         }
 
         $quiz->refresh();
+
         return response()->json(['liked' => true, 'likes_count' => $quiz->likes_count]);
     }
 
@@ -75,6 +76,7 @@ class InteractionController extends Controller
         });
 
         $quiz->refresh();
+
         return response()->json(['liked' => false, 'likes_count' => $quiz->likes_count]);
     }
 
@@ -149,7 +151,7 @@ class InteractionController extends Controller
             return response()->json(['followers' => []]);
         }
 
-        if (!$user->quizMasterProfile) {
+        if (! $user->quizMasterProfile) {
             return response()->json(['followers' => [], 'likers' => []]);
         }
 

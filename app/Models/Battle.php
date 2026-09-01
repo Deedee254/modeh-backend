@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Question;
 
 /**
  * @property int $id
@@ -97,6 +96,7 @@ class Battle extends Model
     {
         return $this->hasMany(BattleSubmission::class);
     }
+
     /**
      * Get the effective price of the battle.
      * Falls back to the global default if no specific price is set.
@@ -109,6 +109,7 @@ class Battle extends Model
 
         try {
             $pricingSetting = PricingSetting::singleton();
+
             return (float) ($pricingSetting->default_battle_one_off_price ?? 0);
         } catch (\Throwable $e) {
             return 0.0;

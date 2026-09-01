@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('usage_type')->default('reveals'); // reveals, attempts, etc.
             $table->integer('used')->default(0); // how many used today
             $table->timestamps();
-            
+
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('subscription_id')->references('id')->on('subscriptions')->onDelete('set null');
             $table->unique(['user_id', 'tracking_date', 'usage_type']);

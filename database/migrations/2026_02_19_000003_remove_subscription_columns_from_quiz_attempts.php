@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (\Illuminate\Support\Facades\DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         Schema::table('quiz_attempts', function (Blueprint $table) {
             // Drop old subscription tracking columns (if they exist)
             if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {

@@ -18,23 +18,23 @@ class SocialAuthSettingsTable
                     ->searchable()
                     ->sortable()
                     ->formatStateUsing(fn (string $state): string => ucfirst($state)),
-                    
+
                 \Filament\Tables\Columns\TextColumn::make('client_id')
                     ->label('Client ID (from .env)')
                     ->formatStateUsing(fn ($record) => self::getEnvValue($record->provider, 'client_id') ?: '(not configured)')
                     ->toggleable(),
-                    
+
                 \Filament\Tables\Columns\TextColumn::make('redirect_url')
                     ->label('Redirect URL (from .env)')
                     ->formatStateUsing(fn ($record) => self::getEnvValue($record->provider, 'redirect_url') ?: '(not configured)')
                     ->toggleable()
                     ->wrap(),
-                    
+
                 \Filament\Tables\Columns\IconColumn::make('is_enabled')
                     ->label('Status')
                     ->boolean()
                     ->sortable(),
-                    
+
                 \Filament\Tables\Columns\TextColumn::make('updated_at')
                     ->label('Last Updated')
                     ->dateTime()
@@ -57,14 +57,16 @@ class SocialAuthSettingsTable
 
     private static function getEnvValue($provider, $type): ?string
     {
-        if (!$provider) return null;
-        
+        if (! $provider) {
+            return null;
+        }
+
         $providerUpper = strtoupper($provider);
-        
+
         return match ($type) {
             'client_id' => config("services.{$provider}.client_id") ?? env("{$providerUpper}_CLIENT_ID"),
             'client_secret' => config("services.{$provider}.client_secret") ?? env("{$providerUpper}_CLIENT_SECRET"),
-            'redirect_url' => env("{$providerUpper}_OAUTH_REDIRECT_URI") ?? config('app.url') . "/auth/{$provider}/callback",
+            'redirect_url' => env("{$providerUpper}_OAUTH_REDIRECT_URI") ?? config('app.url')."/auth/{$provider}/callback",
             default => null,
         };
     }

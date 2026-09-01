@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
  * MpesaTransaction Model
- * 
+ *
  * @property int $id
  * @property int $user_id
  * @property string $checkout_request_id

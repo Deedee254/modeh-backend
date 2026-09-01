@@ -41,15 +41,18 @@ class AdminQuizeeAnalyticsController extends Controller
             ? Carbon::parse($validated['from'])->toDateString()
             : Carbon::parse($to)->subDays(29)->toDateString();
 
-        if ($from > $to)
+        if ($from > $to) {
             [$from, $to] = [$to, $from];
+        }
+
         return [$from, $to];
     }
 
     public function analytics(Request $request)
     {
-        if ($resp = $this->requireAdmin())
+        if ($resp = $this->requireAdmin()) {
             return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -57,8 +60,8 @@ class AdminQuizeeAnalyticsController extends Controller
         ]);
 
         [$from, $to] = $this->resolveRange($validated);
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $totalQuizees = (int) DB::table('users')->where('role', 'quizee')->count();
         $newQuizees = (int) DB::table('users')
@@ -125,8 +128,9 @@ class AdminQuizeeAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $signupByDate = [];
-        foreach ($signupRows as $r)
+        foreach ($signupRows as $r) {
             $signupByDate[$r->date] = (int) $r->value;
+        }
 
         $attemptRows = (clone $attemptsQ)
             ->selectRaw('DATE(a.created_at) as date')
@@ -137,8 +141,9 @@ class AdminQuizeeAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $attemptByDate = [];
-        foreach ($attemptRows as $r)
+        foreach ($attemptRows as $r) {
             $attemptByDate[$r->date] = $r;
+        }
 
         $dailyRows = (clone $dailyQ)
             ->selectRaw('c.date as date')
@@ -147,8 +152,9 @@ class AdminQuizeeAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $dailyByDate = [];
-        foreach ($dailyRows as $r)
+        foreach ($dailyRows as $r) {
             $dailyByDate[$r->date] = (int) ($r->completions ?? 0);
+        }
 
         $activeRows = (clone $activity)
             ->selectRaw('date as date')
@@ -157,8 +163,9 @@ class AdminQuizeeAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $activeByDate = [];
-        foreach ($activeRows as $r)
+        foreach ($activeRows as $r) {
             $activeByDate[$r->date] = (int) ($r->active ?? 0);
+        }
 
         $series = [
             'signups' => [],
@@ -275,8 +282,9 @@ class AdminQuizeeAnalyticsController extends Controller
 
     public function insights(Request $request)
     {
-        if ($resp = $this->requireAdmin())
+        if ($resp = $this->requireAdmin()) {
             return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -287,8 +295,8 @@ class AdminQuizeeAnalyticsController extends Controller
         ]);
 
         [$from, $to] = $this->resolveRange($validated);
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $page = (int) ($validated['page'] ?? 1);
         $limit = (int) ($validated['limit'] ?? 50);
@@ -353,8 +361,8 @@ class AdminQuizeeAnalyticsController extends Controller
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
-                $q->where('u.name', 'like', '%' . $search . '%')
-                    ->orWhere('u.email', 'like', '%' . $search . '%');
+                $q->where('u.name', 'like', '%'.$search.'%')
+                    ->orWhere('u.email', 'like', '%'.$search.'%');
             });
         }
 
@@ -409,16 +417,17 @@ class AdminQuizeeAnalyticsController extends Controller
 
     public function userInsights(Request $request, $userId)
     {
-        if ($resp = $this->requireAdmin())
+        if ($resp = $this->requireAdmin()) {
             return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
             'to' => 'nullable|date',
         ]);
         [$from, $to] = $this->resolveRange($validated);
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         // Allow $userId to be numeric ID or an identifying string (email or name)
         $user = DB::table('users as u')
@@ -442,8 +451,9 @@ class AdminQuizeeAnalyticsController extends Controller
             ->selectRaw('g.name as grade_name, l.name as level_name, q.first_name, q.last_name, q.dob, q.institution')
             ->first();
 
-        if (!$user)
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Not found'], 404);
+        }
 
         $attemptsQ = DB::table('quiz_attempts as a')
             ->where('a.user_id', $user->id)
@@ -485,8 +495,9 @@ class AdminQuizeeAnalyticsController extends Controller
         $fromDt = Carbon::parse($from);
         $toDt = Carbon::parse($to);
         $dates = [];
-        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay())
+        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) {
             $dates[] = $d->toDateString();
+        }
 
         $attemptRows = (clone $attemptsQ)
             ->selectRaw('DATE(a.created_at) as date')
@@ -497,8 +508,9 @@ class AdminQuizeeAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $attemptByDate = [];
-        foreach ($attemptRows as $r)
+        foreach ($attemptRows as $r) {
             $attemptByDate[$r->date] = $r;
+        }
 
         $dailyRows = (clone $dailyQ)
             ->selectRaw('c.date as date')
@@ -507,8 +519,9 @@ class AdminQuizeeAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $dailyByDate = [];
-        foreach ($dailyRows as $r)
+        foreach ($dailyRows as $r) {
             $dailyByDate[$r->date] = (int) ($r->completions ?? 0);
+        }
 
         $series = [
             'quiz_attempts' => [],

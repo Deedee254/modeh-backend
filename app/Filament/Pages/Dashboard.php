@@ -2,21 +2,22 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Grade;
+use App\Models\Level;
+use App\Models\User;
 use BackedEnum;
-use Filament\Pages\Dashboard as BaseDashboard;
-use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
+use Filament\Pages\Dashboard as BaseDashboard;
+use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use App\Models\Level;
-use App\Models\Grade;
-use App\Models\User;
 
 class Dashboard extends BaseDashboard
 {
     // Filament v4 expects this exact union type
-    protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-chart-bar';
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-chart-bar';
+
     protected static ?int $navigationSort = -2;
 
     use HasFiltersForm;
@@ -61,7 +62,7 @@ class Dashboard extends BaseDashboard
     }
 
     // Override columns for nicer layout
-    public function getColumns(): int | array
+    public function getColumns(): int|array
     {
         return [
             'sm' => 1,

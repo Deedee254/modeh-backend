@@ -1,11 +1,10 @@
 <?php
 
+use App\Models\Subject;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
-use App\Services\SlugService;
-use App\Models\Subject;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -13,7 +12,7 @@ return new class extends Migration
     {
         // Ensure the slug column exists and is nullable so we can backfill safely
         Schema::table('subjects', function (Blueprint $table) {
-            if (!Schema::hasColumn('subjects', 'slug')) {
+            if (! Schema::hasColumn('subjects', 'slug')) {
                 $table->string('slug', 191)->nullable();
             }
         });
@@ -32,7 +31,7 @@ return new class extends Migration
 
                 // Ensure uniqueness using DB queries
                 while (DB::table('subjects')->where('slug', $slug)->where('id', '!=', $subject->id)->exists()) {
-                    $slug = $baseSlug . '-' . $count;
+                    $slug = $baseSlug.'-'.$count;
                     $count++;
                 }
 

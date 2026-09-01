@@ -3,21 +3,20 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\DailyChallenge;
 use App\Models\DailyChallengeCache;
 use App\Models\DailyChallengeSubmission;
 use App\Models\Question;
-use App\Models\UserDailyChallenge;
 use App\Services\AchievementService;
 use App\Services\DailyChallengeBaker;
 use App\Services\QuestionMarkingService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 
 class DailyChallengeController extends Controller
 {
     protected $achievementService;
+
     protected $dailyChallengeBaker;
+
     protected $markingService;
 
     public function __construct(
@@ -41,7 +40,7 @@ class DailyChallengeController extends Controller
         // Ensure grade and level relationships are loaded
         $quizee = $user->quizee()->with(['grade', 'level'])->first();
 
-        if (!$quizee || !$quizee->grade || !$quizee->level) {
+        if (! $quizee || ! $quizee->grade || ! $quizee->level) {
             return response()->json(['error' => 'User grade or level not found'], 400);
         }
 
@@ -51,7 +50,7 @@ class DailyChallengeController extends Controller
 
             // Prepare questions (apply shuffling if configured)
             // Use a deterministic seed based on cache and user so we can re-resolve labels in history without a column
-            $shuffleSeed = (string)$request->input('shuffle_seed', md5($cache->id . '::' . $user->id));
+            $shuffleSeed = (string) $request->input('shuffle_seed', md5($cache->id.'::'.$user->id));
             // We use a simplified version of getPreparedQuestions logic here
             $questions = Question::whereIn('id', $cache->questions)->get();
             $preparedQuestions = [];
@@ -76,7 +75,7 @@ class DailyChallengeController extends Controller
             return response()->json([
                 'challenge' => [
                     'id' => $cache->id,
-                    'title' => 'Daily Challenge - ' . $quizee->grade->name,
+                    'title' => 'Daily Challenge - '.$quizee->grade->name,
                     'description' => 'Answer 5 questions to complete today\'s challenge',
                     'date' => $cache->date,
                     'grade' => $quizee->grade,
@@ -88,7 +87,8 @@ class DailyChallengeController extends Controller
                 'completion' => $existingSubmission,
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error fetching daily challenge: ' . $e->getMessage());
+            \Log::error('Error fetching daily challenge: '.$e->getMessage());
+
             return response()->json(['error' => $e->getMessage()], 422);
         }
     }
@@ -138,10 +138,12 @@ class DailyChallengeController extends Controller
 
         // Build detailed results with explanations using the marking service
         // Use deterministic seed so we can re-resolve labels correctly
-        $shuffleSeed = (string)$request->input('shuffle_seed', md5($submission->daily_challenge_cache_id . '::' . $user->id)); 
+        $shuffleSeed = (string) $request->input('shuffle_seed', md5($submission->daily_challenge_cache_id.'::'.$user->id));
         $results = collect($submission->is_correct)->map(function ($isCorrect, $questionId) use ($submission, $questions, $shuffleSeed) {
             $question = $questions->get($questionId);
-            if (!$question) return null;
+            if (! $question) {
+                return null;
+            }
 
             $userAnswer = $submission->answers[$questionId] ?? null;
             $optionMap = $this->markingService->buildOptionMap($question, $shuffleSeed);
@@ -182,7 +184,7 @@ class DailyChallengeController extends Controller
         // Ensure grade and level relationships are loaded
         $quizee = $user->quizee()->with(['grade', 'level'])->first();
 
-        if (!$quizee || !$quizee->grade || !$quizee->level) {
+        if (! $quizee || ! $quizee->grade || ! $quizee->level) {
             return response()->json(['error' => 'User grade or level not found'], 400);
         }
 
@@ -211,8 +213,8 @@ class DailyChallengeController extends Controller
 
         // Get questions and calculate score server-side using shared marking service
         $questions = Question::whereIn('id', $cache->questions)->get();
-        $shuffleSeed = $validated['shuffle_seed'] ?? md5($cache->id . '::' . $user->id);
-        
+        $shuffleSeed = $validated['shuffle_seed'] ?? md5($cache->id.'::'.$user->id);
+
         // Unmap shuffled answers before marking if seed provided
         if ($shuffleSeed) {
             $unmappedAnswers = [];
@@ -245,7 +247,7 @@ class DailyChallengeController extends Controller
 
         // Check achievements: daily challenge completion + streak bonuses
         $awarded = [];
-        
+
         // Check general daily challenge completion achievements
         $completionAwards = $this->achievementService->checkAchievements($user->id, [
             'type' => 'daily_challenge_completed',
@@ -281,8 +283,8 @@ class DailyChallengeController extends Controller
                     'daily_challenge_submissions.user_id',
                     'daily_challenge_submissions.score',
                     'daily_challenge_submissions.completed_at',
-                        'users.name as user_name',
-                        \DB::raw('COALESCE(users.avatar_url, users.social_avatar) as user_avatar'),
+                    'users.name as user_name',
+                    \DB::raw('COALESCE(users.avatar_url, users.social_avatar) as user_avatar'),
                     'grades.name as grade_name',
                     'levels.name as level_name'
                 )
@@ -338,11 +340,11 @@ class DailyChallengeController extends Controller
                     'last_page' => $leaderboard->lastPage(),
                     'per_page' => $leaderboard->perPage(),
                     'total' => $leaderboard->total(),
-                ]
+                ],
             ]);
         } catch (\Exception $e) {
             // Log full exception for server-side inspection
-            \Log::error('Error fetching daily challenge leaderboard: ' . $e->getMessage());
+            \Log::error('Error fetching daily challenge leaderboard: '.$e->getMessage());
 
             // Include the exception message in the JSON response to aid debugging during development.
             // In production you may want to remove the exception details to avoid leaking internals.

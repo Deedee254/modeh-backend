@@ -4,28 +4,30 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PackageResource\Pages;
 use App\Models\Package;
-use Filament\Tables\Table;
-use Filament\Resources\Resource;
-use Filament\Actions\ViewAction;
-use Filament\Actions\EditAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
-use Filament\Forms\Components\TextInput;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Tables\Columns\TextColumn;
+use Filament\Resources\Resource;
 use Filament\Tables\Columns\IconColumn;
-use UnitEnum;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class PackageResource extends Resource
 {
     protected static ?string $model = Package::class;
+
     protected static \UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
+
     protected static ?int $navigationSort = 1;
+
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
@@ -47,7 +49,7 @@ class PackageResource extends Resource
                 ->numeric()
                 ->minValue(1)
                 ->visible(fn ($get) => $get('audience') === 'institution')
-                ->rules(['nullable','integer','min:1'])
+                ->rules(['nullable', 'integer', 'min:1'])
                 ->helperText('Number of seats available to the institution. Visible only when Audience = Institution.'),
             Select::make('preset_limits')
                 ->label('Quick add limits')
@@ -59,7 +61,9 @@ class PackageResource extends Resource
                 ])
                 ->reactive()
                 ->afterStateUpdated(function ($state, $set) {
-                    if (! $state) return;
+                    if (! $state) {
+                        return;
+                    }
 
                     if ($state === 'quiz_battle') {
                         $set('features', [
@@ -108,7 +112,7 @@ class PackageResource extends Resource
                         ->numeric()
                         ->nullable()
                         ->minValue(0)
-                        ->rules(['nullable','integer','min:0'])
+                        ->rules(['nullable', 'integer', 'min:0'])
                         ->helperText('Leave empty for unlimited. Set a non-negative integer to cap this feature for the package.'),
                 ])
                 ->columns(3)
@@ -128,14 +132,14 @@ class PackageResource extends Resource
                 ->boolean(),
             TextColumn::make('created_at')->date(),
         ])
-        ->actions([
-            ViewAction::make(),
-            EditAction::make(),
-            DeleteAction::make(),
-        ])
-        ->bulkActions([
-            DeleteBulkAction::make(),
-        ]);
+            ->actions([
+                ViewAction::make(),
+                EditAction::make(),
+                DeleteAction::make(),
+            ])
+            ->bulkActions([
+                DeleteBulkAction::make(),
+            ]);
     }
 
     public static function getPages(): array

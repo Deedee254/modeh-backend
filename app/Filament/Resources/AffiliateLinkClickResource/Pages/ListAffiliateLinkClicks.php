@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Filament\Resources\AffiliateLinkClickResource\Pages;
 
 use App\Filament\Resources\AffiliateLinkClickResource;

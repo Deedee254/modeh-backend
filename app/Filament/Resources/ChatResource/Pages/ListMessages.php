@@ -3,12 +3,11 @@
 namespace App\Filament\Resources\ChatResource\Pages;
 
 use App\Filament\Resources\ChatResource;
+use App\Models\User;
+use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables;
-use Filament\Actions;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
-use App\Models\User;
 
 class ListMessages extends ListRecords
 {

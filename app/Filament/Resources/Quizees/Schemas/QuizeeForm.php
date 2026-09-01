@@ -2,11 +2,11 @@
 
 namespace App\Filament\Resources\Quizees\Schemas;
 
-use Filament\Schemas\Schema;
 use Filament\Forms\Components\Section;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Schema;
 
 class QuizeeForm
 {
@@ -47,7 +47,7 @@ class QuizeeForm
                         Toggle::make('user.is_profile_completed')
                             ->label('Profile Completed')
                             ->disabled(),
-                    ])
+                    ]),
             ]);
     }
 }

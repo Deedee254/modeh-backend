@@ -21,9 +21,13 @@ class QuizeeResource extends Resource
     protected static ?string $model = Quizee::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::AcademicCap;
+
     protected static ?string $navigationLabel = 'Quizees';
+
     protected static ?string $modelLabel = 'Quizee';
+
     protected static ?string $pluralLabel = 'Quizees';
+
     protected static ?string $recordTitleAttribute = 'first_name';
 
     public static function getNavigationGroup(): ?string

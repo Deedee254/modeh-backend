@@ -3,10 +3,9 @@
 namespace App\Events;
 
 use Illuminate\Broadcasting\Channel;
-use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\ShouldBroadcast;
+use Illuminate\Broadcasting\PresenceChannel;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast as ShouldBroadcastContract;
 use Illuminate\Queue\SerializesModels;
 
@@ -15,8 +14,11 @@ class GenericBroadcast implements ShouldBroadcastContract
     use InteractsWithSockets, SerializesModels;
 
     public $payload;
+
     protected $channelName;
+
     protected $isPrivate = false;
+
     protected $isPresence = false;
 
     public function __construct(string $channelName, array $payload = [], bool $isPrivate = false, bool $isPresence = false)

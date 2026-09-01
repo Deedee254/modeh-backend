@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\ChatResource\Pages;
 
 use App\Filament\Resources\ChatResource;
+use App\Models\Message;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables;
-use App\Models\Message;
 use Illuminate\Support\Str;
 
 class SenderMessages extends ListRecords
@@ -18,10 +18,10 @@ class SenderMessages extends ListRecords
      */
     public function table(Tables\Table $table): Tables\Table
     {
-    $senderId = request()->route('record');
+        $senderId = request()->route('record');
 
         return $table
-            ->query(Message::query()->when($senderId, fn($q) => $q->where('sender_id', $senderId))->latest())
+            ->query(Message::query()->when($senderId, fn ($q) => $q->where('sender_id', $senderId))->latest())
             ->columns([
                 Tables\Columns\TextColumn::make('id')->label('ID')->sortable(),
                 Tables\Columns\TextColumn::make('content')
@@ -47,8 +47,9 @@ class SenderMessages extends ListRecords
 
     public function getTitle(): string
     {
-    $senderId = request()->route('record');
+        $senderId = request()->route('record');
         $name = optional(\App\Models\User::find($senderId))->name ?? 'Sender';
+
         return "Messages from {$name}";
     }
 }

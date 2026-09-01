@@ -1,24 +1,27 @@
 <?php
 
 namespace App\Filament\Resources;
+
 // ...existing use statements...
 
 use App\Filament\Resources\TopicResource\Pages;
 use App\Models\Topic;
-use Filament\Resources\Resource;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Forms;
-use Illuminate\Database\Eloquent\Builder;
+use Filament\Resources\Resource;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class TopicResource extends Resource
 {
     protected static ?string $model = Topic::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-rectangle-stack';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Content Management';
+
     protected static ?int $navigationSort = 3;
+
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
@@ -27,26 +30,27 @@ class TopicResource extends Resource
                     Forms\Components\TextInput::make('name')
                         ->required()
                         ->maxLength(255),
-                        
-                        // Select the subject directly when creating a topic. We present subjects grouped
-                        // by Level -> Grade (or Course) to make it easier for admins to find the right subject.
-                        Forms\Components\Select::make('subject_id')
-                            ->label('Subject')
-                            ->options(function () {
-                                $subjects = \App\Models\Subject::with(['grade.level'])->get();
-                                $groups = [];
-                                foreach ($subjects as $s) {
-                                    $levelName = $s->grade?->level?->name ?? 'No level';
-                                    $grade = $s->grade;
-                                    $gradeLabel = $grade ? ($grade->type === 'course' ? ($grade->display_name ?? $grade->name) . ' (Course)' : ($grade->name)) : 'No grade';
-                                    $label = "{$gradeLabel} — {$s->name}";
-                                    $groups[$levelName][$s->id] = $label;
-                                }
-                                return $groups;
-                            })
-                            ->required()
-                            ->searchable()
-                            ->preload(),
+
+                    // Select the subject directly when creating a topic. We present subjects grouped
+                    // by Level -> Grade (or Course) to make it easier for admins to find the right subject.
+                    Forms\Components\Select::make('subject_id')
+                        ->label('Subject')
+                        ->options(function () {
+                            $subjects = \App\Models\Subject::with(['grade.level'])->get();
+                            $groups = [];
+                            foreach ($subjects as $s) {
+                                $levelName = $s->grade?->level?->name ?? 'No level';
+                                $grade = $s->grade;
+                                $gradeLabel = $grade ? ($grade->type === 'course' ? ($grade->display_name ?? $grade->name).' (Course)' : ($grade->name)) : 'No grade';
+                                $label = "{$gradeLabel} — {$s->name}";
+                                $groups[$levelName][$s->id] = $label;
+                            }
+
+                            return $groups;
+                        })
+                        ->required()
+                        ->searchable()
+                        ->preload(),
 
                     // created_by is set automatically for admins during create - not editable in the form
 
@@ -66,7 +70,7 @@ class TopicResource extends Resource
 
                     // approval_requested_at is set automatically on create, not editable in the form
                 ])
-                ->columns(2)
+                ->columns(2),
         ]);
     }
 

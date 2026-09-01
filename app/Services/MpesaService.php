@@ -4,13 +4,15 @@ namespace App\Services;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class MpesaService
 {
     protected $config;
+
     protected $token;
+
     protected $tokenExpiresAt;
 
     public function __construct(array $config = [])
@@ -24,7 +26,7 @@ class MpesaService
             'passkey' => null,
             'callback_url' => null,
         ], config('services.mpesa', []), $config);
-        
+
         // Trim whitespace from string config values
         foreach (['consumer_key', 'consumer_secret', 'shortcode', 'till_number', 'passkey', 'callback_url'] as $key) {
             if (is_string($this->config[$key])) {
@@ -37,8 +39,8 @@ class MpesaService
         try {
             Log::info('[MPESA] Service constructed', [
                 'environment' => $this->config['environment'] ?? 'unknown',
-                'shortcode_configured' => !empty($this->config['shortcode']),
-                'callback_configured' => !empty($this->config['callback_url']),
+                'shortcode_configured' => ! empty($this->config['shortcode']),
+                'callback_configured' => ! empty($this->config['callback_url']),
             ]);
         } catch (\Throwable $e) {
             // Silently ignore logging failures; logging shouldn't break the constructor.
@@ -62,15 +64,16 @@ class MpesaService
         // Try cache first (recommended to reduce token generation requests)
         $cacheKey = 'mpesa.token.'.$this->config['environment'];
         $cached = Cache::get($cacheKey);
-        if (!empty($cached)) {
+        if (! empty($cached)) {
             return $cached;
         }
 
         $client = $this->httpClient();
         $key = $this->config['consumer_key'];
         $secret = $this->config['consumer_secret'];
-        if (!$key || !$secret) {
+        if (! $key || ! $secret) {
             Log::error('MpesaService: consumer credentials missing');
+
             return null;
         }
 
@@ -78,11 +81,11 @@ class MpesaService
             $res = $client->request('GET', '/oauth/v1/generate?grant_type=client_credentials', [
                 'auth' => [$key, $secret],
             ]);
-            $body = json_decode((string)$res->getBody(), true);
-            if (!empty($body['access_token'])) {
+            $body = json_decode((string) $res->getBody(), true);
+            if (! empty($body['access_token'])) {
                 $this->token = $body['access_token'];
                 // token typically valid for 3600s
-                $expiresIn = (int)($body['expires_in'] ?? 3500);
+                $expiresIn = (int) ($body['expires_in'] ?? 3500);
                 $this->tokenExpiresAt = now()->addSeconds($expiresIn);
 
                 // Store in cache with a small safety margin (30s)
@@ -113,6 +116,7 @@ class MpesaService
             ]);
             Log::error('MpesaService token error: '.$e->getMessage());
         }
+
         return null;
     }
 
@@ -122,22 +126,22 @@ class MpesaService
      */
     public function normalizePhone(?string $phone): ?string
     {
-        if (!is_string($phone) || trim($phone) === '') {
+        if (! is_string($phone) || trim($phone) === '') {
             return null;
         }
 
         $p = preg_replace('/[^0-9]/', '', $phone);
-        if (!$p) {
+        if (! $p) {
             return null;
         }
 
         if (str_starts_with($p, '0') && strlen($p) === 10) {
-            $p = '254' . substr($p, 1);
+            $p = '254'.substr($p, 1);
         } elseif ((str_starts_with($p, '7') || str_starts_with($p, '1')) && strlen($p) === 9) {
-            $p = '254' . $p;
+            $p = '254'.$p;
         }
 
-        if (!preg_match('/^254(7|1)\d{8}$/', $p)) {
+        if (! preg_match('/^254(7|1)\d{8}$/', $p)) {
             return null;
         }
 
@@ -149,18 +153,20 @@ class MpesaService
         // Build and send STK push to Daraja (sandbox or live depending on config)
 
         $token = $this->getToken();
-        if (!$token) return ['ok' => false, 'message' => 'failed to obtain oauth token'];
+        if (! $token) {
+            return ['ok' => false, 'message' => 'failed to obtain oauth token'];
+        }
 
         $shortcode = $this->config['shortcode'] ?? null;
         $tillNumber = $this->config['till_number'] ?? $shortcode; // fallback to shortcode if till_number not set
         $passkey = $this->config['passkey'] ?? null;
         $callback = $this->config['callback_url'] ?? null;
 
-        if (!$shortcode || !$passkey) {
+        if (! $shortcode || ! $passkey) {
             return ['ok' => false, 'message' => 'shortcode or passkey not configured'];
         }
 
-        if (!$callback || !filter_var($callback, FILTER_VALIDATE_URL)) {
+        if (! $callback || ! filter_var($callback, FILTER_VALIDATE_URL)) {
             return ['ok' => false, 'message' => 'Invalid callback_url'];
         }
 
@@ -168,7 +174,7 @@ class MpesaService
         $password = base64_encode($shortcode.$passkey.$timestamp);
 
         $normalizedPhone = $this->normalizePhone($phone);
-        if (!$normalizedPhone) {
+        if (! $normalizedPhone) {
             return ['ok' => false, 'message' => 'Invalid phone number. Use 2547XXXXXXXX or 07XXXXXXXX'];
         }
 
@@ -199,7 +205,9 @@ class MpesaService
 
             // Temporary debug: log outgoing payload without secrets (do not log Password)
             $payloadToLog = $payload;
-            if (isset($payloadToLog['Password'])) unset($payloadToLog['Password']);
+            if (isset($payloadToLog['Password'])) {
+                unset($payloadToLog['Password']);
+            }
             Log::debug('[MPESA] Outgoing STK payload (safe)', $payloadToLog);
             Log::debug('[MPESA] Callback URL being sent', ['callback_url' => $callback, 'env' => $this->config['environment']]);
 
@@ -208,14 +216,14 @@ class MpesaService
                 'headers' => ['Authorization' => 'Bearer '.$token, 'Content-Type' => 'application/json'],
                 'json' => $payload,
             ]);
-            $rawBody = (string)$res->getBody();
+            $rawBody = (string) $res->getBody();
             // Log raw response for troubleshooting
             Log::debug('[MPESA] Raw STK response body', ['body' => $rawBody]);
             $body = json_decode($rawBody, true);
-            
+
             // successful response contains CheckoutRequestID and ResponseCode 0 (can be int or string)
             $responseCode = $body['ResponseCode'] ?? null;
-            if ($responseCode !== null && ((int)$responseCode === 0 || $responseCode === '0')) {
+            if ($responseCode !== null && ((int) $responseCode === 0 || $responseCode === '0')) {
                 $tx = $body['CheckoutRequestID'] ?? ($body['MerchantRequestID'] ?? null);
                 Log::info('[MPESA] STK Push successful', [
                     'trace_id' => $traceId,
@@ -223,9 +231,10 @@ class MpesaService
                     'tx' => $tx,
                     'response' => $body,
                 ]);
+
                 return ['ok' => true, 'tx' => $tx, 'body' => $body];
             }
-            
+
             $errorMsg = $body['errorMessage'] ?? json_encode($body);
             $this->logDarajaError('stk_push_non_success_response', [
                 'trace_id' => $traceId,
@@ -240,6 +249,7 @@ class MpesaService
                 'error_message' => $errorMsg,
                 'full_response' => $body,
             ]);
+
             return ['ok' => false, 'message' => $errorMsg, 'body' => $body];
         } catch (RequestException $e) {
             $statusCode = $e->hasResponse() ? $e->getResponse()->getStatusCode() : null;
@@ -262,6 +272,7 @@ class MpesaService
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+
             return ['ok' => false, 'message' => $e->getMessage(), 'status_code' => $statusCode, 'body' => $responseBody ? json_decode($responseBody, true) : null];
         } catch (\Exception $e) {
             $this->logDarajaError('stk_push_exception', [
@@ -280,6 +291,7 @@ class MpesaService
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+
             return ['ok' => false, 'message' => $e->getMessage()];
         }
     }
@@ -288,7 +300,7 @@ class MpesaService
      * Query the status of a previously initiated STK Push.
      * Used for reconciliation when callback was missed or for manual status checks.
      *
-     * @param string $checkoutRequestId The CheckoutRequestID from the initial STK Push response
+     * @param  string  $checkoutRequestId  The CheckoutRequestID from the initial STK Push response
      * @return array Normalized response: ['ok' => bool, 'status' => 'success|pending|failed', 'result_code' => int|null, ...]
      */
     public function queryStkPush(string $checkoutRequestId): array
@@ -298,19 +310,19 @@ class MpesaService
         }
 
         $token = $this->getToken();
-        if (!$token) {
+        if (! $token) {
             return ['ok' => false, 'message' => 'failed to obtain oauth token'];
         }
 
         $shortcode = $this->config['shortcode'] ?? null;
         $passkey = $this->config['passkey'] ?? null;
 
-        if (!$shortcode || !$passkey) {
+        if (! $shortcode || ! $passkey) {
             return ['ok' => false, 'message' => 'shortcode or passkey not configured'];
         }
 
         $timestamp = now()->format('YmdHis');
-        $password = base64_encode($shortcode . $passkey . $timestamp);
+        $password = base64_encode($shortcode.$passkey.$timestamp);
 
         $payload = [
             'BusinessShortCode' => $shortcode,
@@ -326,16 +338,18 @@ class MpesaService
 
             // Temporary debug: log outgoing query payload without secrets
             $payloadToLog = $payload;
-            if (isset($payloadToLog['Password'])) unset($payloadToLog['Password']);
+            if (isset($payloadToLog['Password'])) {
+                unset($payloadToLog['Password']);
+            }
             Log::debug('[MPESA] Outgoing STK query payload (safe)', $payloadToLog);
 
             $client = $this->httpClient();
             $res = $client->request('POST', '/mpesa/stkpushquery/v1/query', [
-                'headers' => ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
+                'headers' => ['Authorization' => 'Bearer '.$token, 'Content-Type' => 'application/json'],
                 'json' => $payload,
             ]);
 
-            $rawBody = (string)$res->getBody();
+            $rawBody = (string) $res->getBody();
             // Log raw response from Daraja for troubleshooting
             Log::debug('[MPESA] Raw STK query response body', ['body' => $rawBody]);
             $body = json_decode($rawBody, true);
@@ -347,6 +361,7 @@ class MpesaService
                     'status_code' => $res->getStatusCode(),
                     'body' => $body,
                 ]);
+
                 return ['ok' => false, 'message' => 'Daraja HTTP error', 'status_code' => $res->getStatusCode(), 'body' => $body];
             }
 
@@ -389,6 +404,7 @@ class MpesaService
                     'response_description' => $responseDescription,
                     'response' => $body,
                 ]);
+
                 return ['ok' => false, 'message' => $responseDescription !== '' ? $responseDescription : 'Query failed', 'body' => $body];
             }
 
@@ -480,6 +496,7 @@ class MpesaService
                 'error' => $e->getMessage(),
                 'code' => $e->getCode(),
             ]);
+
             return ['ok' => false, 'message' => $e->getMessage()];
         }
     }
@@ -491,7 +508,7 @@ class MpesaService
                 'driver' => 'single',
                 'path' => storage_path('logs/mpesa-daraja-errors.log'),
                 'level' => 'debug',
-            ])->error('[DARAJA ERROR] ' . $kind, array_merge([
+            ])->error('[DARAJA ERROR] '.$kind, array_merge([
                 'at' => now()->toIso8601String(),
                 'environment' => $this->config['environment'] ?? null,
             ], $context));

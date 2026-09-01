@@ -4,19 +4,21 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\SubscriptionResource\Pages;
 use App\Models\Subscription;
-use Filament\Resources\Resource;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\BadgeColumn;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Forms\Components\Select;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
+use Filament\Resources\Resource;
+use Filament\Tables\Columns\BadgeColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class SubscriptionResource extends Resource
 {
     protected static ?string $model = Subscription::class;
+
     protected static \UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
+
     protected static ?int $navigationSort = 2;
+
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
@@ -66,9 +68,9 @@ class SubscriptionResource extends Resource
             \Filament\Actions\EditAction::make(),
             \Filament\Actions\DeleteAction::make(),
         ])
-        ->bulkActions([
-            \Filament\Actions\DeleteBulkAction::make(),
-        ]);
+            ->bulkActions([
+                \Filament\Actions\DeleteBulkAction::make(),
+            ]);
     }
 
     public static function getPages(): array

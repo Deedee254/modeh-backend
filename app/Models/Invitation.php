@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Invitation Model
- * 
+ *
  * Represents user referral/signup invitations with token-based validation
  * Supports both email-based and authenticated invitations
- * 
+ *
  * @property int $id
  * @property int|null $inviter_id User who sent the invitation (nullable for system invitations)
  * @property string $token Unique invitation token (URL-safe)
@@ -47,20 +47,20 @@ class Invitation extends Model
     protected static function boot()
     {
         parent::boot();
-        
+
         static::creating(function ($model) {
             // Generate unique invitation token if not set
-            if (!$model->token) {
+            if (! $model->token) {
                 $model->token = \Illuminate\Support\Str::random(32);
             }
-            
+
             // Set default expiration to 30 days from now if not set
-            if (!$model->expires_at) {
+            if (! $model->expires_at) {
                 $model->expires_at = now()->addDays(30);
             }
-            
+
             // Set default status to 'pending' if not set
-            if (!$model->status) {
+            if (! $model->status) {
                 $model->status = 'pending';
             }
         });

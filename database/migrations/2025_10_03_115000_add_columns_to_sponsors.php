@@ -8,19 +8,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (!Schema::hasColumn('sponsors', 'description')) {
+        if (! Schema::hasColumn('sponsors', 'description')) {
             Schema::table('sponsors', function (Blueprint $table) {
                 $table->text('description')->nullable()->after('name');
             });
         }
 
-        if (!Schema::hasColumn('sponsors', 'logo_url')) {
+        if (! Schema::hasColumn('sponsors', 'logo_url')) {
             Schema::table('sponsors', function (Blueprint $table) {
                 $table->string('logo_url')->nullable()->after('description');
             });
         }
 
-        if (!Schema::hasColumn('sponsors', 'website_url')) {
+        if (! Schema::hasColumn('sponsors', 'website_url')) {
             Schema::table('sponsors', function (Blueprint $table) {
                 $table->string('website_url')->nullable()->after('logo_url');
             });

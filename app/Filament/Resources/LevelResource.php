@@ -4,17 +4,18 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\LevelResource\Pages;
 use App\Models\Level;
+use BackedEnum;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use BackedEnum;
 
 class LevelResource extends Resource
 {
     protected static ?string $model = Level::class;
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-book-open';
+
     protected static ?int $navigationSort = 0;
 
     public static function getNavigationGroup(): ?string
@@ -32,7 +33,7 @@ class LevelResource extends Resource
                     Forms\Components\TextInput::make('order')->numeric()->default(0),
                     Forms\Components\Textarea::make('description')->maxLength(65535),
                     Forms\Components\FileUpload::make('image')->image()->directory('levels'),
-                ])
+                ]),
         ]);
     }
 
@@ -48,7 +49,7 @@ class LevelResource extends Resource
             ])
             ->actions([
                 \Filament\Actions\EditAction::make(),
-                    \Filament\Actions\DeleteAction::make(),
+                \Filament\Actions\DeleteAction::make(),
             ]);
     }
 

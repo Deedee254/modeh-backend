@@ -2,12 +2,12 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\User;
 use App\Models\QuizMaster;
 use App\Models\Subject;
-use Illuminate\Support\Facades\Hash;
+use App\Models\User;
 use Faker\Factory as Faker;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class QuizMasterSeeder extends Seeder
 {
@@ -45,7 +45,7 @@ class QuizMasterSeeder extends Seeder
         // Create the main quiz-master for manual testing (idempotent)
         $user = User::updateOrCreate([
             'email' => 'quiz-master@example.com',
-        ],[
+        ], [
             'name' => 'quiz-master One',
             'password' => Hash::make('password123'),
             'social_avatar' => 'https://i.pravatar.cc/300?u=quiz-master@example.com',
@@ -54,10 +54,10 @@ class QuizMasterSeeder extends Seeder
 
         $gradeId = $faker->randomElement($gradeIds);
         $grade = \App\Models\Grade::find($gradeId);
-        
+
         QuizMaster::updateOrCreate([
             'user_id' => $user->id,
-        ],[
+        ], [
             'headline' => 'Your friendly neighborhood quiz-master.',
             'bio' => 'I am a passionate educator with over 10 years of experience in helping quizees achieve their academic goals. My focus is on creating a supportive and engaging learning environment.',
             'subjects' => $faker->randomElements($subjectIds, rand(2, 3)),
@@ -73,10 +73,10 @@ class QuizMasterSeeder extends Seeder
 
             $user = User::updateOrCreate([
                 'email' => $email,
-            ],[
+            ], [
                 'name' => $faker->name,
                 'password' => Hash::make('password123'),
-                'social_avatar' => 'https://i.pravatar.cc/300?u=' . $email,
+                'social_avatar' => 'https://i.pravatar.cc/300?u='.$email,
                 'role' => 'quiz-master',
             ]);
 
@@ -85,7 +85,7 @@ class QuizMasterSeeder extends Seeder
 
             QuizMaster::updateOrCreate([
                 'user_id' => $user->id,
-            ],[
+            ], [
                 'headline' => $faker->sentence(6),
                 'bio' => $faker->paragraphs(3, true),
                 'subjects' => $faker->randomElements($subjectIds, rand(2, 4)),

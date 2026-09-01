@@ -4,24 +4,13 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ChatResource\Pages;
 use App\Models\Message;
-use App\Models\User;
 // use Filament\Forms;
-use Filament\Forms;
 use Filament\Resources\Resource;
 // use Filament\Tables;
-use Filament\Tables;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
-use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\Filter;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
-// DateFilter not available in this Filament version; omit date filter or use a custom filter if needed
-use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Builder;
 
-use Filament\Support\Enums\IconSize;
-use Filament\Support\Enums\IconName;
+// DateFilter not available in this Filament version; omit date filter or use a custom filter if needed
 
 class ChatResource extends Resource
 {
@@ -32,8 +21,8 @@ class ChatResource extends Resource
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-chat-bubble-left';
 
     protected static \UnitEnum|string|null $navigationGroup = 'Community';
-    protected static ?int $navigationSort = 1;
 
+    protected static ?int $navigationSort = 1;
 
     public static function getRelations(): array
     {
@@ -51,10 +40,11 @@ class ChatResource extends Resource
             'view' => Pages\SenderMessages::route('/sender/{record}'),
         ];
     }
-    
+
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
+
         // Filament 4: Use policies for access control, keep query simple
         return $query->latest();
     }

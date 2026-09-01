@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('quiz_masters', function (Blueprint $table) {
             // Only add the subjects column as grade_id and institution were added in previous migration
-            if (!Schema::hasColumn('quiz_masters', 'subjects')) {
+            if (! Schema::hasColumn('quiz_masters', 'subjects')) {
                 $table->json('subjects')->nullable()->after('institution');
             }
         });

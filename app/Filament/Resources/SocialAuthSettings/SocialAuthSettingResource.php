@@ -10,7 +10,6 @@ use App\Filament\Resources\SocialAuthSettings\Schemas\SocialAuthSettingForm;
 use App\Filament\Resources\SocialAuthSettings\Schemas\SocialAuthSettingInfolist;
 use App\Filament\Resources\SocialAuthSettings\Tables\SocialAuthSettingsTable;
 use App\Models\SocialAuthSetting;
-use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -23,9 +22,13 @@ class SocialAuthSettingResource extends Resource
     protected static \BackedEnum|string|null $navigationIcon = Heroicon::Key;
 
     protected static ?string $navigationLabel = 'Social Login Settings';
+
     protected static ?string $modelLabel = 'Social Login Provider';
+
     protected static ?string $pluralLabel = 'Social Login Providers';
+
     protected static \UnitEnum|string|null $navigationGroup = 'System Settings';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema

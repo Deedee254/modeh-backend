@@ -37,20 +37,20 @@ class InvoiceGeneratedNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $invoiceService = app(\App\Services\InvoiceService::class);
-        
+
         $subject = match ($this->invoice->invoiceable_type) {
-            'App\\Models\\Subscription' => 'Your Subscription Invoice - ' . $this->invoice->invoice_number,
-            'App\\Models\\OneOffPurchase' => 'Your Purchase Invoice - ' . $this->invoice->invoice_number,
-            default => 'Your Invoice - ' . $this->invoice->invoice_number,
+            'App\\Models\\Subscription' => 'Your Subscription Invoice - '.$this->invoice->invoice_number,
+            'App\\Models\\OneOffPurchase' => 'Your Purchase Invoice - '.$this->invoice->invoice_number,
+            default => 'Your Invoice - '.$this->invoice->invoice_number,
         };
 
         $mail = (new MailMessage)
             ->subject($subject)
             ->greeting("Hello {$notifiable->name},")
             ->line('Your invoice has been generated and is attached below.')
-            ->line('Invoice Number: ' . $this->invoice->invoice_number)
-            ->line('Amount: KES ' . number_format($this->invoice->amount, 2))
-            ->line('Status: ' . ucfirst($this->invoice->status));
+            ->line('Invoice Number: '.$this->invoice->invoice_number)
+            ->line('Amount: KES '.number_format($this->invoice->amount, 2))
+            ->line('Status: '.ucfirst($this->invoice->status));
 
         // Try to attach PDF if available
         try {
@@ -63,14 +63,14 @@ class InvoiceGeneratedNotification extends Notification implements ShouldQueue
             }
         } catch (\Exception $e) {
             // Log error but don't fail the email
-            \Log::warning("Failed to attach PDF to invoice notification", [
+            \Log::warning('Failed to attach PDF to invoice notification', [
                 'invoice_id' => $this->invoice->id,
                 'error' => $e->getMessage(),
             ]);
         }
 
         return $mail
-            ->action('View Dashboard', config('app.frontend_url') . '/dashboard/transactions')
+            ->action('View Dashboard', config('app.frontend_url').'/dashboard/transactions')
             ->line('Thank you for using Modeh!');
     }
 

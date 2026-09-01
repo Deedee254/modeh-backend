@@ -2,20 +2,24 @@
 
 namespace App\Filament\Resources\InstitutionResource\Pages;
 
+use App\Filament\Resources\InstitutionResource;
 use App\Models\Institution;
 use App\Models\User;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Facades\DB;
-use App\Filament\Resources\InstitutionResource;
 
 class MemberAnalytics extends Page
 {
     protected static string $resource = InstitutionResource::class;
+
     protected string $view = 'filament.resources.institution-resource.pages.member-analytics';
+
     protected static ?string $title = 'Member Analytics';
-    
+
     public Institution $institution;
+
     public User $user;
+
     public array $analyticsData = [];
 
     public function mount($institution, $user): void
@@ -62,12 +66,12 @@ class MemberAnalytics extends Page
                 '20-40' => $attempts->whereBetween('score', [20, 39])->count(),
                 '40-60' => $attempts->whereBetween('score', [40, 59])->count(),
                 '60-80' => $attempts->whereBetween('score', [60, 79])->count(),
-                '80-100' => $attempts->where('score', '>=', 80)->count()
+                '80-100' => $attempts->where('score', '>=', 80)->count(),
             ];
 
             // Activity trend (last 7 days)
             $activityTrend = [];
-            
+
             for ($i = 6; $i >= 0; $i--) {
                 $date = now()->subDays($i)->format('Y-m-d');
                 $count = $attempts->filter(function ($attempt) use ($date) {
@@ -86,12 +90,12 @@ class MemberAnalytics extends Page
                     'total_attempts' => $totalAttempts,
                     'avg_score' => $avgScore,
                     'highest_score' => $highestScore,
-                    'lowest_score' => $lowestScore
+                    'lowest_score' => $lowestScore,
                 ],
                 'last_activity' => $lastActivity?->format('M d, Y H:i'),
                 'last_activity_relative' => $lastActivity?->diffForHumans(),
                 'score_distribution' => $scoreRanges,
-                'activity_trend' => $activityTrend
+                'activity_trend' => $activityTrend,
             ];
         } catch (\Exception $e) {
             \Filament\Notifications\Notification::make()
@@ -104,6 +108,6 @@ class MemberAnalytics extends Page
 
     public function getHeading(): string
     {
-        return 'Analytics: ' . $this->user->name . ' (' . $this->institution->name . ')';
+        return 'Analytics: '.$this->user->name.' ('.$this->institution->name.')';
     }
 }

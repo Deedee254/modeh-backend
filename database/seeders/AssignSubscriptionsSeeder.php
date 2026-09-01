@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Package;
 use App\Models\Quizee;
 use App\Models\Subscription;
+use Illuminate\Database\Seeder;
 
 class AssignSubscriptionsSeeder extends Seeder
 {
@@ -17,18 +17,20 @@ class AssignSubscriptionsSeeder extends Seeder
         // Prefer a free 'starter' package if available, otherwise pick the first active package or any package.
         $package = Package::where('slug', 'starter')->first() ?: Package::where('is_active', true)->first() ?: Package::first();
 
-        if (!$package) {
+        if (! $package) {
             $this->command->warn('No package found. Skipping AssignSubscriptionsSeeder.');
+
             return;
         }
 
-    $quizees = Quizee::with('user')->get();
-    $this->command->info('Found '.$quizees->count().' quizee records. Assigning subscriptions...');
+        $quizees = Quizee::with('user')->get();
+        $this->command->info('Found '.$quizees->count().' quizee records. Assigning subscriptions...');
 
         foreach ($quizees as $quizee) {
             $user = $quizee->user;
-            if (!$user) {
+            if (! $user) {
                 $this->command->warn('quizee id '.$quizee->id.' has no linked user; skipping.');
+
                 continue;
             }
 

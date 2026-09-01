@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('packages', function (Blueprint $table) {
-            if (!Schema::hasColumn('packages', 'seats')) {
+            if (! Schema::hasColumn('packages', 'seats')) {
                 $table->integer('seats')->unsigned()->nullable()->after('duration_days')->comment('Optional seat limit for institution subscriptions');
             }
         });

@@ -7,6 +7,7 @@ use Illuminate\Console\Command;
 class VerifyMpesaCallback extends Command
 {
     protected $signature = 'mpesa:verify-callback';
+
     protected $description = 'Verify M-Pesa callback endpoint is accessible and configured correctly';
 
     public function handle()
@@ -17,9 +18,10 @@ class VerifyMpesaCallback extends Command
         $callbackUrl = config('services.mpesa.callback_url');
         $this->info('1. Callback URL Configuration:');
         $this->info("   URL: {$callbackUrl}");
-        
+
         if (filter_var($callbackUrl, FILTER_VALIDATE_URL) === false) {
             $this->error('   ❌ Invalid URL format');
+
             return 1;
         }
         $this->info('   ✅ Valid URL format');
@@ -27,6 +29,7 @@ class VerifyMpesaCallback extends Command
         // 2. Check if HTTPS
         if (strpos($callbackUrl, 'https://') !== 0) {
             $this->error('   ❌ Must use HTTPS (not HTTP)');
+
             return 1;
         }
         $this->info('   ✅ Using HTTPS');
@@ -34,6 +37,7 @@ class VerifyMpesaCallback extends Command
         // 3. Check if public domain (not localhost)
         if (strpos($callbackUrl, 'localhost') !== false || strpos($callbackUrl, '127.0.0.1') !== false) {
             $this->error('   ❌ Cannot use localhost - must be publicly accessible');
+
             return 1;
         }
         $this->info('   ✅ Using public domain');
@@ -64,6 +68,7 @@ class VerifyMpesaCallback extends Command
             $this->warn('   - Domain not pointing to your server');
             $this->warn('   - SSL certificate issue');
             $this->warn('   - Server firewall blocking connections');
+
             return 1;
         }
 
@@ -72,14 +77,16 @@ class VerifyMpesaCallback extends Command
             $this->info("   ✅ Endpoint accessible (HTTP {$httpCode})");
         } else {
             $this->error("   ❌ Unexpected HTTP code: {$httpCode}");
+
             return 1;
         }
 
         // 5. Check CSRF exemption
         $this->info("\n3. Checking CSRF Configuration:");
         $csrfFile = app_path('Http/Middleware/VerifyCsrfToken.php');
-        if (!file_exists($csrfFile)) {
+        if (! file_exists($csrfFile)) {
             $this->error('   ⚠️  VerifyCsrfToken.php not found');
+
             return 1;
         }
 
@@ -89,6 +96,7 @@ class VerifyMpesaCallback extends Command
         } else {
             $this->error('   ❌ Callback URL is NOT CSRF-exempt');
             $this->error('   Add "api/payments/mpesa/callback" to VerifyCsrfToken $except array');
+
             return 1;
         }
 
@@ -100,19 +108,20 @@ class VerifyMpesaCallback extends Command
             $this->info('   ✅ Callback route is registered');
         } else {
             $this->error('   ❌ Callback route not found in routes/api.php');
+
             return 1;
         }
 
         // 7. Summary
-        $this->info("\n" . str_repeat('=', 60));
+        $this->info("\n".str_repeat('=', 60));
         $this->info('✅ All Checks Passed!');
         $this->info(str_repeat('=', 60));
         $this->info("\nYour M-Pesa callback endpoint is ready to receive Safaricom notifications.");
         $this->info("\nNext Steps:");
-        $this->info("1. Whitelist these Safaricom IPs in your DigitalOcean Firewall:");
-        $this->info("   - 196.201.214.200, 196.201.214.206, 196.201.213.114, 196.201.214.207");
-        $this->info("   - 196.201.214.208, 196.201.213.44, 196.201.212.127, 196.201.212.138");
-        $this->info("   - 196.201.212.129, 196.201.212.136, 196.201.212.74, 196.201.212.69");
+        $this->info('1. Whitelist these Safaricom IPs in your DigitalOcean Firewall:');
+        $this->info('   - 196.201.214.200, 196.201.214.206, 196.201.213.114, 196.201.214.207');
+        $this->info('   - 196.201.214.208, 196.201.213.44, 196.201.212.127, 196.201.212.138');
+        $this->info('   - 196.201.212.129, 196.201.212.136, 196.201.212.74, 196.201.212.69');
         $this->info("\n2. Verify firewall is applied to your droplet");
         $this->info("\n3. Run: php artisan mpesa:test-stk 0725264955 1");
         $this->info("\n4. Complete payment on phone to trigger callback");

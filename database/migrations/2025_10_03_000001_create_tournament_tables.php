@@ -50,7 +50,7 @@ return new class extends Migration
             $table->unique(['tournament_id', 'question_id'], 't_questions_tournament_question_uq');
         });
 
-    Schema::create('tournament_battles', function (Blueprint $table) {
+        Schema::create('tournament_battles', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tournament_id')->constrained()->onDelete('cascade');
             $table->integer('round');

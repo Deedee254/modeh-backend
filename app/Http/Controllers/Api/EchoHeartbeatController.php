@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\ChatMetric;
+use Illuminate\Http\Request;
 
 class EchoHeartbeatController extends Controller
 {

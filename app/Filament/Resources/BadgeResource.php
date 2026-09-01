@@ -5,17 +5,18 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\BadgeResource\Pages;
 use App\Models\Badge;
 // Note: avoid importing Filament\Forms\Form directly to prevent signature conflicts with installed Filament version
-use Filament\Tables\Table;
-use Filament\Resources\Resource;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Select;
-use Filament\Tables\Columns\TextColumn;
 use BackedEnum;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Resources\Resource;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class BadgeResource extends Resource
 {
     protected static ?string $model = Badge::class;
+
     protected static ?int $navigationSort = 4;
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';

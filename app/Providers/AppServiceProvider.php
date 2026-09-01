@@ -2,24 +2,23 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\ServiceProvider;
-use App\Models\UserBadge;
-use App\Models\UserDailyChallenge;
+use App\Http\Middleware\RequestIdMiddleware;
 use App\Models\Battle;
-use App\Observers\UserBadgeObserver;
-use App\Observers\UserDailyChallengeObserver;
-use App\Observers\BattleObserver;
-use App\Observers\QuizObserver;
-use App\Observers\DashboardCacheInvalidationObserver;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
-use App\Http\Middleware\RequestIdMiddleware;
-use Illuminate\Support\Facades\Cache;
+use App\Models\Tournament;
 use App\Models\User;
+use App\Models\UserBadge;
+use App\Models\UserDailyChallenge;
+use App\Observers\BattleObserver;
+use App\Observers\QuizObserver;
+use App\Observers\UserBadgeObserver;
+use App\Observers\UserDailyChallengeObserver;
 use App\Policies\QuizPolicy;
 use App\Policies\TournamentPolicy;
-use App\Models\Tournament;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -44,9 +43,9 @@ use App\Policies\QuizPolicy;
         Gate::define('viewFilament', function ($user = null) {
             // Resolve the user from any active guard (session or sanctum token)
             $resolvedUser = $user ?? auth()->user() ?? auth('sanctum')->user();
-            
+
             // If still no user, try resolving directly from the request's sanctum guard
-            if (!$resolvedUser) {
+            if (! $resolvedUser) {
                 $resolvedUser = request()->user('sanctum');
             }
 
@@ -61,7 +60,7 @@ use App\Policies\QuizPolicy;
         UserBadge::observe(UserBadgeObserver::class);
         UserDailyChallenge::observe(UserDailyChallengeObserver::class);
         Battle::observe(BattleObserver::class);
-    Quiz::observe(QuizObserver::class);
+        Quiz::observe(QuizObserver::class);
 
         // Register lightweight cache invalidation listeners for dashboard widgets
         $flush = function ($model = null) {
@@ -80,7 +79,7 @@ use App\Policies\QuizPolicy;
                     }
                 }
             } catch (\Throwable $e) {
-                logger()->warning('Failed to flush dashboard cache: ' . $e->getMessage());
+                logger()->warning('Failed to flush dashboard cache: '.$e->getMessage());
             }
         };
 
@@ -106,7 +105,7 @@ use App\Policies\QuizPolicy;
             }
         } catch (\Throwable $e) {
             // Don't block boot if Livewire registration fails in some contexts
-            logger()->debug('Livewire component registration skipped: ' . $e->getMessage());
+            logger()->debug('Livewire component registration skipped: '.$e->getMessage());
         }
 
         QuizAttempt::created($flush);
@@ -116,14 +115,14 @@ use App\Policies\QuizPolicy;
         // Prepend RequestIdMiddleware so each HTTP request has a request_id
         // available in logs and returns the X-Request-Id header to clients.
         try {
-            if (!$this->app->runningInConsole()) {
+            if (! $this->app->runningInConsole()) {
                 // Use the concrete Foundation Kernel so we can call prependMiddleware
                 $kernel = $this->app->make(\Illuminate\Foundation\Http\Kernel::class);
                 $kernel->prependMiddleware(RequestIdMiddleware::class);
             }
         } catch (\Throwable $e) {
             // Ignore during CLI/bootstrap where HTTP kernel isn't available
-            logger()->debug('RequestIdMiddleware registration skipped: ' . $e->getMessage());
+            logger()->debug('RequestIdMiddleware registration skipped: '.$e->getMessage());
         }
     }
 }

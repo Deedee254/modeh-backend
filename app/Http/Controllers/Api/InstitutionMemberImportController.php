@@ -3,17 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Institution;
-use App\Models\User;
 use App\Models\Quizee;
 use App\Models\QuizMaster;
-use App\Services\OnboardingService;
+use App\Models\User;
 use App\Services\InstitutionPackageUsageService;
-use Illuminate\Support\Str;
+use App\Services\OnboardingService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class InstitutionMemberImportController extends Controller
 {
@@ -21,14 +21,14 @@ class InstitutionMemberImportController extends Controller
     {
         /** @var Institution $institution */
         $user = $request->user();
-        
+
         // Only institution managers can import members
         $isManager = $institution->users()
             ->where('users.id', $user->id)
             ->wherePivot('role', 'institution-manager')
             ->exists();
-            
-        if (!$isManager) {
+
+        if (! $isManager) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
@@ -58,17 +58,17 @@ class InstitutionMemberImportController extends Controller
         $skipped = [];
         $linked = [];
 
-        $onboardingService = new OnboardingService();
+        $onboardingService = new OnboardingService;
 
         foreach ($rows as $index => $row) {
             $normalized = $this->normalizeRow($row);
-            
+
             $name = trim($normalized['name'] ?? '');
             $email = strtolower(trim($normalized['email'] ?? ''));
             $role = strtolower(trim($normalized['role'] ?? $defaultRole));
-            
+
             // Normalize role to valid options
-            if (!in_array($role, ['quizee', 'quiz-master'])) {
+            if (! in_array($role, ['quizee', 'quiz-master'])) {
                 $role = $defaultRole;
             }
 
@@ -79,16 +79,18 @@ class InstitutionMemberImportController extends Controller
                     'name' => $name ?: 'N/A',
                     'reason' => 'Name or Email is missing.',
                 ];
+
                 continue;
             }
 
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $skipped[] = [
                     'row' => $index + 2,
                     'email' => $email,
                     'name' => $name,
                     'reason' => 'Invalid email address format.',
                 ];
+
                 continue;
             }
 
@@ -113,6 +115,7 @@ class InstitutionMemberImportController extends Controller
                                 'name' => $name,
                                 'reason' => 'Already a member of this institution.',
                             ];
+
                             return;
                         }
 
@@ -139,14 +142,14 @@ class InstitutionMemberImportController extends Controller
 
                         if ($role === 'quizee') {
                             $profile = Quizee::where('user_id', $existingUser->id)->first();
-                            if (!$profile) {
+                            if (! $profile) {
                                 Quizee::create(array_merge(['user_id' => $existingUser->id], $profileData));
                             } else {
                                 $profile->update(array_filter($profileData));
                             }
                         } else {
                             $profile = QuizMaster::where('user_id', $existingUser->id)->first();
-                            if (!$profile) {
+                            if (! $profile) {
                                 QuizMaster::create(array_merge(['user_id' => $existingUser->id], $profileData));
                             } else {
                                 $profile->update(array_filter($profileData));
@@ -163,7 +166,7 @@ class InstitutionMemberImportController extends Controller
                         ];
                     } else {
                         // Create new user
-                        $passwordText = !empty($normalized['password']) ? $normalized['password'] : Str::random(8);
+                        $passwordText = ! empty($normalized['password']) ? $normalized['password'] : Str::random(8);
 
                         $newUser = User::create([
                             'name' => $name,
@@ -204,7 +207,7 @@ class InstitutionMemberImportController extends Controller
                         try {
                             InstitutionPackageUsageService::recordSeatUsage($institution, $newUser);
                         } catch (\Throwable $e) {
-                            Log::warning('[Institution Import] Failed to record seat usage: ' . $e->getMessage());
+                            Log::warning('[Institution Import] Failed to record seat usage: '.$e->getMessage());
                         }
 
                         // Try to assign active subscription seat
@@ -213,7 +216,7 @@ class InstitutionMemberImportController extends Controller
                             try {
                                 $activeSub->assignUser($newUser->id, $user->id);
                             } catch (\Throwable $e) {
-                                Log::warning('[Institution Import] Failed to assign subscription seat: ' . $e->getMessage());
+                                Log::warning('[Institution Import] Failed to assign subscription seat: '.$e->getMessage());
                             }
                         }
 
@@ -229,12 +232,12 @@ class InstitutionMemberImportController extends Controller
                     }
                 });
             } catch (\Throwable $e) {
-                Log::error('[Institution Import] Transaction failed for row ' . ($index + 2) . ': ' . $e->getMessage());
+                Log::error('[Institution Import] Transaction failed for row '.($index + 2).': '.$e->getMessage());
                 $skipped[] = [
                     'row' => $index + 2,
                     'email' => $email,
                     'name' => $name,
-                    'reason' => 'Internal error: ' . $e->getMessage(),
+                    'reason' => 'Internal error: '.$e->getMessage(),
                 ];
             }
         }
@@ -258,7 +261,9 @@ class InstitutionMemberImportController extends Controller
     private function parseCsv(string $path): array
     {
         $FH = fopen($path, 'r');
-        if (!$FH) return [];
+        if (! $FH) {
+            return [];
+        }
 
         // Detect and remove UTF-8 BOM
         $bom = fread($FH, 3);
@@ -269,13 +274,15 @@ class InstitutionMemberImportController extends Controller
         $rawHeaders = fgetcsv($FH);
         if ($rawHeaders === false) {
             fclose($FH);
+
             return [];
         }
 
         // Clean headers: lowercase, trim, remove non-alphanumeric chars
         $headers = array_map(function ($h) {
             $h = mb_convert_encoding($h, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
-            return preg_replace('/[^a-z0-9_]/', '', strtolower(trim((string)$h)));
+
+            return preg_replace('/[^a-z0-9_]/', '', strtolower(trim((string) $h)));
         }, $rawHeaders);
 
         $rows = [];
@@ -283,25 +290,28 @@ class InstitutionMemberImportController extends Controller
             $row = array_map(function ($value) {
                 return trim(mb_convert_encoding($value, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252'));
             }, $row);
-            
+
             // Map row values to headers
             $mappedRow = [];
             foreach ($headers as $index => $header) {
-                if (empty($header)) continue;
+                if (empty($header)) {
+                    continue;
+                }
                 $mappedRow[$header] = $row[$index] ?? '';
             }
-            if (!empty($mappedRow)) {
+            if (! empty($mappedRow)) {
                 $rows[] = $mappedRow;
             }
         }
         fclose($FH);
+
         return $rows;
     }
 
     private function normalizeRow(array $row): array
     {
         $normalized = [];
-        
+
         // Find name
         foreach (['name', 'fullname', 'full_name', 'username', 'displayname'] as $key) {
             if (isset($row[$key])) {
@@ -309,7 +319,7 @@ class InstitutionMemberImportController extends Controller
                 break;
             }
         }
-        
+
         // Find email
         foreach (['email', 'emailaddress', 'mail', 'email_address'] as $key) {
             if (isset($row[$key])) {
@@ -317,7 +327,7 @@ class InstitutionMemberImportController extends Controller
                 break;
             }
         }
-        
+
         // Find role
         foreach (['role', 'userrole', 'role_name', 'type', 'usertype'] as $key) {
             if (isset($row[$key])) {
@@ -325,7 +335,7 @@ class InstitutionMemberImportController extends Controller
                 break;
             }
         }
-        
+
         // Find password
         foreach (['password', 'pass', 'pwd'] as $key) {
             if (isset($row[$key])) {
@@ -333,7 +343,7 @@ class InstitutionMemberImportController extends Controller
                 break;
             }
         }
-        
+
         return $normalized;
     }
 }

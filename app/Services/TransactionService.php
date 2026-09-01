@@ -2,14 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\Transaction;
-use App\Models\Wallet;
 use App\Models\AffiliateReferral;
 use App\Models\PaymentSetting;
 use App\Models\Quiz;
+use App\Models\Transaction;
+use App\Models\User;
+use App\Models\Wallet;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Models\User;
 
 class TransactionService
 {
@@ -35,7 +35,7 @@ class TransactionService
             $purchaseId = $paymentData['purchase_id'] ?? null;
             $attemptId = $paymentData['attempt_id'] ?? null;
 
-            if (!$quizMasterId && $quizId) {
+            if (! $quizMasterId && $quizId) {
                 $quizMasterId = Quiz::query()->whereKey($quizId)->value('user_id')
                     ?? Quiz::query()->whereKey($quizId)->value('created_by');
             }
@@ -59,7 +59,7 @@ class TransactionService
                 ['user_id' => $platformUserId, 'type' => Wallet::TYPE_PLATFORM],
                 ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
             );
-            if (!$platformWallet->type) {
+            if (! $platformWallet->type) {
                 $platformWallet->type = Wallet::TYPE_PLATFORM;
             }
 
@@ -73,7 +73,7 @@ class TransactionService
                         ['user_id' => $affiliate->user_id],
                         ['type' => Wallet::TYPE_QUIZEE, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
                     );
-                    if (!$affiliateWallet->type) {
+                    if (! $affiliateWallet->type) {
                         $affiliateWallet->type = Wallet::TYPE_QUIZEE;
                     }
                     $affiliateWallet->available = bcadd((string) ($affiliateWallet->available ?? 0), (string) $affiliateShare, 2);
@@ -129,7 +129,7 @@ class TransactionService
                     ['user_id' => $quizMasterId],
                     ['type' => Wallet::TYPE_QUIZ_MASTER, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
                 );
-                if (!$qmWallet->type) {
+                if (! $qmWallet->type) {
                     $qmWallet->type = Wallet::TYPE_QUIZ_MASTER;
                 }
 
@@ -209,15 +209,15 @@ class TransactionService
                 'item_type' => $itemType,
                 'item_id' => $itemId,
                 'distribution' => [
-                    'affiliate' => (float)$affiliateShare,
-                    'quiz_master' => (float)$quizMasterShare,
-                    'platform' => (float)$platformShare,
+                    'affiliate' => (float) $affiliateShare,
+                    'quiz_master' => (float) $quizMasterShare,
+                    'platform' => (float) $platformShare,
                 ],
                 'wallets' => [
-                    'platform_new_balance' => (float)$platformWallet->available,
+                    'platform_new_balance' => (float) $platformWallet->available,
                     'qm_id' => $quizMasterId,
-                    'qm_new_available' => $qmWallet ? (float)$qmWallet->available : null,
-                ]
+                    'qm_new_available' => $qmWallet ? (float) $qmWallet->available : null,
+                ],
             ]);
 
             return $mainTransaction;
@@ -309,7 +309,7 @@ class TransactionService
                 'type' => 'quiz_completion_payment',
                 'payment_status' => 'paid',
                 'status' => 'completed',
-                'description' => "Quiz payment received from quizee",
+                'description' => 'Quiz payment received from quizee',
             ]);
 
             if ($quizMasterId && isset($qmWallet)) {
@@ -320,19 +320,19 @@ class TransactionService
                 'quizee_id' => $quizeeId,
                 'quiz_id' => $quizId,
                 'distribution' => [
-                    'affiliate' => (float)$affiliateShare,
-                    'quiz_master' => (float)$qmShare,
-                    'platform' => (float)$platformShare,
+                    'affiliate' => (float) $affiliateShare,
+                    'quiz_master' => (float) $qmShare,
+                    'platform' => (float) $platformShare,
                 ],
-                'qm_new_available' => isset($qmWallet) ? (float)$qmWallet->available : 0,
-                'platform_new_available' => (float)$platformWallet->available,
+                'qm_new_available' => isset($qmWallet) ? (float) $qmWallet->available : 0,
+                'platform_new_available' => (float) $platformWallet->available,
             ]);
 
             return [
                 'success' => true,
-                'quiz_master_earned' => (float)$qmShare,
-                'platform_earned' => (float)$platformShare,
-                'affiliate_earned' => (float)$affiliateShare,
+                'quiz_master_earned' => (float) $qmShare,
+                'platform_earned' => (float) $platformShare,
+                'affiliate_earned' => (float) $affiliateShare,
             ];
         });
     }
@@ -378,7 +378,7 @@ class TransactionService
                 'type' => 'pending_quiz_payment',
                 'payment_status' => 'pending_payment',
                 'status' => 'pending',
-                'description' => "Pending payment from quizee for quiz",
+                'description' => 'Pending payment from quizee for quiz',
             ]);
 
             return $pending;
@@ -391,7 +391,7 @@ class TransactionService
     public static function getPaymentFlow($mainTransactionId): array
     {
         $mainTx = Transaction::find($mainTransactionId);
-        if (!$mainTx) {
+        if (! $mainTx) {
             return [];
         }
 
@@ -406,7 +406,7 @@ class TransactionService
                 'recipient' => 'Platform',
                 'status' => $mainTx->status,
                 'timestamp' => $mainTx->created_at,
-            ]
+            ],
         ];
 
         // Get all related credit transactions
@@ -420,13 +420,13 @@ class TransactionService
 
         $order = 2;
         foreach ($credits as $credit) {
-            $recipient = match($credit->type) {
-                Transaction::TYPE_AFFILIATE_PAYOUT => 'Affiliate (' . ($credit->meta['referral_code'] ?? 'N/A') . ')',
-                Transaction::TYPE_QUIZ_MASTER_PAYOUT => $credit->quizMaster?->name ?? 'Quiz Master #' . $credit->{'quiz_master_id'},
+            $recipient = match ($credit->type) {
+                Transaction::TYPE_AFFILIATE_PAYOUT => 'Affiliate ('.($credit->meta['referral_code'] ?? 'N/A').')',
+                Transaction::TYPE_QUIZ_MASTER_PAYOUT => $credit->quizMaster?->name ?? 'Quiz Master #'.$credit->{'quiz_master_id'},
                 default => 'Unknown'
             };
 
-            $typeLabel = match($credit->type) {
+            $typeLabel = match ($credit->type) {
                 Transaction::TYPE_AFFILIATE_PAYOUT => 'Affiliate Payout',
                 Transaction::TYPE_QUIZ_MASTER_PAYOUT => 'Quiz Master Payout',
                 default => ucfirst(str_replace('_', ' ', $credit->type ?? 'transaction'))
@@ -454,7 +454,7 @@ class TransactionService
     {
         $platformUserId = User::where('role', 'admin')->orderBy('id')->first()?->id ?? 0;
         $platformWallet = Wallet::where('user_id', $platformUserId)->first();
-        
+
         $allTime = Transaction::where('type', Transaction::TYPE_PAYMENT)->sum('amount') ?? 0;
         $last30Days = Transaction::where('type', Transaction::TYPE_PAYMENT)
             ->where('created_at', '>=', now()->subDays(30))
@@ -470,28 +470,24 @@ class TransactionService
 
         return [
             'platform_balance' => [
-                'available' => (float)($platformWallet?->available ?? 0),
-                'pending' => (float)($platformWallet?->pending ?? 0),
-                'total' => (float)(bcadd($platformWallet?->available ?? 0, $platformWallet?->pending ?? 0, 2)),
+                'available' => (float) ($platformWallet?->available ?? 0),
+                'pending' => (float) ($platformWallet?->pending ?? 0),
+                'total' => (float) (bcadd($platformWallet?->available ?? 0, $platformWallet?->pending ?? 0, 2)),
             ],
             'revenue' => [
-                'all_time' => (float)$allTime,
-                'last_30_days' => (float)$last30Days,
-                'last_7_days' => (float)$last7Days,
+                'all_time' => (float) $allTime,
+                'last_30_days' => (float) $last30Days,
+                'last_7_days' => (float) $last7Days,
             ],
             'payouts' => [
-                'affiliates_total' => (float)$affiliatePayouts,
-                'quiz_masters_total' => (float)$qmPayouts,
-                'total_paid_out' => (float)bcadd($affiliatePayouts, $qmPayouts, 2),
+                'affiliates_total' => (float) $affiliatePayouts,
+                'quiz_masters_total' => (float) $qmPayouts,
+                'total_paid_out' => (float) bcadd($affiliatePayouts, $qmPayouts, 2),
             ],
             'pending' => [
                 'affiliate_settlements' => 0,
                 'qm_settlements' => 0,
-            ]
+            ],
         ];
     }
 }
-
-
-
-

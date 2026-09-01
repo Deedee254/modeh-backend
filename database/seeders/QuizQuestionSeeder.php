@@ -2,16 +2,15 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\User;
 use App\Models\Grade;
+use App\Models\Question;
+use App\Models\Quiz;
 use App\Models\Subject;
 use App\Models\Topic;
-use App\Models\Quiz;
-use App\Models\Question;
-use Illuminate\Support\Facades\Hash;
-use Faker\Factory as Faker;
+use App\Models\User;
 use App\Services\SlugService;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class QuizQuestionSeeder extends Seeder
 {
@@ -39,7 +38,7 @@ class QuizQuestionSeeder extends Seeder
             [
                 'name' => 'quiz-master One',
                 'password' => Hash::make('password123'),
-                'role' => 'quiz-master'
+                'role' => 'quiz-master',
             ]
         );
     }
@@ -50,6 +49,7 @@ class QuizQuestionSeeder extends Seeder
         if ($grades->isEmpty()) {
             $grades = collect([Grade::firstOrCreate(['name' => 'General Knowledge'])]);
         }
+
         return $grades;
     }
 
@@ -61,9 +61,10 @@ class QuizQuestionSeeder extends Seeder
                 Subject::firstOrCreate(
                     ['name' => 'General Studies', 'grade_id' => $grade->id],
                     ['created_by' => $quizMaster->id, 'is_approved' => true]
-                )
+                ),
             ]);
         }
+
         return $subjects;
     }
 
@@ -75,15 +76,17 @@ class QuizQuestionSeeder extends Seeder
                 Topic::firstOrCreate(
                     ['name' => 'General', 'subject_id' => $subject->id],
                     ['created_by' => $quizMaster->id, 'is_approved' => true]
-                )
+                ),
             ]);
         }
+
         return $topics;
     }
 
     private function createQuiz(User $quizMaster, Subject $subject, Topic $topic, Grade $grade): Quiz
     {
         $title = sprintf('%s — %s Quiz', $subject->name, $topic->name);
+
         return Quiz::updateOrCreate(
             [
                 'title' => $title,
@@ -113,7 +116,7 @@ class QuizQuestionSeeder extends Seeder
 
     private function createQuestion(Quiz $quiz, User $quizMaster, Subject $subject, Topic $topic, Grade $grade, array $template, int $idx): void
     {
-        $uniqueBody = $template['body'] . " (seed {$quiz->id}-{$idx})";
+        $uniqueBody = $template['body']." (seed {$quiz->id}-{$idx})";
 
         $attributes = [
             'quiz_id' => $quiz->id,
@@ -152,7 +155,7 @@ class QuizQuestionSeeder extends Seeder
         return [
             [
                 'type' => 'mcq',
-                'body' => "Which of the following is the capital city of Kenya?",
+                'body' => 'Which of the following is the capital city of Kenya?',
                 'options' => ['Lagos', 'Nairobi', 'Kigali', 'Accra'],
                 'answers' => [1],
                 'explanation' => 'Nairobi is the capital and largest city of Kenya.',

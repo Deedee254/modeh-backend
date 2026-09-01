@@ -16,10 +16,8 @@ class TournamentQuestionService
     /**
      * Attach questions to a tournament battle from an uploaded CSV/XLSX file.
      *
-     * @param Tournament $tournament
-     * @param TournamentBattle $battle
-     * @param UploadedFile $file
      * @return array{attached:int,questions:\Illuminate\Database\Eloquent\Collection}
+     *
      * @throws \Throwable
      */
     public function attachQuestionsFromCsv(Tournament $tournament, TournamentBattle $battle, UploadedFile $file)
@@ -38,13 +36,13 @@ class TournamentQuestionService
 
             DB::beginTransaction();
 
-            if (!empty($idKeyIndexes)) {
+            if (! empty($idKeyIndexes)) {
                 $attachData = $this->getAttachDataFromIds($rows, $idKeyIndexes);
             } else {
                 $attachData = $this->createQuestionsFromRows($rows, $headers, $tournament);
             }
 
-            if (!empty($attachData)) {
+            if (! empty($attachData)) {
                 $battle->questions()->detach();
                 $battle->questions()->attach($attachData);
             }
@@ -67,10 +65,9 @@ class TournamentQuestionService
     /**
      * Attach questions to a tournament from an uploaded CSV/XLSX file or file path.
      *
-     * @param Tournament $tournament
-     * @param UploadedFile|string $file
-     * @param string|null $ext
+     * @param  UploadedFile|string  $file
      * @return array{attached:int,questions:\Illuminate\Database\Eloquent\Collection}
+     *
      * @throws \Throwable
      */
     public function attachQuestionsToTournamentFromCsv(Tournament $tournament, $file, ?string $ext = null)
@@ -92,13 +89,13 @@ class TournamentQuestionService
 
             DB::beginTransaction();
 
-            if (!empty($idKeyIndexes)) {
+            if (! empty($idKeyIndexes)) {
                 $attachData = $this->getAttachDataFromIds($rows, $idKeyIndexes);
             } else {
                 $attachData = $this->createQuestionsFromRows($rows, $headers, $tournament);
             }
 
-            if (!empty($attachData)) {
+            if (! empty($attachData)) {
                 $maxPosition = $tournament->questions()->max('position') ?? 0;
                 $position = $maxPosition + 1;
                 $adjustedAttachData = [];
@@ -130,16 +127,22 @@ class TournamentQuestionService
             $spreadsheet = IOFactory::load($path);
             $sheet = $spreadsheet->getActiveSheet();
             $array = $sheet->toArray(null, true, true, true);
-            if (empty($array)) return [[], []];
+            if (empty($array)) {
+                return [[], []];
+            }
             $first = array_shift($array);
-            $headers = array_map(function ($h) { return strtolower(trim((string)$h)); }, array_values($first));
+            $headers = array_map(function ($h) {
+                return strtolower(trim((string) $h));
+            }, array_values($first));
             foreach ($array as $r) {
                 $rows[] = array_values($r);
             }
         } else {
             $FH = fopen($path, 'r');
-            if (!$FH) return [[], []];
-            
+            if (! $FH) {
+                return [[], []];
+            }
+
             // Detect BOM
             $bom = fread($FH, 3);
             if ($bom !== "\xEF\xBB\xBF") {
@@ -147,20 +150,26 @@ class TournamentQuestionService
             }
 
             $rawHeaders = fgetcsv($FH);
-            if ($rawHeaders === false) { fclose($FH); return [[], []]; }
-            
-            $headers = array_map(function ($h) { 
+            if ($rawHeaders === false) {
+                fclose($FH);
+
+                return [[], []];
+            }
+
+            $headers = array_map(function ($h) {
                 $h = mb_convert_encoding($h, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
-                return strtolower(trim((string)$h)); 
+
+                return strtolower(trim((string) $h));
             }, $rawHeaders);
-            
+
             while (($row = fgetcsv($FH)) !== false) {
-                $rows[] = array_map(function($value) {
+                $rows[] = array_map(function ($value) {
                     return mb_convert_encoding($value, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
                 }, $row);
             }
             fclose($FH);
         }
+
         return [$headers, $rows];
     }
 
@@ -168,16 +177,19 @@ class TournamentQuestionService
     {
         $idKeyIndexes = [];
         foreach ($headers as $i => $h) {
-            if (in_array($h, ['id', 'question_id', 'questionid', 'question id'])) { $idKeyIndexes[] = $i; }
+            if (in_array($h, ['id', 'question_id', 'questionid', 'question id'])) {
+                $idKeyIndexes[] = $i;
+            }
         }
+
         return $idKeyIndexes;
     }
 
     /**
      * Build attach data array from existing question ids parsed from the file.
      *
-     * @param array<int,array> $rows
-     * @param int[] $idKeyIndexes
+     * @param  array<int,array>  $rows
+     * @param  int[]  $idKeyIndexes
      * @return array<int,array{position:int}>
      */
     private function getAttachDataFromIds(array $rows, array $idKeyIndexes): array
@@ -185,10 +197,16 @@ class TournamentQuestionService
         $idIdx = $idKeyIndexes[0];
         $ids = [];
         foreach ($rows as $row) {
-            if (!isset($row[$idIdx])) continue;
-            $val = trim((string)$row[$idIdx]);
-            if ($val === '') continue;
-            if (is_numeric($val)) $ids[] = intval($val);
+            if (! isset($row[$idIdx])) {
+                continue;
+            }
+            $val = trim((string) $row[$idIdx]);
+            if ($val === '') {
+                continue;
+            }
+            if (is_numeric($val)) {
+                $ids[] = intval($val);
+            }
         }
         if (empty($ids)) {
             throw new \Exception('No question ids found in file');
@@ -200,20 +218,22 @@ class TournamentQuestionService
                 $attachData[$qid] = ['position' => $i];
             }
         }
+
         return $attachData;
     }
 
     /**
      * Create Question models from parsed CSV rows and return attach data.
      *
-     * @param array<int,array> $rows
-     * @param string[] $headers
-     * @param Tournament $tournament
+     * @param  array<int,array>  $rows
+     * @param  string[]  $headers
      * @return array<int,array{position:int}>
      */
     private function createQuestionsFromRows(array $rows, array $headers, Tournament $tournament): array
     {
-        $canonical = array_map(function ($h) { return preg_replace('/[^a-z0-9_]/', '_', $h); }, $headers);
+        $canonical = array_map(function ($h) {
+            return preg_replace('/[^a-z0-9_]/', '_', $h);
+        }, $headers);
         /** @var \App\Models\Question[] $created */
         $created = [];
         $userId = Auth::id();
@@ -221,11 +241,13 @@ class TournamentQuestionService
         foreach ($rows as $rIdx => $row) {
             $rowData = [];
             foreach ($canonical as $i => $key) {
-                $rowData[$key] = isset($row[$i]) ? trim((string)$row[$i]) : null;
+                $rowData[$key] = isset($row[$i]) ? trim((string) $row[$i]) : null;
             }
 
             $body = $rowData['body'] ?? $rowData['prompt'] ?? $rowData['question'] ?? $rowData['text'] ?? null;
-            if (!$body) continue;
+            if (! $body) {
+                continue;
+            }
             $rawType = strtolower(trim($rowData['type'] ?? $rowData['question_type'] ?? 'mcq'));
             if (in_array($rawType, ['mcq', 'multiple choice question', 'multiple choice', 'multiple_choice'])) {
                 $type = 'mcq';
@@ -254,19 +276,33 @@ class TournamentQuestionService
                     $parts = array_map('trim', preg_split('/[|,]/', $rawCorrect));
                     $mapped = [];
                     foreach ($parts as $p) {
-                        if (is_numeric($p)) $mapped[] = intval($p);
-                        else {
+                        if (is_numeric($p)) {
+                            $mapped[] = intval($p);
+                        } else {
                             $idx = null;
-                            foreach ($options as $oi => $opt) { if (strcasecmp($opt['text'], $p) === 0) { $idx = $oi; break; } }
-                            if ($idx !== null) $mapped[] = $idx;
+                            foreach ($options as $oi => $opt) {
+                                if (strcasecmp($opt['text'], $p) === 0) {
+                                    $idx = $oi;
+                                    break;
+                                }
+                            }
+                            if ($idx !== null) {
+                                $mapped[] = $idx;
+                            }
                         }
                     }
                     $corrects = array_values(array_unique(array_filter($mapped, 'is_int')));
                 } else {
-                    $p = trim((string)$rawCorrect);
-                    if (is_numeric($p)) $correct = intval($p);
-                    else {
-                        foreach ($options as $oi => $opt) { if (strcasecmp($opt['text'], $p) === 0) { $correct = $oi; break; } }
+                    $p = trim((string) $rawCorrect);
+                    if (is_numeric($p)) {
+                        $correct = intval($p);
+                    } else {
+                        foreach ($options as $oi => $opt) {
+                            if (strcasecmp($opt['text'], $p) === 0) {
+                                $correct = $oi;
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -281,7 +317,7 @@ class TournamentQuestionService
                     if (strpos($rawCorrect, '|') !== false || strpos($rawCorrect, ',') !== false) {
                         $answers = array_map('trim', preg_split('/[|,]/', $rawCorrect));
                     } else {
-                        $answers = [trim((string)$rawCorrect)];
+                        $answers = [trim((string) $rawCorrect)];
                     }
                 }
             }
@@ -302,9 +338,15 @@ class TournamentQuestionService
                 'is_banked' => true,
                 'is_approved' => true,
             ];
-            if ($corrects !== null) $createData['corrects'] = $corrects;
-            if ($correct !== null) $createData['correct'] = $correct;
-            if ($userId) $createData['created_by'] = $userId;
+            if ($corrects !== null) {
+                $createData['corrects'] = $corrects;
+            }
+            if ($correct !== null) {
+                $createData['correct'] = $correct;
+            }
+            if ($userId) {
+                $createData['created_by'] = $userId;
+            }
 
             $question = Question::create($createData);
             $created[] = $question;
@@ -315,34 +357,42 @@ class TournamentQuestionService
         foreach ($created as $i => $q) {
             $attachData[$q->id] = ['position' => $i];
         }
+
         return $attachData;
     }
 
     private function getOptions(array $rowData): array
     {
         $options = [];
-        if (!empty($rowData['options'])) {
+        if (! empty($rowData['options'])) {
             $maybe = $rowData['options'];
             $decoded = json_decode($maybe, true);
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                 foreach ($decoded as $opt) {
-                    if (is_array($opt) && isset($opt['text'])) $options[] = ['text' => $opt['text']];
-                    elseif (is_string($opt)) $options[] = ['text' => $opt];
+                    if (is_array($opt) && isset($opt['text'])) {
+                        $options[] = ['text' => $opt['text']];
+                    } elseif (is_string($opt)) {
+                        $options[] = ['text' => $opt];
+                    }
                 }
             } else {
                 $parts = array_filter(array_map('trim', explode('|', $maybe)));
-                foreach ($parts as $p) $options[] = ['text' => $p];
+                foreach ($parts as $p) {
+                    $options[] = ['text' => $p];
+                }
             }
-        } elseif (!empty($rowData['choices'])) {
+        } elseif (! empty($rowData['choices'])) {
             $parts = array_filter(array_map('trim', preg_split('/[|,]/', $rowData['choices'])));
-            foreach ($parts as $p) $options[] = ['text' => $p];
+            foreach ($parts as $p) {
+                $options[] = ['text' => $p];
+            }
         } else {
             // CRITICAL: Preserve empty option columns to maintain alignment with numeric answer indexes
             // Previously this only added non-empty options, which caused empty cells to be skipped
             // and numeric answers (e.g., "2") to point to wrong options.
             for ($i = 1; $i <= 10; $i++) {
-                $k1 = 'option_' . $i;
-                $k2 = 'option' . $i;
+                $k1 = 'option_'.$i;
+                $k2 = 'option'.$i;
                 $optValue = null;
                 if (isset($rowData[$k1])) {
                     $optValue = $rowData[$k1];
@@ -351,10 +401,11 @@ class TournamentQuestionService
                 }
                 // Add option if the column exists, even if empty (preserve alignment)
                 if ($optValue !== null) {
-                    $options[] = ['text' => trim((string)$optValue)];
+                    $options[] = ['text' => trim((string) $optValue)];
                 }
             }
         }
+
         return $options;
     }
 }

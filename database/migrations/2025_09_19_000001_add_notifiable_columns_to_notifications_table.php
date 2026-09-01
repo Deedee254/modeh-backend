@@ -17,7 +17,7 @@ return new class extends Migration
         // The canonical create_notifications_table migration now owns the table
         // schema. Keep this migration as a no-op to remain idempotent during
         // tests and fresh migrations.
-        return;
+
     }
 
     /**
@@ -27,7 +27,7 @@ return new class extends Migration
      */
     public function down()
     {
-        if (!Schema::hasTable('notifications')) {
+        if (! Schema::hasTable('notifications')) {
             return;
         }
 

@@ -48,8 +48,11 @@ class Wallet extends Model
      * Wallet type constants
      */
     public const TYPE_PLATFORM = 'platform';          // Platform operating wallet (pays everyone)
+
     public const TYPE_ADMIN = 'admin';                // Admin personal wallet (platform revenue after payouts)
+
     public const TYPE_QUIZ_MASTER = 'quiz_master';    // Quiz creator earnings
+
     public const TYPE_QUIZEE = 'quizee';              // Regular user earnings
 
     public function user()
@@ -86,7 +89,7 @@ class Wallet extends Model
 
         return [
             'count' => $pending->count(),
-            'total' => (float)$pending->sum('amount'),
+            'total' => (float) $pending->sum('amount'),
             'details' => $pending,
         ];
     }
@@ -110,8 +113,8 @@ class Wallet extends Model
             throw new \Exception('Insufficient available balance');
         }
 
-        $this->available = bcsub((string)$this->available, (string)$amount, 2); // @phpstan-ignore-line
-        $this->withdrawn_pending = bcadd((string)$this->withdrawn_pending, (string)$amount, 2); // @phpstan-ignore-line
+        $this->available = bcsub((string) $this->available, (string) $amount, 2); // @phpstan-ignore-line
+        $this->withdrawn_pending = bcadd((string) $this->withdrawn_pending, (string) $amount, 2); // @phpstan-ignore-line
         $this->save();
     }
 
@@ -124,9 +127,9 @@ class Wallet extends Model
             throw new \Exception('Invalid withdrawal amount');
         }
 
-        $this->withdrawn_pending = bcsub((string)$this->withdrawn_pending, (string)$amount, 2); // @phpstan-ignore-line
-        $this->settled = bcadd((string)$this->settled, (string)$amount, 2); // @phpstan-ignore-line
-        $this->total_withdrawn = bcadd((string)$this->total_withdrawn, (string)$amount, 2); // @phpstan-ignore-line
+        $this->withdrawn_pending = bcsub((string) $this->withdrawn_pending, (string) $amount, 2); // @phpstan-ignore-line
+        $this->settled = bcadd((string) $this->settled, (string) $amount, 2); // @phpstan-ignore-line
+        $this->total_withdrawn = bcadd((string) $this->total_withdrawn, (string) $amount, 2); // @phpstan-ignore-line
         $this->save();
     }
 
@@ -149,12 +152,12 @@ class Wallet extends Model
     public function getEarningsBreakdown(): array
     {
         return [
-            'from_quizzes' => (float)($this->earned_from_quizzes ?? 0),
-            'from_affiliates' => (float)($this->earned_from_affiliates ?? 0),
-            'from_tournaments' => (float)($this->earned_from_tournaments ?? 0),
-            'from_battles' => (float)($this->earned_from_battles ?? 0),
-            'from_subscriptions' => (float)($this->earned_from_subscriptions ?? 0),
-            'total' => (float)($this->lifetime_earned ?? 0),
+            'from_quizzes' => (float) ($this->earned_from_quizzes ?? 0),
+            'from_affiliates' => (float) ($this->earned_from_affiliates ?? 0),
+            'from_tournaments' => (float) ($this->earned_from_tournaments ?? 0),
+            'from_battles' => (float) ($this->earned_from_battles ?? 0),
+            'from_subscriptions' => (float) ($this->earned_from_subscriptions ?? 0),
+            'total' => (float) ($this->lifetime_earned ?? 0),
         ];
     }
 
@@ -163,7 +166,7 @@ class Wallet extends Model
      */
     public function recordEarning(string $source, float $amount, string $description = ''): Transaction
     {
-        $field = match($source) {
+        $field = match ($source) {
             'quizzes' => 'earned_from_quizzes',
             'affiliates' => 'earned_from_affiliates',
             'tournaments' => 'earned_from_tournaments',
@@ -173,9 +176,9 @@ class Wallet extends Model
         };
 
         if ($field) {
-            $this->$field = bcadd((string)($this->{$field} ?? 0), (string)$amount, 2); // @phpstan-ignore-line
-            $this->lifetime_earned = bcadd((string)($this->lifetime_earned ?? 0), (string)$amount, 2); // @phpstan-ignore-line
-            $this->available = bcadd((string)($this->available ?? 0), (string)$amount, 2); // @phpstan-ignore-line
+            $this->$field = bcadd((string) ($this->{$field} ?? 0), (string) $amount, 2); // @phpstan-ignore-line
+            $this->lifetime_earned = bcadd((string) ($this->lifetime_earned ?? 0), (string) $amount, 2); // @phpstan-ignore-line
+            $this->available = bcadd((string) ($this->available ?? 0), (string) $amount, 2); // @phpstan-ignore-line
             $this->save();
 
             // Record transaction
@@ -186,9 +189,9 @@ class Wallet extends Model
                 'status' => Transaction::STATUS_COMPLETED,
                 'description' => $description ?: "Earning from {$source}",
                 'meta' => [
-                        'source' => $source,
-                        'type' => $this->type,
-                    ],
+                    'source' => $source,
+                    'type' => $this->type,
+                ],
             ]);
         }
 
@@ -217,8 +220,6 @@ class Wallet extends Model
         $this->save();
     }
 
-
-
     /**
      * Get wallet summary for dashboard
      */
@@ -227,13 +228,13 @@ class Wallet extends Model
         return [
             'user_id' => $this->user_id,
             'type' => $this->type,
-            'available' => (float)($this->available ?? 0),
-            'pending' => (float)($this->pending ?? 0),
-            'total_balance' => (float)bcadd($this->available ?? 0, $this->pending ?? 0, 2),
-            'lifetime_earned' => (float)($this->lifetime_earned ?? 0),
-            'total_withdrawn' => (float)($this->total_withdrawn ?? 0),
-            'refunded' => (float)($this->refunded ?? 0),
-            'net_earned' => (float)bcsub(
+            'available' => (float) ($this->available ?? 0),
+            'pending' => (float) ($this->pending ?? 0),
+            'total_balance' => (float) bcadd($this->available ?? 0, $this->pending ?? 0, 2),
+            'lifetime_earned' => (float) ($this->lifetime_earned ?? 0),
+            'total_withdrawn' => (float) ($this->total_withdrawn ?? 0),
+            'refunded' => (float) ($this->refunded ?? 0),
+            'net_earned' => (float) bcsub(
                 bcsub($this->lifetime_earned ?? 0, $this->total_withdrawn ?? 0, 2),
                 $this->refunded ?? 0,
                 2

@@ -12,15 +12,18 @@ class AdminDailyChallengeAnalyticsController extends Controller
     private function requireAdmin()
     {
         $user = auth()->user() ?? auth('sanctum')->user();
-        if (!$user || !$user->is_admin) {
+        if (! $user || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
+
         return null;
     }
 
     public function analytics(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -47,8 +50,12 @@ class AdminDailyChallengeAnalyticsController extends Controller
             ->join('daily_challenges_cache as c', 'c.id', '=', 's.daily_challenge_cache_id')
             ->whereBetween('c.date', [$from, $to]);
 
-        if ($levelId) $base->where('c.level_id', $levelId);
-        if ($gradeId) $base->where('c.grade_id', $gradeId);
+        if ($levelId) {
+            $base->where('c.level_id', $levelId);
+        }
+        if ($gradeId) {
+            $base->where('c.grade_id', $gradeId);
+        }
 
         $kpiRow = (clone $base)
             ->selectRaw('COUNT(*) as total_submissions')
@@ -67,8 +74,12 @@ class AdminDailyChallengeAnalyticsController extends Controller
             ->count();
 
         $eligibleUsersQuery = DB::table('quizees as q');
-        if ($levelId) $eligibleUsersQuery->where('q.level_id', $levelId);
-        if ($gradeId) $eligibleUsersQuery->where('q.grade_id', $gradeId);
+        if ($levelId) {
+            $eligibleUsersQuery->where('q.level_id', $levelId);
+        }
+        if ($gradeId) {
+            $eligibleUsersQuery->where('q.grade_id', $gradeId);
+        }
         $eligibleUsers = (int) ($eligibleUsersQuery->count() ?? 0);
 
         $uniqueUsers = (int) ($kpiRow->unique_users ?? 0);
@@ -109,13 +120,17 @@ class AdminDailyChallengeAnalyticsController extends Controller
 
         $uaBase = DB::table('user_achievements as ua')
             ->join('achievements as a', 'a.id', '=', 'ua.achievement_id')
-            ->whereBetween('ua.created_at', [$from . ' 00:00:00', $to . ' 23:59:59'])
+            ->whereBetween('ua.created_at', [$from.' 00:00:00', $to.' 23:59:59'])
             ->whereIn('a.type', ['streak', 'daily_challenge']);
 
         if ($levelId || $gradeId) {
             $uaBase->join('quizees as q', 'q.user_id', '=', 'ua.user_id');
-            if ($levelId) $uaBase->where('q.level_id', $levelId);
-            if ($gradeId) $uaBase->where('q.grade_id', $gradeId);
+            if ($levelId) {
+                $uaBase->where('q.level_id', $levelId);
+            }
+            if ($gradeId) {
+                $uaBase->where('q.grade_id', $gradeId);
+            }
         }
 
         $pointsRows = (clone $uaBase)
@@ -131,7 +146,9 @@ class AdminDailyChallengeAnalyticsController extends Controller
         ];
         foreach ($pointsRows as $r) {
             $t = $r->type;
-            if (!isset($pointsByType[$t])) continue;
+            if (! isset($pointsByType[$t])) {
+                continue;
+            }
             $pointsByType[$t] = [
                 'unlocks' => (int) ($r->unlocks ?? 0),
                 'points' => (int) ($r->points ?? 0),
@@ -239,13 +256,19 @@ class AdminDailyChallengeAnalyticsController extends Controller
             ->distinct()
             ->orderBy('c.date', 'desc');
 
-        if ($levelId) $streakRows->where('c.level_id', $levelId);
-        if ($gradeId) $streakRows->where('c.grade_id', $gradeId);
+        if ($levelId) {
+            $streakRows->where('c.level_id', $levelId);
+        }
+        if ($gradeId) {
+            $streakRows->where('c.grade_id', $gradeId);
+        }
 
         $streakDatesByUser = [];
         foreach ($streakRows->get() as $r) {
             $uid = (int) $r->user_id;
-            if (!isset($streakDatesByUser[$uid])) $streakDatesByUser[$uid] = [];
+            if (! isset($streakDatesByUser[$uid])) {
+                $streakDatesByUser[$uid] = [];
+            }
             $streakDatesByUser[$uid][$r->date] = true;
         }
 
@@ -255,8 +278,11 @@ class AdminDailyChallengeAnalyticsController extends Controller
             $streak = 0;
             for ($i = 0; $i < 60; $i++) {
                 $d = $endDt->copy()->subDays($i)->toDateString();
-                if (isset($dateSet[$d])) $streak++;
-                else break;
+                if (isset($dateSet[$d])) {
+                    $streak++;
+                } else {
+                    break;
+                }
             }
             $streaks[$uid] = $streak;
         }
@@ -289,11 +315,17 @@ class AdminDailyChallengeAnalyticsController extends Controller
             '7_plus' => 0,
         ];
         foreach ($streaks as $v) {
-            if ($v <= 0) $streakDistribution['0']++;
-            else if ($v <= 2) $streakDistribution['1_2']++;
-            else if ($v <= 4) $streakDistribution['3_4']++;
-            else if ($v <= 6) $streakDistribution['5_6']++;
-            else $streakDistribution['7_plus']++;
+            if ($v <= 0) {
+                $streakDistribution['0']++;
+            } elseif ($v <= 2) {
+                $streakDistribution['1_2']++;
+            } elseif ($v <= 4) {
+                $streakDistribution['3_4']++;
+            } elseif ($v <= 6) {
+                $streakDistribution['5_6']++;
+            } else {
+                $streakDistribution['7_plus']++;
+            }
         }
 
         return response()->json([
@@ -343,4 +375,3 @@ class AdminDailyChallengeAnalyticsController extends Controller
         ]);
     }
 }
-
