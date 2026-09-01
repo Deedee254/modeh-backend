@@ -25,7 +25,6 @@ class SubjectResource extends JsonResource
     /**
      * Transform the resource into an array.
      *
-     * @param Request $request
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
@@ -61,7 +60,7 @@ class SubjectResource extends JsonResource
         if ($this->image) {
             return Storage::url($this->image);
         }
-        
+
         // Return first quiz cover image if available (cached or loaded)
         return $this->quizzes_cover_image ?? null;
     }
@@ -79,7 +78,7 @@ class SubjectResource extends JsonResource
         if (isset($this->quizzes_count)) {
             return $this->quizzes_count;
         }
-        
+
         return $this->topics->sum('quizzes_count');
     }
 }

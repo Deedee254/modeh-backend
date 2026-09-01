@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
+use App\Models\Battle;
+use App\Models\GuestUnlockToken;
+use App\Models\MpesaTransaction;
 use App\Models\OneOffPurchase;
 use App\Models\Quiz;
-use App\Models\Battle;
 use App\Models\Tournament;
-use App\Models\MpesaTransaction;
-use App\Models\GuestUnlockToken;
 use App\Services\MpesaService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -20,7 +20,9 @@ class OneOffPurchaseController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        if (! $user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
         $query = OneOffPurchase::where('user_id', $user->id);
 
@@ -40,7 +42,9 @@ class OneOffPurchaseController extends Controller
     public function store(Request $request)
     {
         $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        if (! $user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
         $data = $request->validate([
             'item_type' => 'required|in:quiz,battle,tournament,package,performance_report',
@@ -55,11 +59,11 @@ class OneOffPurchaseController extends Controller
         ]);
 
         // Check for duplicate request using idempotency_key
-        if (!empty($data['idempotency_key'])) {
+        if (! empty($data['idempotency_key'])) {
             $existingPurchase = OneOffPurchase::where('user_id', $user->id)
                 ->where('meta->idempotency_key', $data['idempotency_key'])
                 ->first();
-            
+
             if ($existingPurchase) {
                 // Return existing purchase details to prevent duplicate charges
                 Log::info('[OneOff Purchase] Duplicate request detected - returning existing purchase', [
@@ -68,7 +72,7 @@ class OneOffPurchaseController extends Controller
                     'purchase_id' => $existingPurchase->id,
                     'status' => $existingPurchase->status,
                 ]);
-                
+
                 // If purchase is still pending, return the same transaction
                 if ($existingPurchase->status === 'pending') {
                     return response()->json([
@@ -80,7 +84,7 @@ class OneOffPurchaseController extends Controller
                         'duplicate' => true,
                     ]);
                 }
-                
+
                 // If already completed/confirmed, return success
                 if (in_array($existingPurchase->status, ['completed', 'confirmed'])) {
                     return response()->json([
@@ -98,12 +102,12 @@ class OneOffPurchaseController extends Controller
 
         if ($data['item_type'] === 'package') {
             $package = \App\Models\Package::find($data['item_id']);
-            if (!$package) {
+            if (! $package) {
                 return response()->json(['ok' => false, 'message' => 'Package not found'], 404);
             }
             if (($package->audience ?? 'quizee') === 'institution') {
                 $institutionValidation = $this->resolveInstitutionForPackagePurchase($request, $user);
-                if (!$institutionValidation['ok']) {
+                if (! $institutionValidation['ok']) {
                     return response()->json(['ok' => false, 'message' => $institutionValidation['message']], $institutionValidation['status']);
                 }
                 $data['institution_id'] = $institutionValidation['institution_id'];
@@ -115,7 +119,7 @@ class OneOffPurchaseController extends Controller
             return response()->json(['ok' => false, 'message' => 'Invalid item or price not configured'], 422);
         }
 
-        if (!empty($data['amount']) && (float)$data['amount'] != (float)$resolvedAmount) {
+        if (! empty($data['amount']) && (float) $data['amount'] != (float) $resolvedAmount) {
             Log::warning('[OneOff Purchase] Client amount mismatch', [
                 'item_type' => $data['item_type'],
                 'item_id' => $data['item_id'],
@@ -127,7 +131,7 @@ class OneOffPurchaseController extends Controller
         $promoDiscount = 0;
         $promoCodeObj = null;
 
-        if (!empty($data['promo_code'])) {
+        if (! empty($data['promo_code'])) {
             $promoCodeObj = \App\Models\PromoCode::where('code', $data['promo_code'])->first();
             if ($promoCodeObj && $promoCodeObj->isValid()) {
                 $userUses = $user ? $promoCodeObj->usages()->where('user_id', $user->id)->count() : 0;
@@ -147,13 +151,14 @@ class OneOffPurchaseController extends Controller
         $mpesaConfig = config('services.mpesa', []);
         if ($gateway === 'mpesa') {
             $missing = $this->missingMpesaConfig($mpesaConfig);
-            if (!empty($missing)) {
+            if (! empty($missing)) {
                 $this->logMpesaFlow('store.config_missing', [
                     'user_id' => $user->id,
                     'missing' => $missing,
                     'environment' => $mpesaConfig['environment'] ?? null,
                     'callback_url' => $mpesaConfig['callback_url'] ?? null,
                 ]);
+
                 return response()->json([
                     'ok' => false,
                     'code' => 'gateway_not_configured',
@@ -170,11 +175,11 @@ class OneOffPurchaseController extends Controller
             'item_id' => $data['item_id'],
             'gateway' => $gateway,
             'environment' => $mpesaConfig['environment'] ?? null,
-            'shortcode_configured' => !empty($mpesaConfig['shortcode']),
+            'shortcode_configured' => ! empty($mpesaConfig['shortcode']),
             'callback_url' => $mpesaConfig['callback_url'] ?? null,
         ]);
         $phoneResolution = $this->resolveMpesaPhone($service, $data['phone'] ?? ($user->phone ?? null), $gateway);
-        if (!$phoneResolution['ok']) {
+        if (! $phoneResolution['ok']) {
             return response()->json($phoneResolution['error'], 422);
         }
         $phone = $phoneResolution['phone'];
@@ -189,7 +194,7 @@ class OneOffPurchaseController extends Controller
             'amount' => $resolvedAmount,
             'gateway' => $gateway,
             'phone' => $this->maskPhone($phone),
-            'idempotency_key' => !empty($data['idempotency_key']) ? 'present' : 'none',
+            'idempotency_key' => ! empty($data['idempotency_key']) ? 'present' : 'none',
         ]);
 
         $purchase = OneOffPurchase::create([
@@ -203,13 +208,13 @@ class OneOffPurchaseController extends Controller
                 'phone' => $phone,
                 'institution_id' => $data['institution_id'] ?? null,
                 'trace_id' => $traceId,
-            ], fn($v) => $v !== null && $v !== ''),
+            ], fn ($v) => $v !== null && $v !== ''),
             'meta' => array_filter([
                 'attempt_id' => $data['attempt_id'] ?? null,
                 'idempotency_key' => $data['idempotency_key'] ?? null,  // Store for duplicate detection
                 'promo_code_id' => $promoCodeObj->id ?? null,
                 'discount_applied' => $promoDiscount > 0 ? $promoDiscount : null,
-            ], fn($v) => $v !== null),
+            ], fn ($v) => $v !== null),
         ]);
 
         if ($finalAmount == 0) {
@@ -222,7 +227,7 @@ class OneOffPurchaseController extends Controller
             $purchase->amount = 0;
             $purchase->gateway = 'promo';
             $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
-                'tx' => 'PROMO-' . $purchase->id,
+                'tx' => 'PROMO-'.$purchase->id,
                 'completed_at' => now(),
             ]);
             $purchase->save();
@@ -240,19 +245,19 @@ class OneOffPurchaseController extends Controller
 
             // Manually fulfill
             $paymentController = app(\App\Http\Controllers\Api\PaymentController::class);
-            $paymentController->handleOneOffPurchase($purchase, 'PROMO-' . $purchase->id, 'success');
+            $paymentController->handleOneOffPurchase($purchase, 'PROMO-'.$purchase->id, 'success');
 
             return response()->json([
                 'ok' => true,
                 'purchase' => $purchase,
-                'tx' => 'PROMO-' . $purchase->id,
+                'tx' => 'PROMO-'.$purchase->id,
                 'discounted_fully' => true,
-                'message' => 'Purchase completed successfully using promo code'
+                'message' => 'Purchase completed successfully using promo code',
             ]);
         }
 
         // initiate mpesa push via MpesaService
-        $res = $service->initiateStkPush($phone, (float)$finalAmount, 'OneOff-'.$purchase->id, $traceId);
+        $res = $service->initiateStkPush($phone, (float) $finalAmount, 'OneOff-'.$purchase->id, $traceId);
 
         Log::info('[OneOff Purchase] STK initiation response', [
             'trace_id' => $traceId,
@@ -277,7 +282,7 @@ class OneOffPurchaseController extends Controller
 
         if ($res['ok']) {
             $checkoutRequestId = $res['tx'];  // M-PESA's CheckoutRequestID
-            
+
             $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
                 'tx' => $checkoutRequestId,
                 'checkout_request_id' => $checkoutRequestId,  // CheckoutRequestID from M-PESA
@@ -285,7 +290,7 @@ class OneOffPurchaseController extends Controller
                 'trace_id' => $traceId,
             ]);
             $purchase->save();
-            
+
             // Create MpesaTransaction record for reconciliation
             MpesaTransaction::create([
                 'user_id' => $user->id,
@@ -301,7 +306,7 @@ class OneOffPurchaseController extends Controller
                     'init' => $res['body'] ?? [],
                 ],
             ]);
-            
+
             Log::info('[OneOff Purchase] STK Push initiated', [
                 'trace_id' => $traceId,
                 'user_id' => $user->id,
@@ -309,10 +314,10 @@ class OneOffPurchaseController extends Controller
                 'checkout_request_id' => $checkoutRequestId,
                 'amount' => $purchase->amount,
             ]);
-            
+
             return response()->json([
-                'ok' => true, 
-                'purchase' => $purchase, 
+                'ok' => true,
+                'purchase' => $purchase,
                 'tx' => $checkoutRequestId,
                 'checkout_request_id' => $checkoutRequestId,  // Return checkout_request_id to frontend
                 'trace_id' => $traceId,
@@ -345,22 +350,28 @@ class OneOffPurchaseController extends Controller
         switch ($type) {
             case 'quiz':
                 $quiz = Quiz::find($itemId);
-                if (!$quiz && !is_numeric($itemId)) {
+                if (! $quiz && ! is_numeric($itemId)) {
                     $quiz = Quiz::where('slug', $itemId)->first();
                 }
+
                 return $quiz ? $quiz->price : null;
             case 'battle':
                 $battle = Battle::find($itemId);
-                if (!$battle && !is_numeric($itemId)) {
+                if (! $battle && ! is_numeric($itemId)) {
                     $battle = Battle::where('uuid', $itemId)->first();
                 }
+
                 return $battle ? $battle->price : null;
             case 'tournament':
                 $tournament = Tournament::find($itemId);
+
                 return $tournament ? (float) ($tournament->entry_fee ?? 0) : null;
             case 'package':
                 $package = \App\Models\Package::find($itemId);
-                if (!$package) return null;
+                if (! $package) {
+                    return null;
+                }
+
                 return (float) ($package->price ?? 0);
             case 'performance_report':
                 return (float) ($pricingSetting->performance_report_price ?? 0.0);
@@ -393,7 +404,7 @@ class OneOffPurchaseController extends Controller
             }
         }
 
-        if (!$institution) {
+        if (! $institution) {
             return ['ok' => false, 'status' => 404, 'message' => 'Institution not found'];
         }
 
@@ -401,7 +412,7 @@ class OneOffPurchaseController extends Controller
             ->where('users.id', $user->id)
             ->wherePivot('role', 'institution-manager')
             ->exists();
-        if (!$isManager) {
+        if (! $isManager) {
             return ['ok' => false, 'status' => 403, 'message' => 'Only institution managers can purchase institution packages'];
         }
 
@@ -411,13 +422,17 @@ class OneOffPurchaseController extends Controller
     public function show(Request $request, int|string $purchaseId)
     {
         $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        if (! $user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
         $purchase = OneOffPurchase::find($purchaseId);
-        if (!$purchase) return response()->json(['ok' => false, 'message' => 'Not found'], 404);
+        if (! $purchase) {
+            return response()->json(['ok' => false, 'message' => 'Not found'], 404);
+        }
 
         // Only owner or admins can view
-        if ($purchase->user_id !== $user->id && !(isset($user->is_admin) && $user->is_admin)) {
+        if ($purchase->user_id !== $user->id && ! (isset($user->is_admin) && $user->is_admin)) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
@@ -446,7 +461,7 @@ class OneOffPurchaseController extends Controller
             return response()->json(['ok' => false, 'message' => 'Invalid item or price not configured'], 422);
         }
 
-        if (!empty($data['amount']) && (float) $data['amount'] != (float) $resolvedAmount) {
+        if (! empty($data['amount']) && (float) $data['amount'] != (float) $resolvedAmount) {
             Log::warning('[Guest OneOff Purchase] Client amount mismatch', [
                 'item_type' => $data['item_type'],
                 'item_id' => $data['item_id'],
@@ -458,7 +473,7 @@ class OneOffPurchaseController extends Controller
         $promoDiscount = 0;
         $promoCodeObj = null;
 
-        if (!empty($data['promo_code'])) {
+        if (! empty($data['promo_code'])) {
             $promoCodeObj = \App\Models\PromoCode::where('code', $data['promo_code'])->first();
             if ($promoCodeObj && $promoCodeObj->isValid()) {
                 // Guests don't have a user_id, so we can't accurately track uses per user
@@ -475,13 +490,14 @@ class OneOffPurchaseController extends Controller
         $mpesaConfig = config('services.mpesa', []);
         if ($gateway === 'mpesa') {
             $missing = $this->missingMpesaConfig($mpesaConfig);
-            if (!empty($missing)) {
+            if (! empty($missing)) {
                 $this->logMpesaFlow('store_guest.config_missing', [
                     'guest_identifier' => $data['guest_identifier'] ?? null,
                     'missing' => $missing,
                     'environment' => $mpesaConfig['environment'] ?? null,
                     'callback_url' => $mpesaConfig['callback_url'] ?? null,
                 ]);
+
                 return response()->json([
                     'ok' => false,
                     'code' => 'gateway_not_configured',
@@ -498,11 +514,11 @@ class OneOffPurchaseController extends Controller
             'item_id' => $data['item_id'],
             'gateway' => $gateway,
             'environment' => $mpesaConfig['environment'] ?? null,
-            'shortcode_configured' => !empty($mpesaConfig['shortcode']),
+            'shortcode_configured' => ! empty($mpesaConfig['shortcode']),
             'callback_url' => $mpesaConfig['callback_url'] ?? null,
         ]);
         $phoneResolution = $this->resolveMpesaPhone($service, $data['phone'] ?? null, $gateway);
-        if (!$phoneResolution['ok']) {
+        if (! $phoneResolution['ok']) {
             return response()->json($phoneResolution['error'], 422);
         }
         $phone = $phoneResolution['phone'];
@@ -530,12 +546,12 @@ class OneOffPurchaseController extends Controller
             'gateway_meta' => array_filter([
                 'phone' => $phone,
                 'trace_id' => $traceId,
-            ], fn($v) => $v !== null && $v !== ''),
+            ], fn ($v) => $v !== null && $v !== ''),
             'meta' => array_filter([
                 'guest_attempt_id' => $data['guest_attempt_id'] ?? null,
                 'promo_code_id' => $promoCodeObj->id ?? null,
                 'discount_applied' => $promoDiscount > 0 ? $promoDiscount : null,
-            ], fn($v) => $v !== null),
+            ], fn ($v) => $v !== null),
         ]);
 
         if ($finalAmount == 0) {
@@ -548,7 +564,7 @@ class OneOffPurchaseController extends Controller
             $purchase->amount = 0;
             $purchase->gateway = 'promo';
             $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
-                'tx' => 'PROMO-' . $purchase->id,
+                'tx' => 'PROMO-'.$purchase->id,
                 'completed_at' => now(),
             ]);
             $purchase->save();
@@ -566,20 +582,20 @@ class OneOffPurchaseController extends Controller
 
             // Manually fulfill
             $paymentController = app(\App\Http\Controllers\Api\PaymentController::class);
-            $paymentController->handleOneOffPurchase($purchase, 'PROMO-' . $purchase->id, 'success');
+            $paymentController->handleOneOffPurchase($purchase, 'PROMO-'.$purchase->id, 'success');
 
             return response()->json([
                 'ok' => true,
                 'purchase' => $purchase,
-                'tx' => 'PROMO-' . $purchase->id,
-                'checkout_request_id' => 'PROMO-' . $purchase->id,
+                'tx' => 'PROMO-'.$purchase->id,
+                'checkout_request_id' => 'PROMO-'.$purchase->id,
                 'trace_id' => $traceId,
                 'discounted_fully' => true,
             ]);
         }
 
         // initiate mpesa push via MpesaService
-        $res = $service->initiateStkPush($phone, (float)$finalAmount, 'OneOff-'.$purchase->id, $traceId);
+        $res = $service->initiateStkPush($phone, (float) $finalAmount, 'OneOff-'.$purchase->id, $traceId);
 
         Log::info('[Guest OneOff Purchase] STK initiation response', [
             'trace_id' => $traceId,
@@ -600,12 +616,13 @@ class OneOffPurchaseController extends Controller
             'body' => $res['body'] ?? null,
         ]);
 
-        if (!$res['ok']) {
+        if (! $res['ok']) {
             Log::error('[Guest OneOff Purchase] STK Push failed', [
                 'trace_id' => $traceId,
                 'purchase_id' => $purchase->id,
                 'error' => $res['message'] ?? 'unknown error',
             ]);
+
             return response()->json([
                 'ok' => false,
                 'message' => $res['message'] ?? 'Failed to initiate payment',
@@ -665,7 +682,7 @@ class OneOffPurchaseController extends Controller
             ->where('guest_identifier', $data['guest_identifier'])
             ->first();
 
-        if (!$purchase) {
+        if (! $purchase) {
             return response()->json(['ok' => false, 'message' => 'Purchase not found'], 404);
         }
 
@@ -683,7 +700,7 @@ class OneOffPurchaseController extends Controller
             ->latest('id')
             ->first();
 
-        if (!$token) {
+        if (! $token) {
             $token = GuestUnlockToken::create([
                 'token' => Str::random(64),
                 'guest_identifier' => $data['guest_identifier'],
@@ -706,19 +723,24 @@ class OneOffPurchaseController extends Controller
 
     private function maskPhone(?string $phone): ?string
     {
-        if (!$phone) return null;
+        if (! $phone) {
+            return null;
+        }
         $value = preg_replace('/\s+/', '', (string) $phone);
-        if (strlen($value) <= 5) return $value;
-        return substr($value, 0, 4) . str_repeat('*', max(0, strlen($value) - 6)) . substr($value, -2);
+        if (strlen($value) <= 5) {
+            return $value;
+        }
+
+        return substr($value, 0, 4).str_repeat('*', max(0, strlen($value) - 6)).substr($value, -2);
     }
 
-    private function resolveMpesaPhone(MpesaService $service, string|null $rawPhone, string $gateway): array
+    private function resolveMpesaPhone(MpesaService $service, ?string $rawPhone, string $gateway): array
     {
         if ($gateway !== 'mpesa') {
             return ['ok' => true, 'phone' => is_string($rawPhone) ? trim($rawPhone) : $rawPhone];
         }
 
-        if (!is_string($rawPhone) || trim($rawPhone) === '') {
+        if (! is_string($rawPhone) || trim($rawPhone) === '') {
             return [
                 'ok' => false,
                 'error' => [
@@ -730,7 +752,7 @@ class OneOffPurchaseController extends Controller
         }
 
         $normalized = $service->normalizePhone($rawPhone);
-        if (!$normalized) {
+        if (! $normalized) {
             return [
                 'ok' => false,
                 'error' => [
@@ -750,10 +772,11 @@ class OneOffPurchaseController extends Controller
         $missing = [];
         foreach ($required as $key) {
             $value = $config[$key] ?? null;
-            if (!is_string($value) || trim($value) === '') {
+            if (! is_string($value) || trim($value) === '') {
                 $missing[] = $key;
             }
         }
+
         return $missing;
     }
 
@@ -764,7 +787,7 @@ class OneOffPurchaseController extends Controller
                 'driver' => 'single',
                 'path' => storage_path('logs/mpesa-oneoff-flow.log'),
                 'level' => 'debug',
-            ])->info('[MPESA ONEOFF FLOW] ' . $stage, array_merge([
+            ])->info('[MPESA ONEOFF FLOW] '.$stage, array_merge([
                 'at' => now()->toIso8601String(),
             ], $context));
         } catch (\Throwable $_) {
@@ -772,4 +795,3 @@ class OneOffPurchaseController extends Controller
         }
     }
 }
-

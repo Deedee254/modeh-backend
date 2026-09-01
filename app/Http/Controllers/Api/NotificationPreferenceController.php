@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\NotificationPreference;
+use Illuminate\Http\Request;
 
 class NotificationPreferenceController extends Controller
 {
@@ -13,6 +13,7 @@ class NotificationPreferenceController extends Controller
     {
         $user = $request->user();
         $pref = NotificationPreference::where('user_id', $user->id)->first();
+
         return response()->json(['preferences' => $pref ? $pref->preferences : null]);
     }
 
@@ -27,10 +28,12 @@ class NotificationPreferenceController extends Controller
         if (is_string($prefs)) {
             // try to decode
             $decoded = json_decode($prefs, true);
-            if (json_last_error() === JSON_ERROR_NONE) $prefs = $decoded;
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $prefs = $decoded;
+            }
         }
 
-        if (!is_array($prefs) && !is_null($prefs)) {
+        if (! is_array($prefs) && ! is_null($prefs)) {
             return response()->json(['message' => 'preferences must be a JSON object or array'], 422);
         }
 

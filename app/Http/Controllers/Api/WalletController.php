@@ -3,14 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\Wallet;
-use App\Models\Transaction;
-use App\Models\WithdrawalRequest;
-use App\Models\User;
 use App\Models\Quiz;
+use App\Models\Transaction;
+use App\Models\User;
+use App\Models\Wallet;
+use App\Models\WithdrawalRequest;
 use App\Services\TransactionService;
 use App\Services\WalletService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -21,21 +21,22 @@ class WalletController extends Controller
     public function mine()
     {
         $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false], 401);
+        if (! $user) {
+            return response()->json(['ok' => false], 401);
+        }
         /** @var \App\Models\User $user */
-        
         $walletType = $user->role === 'quizee'
             ? Wallet::TYPE_QUIZEE
             : ($user->role === 'quiz-master' ? Wallet::TYPE_QUIZ_MASTER : null);
 
         // Initialize wallet with new balance states
         $wallet = Wallet::firstOrCreate(
-            ['user_id' => $user->id], 
+            ['user_id' => $user->id],
             [
                 'type' => $walletType,
-                'available' => 0, 
+                'available' => 0,
                 'pending' => 0,
-                'withdrawn_pending' => 0, 
+                'withdrawn_pending' => 0,
                 'settled' => 0,
                 'earned_this_month' => 0,
                 'lifetime_earned' => 0,
@@ -51,7 +52,7 @@ class WalletController extends Controller
             $wallet->type = $walletType;
             $wallet->save();
         }
-        
+
         // Check and send due reminders (API-driven, 24hr logic)
         if ($user->role === 'quiz-master') {
             try {
@@ -61,13 +62,13 @@ class WalletController extends Controller
                 Log::warning('Failed to check reminders', ['error' => $e->getMessage()]);
             }
         }
-        
+
         // Gather wallet stats (reconciliation helpers)
         $walletStats = app(WalletService::class)->getStats($user->id);
 
         // Reconcile wallet with calculated stats for quiz-masters
         // This ensures the wallet reflects actual earnings from completed transactions
-        if ($user->role === 'quiz-master' && !empty($walletStats)) {
+        if ($user->role === 'quiz-master' && ! empty($walletStats)) {
             $wallet->lifetime_earned = $walletStats['total_from_transactions'];
             $wallet->earned_this_month = $walletStats['earned_this_month'];
             $wallet->save();
@@ -85,7 +86,7 @@ class WalletController extends Controller
             $activeReferrals = $affiliate ? $affiliate->referrals()->where('status', 'active')->count() : 0;
             $totalReferrals = $affiliate ? $affiliate->referrals()->count() : 0;
             $conversionRate = $totalReferrals > 0 ? ($activeReferrals / $totalReferrals) * 100 : 0;
-            
+
             // Safely get earnings breakdown
             $earningsBreakdown = [];
             try {
@@ -114,14 +115,16 @@ class WalletController extends Controller
                 ],
             ]);
         }
-        
+
         return response()->json(['ok' => true, 'wallet' => $wallet, 'wallet_stats' => $walletStats]);
     }
 
     public function transactions(Request $request)
     {
         $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false], 401);
+        if (! $user) {
+            return response()->json(['ok' => false], 401);
+        }
 
         // Quiz-master wallet view should only expose quiz-master amounts.
         // Do not return platform_share/affiliate_share to quiz-masters.
@@ -141,10 +144,16 @@ class WalletController extends Controller
             ->whereIn('type', $visibleTypes)
             ->orderBy('created_at', 'desc');
 
-        if ($request->filled('quiz_id')) $q->where('quiz_id', $request->quiz_id);
-        if ($request->filled('from')) $q->where('created_at', '>=', $request->from);
-        if ($request->filled('to')) $q->where('created_at', '<=', $request->to);
-        $perPage = (int)$request->input('per_page', 20);
+        if ($request->filled('quiz_id')) {
+            $q->where('quiz_id', $request->quiz_id);
+        }
+        if ($request->filled('from')) {
+            $q->where('created_at', '>=', $request->from);
+        }
+        if ($request->filled('to')) {
+            $q->where('created_at', '<=', $request->to);
+        }
+        $perPage = (int) $request->input('per_page', 20);
         $perPage = $perPage > 0 ? $perPage : 20;
         $txs = $q->paginate($perPage);
 
@@ -159,8 +168,8 @@ class WalletController extends Controller
 
         $sanitized = [];
         foreach ($items as $item) {
-            $type = (string)($item->type ?? '');
-            
+            $type = (string) ($item->type ?? '');
+
             // If we have a dedicated quiz_master_payout for a payment, hide the payment row
             if ($type === Transaction::TYPE_PAYMENT) {
                 $ref = $item->reference_id ?? $item->tx_id;
@@ -172,19 +181,21 @@ class WalletController extends Controller
             // Pull quiz-master share without exposing platform numbers.
             $qmShare = 0.0;
             try {
-                $qmShare = (float)($item->{'quiz-master_share'} ?? 0);
+                $qmShare = (float) ($item->{'quiz-master_share'} ?? 0);
             } catch (\Throwable $e) {
                 $qmShare = 0.0;
             }
 
-            $amount = (float)($item->amount ?? 0);
+            $amount = (float) ($item->amount ?? 0);
             $direction = 'credit';
 
             if ($type === Transaction::TYPE_WITHDRAWAL) {
                 $direction = 'debit';
             } elseif ($type === Transaction::TYPE_PAYMENT) {
                 // For payment rows (fallback), show only quiz-master share when present.
-                if ($qmShare > 0) $amount = $qmShare;
+                if ($qmShare > 0) {
+                    $amount = $qmShare;
+                }
             }
 
             $meta = $item->meta;
@@ -194,7 +205,9 @@ class WalletController extends Controller
                     'affiliate_share', 'affiliateShare', 'affiliate',
                     'shares', // may include platform share breakdown
                 ] as $k) {
-                    if (array_key_exists($k, $meta)) unset($meta[$k]);
+                    if (array_key_exists($k, $meta)) {
+                        unset($meta[$k]);
+                    }
                 }
             }
 
@@ -213,9 +226,9 @@ class WalletController extends Controller
                     'slug' => $item->quiz->slug,
                 ] : null,
                 'tx_id' => $item->tx_id,
-                'amount' => (float)$amount,
+                'amount' => (float) $amount,
                 'direction' => $direction,
-                'balance_after' => $item->balance_after !== null ? (float)$item->balance_after : null,
+                'balance_after' => $item->balance_after !== null ? (float) $item->balance_after : null,
                 'meta' => $meta,
             ];
         }
@@ -228,18 +241,24 @@ class WalletController extends Controller
     public function requestWithdrawal(Request $request)
     {
         $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false], 401);
-        $amount = (float)$request->input('amount', 0);
-        if ($amount <= 0) return response()->json(['ok' => false, 'message' => 'Invalid amount'], 400);
+        if (! $user) {
+            return response()->json(['ok' => false], 401);
+        }
+        $amount = (float) $request->input('amount', 0);
+        if ($amount <= 0) {
+            return response()->json(['ok' => false, 'message' => 'Invalid amount'], 400);
+        }
         $wallet = Wallet::firstOrCreate(['user_id' => $user->id], ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
-        if ($amount > $wallet->available) return response()->json(['ok' => false, 'message' => 'Insufficient balance'], 400);
+        if ($amount > $wallet->available) {
+            return response()->json(['ok' => false, 'message' => 'Insufficient balance'], 400);
+        }
 
         // Perform debit and withdrawal creation atomically in a DB transaction
         $wr = null;
         try {
             DB::transaction(function () use (&$wr, $wallet, $amount, $request, $user) {
                 // debit available
-                $wallet->setAttribute('available', (string)bcsub((string)$wallet->available, (string)$amount, 2));
+                $wallet->setAttribute('available', (string) bcsub((string) $wallet->available, (string) $amount, 2));
                 $wallet->save();
 
                 // create withdrawal request
@@ -261,14 +280,15 @@ class WalletController extends Controller
             if ($wr) {
                 event(new \App\Events\WithdrawalRequestUpdated($wr->toArray(), $user->id));
             }
-        } catch (\Throwable $e) { }
+        } catch (\Throwable $e) {
+        }
 
         Log::channel('payment')->info("Withdrawal request created: User {$user->id}, Amount KES {$amount}", [
             'user_id' => $user->id,
             'amount' => $amount,
             'method' => $wr->method ?? 'unknown',
             'status' => 'pending',
-            'new_available' => (float)$wallet->available
+            'new_available' => (float) $wallet->available,
         ]);
 
         return response()->json(['ok' => true, 'withdrawal' => $wr]);
@@ -277,48 +297,51 @@ class WalletController extends Controller
     public function myWithdrawals()
     {
         $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false], 401);
+        if (! $user) {
+            return response()->json(['ok' => false], 401);
+        }
         $list = WithdrawalRequest::where('quiz_master_id', $user->id)->orderBy('created_at', 'desc')->get();
+
         return response()->json(['ok' => true, 'withdrawals' => $list]);
     }
 
     public function rewardsMy()
     {
         $user = Auth::user();
-        if (!$user) return response()->json(['ok' => false], 401);
-        
+        if (! $user) {
+            return response()->json(['ok' => false], 401);
+        }
+
         // Get user's wallet
         $wallet = Wallet::firstOrCreate(
             ['user_id' => $user->id],
             ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
         );
-        
+
         // Get transactions (rewards earned)
         $transactions = Transaction::where('quiz_master_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();
-        
+
         return response()->json([
             'ok' => true,
             'wallet' => $wallet,
-            'transactions' => $transactions
+            'transactions' => $transactions,
         ]);
     }
-
-
 
     // Admin: Finance dashboard metrics
     public function adminMetrics()
     {
         $user = Auth::user();
-        if (!$user || !isset($user->is_admin) || !$user->is_admin) {
+        if (! $user || ! isset($user->is_admin) || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
         // Platform wallet balance
         $platformUserId = User::where('role', 'admin')->orderBy('id')->first()?->id ?? 0;
         $platformWallet = Wallet::where('user_id', $platformUserId)->first();
-        $platformBalance = $platformWallet ? (float)$platformWallet->available : 0;
+        $platformBalance = $platformWallet ? (float) $platformWallet->available : 0;
 
         // Total revenue (all transactions)
         $totalRevenue = Transaction::sum('amount') ?? 0;
@@ -345,7 +368,7 @@ class WalletController extends Controller
         $qmAvailableTotal = Wallet::where('user_id', '!=', $platformUserId)
             ->where('type', Wallet::TYPE_QUIZ_MASTER)
             ->sum('available') ?? 0;
-            
+
         $affiliateAvailableTotal = Wallet::where('type', Wallet::TYPE_QUIZEE)
             ->where('user_id', '!=', $platformUserId)
             ->sum('available') ?? 0;
@@ -353,30 +376,30 @@ class WalletController extends Controller
         return response()->json([
             'ok' => true,
             'data' => [
-                'platform_balance' => (float)$platformBalance,
-                'total_revenue' => (float)$totalRevenue,
-                'cash_in_last_30' => (float)$cashInLast30,
-                'cash_out_last_30' => (float)$cashOutLast30,
-                'net_flow_last_30' => (float)($cashInLast30 + $cashOutLast30),
+                'platform_balance' => (float) $platformBalance,
+                'total_revenue' => (float) $totalRevenue,
+                'cash_in_last_30' => (float) $cashInLast30,
+                'cash_out_last_30' => (float) $cashOutLast30,
+                'net_flow_last_30' => (float) ($cashInLast30 + $cashOutLast30),
                 'revenue_breakdown' => [
-                    'quizzes' => (float)($revenueBreakdown['quiz'] ?? 0),
-                    'subscriptions' => (float)($revenueBreakdown['subscription'] ?? 0) + (float)($revenueBreakdown['package'] ?? 0),
-                    'tournaments' => (float)($revenueBreakdown['tournament'] ?? 0),
-                    'battles' => (float)($revenueBreakdown['battle'] ?? 0),
-                    'other' => (float)max(0, $totalRevenue - (
-                        (float)($revenueBreakdown['quiz'] ?? 0) + 
-                        (float)($revenueBreakdown['subscription'] ?? 0) + 
-                        (float)($revenueBreakdown['package'] ?? 0) + 
-                        (float)($revenueBreakdown['tournament'] ?? 0) + 
-                        (float)($revenueBreakdown['battle'] ?? 0)
-                    ))
+                    'quizzes' => (float) ($revenueBreakdown['quiz'] ?? 0),
+                    'subscriptions' => (float) ($revenueBreakdown['subscription'] ?? 0) + (float) ($revenueBreakdown['package'] ?? 0),
+                    'tournaments' => (float) ($revenueBreakdown['tournament'] ?? 0),
+                    'battles' => (float) ($revenueBreakdown['battle'] ?? 0),
+                    'other' => (float) max(0, $totalRevenue - (
+                        (float) ($revenueBreakdown['quiz'] ?? 0) +
+                        (float) ($revenueBreakdown['subscription'] ?? 0) +
+                        (float) ($revenueBreakdown['package'] ?? 0) +
+                        (float) ($revenueBreakdown['tournament'] ?? 0) +
+                        (float) ($revenueBreakdown['battle'] ?? 0)
+                    )),
                 ],
                 'fund_allocation' => [
-                    'platform_ops' => (float)$platformBalance,
-                    'quiz_master_wallets' => (float)$qmAvailableTotal,
-                    'affiliate_wallets' => (float)$affiliateAvailableTotal,
-                ]
-            ]
+                    'platform_ops' => (float) $platformBalance,
+                    'quiz_master_wallets' => (float) $qmAvailableTotal,
+                    'affiliate_wallets' => (float) $affiliateAvailableTotal,
+                ],
+            ],
         ]);
     }
 
@@ -384,7 +407,7 @@ class WalletController extends Controller
     public function adminTransactions(Request $request)
     {
         $user = Auth::user();
-        if (!$user || !isset($user->is_admin) || !$user->is_admin) {
+        if (! $user || ! isset($user->is_admin) || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -405,7 +428,7 @@ class WalletController extends Controller
             $query->where('created_at', '<=', $request->to);
         }
 
-        $perPage = (int)$request->input('per_page', 20);
+        $perPage = (int) $request->input('per_page', 20);
         $perPage = $perPage > 0 ? $perPage : 20;
 
         $transactions = $query->with(['user', 'quizMaster', 'quiz'])
@@ -420,12 +443,12 @@ class WalletController extends Controller
                 ?? 'unknown';
 
             $resolvedQuiz = $tx->quiz;
-            if (!$resolvedQuiz && ($meta['item_type'] ?? null) === 'quiz' && !empty($meta['item_id'])) {
+            if (! $resolvedQuiz && ($meta['item_type'] ?? null) === 'quiz' && ! empty($meta['item_id'])) {
                 $resolvedQuiz = Quiz::find($meta['item_id']);
             }
 
             $resolvedQuizMaster = $tx->quizMaster;
-            if (!$resolvedQuizMaster && $resolvedQuiz?->user_id) {
+            if (! $resolvedQuizMaster && $resolvedQuiz?->user_id) {
                 $resolvedQuizMaster = User::find($resolvedQuiz->user_id);
             }
 
@@ -470,42 +493,41 @@ class WalletController extends Controller
 
         return response()->json([
             'ok' => true,
-            'transactions' => $transactions
+            'transactions' => $transactions,
         ]);
     }
-
 
     // Admin: Get transaction flow details (debit + all credits for a payment)
     public function transactionFlow($transactionId)
     {
         $user = Auth::user();
-        if (!$user || !isset($user->is_admin) || !$user->is_admin) {
+        if (! $user || ! isset($user->is_admin) || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
         try {
             $mainTx = Transaction::find($transactionId);
-            if (!$mainTx) {
+            if (! $mainTx) {
                 return response()->json(['ok' => false, 'message' => 'Transaction not found'], 404);
             }
 
             $flow = TransactionService::getPaymentFlow($transactionId);
-            
+
             return response()->json([
                 'ok' => true,
                 'data' => [
                     'transaction_id' => $mainTx->id,
                     'tx_id' => $mainTx->tx_id,
-                    'total_amount' => (float)$mainTx->amount,
+                    'total_amount' => (float) $mainTx->amount,
                     'initiated_at' => $mainTx->created_at,
                     'flow' => $flow,
                     'summary' => [
-                        'total_in' => (float)$mainTx->amount,
-                        'affiliate_share' => (float)($mainTx->affiliate_share ?? 0),
-                        'quiz_master_share' => (float)($mainTx->quiz_master_share ?? 0),
-                        'platform_share' => (float)($mainTx->platform_share ?? 0),
-                    ]
-                ]
+                        'total_in' => (float) $mainTx->amount,
+                        'affiliate_share' => (float) ($mainTx->affiliate_share ?? 0),
+                        'quiz_master_share' => (float) ($mainTx->quiz_master_share ?? 0),
+                        'platform_share' => (float) ($mainTx->platform_share ?? 0),
+                    ],
+                ],
             ]);
         } catch (\Exception $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
@@ -516,7 +538,7 @@ class WalletController extends Controller
     public function transactionHistory(Request $request)
     {
         $user = Auth::user();
-        if (!$user || !isset($user->is_admin) || !$user->is_admin) {
+        if (! $user || ! isset($user->is_admin) || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -524,14 +546,14 @@ class WalletController extends Controller
             $query = Transaction::query()
                 ->where(function ($q) {
                     $q->where('type', Transaction::TYPE_PAYMENT)
-                      ->orWhere(function ($nested) {
-                          $nested->whereNull('type')
-                              ->where(function ($shares) {
-                                  $shares->where('platform_share', '>', 0)
-                                      ->orWhere('quiz-master_share', '>', 0)
-                                      ->orWhere('affiliate_share', '>', 0);
-                              });
-                      });
+                        ->orWhere(function ($nested) {
+                            $nested->whereNull('type')
+                                ->where(function ($shares) {
+                                    $shares->where('platform_share', '>', 0)
+                                        ->orWhere('quiz-master_share', '>', 0)
+                                        ->orWhere('affiliate_share', '>', 0);
+                                });
+                        });
                 });
 
             if ($request->filled('from')) {
@@ -549,13 +571,13 @@ class WalletController extends Controller
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('tx_id', 'like', "%{$search}%")
-                      ->orWhereHas('quiz', function ($qq) use ($search) {
-                          $qq->where('title', 'like', "%{$search}%");
-                      });
+                        ->orWhereHas('quiz', function ($qq) use ($search) {
+                            $qq->where('title', 'like', "%{$search}%");
+                        });
                 });
             }
 
-            $perPage = (int)$request->input('per_page', 20);
+            $perPage = (int) $request->input('per_page', 20);
             $perPage = $perPage > 0 && $perPage <= 100 ? $perPage : 20;
 
             $transactions = $query->with(['user', 'quizMaster', 'quiz'])
@@ -570,12 +592,12 @@ class WalletController extends Controller
                     ?? 'unknown';
 
                 $resolvedQuiz = $tx->quiz;
-                if (!$resolvedQuiz && ($meta['item_type'] ?? null) === 'quiz' && !empty($meta['item_id'])) {
+                if (! $resolvedQuiz && ($meta['item_type'] ?? null) === 'quiz' && ! empty($meta['item_id'])) {
                     $resolvedQuiz = Quiz::find($meta['item_id']);
                 }
 
                 $resolvedQuizMaster = $tx->quizMaster;
-                if (!$resolvedQuizMaster && $resolvedQuiz?->user_id) {
+                if (! $resolvedQuizMaster && $resolvedQuiz?->user_id) {
                     $resolvedQuizMaster = User::find($resolvedQuiz->user_id);
                 }
 
@@ -617,26 +639,27 @@ class WalletController extends Controller
 
             return response()->json([
                 'ok' => true,
-                'data' => $transactions
+                'data' => $transactions,
             ]);
         } catch (\Exception $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
         }
     }
+
     // Admin: Get platform financial summary
     public function platformSummary()
     {
         $user = Auth::user();
-        if (!$user || !isset($user->is_admin) || !$user->is_admin) {
+        if (! $user || ! isset($user->is_admin) || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
         try {
             $summary = TransactionService::getPlatformSummary();
-            
+
             return response()->json([
                 'ok' => true,
-                'data' => $summary
+                'data' => $summary,
             ]);
         } catch (\Exception $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
@@ -650,7 +673,7 @@ class WalletController extends Controller
     public function myUnpaidQuizzes(Request $request)
     {
         $user = Auth::user();
-        if (!$user || $user->role !== 'quiz-master') {
+        if (! $user || $user->role !== 'quiz-master') {
             return response()->json(['ok' => false, 'message' => 'Only quiz masters can view unpaid quizzes'], 403);
         }
 
@@ -667,7 +690,7 @@ class WalletController extends Controller
             $query->where('payment_due_at', '<', now());
         }
 
-        $perPage = (int)$request->input('per_page', 20);
+        $perPage = (int) $request->input('per_page', 20);
         $perPage = $perPage > 0 && $perPage <= 100 ? $perPage : 20;
 
         $payments = $query->with(['quizee:id,name,email', 'quiz:id,title,slug', 'quizAttempt:id,score,max_score'])
@@ -676,7 +699,7 @@ class WalletController extends Controller
 
         return response()->json([
             'ok' => true,
-            'unpaid_quizzes' => $payments
+            'unpaid_quizzes' => $payments,
         ]);
     }
 
@@ -687,7 +710,7 @@ class WalletController extends Controller
     public function adminPendingPayments(Request $request)
     {
         $user = Auth::user();
-        if (!$user || !$user->is_admin) {
+        if (! $user || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -713,17 +736,17 @@ class WalletController extends Controller
             $query->where('quizee_id', $request->quizee_id);
         }
 
-        $perPage = (int)$request->input('per_page', 20);
+        $perPage = (int) $request->input('per_page', 20);
         $perPage = $perPage > 0 && $perPage <= 100 ? $perPage : 20;
 
         $payments = $query->with([
             'quizee:id,name,email',
             'quizMaster:id,name,email',
             'quiz:id,title,slug',
-            'quizAttempt:id,score,max_score'
+            'quizAttempt:id,score,max_score',
         ])
-        ->orderBy('payment_due_at', 'asc')
-        ->paginate($perPage);
+            ->orderBy('payment_due_at', 'asc')
+            ->paginate($perPage);
 
         // Add summary stats
         $stats = [
@@ -744,7 +767,7 @@ class WalletController extends Controller
         return response()->json([
             'ok' => true,
             'pending_payments' => $payments,
-            'stats' => $stats
+            'stats' => $stats,
         ]);
     }
 
@@ -755,21 +778,21 @@ class WalletController extends Controller
     public function sendPendingPaymentReminder(Request $request, $pendingPaymentId)
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 401);
         }
 
         $payment = \App\Models\PendingQuizPayment::findOrFail($pendingPaymentId);
 
         // Only quiz master or admin can send reminders
-        if ($user->id !== $payment->quiz_master_id && !$user->is_admin) {
+        if ($user->id !== $payment->quiz_master_id && ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
         try {
             // Send custom reminder message from quiz master
             $message = $request->input('message', null);
-            
+
             app(\App\Services\ReminderService::class)->sendQuizMasterReminder(
                 $payment,
                 $message
@@ -777,17 +800,16 @@ class WalletController extends Controller
 
             return response()->json([
                 'ok' => true,
-                'message' => 'Reminder sent to quizee'
+                'message' => 'Reminder sent to quizee',
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'ok' => false,
                 'message' => 'Failed to send reminder',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     /**
      * Admin broadcasts a notification to a filtered set of users.
@@ -796,7 +818,7 @@ class WalletController extends Controller
     public function adminBroadcast(Request $request)
     {
         $user = Auth::user();
-        if (!$user || !$user->is_admin) {
+        if (! $user || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -878,7 +900,7 @@ class WalletController extends Controller
             $query->where('role', 'quiz-master');
         } elseif ($type === 'quiz-attempts') {
             $quizId = $this->resolveQuizId($targets['quiz_id'] ?? null);
-            if (!$quizId) {
+            if (! $quizId) {
                 return [];
             }
             $query->whereHas('quizAttempts', function ($attempts) use ($quizId) {
@@ -924,9 +946,10 @@ class WalletController extends Controller
         }
 
         $value = trim((string) $rawQuiz);
+
         return Quiz::query()
             ->where('slug', $value)
-            ->orWhere('title', 'like', '%' . $value . '%')
+            ->orWhere('title', 'like', '%'.$value.'%')
             ->value('id');
     }
 
@@ -967,15 +990,15 @@ class WalletController extends Controller
 
     private function applyTaxonomyFilters($profileQuery, array $levelIds, array $gradeIds, array $subjectIds): void
     {
-        if (!empty($levelIds)) {
+        if (! empty($levelIds)) {
             $profileQuery->whereIn('level_id', $levelIds);
         }
 
-        if (!empty($gradeIds)) {
+        if (! empty($gradeIds)) {
             $profileQuery->whereIn('grade_id', $gradeIds);
         }
 
-        if (!empty($subjectIds)) {
+        if (! empty($subjectIds)) {
             $profileQuery->where(function ($subjectQuery) use ($subjectIds) {
                 foreach ($subjectIds as $subjectId) {
                     $subjectQuery->orWhereJsonContains('subjects', $subjectId);
@@ -991,7 +1014,7 @@ class WalletController extends Controller
     public function adminSendChatMessage(Request $request)
     {
         $user = Auth::user();
-        if (!$user || !$user->is_admin) {
+        if (! $user || ! $user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -1025,13 +1048,13 @@ class WalletController extends Controller
 
             return response()->json([
                 'ok' => true,
-                'message' => 'Message sent successfully'
+                'message' => 'Message sent successfully',
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'ok' => false,
                 'message' => 'Failed to send message',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -1043,7 +1066,7 @@ class WalletController extends Controller
     public function processPayment(Request $request)
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 401);
         }
 
@@ -1078,7 +1101,7 @@ class WalletController extends Controller
                         'ok' => true,
                         'message' => 'Payment processed successfully',
                         'result' => $result,
-                        'status' => 'completed'
+                        'status' => 'completed',
                     ]);
                 } else {
                     // Payment pending: create pending payment record for recovery
@@ -1094,7 +1117,7 @@ class WalletController extends Controller
                         'ok' => true,
                         'message' => 'Payment pending - will be reminded',
                         'pending_payment' => $pendingPayment,
-                        'status' => 'pending'
+                        'status' => 'pending',
                     ]);
                 }
             });
@@ -1102,12 +1125,8 @@ class WalletController extends Controller
             return response()->json([
                 'ok' => false,
                 'message' => 'Failed to process payment',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
 }
-
-
-
-

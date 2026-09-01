@@ -3,27 +3,30 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\MpesaTransactionResource\Pages;
+use App\Models\Invoice;
 use App\Models\MpesaTransaction;
 use App\Models\OneOffPurchase;
-use App\Models\Invoice;
+use Filament\Actions\Action;
 use Filament\Resources\Resource;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
-use Filament\Actions\Action;
-use Filament\Support\Enums\FontWeight;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 
 class MpesaTransactionResource extends Resource
 {
     protected static ?string $model = MpesaTransaction::class;
+
     protected static ?string $navigationLabel = 'M-Pesa Transactions';
-    /** @var string|null $navigationGroup */
+
+    /** @var string|null */
     protected static \UnitEnum|string|null $navigationGroup = 'Payments & Subscriptions';
+
     protected static ?int $navigationSort = 4;
+
     protected static ?string $recordTitleAttribute = 'mpesa_receipt';
 
     public static function table(Table $table): Table
@@ -116,7 +119,7 @@ class MpesaTransactionResource extends Resource
                             }
 
                             $purchase = OneOffPurchase::find($record->billable_id);
-                            if (!$purchase) {
+                            if (! $purchase) {
                                 throw new \Exception('Purchase not found');
                             }
 
@@ -131,6 +134,7 @@ class MpesaTransactionResource extends Resource
                                     ->title('Invoice Exists')
                                     ->body("Invoice {$existing->invoice_number} already exists for this purchase")
                                     ->send();
+
                                 return;
                             }
 
@@ -184,10 +188,9 @@ class MpesaTransactionResource extends Resource
                                 ->send();
                         }
                     })
-                    ->visible(fn (MpesaTransaction $record) => 
-                        $record->billable_type === 'App\Models\OneOffPurchase' &&
+                    ->visible(fn (MpesaTransaction $record) => $record->billable_type === 'App\Models\OneOffPurchase' &&
                         $record->status === 'success' &&
-                        !Invoice::where('invoiceable_type', OneOffPurchase::class)
+                        ! Invoice::where('invoiceable_type', OneOffPurchase::class)
                             ->where('invoiceable_id', $record->billable_id)
                             ->exists()
                     ),
@@ -202,7 +205,7 @@ class MpesaTransactionResource extends Resource
                             }
 
                             $purchase = OneOffPurchase::find($record->billable_id);
-                            if (!$purchase) {
+                            if (! $purchase) {
                                 throw new \Exception('Purchase not found');
                             }
 
@@ -228,8 +231,7 @@ class MpesaTransactionResource extends Resource
                                 ->send();
                         }
                     })
-                    ->visible(fn (MpesaTransaction $record) => 
-                        $record->billable_type === 'App\Models\OneOffPurchase' &&
+                    ->visible(fn (MpesaTransaction $record) => $record->billable_type === 'App\Models\OneOffPurchase' &&
                         $record->status === 'success'
                     ),
                 /* @phpstan-ignore-next-line */

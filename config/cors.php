@@ -7,7 +7,7 @@
 //   CORS_ALLOWED_ORIGINS=https://modeh.co.ke,https://admin.modeh.co.ke
 
 $corsOrigins = env('CORS_ALLOWED_ORIGINS');
-if (!$corsOrigins) {
+if (! $corsOrigins) {
     throw new \RuntimeException('Missing required environment variable: CORS_ALLOWED_ORIGINS');
 }
 

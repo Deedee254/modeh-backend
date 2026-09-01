@@ -7,10 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * PricingSetting Model
- * 
+ *
  * Stores global default pricing for quizzes and battles.
  * Intended to be a singleton: only one record in the table.
- * 
+ *
  * @property int $id
  * @property float|null $default_quiz_one_off_price Global default one-off price for quizzes (if quiz has no price set)
  * @property float|null $default_battle_one_off_price Global default one-off price for battles (if battle has no price set)
@@ -44,6 +44,7 @@ class PricingSetting extends Model
         if ($record) {
             return $record;
         }
+
         return static::create([]);
     }
 }

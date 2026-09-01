@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use App\Models\Subject;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
+use App\Models\Subject;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class QuizMasterController extends Controller
 {
@@ -20,7 +20,7 @@ class QuizMasterController extends Controller
     {
         $request = request();
         $currentUser = Auth::guard('sanctum')->user();
-        
+
         // Start building the query for users with a quiz master profile
         $query = User::query()->whereHas('quizMasterProfile');
 
@@ -31,7 +31,7 @@ class QuizMasterController extends Controller
             }
             if ($request->has('subject_id') && $request->subject_id) {
                 // Assumes 'subjects' is a JSON array of IDs in the profile
-                $q->whereJsonContains('subjects', (int)$request->subject_id);
+                $q->whereJsonContains('subjects', (int) $request->subject_id);
             }
         });
 
@@ -43,13 +43,13 @@ class QuizMasterController extends Controller
             // Filter users whose name matches the slug pattern
             $query->where(function ($slugQuery) use ($request, $slugParts) {
                 $slugQuery->whereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%{$request->slug}%"])
-                    ->orWhereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ["%" . implode("%", $slugParts) . "%"]);
+                    ->orWhereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE LOWER(?)", ['%'.implode('%', $slugParts).'%']);
             });
-            
+
             $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes' => function ($q) use ($currentUser) {
                 // When eager loading for the list, we need to be careful with the user context.
                 // We'll use a subquery to handle the OR logic properly within the relationship constraint.
-                $q->where(function($query) use ($currentUser) {
+                $q->where(function ($query) use ($currentUser) {
                     $query->where('is_approved', true)->where('visibility', 'published');
                     if ($currentUser) {
                         // Owners see their own quizzes; quizees see all published quizzes on profiles
@@ -57,21 +57,21 @@ class QuizMasterController extends Controller
                             $query->orWhere('visibility', 'published');
                         } else {
                             $query->orWhere('user_id', $currentUser->id)
-                                  ->orWhere('created_by', $currentUser->id);
+                                ->orWhere('created_by', $currentUser->id);
                         }
                     }
                 })->with('topic');
             }])->get();
         } else {
             $quizMasters = $query->with(['quizMasterProfile.grade', 'quizzes' => function ($q) use ($currentUser) {
-                $q->where(function($query) use ($currentUser) {
+                $q->where(function ($query) use ($currentUser) {
                     $query->where('is_approved', true)->where('visibility', 'published');
                     if ($currentUser) {
                         if ($currentUser->role === 'quizee' || $currentUser->is_admin) {
                             $query->orWhere('visibility', 'published');
                         } else {
                             $query->orWhere('user_id', $currentUser->id)
-                                  ->orWhere('created_by', $currentUser->id);
+                                ->orWhere('created_by', $currentUser->id);
                         }
                     }
                 })->with('topic');
@@ -83,17 +83,17 @@ class QuizMasterController extends Controller
 
         // Check if results are paginated or collection
         $isPaginated = $quizMasters instanceof \Illuminate\Pagination\AbstractPaginator;
-        
+
         // Transform the collection for the frontend.
         if ($isPaginated) {
             $collection = $quizMasters->getCollection();
         } else {
             $collection = $quizMasters;
         }
-        
+
         $collection->transform(function ($user) use ($currentUserId) {
             $profile = $user->quizMasterProfile;
-            if (!$profile) {
+            if (! $profile) {
                 return null;
             }
             $subjects = Subject::whereIn('id', $profile->subjects ?? [])->get()
@@ -176,6 +176,7 @@ class QuizMasterController extends Controller
         // If it's a paginated collection, reconstruct it; otherwise return wrapped result
         if ($isPaginated) {
             $quizMasters->setCollection($collection);
+
             return response()->json($quizMasters);
         } else {
             return response()->json(['data' => $collection->values()]);
@@ -194,26 +195,26 @@ class QuizMasterController extends Controller
         if (is_numeric($id)) {
             $userQuery->where('id', $id);
         } else {
-            $userQuery->where(function($q) use ($id) {
+            $userQuery->where(function ($q) use ($id) {
                 $q->whereRaw("LOWER(REPLACE(name, ' ', '-')) = LOWER(?)", [$id]);
             });
         }
 
         $user = $userQuery->with(['quizMasterProfile', 'quizzes' => function ($q) use ($currentUser) {
-            $q->where(function($query) use ($currentUser) {
+            $q->where(function ($query) use ($currentUser) {
                 // By default, show approved and published
                 $query->where('is_approved', true)->where('visibility', 'published');
-                
+
                 if ($currentUser) {
                     // Quiz Master viewing their own profile should see ALL their quizzes
                     // Quizees (students) should see all PUBLISHED quizzes even if not approved
                     // Admins see everything
-                    $query->orWhere(function($inner) use ($currentUser) {
+                    $query->orWhere(function ($inner) use ($currentUser) {
                         if ($currentUser->role === 'quizee' || $currentUser->is_admin) {
-                             $inner->where('visibility', 'published');
+                            $inner->where('visibility', 'published');
                         } else {
-                             $inner->where('user_id', $currentUser->id)
-                                   ->orWhere('created_by', $currentUser->id);
+                            $inner->where('user_id', $currentUser->id)
+                                ->orWhere('created_by', $currentUser->id);
                         }
                     });
                 }
@@ -221,7 +222,7 @@ class QuizMasterController extends Controller
         }])->firstOrFail();
 
         // Ensure the user has a quiz master profile.
-        if (!$user->quizMasterProfile) {
+        if (! $user->quizMasterProfile) {
             return response()->json(['message' => 'Quiz master not found'], 404);
         }
 
@@ -326,7 +327,7 @@ class QuizMasterController extends Controller
     public function quizeeStats(Request $request, User $user)
     {
         $quizMaster = $request->user();
-        if (!$quizMaster || $quizMaster->role !== 'quiz-master') {
+        if (! $quizMaster || $quizMaster->role !== 'quiz-master') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

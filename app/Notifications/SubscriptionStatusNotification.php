@@ -3,15 +3,15 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Notification;
-use Illuminate\Notifications\Messages\DatabaseMessage;
 use Illuminate\Notifications\Messages\BroadcastMessage;
+use Illuminate\Notifications\Notification;
 
 class SubscriptionStatusNotification extends Notification
 {
     use Queueable;
 
     protected $subscription;
+
     protected $message;
 
     public function __construct($subscription, $message = '')

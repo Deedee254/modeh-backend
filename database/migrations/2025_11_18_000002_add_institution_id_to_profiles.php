@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('quiz_masters', function (Blueprint $table) {
-            if (!Schema::hasColumn('quiz_masters', 'institution_id')) {
+            if (! Schema::hasColumn('quiz_masters', 'institution_id')) {
                 // Only use the AFTER modifier when the referenced column exists.
                 if (Schema::hasColumn('quiz_masters', 'level_id')) {
                     $table->unsignedBigInteger('institution_id')->nullable()->after('level_id');
@@ -27,7 +27,7 @@ return new class extends Migration
         });
 
         Schema::table('quizees', function (Blueprint $table) {
-            if (!Schema::hasColumn('quizees', 'institution_id')) {
+            if (! Schema::hasColumn('quizees', 'institution_id')) {
                 if (Schema::hasColumn('quizees', 'level_id')) {
                     $table->unsignedBigInteger('institution_id')->nullable()->after('level_id');
                 } else {

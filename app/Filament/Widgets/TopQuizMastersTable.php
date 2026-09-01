@@ -2,10 +2,10 @@
 
 namespace App\Filament\Widgets;
 
-use Filament\Widgets\TableWidget;
-use Filament\Widgets\Concerns\InteractsWithPageFilters;
-use Filament\Tables\Columns\TextColumn;
 use App\Models\User;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
+use Filament\Widgets\TableWidget;
 
 class TopQuizMastersTable extends TableWidget
 {
@@ -20,12 +20,16 @@ class TopQuizMastersTable extends TableWidget
         $this->columnSpan = 1;
 
         // Optionally apply page filters that are quiz-scoped (level/grade/creator)
-        if (!empty($this->pageFilters['level']) || !empty($this->pageFilters['grade'])) {
+        if (! empty($this->pageFilters['level']) || ! empty($this->pageFilters['grade'])) {
             $level = $this->pageFilters['level'] ?? null;
             $grade = $this->pageFilters['grade'] ?? null;
             $q->whereHas('quizzes', function ($qq) use ($level, $grade) {
-                if ($level) $qq->where('level_id', $level);
-                if ($grade) $qq->where('grade_id', $grade);
+                if ($level) {
+                    $qq->where('level_id', $level);
+                }
+                if ($grade) {
+                    $qq->where('grade_id', $grade);
+                }
             });
         }
 

@@ -4,7 +4,6 @@ namespace App\Notifications;
 
 use App\Models\PendingQuizPayment;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -15,8 +14,7 @@ class PendingPaymentReminderNotification extends Notification
     public function __construct(
         public PendingQuizPayment $payment,
         public int $reminderNumber = 1
-    ) {
-    }
+    ) {}
 
     public function via(object $notifiable): array
     {
@@ -26,9 +24,9 @@ class PendingPaymentReminderNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $messages = [
-            1 => "You have an outstanding payment for a quiz.",
-            2 => "Reminder: Your quiz payment is still pending.",
-            3 => "FINAL REMINDER: Your payment is due very soon!",
+            1 => 'You have an outstanding payment for a quiz.',
+            2 => 'Reminder: Your quiz payment is still pending.',
+            3 => 'FINAL REMINDER: Your payment is due very soon!',
         ];
 
         $message = $messages[$this->reminderNumber] ?? $messages[3];

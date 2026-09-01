@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\PendingQuizPayment;
-use App\Models\User;
 use App\Notifications\PendingPaymentReminderNotification;
 use Illuminate\Support\Facades\DB;
 
@@ -40,7 +39,7 @@ class ReminderService
                         );
                     }
                 } catch (\Exception $e) {
-                    \Log::error('Failed to send notification: ' . $e->getMessage());
+                    \Log::error('Failed to send notification: '.$e->getMessage());
                 }
 
                 // Send chat message
@@ -97,7 +96,7 @@ class ReminderService
                 'message' => $message,
                 'pending_payment_id' => $payment->id,
                 'reminder_number' => $reminderNumber,
-                'amount' => (float)$payment->amount,
+                'amount' => (float) $payment->amount,
                 'quiz_id' => $quiz->id,
                 'quiz_master_id' => $quizMaster->id,
                 'action_link' => "/checkout/{$quiz->slug}?pending_id={$payment->id}",
@@ -117,8 +116,8 @@ class ReminderService
         $quizMaster = $payment->quizMaster;
         $quiz = $payment->quiz;
 
-        $message = $customMessage ?? 
-            "Hi {$payment->quizee->name}, just reminding you about the pending payment for \"{$quiz->title}\". " .
+        $message = $customMessage ??
+            "Hi {$payment->quizee->name}, just reminding you about the pending payment for \"{$quiz->title}\". ".
             "Amount: KES {$payment->amount}. Please complete payment to access your results.";
 
         // Create notification entry for inbox message

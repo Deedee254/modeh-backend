@@ -9,14 +9,14 @@ return new class extends Migration
     public function up()
     {
         Schema::table('user_achievements', function (Blueprint $table) {
-            if (!Schema::hasColumn('user_achievements', 'attempt_id')) {
+            if (! Schema::hasColumn('user_achievements', 'attempt_id')) {
                 $table->unsignedBigInteger('attempt_id')->nullable()->after('achievement_id');
                 $table->foreign('attempt_id')->references('id')->on('quiz_attempts')->nullOnDelete();
             }
         });
 
         Schema::table('user_badges', function (Blueprint $table) {
-            if (!Schema::hasColumn('user_badges', 'attempt_id')) {
+            if (! Schema::hasColumn('user_badges', 'attempt_id')) {
                 $table->unsignedBigInteger('attempt_id')->nullable()->after('badge_id');
                 $table->foreign('attempt_id')->references('id')->on('quiz_attempts')->nullOnDelete();
             }

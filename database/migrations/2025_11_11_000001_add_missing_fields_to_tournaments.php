@@ -10,12 +10,12 @@ return new class extends Migration
     {
         Schema::table('tournaments', function (Blueprint $table) {
             // Add is_featured column if it doesn't exist
-            if (!Schema::hasColumn('tournaments', 'is_featured')) {
+            if (! Schema::hasColumn('tournaments', 'is_featured')) {
                 $table->boolean('is_featured')->default(false)->after('status');
             }
 
             // Add timeline column if it doesn't exist
-            if (!Schema::hasColumn('tournaments', 'timeline')) {
+            if (! Schema::hasColumn('tournaments', 'timeline')) {
                 $table->json('timeline')->nullable()->after('rules')->comment('Tournament timeline phases');
             }
         });

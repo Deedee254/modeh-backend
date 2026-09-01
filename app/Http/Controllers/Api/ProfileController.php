@@ -3,15 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\User;
-use App\Models\Subject;
-use App\Models\Institution;
 use App\Http\Resources\UserResource;
-use Illuminate\Support\Facades\Validator;
+use App\Models\Institution;
+use App\Models\User;
 use App\Services\OnboardingService;
 use App\Services\SessionUserCacheService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Validator;
 
 class ProfileController extends Controller
 {
@@ -24,7 +23,7 @@ class ProfileController extends Controller
 
     protected function normalizeInstitutionIdFromRequest(Request $request): void
     {
-        if (!$request->has('institution_id')) {
+        if (! $request->has('institution_id')) {
             return;
         }
 
@@ -37,6 +36,7 @@ class ProfileController extends Controller
             $trimmed = trim($rawValue);
             if (in_array(strtolower($trimmed), ['not_applicable', 'not applicable', 'n/a', 'na'], true)) {
                 $request->merge(['institution_id' => null]);
+
                 return;
             }
         }
@@ -63,6 +63,7 @@ class ProfileController extends Controller
             $request->merge(['institution_id' => $institutionId]);
         }
     }
+
     /**
      * Update the quiz master's profile (partial updates only).
      */
@@ -71,7 +72,7 @@ class ProfileController extends Controller
         $user = $request->user();
 
         $this->normalizeInstitutionIdFromRequest($request);
-        
+
         if ($user->role !== 'quiz-master') {
             return response()->json(['message' => 'Not authorized'], 403);
         }
@@ -95,7 +96,7 @@ class ProfileController extends Controller
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
-        
+
         // Only update fields that were actually provided in the request
         $updateData = [];
         if ($request->has('institution')) {
@@ -127,11 +128,11 @@ class ProfileController extends Controller
         }
 
         // Only update if there are fields to update
-        if (!empty($updateData)) {
+        if (! empty($updateData)) {
             $profile->update($updateData);
         }
 
-        if ($request->has('institution') && $request->filled('institution') && !$request->filled('institution_id')) {
+        if ($request->has('institution') && $request->filled('institution') && ! $request->filled('institution_id')) {
             $this->onboardingService->createApprovalRequestIfNeeded(
                 $user,
                 $profile,
@@ -151,7 +152,7 @@ class ProfileController extends Controller
 
         // Return updated user with relationships
         $user->load(['quizMasterProfile.grade', 'quizMasterProfile.level', 'quizMasterProfile.institution']);
-        
+
         // Sync profile completion status
         $this->onboardingService->syncProfileCompletionStatus($user);
 
@@ -173,7 +174,7 @@ class ProfileController extends Controller
         $user = $request->user();
 
         $this->normalizeInstitutionIdFromRequest($request);
-        
+
         if ($user->role !== 'quizee') {
             return response()->json(['message' => 'Not authorized'], 403);
         }
@@ -196,7 +197,7 @@ class ProfileController extends Controller
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
-        
+
         // Only update fields that were actually provided in the request
         $updateData = [];
         if ($request->has('institution')) {
@@ -226,11 +227,11 @@ class ProfileController extends Controller
         }
 
         // Only update if there are fields to update
-        if (!empty($updateData)) {
+        if (! empty($updateData)) {
             $profile->update($updateData);
         }
 
-        if ($request->has('institution') && $request->filled('institution') && !$request->filled('institution_id')) {
+        if ($request->has('institution') && $request->filled('institution') && ! $request->filled('institution_id')) {
             $this->onboardingService->createApprovalRequestIfNeeded(
                 $user,
                 $profile,
@@ -250,7 +251,7 @@ class ProfileController extends Controller
 
         // Return updated user with relationships using UserResource for clean response
         $user->load(['quizeeProfile.grade', 'quizeeProfile.level', 'quizeeProfile.institution']);
-        
+
         // Sync profile completion status
         $this->onboardingService->syncProfileCompletionStatus($user);
 

@@ -3,31 +3,27 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TournamentResource\Pages;
-use App\Models\Tournament;
-use App\Models\Question;
 use App\Models\Grade;
 use App\Models\Subject;
 use App\Models\Topic;
+use App\Models\Tournament;
 use Filament\Forms;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Grid;
-use Filament\Actions\Action;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\HtmlString;
-
-use PhpOffice\PhpSpreadsheet\IOFactory;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 
 class TournamentResource extends Resource
 {
     protected static ?string $model = Tournament::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-trophy';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Tournaments';
+
     protected static ?int $navigationSort = 1;
 
     protected static function getBasicInfoSection(): array
@@ -132,7 +128,7 @@ class TournamentResource extends Resource
                                 $get('grade_options_version');
 
                                 $levelId = $get('level_id');
-                                if (!$levelId) {
+                                if (! $levelId) {
                                     return [];
                                 }
 
@@ -158,7 +154,7 @@ class TournamentResource extends Resource
                                 $set('subject_options_version', ($get('subject_options_version') ?? 0) + 1);
                                 $set('topic_options_version', ($get('topic_options_version') ?? 0) + 1);
                             })
-                            ->disabled(fn ($get) => !$get('level_id')),
+                            ->disabled(fn ($get) => ! $get('level_id')),
 
                         Forms\Components\Select::make('subject_id')
                             ->label('Subject')
@@ -166,7 +162,7 @@ class TournamentResource extends Resource
                                 $get('subject_options_version');
 
                                 $gradeId = $get('grade_id');
-                                if (!$gradeId) {
+                                if (! $gradeId) {
                                     return [];
                                 }
 
@@ -185,7 +181,7 @@ class TournamentResource extends Resource
                                 // Invalidate topic preload
                                 $set('topic_options_version', ($get('topic_options_version') ?? 0) + 1);
                             })
-                            ->disabled(fn ($get) => !$get('grade_id')),
+                            ->disabled(fn ($get) => ! $get('grade_id')),
 
                         Forms\Components\Select::make('topic_id')
                             ->label('Topic')
@@ -193,7 +189,7 @@ class TournamentResource extends Resource
                                 $get('topic_options_version');
 
                                 $subjectId = $get('subject_id');
-                                if (!$subjectId) {
+                                if (! $subjectId) {
                                     return [];
                                 }
 
@@ -206,9 +202,9 @@ class TournamentResource extends Resource
                             ->nullable()
                             ->placeholder('Select Topic')
                             ->searchable()
-                            ->disabled(fn ($get) => !$get('subject_id')),
-                        ]),
+                            ->disabled(fn ($get) => ! $get('subject_id')),
                     ]),
+                ]),
         ];
     }
 
@@ -396,7 +392,7 @@ class TournamentResource extends Resource
                                 ->pluck('display_name', 'id'))
                             ->searchable()
                             ->live()
-                            ->disabled(fn ($get) => !$get('level_id'))
+                            ->disabled(fn ($get) => ! $get('level_id'))
                             ->afterStateUpdated(fn ($set) => $set('subject_id', null)),
 
                         Forms\Components\Select::make('subject_id')
@@ -406,7 +402,7 @@ class TournamentResource extends Resource
                                 ->orderBy('name')
                                 ->pluck('name', 'id'))
                             ->searchable()
-                            ->disabled(fn ($get) => !$get('grade_id')),
+                            ->disabled(fn ($get) => ! $get('grade_id')),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
@@ -430,7 +426,7 @@ class TournamentResource extends Resource
             ->actions([
                 \Filament\Actions\ViewAction::make(),
                 \Filament\Actions\EditAction::make()
-                    ->visible(fn (Tournament $record): bool => 
+                    ->visible(fn (Tournament $record): bool =>
                         // Allow edit for admins on any tournament, or anyone on upcoming tournaments
                         in_array(Auth::user()?->role, ['admin', 'super-admin']) || $record->status === 'upcoming'
                     ),

@@ -2,15 +2,16 @@
 
 namespace App\Filament\Widgets;
 
-use Filament\Widgets\PieChartWidget;
-use Filament\Widgets\Concerns\InteractsWithPageFilters;
-use App\Models\Subject;
 use App\Models\Quiz;
+use App\Models\Subject;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
+use Filament\Widgets\PieChartWidget;
 use Illuminate\Support\Facades\DB;
 
 class TopSubjectsPie extends PieChartWidget
 {
     protected static ?int $sort = 10;
+
     protected int|string|array $columnSpan = [
         'sm' => 1,
         'md' => 1,
@@ -25,23 +26,22 @@ class TopSubjectsPie extends PieChartWidget
         // Get top subjects by quiz count
         $query = DB::table('quizzes')
             ->select('subject_id', DB::raw('count(*) as cnt'))
-            ->whereNotNull('subject_id')
-        ;
+            ->whereNotNull('subject_id');
 
-        if (!empty($this->pageFilters['startDate'])) {
+        if (! empty($this->pageFilters['startDate'])) {
             $query->whereDate('created_at', '>=', $this->pageFilters['startDate']);
         }
-        if (!empty($this->pageFilters['endDate'])) {
+        if (! empty($this->pageFilters['endDate'])) {
             $query->whereDate('created_at', '<=', $this->pageFilters['endDate']);
         }
 
-        if (!empty($this->pageFilters['level'])) {
+        if (! empty($this->pageFilters['level'])) {
             $query->where('level_id', $this->pageFilters['level']);
         }
-        if (!empty($this->pageFilters['grade'])) {
+        if (! empty($this->pageFilters['grade'])) {
             $query->where('grade_id', $this->pageFilters['grade']);
         }
-        if (!empty($this->pageFilters['creator'])) {
+        if (! empty($this->pageFilters['creator'])) {
             $query->where('user_id', $this->pageFilters['creator']);
         }
 

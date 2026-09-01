@@ -15,11 +15,11 @@ return new class extends Migration
             // Qualifier configuration
             $table->integer('qualifier_per_question_seconds')->default(30)->after('max_participants');
             $table->integer('qualifier_question_count')->default(10)->after('qualifier_per_question_seconds');
-            
+
             // Battle configuration
             $table->integer('battle_per_question_seconds')->default(30)->after('qualifier_question_count');
             $table->integer('battle_question_count')->default(10)->after('battle_per_question_seconds');
-            
+
             // Tie-breaker and selection rules
             $table->string('qualifier_tie_breaker')->default('duration')->comment('duration|score_then_duration')->after('battle_question_count');
             $table->integer('bracket_slots')->default(8)->comment('8, 4, or 2')->after('qualifier_tie_breaker');

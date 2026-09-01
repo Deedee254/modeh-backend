@@ -19,10 +19,10 @@ return new class extends Migration
 
         Schema::table('grades', function (Blueprint $table) {
             // add nullable foreign key to levels
-            if (!Schema::hasColumn('grades', 'level_id')) {
+            if (! Schema::hasColumn('grades', 'level_id')) {
                 $table->foreignId('level_id')->nullable()->constrained('levels')->nullOnDelete()->after('id');
             }
-            if (!Schema::hasColumn('grades', 'type')) {
+            if (! Schema::hasColumn('grades', 'type')) {
                 $table->string('type')->default('grade')->after('description');
             }
         });

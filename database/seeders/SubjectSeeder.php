@@ -188,7 +188,7 @@ class SubjectSeeder extends Seeder
         // Upsert by unique combination of grade_id + name
         // Note: if you have a unique index, this will be more efficient. Without it, still works logically.
         foreach ($rows as $row) {
-                DB::table('subjects')->updateOrInsert(
+            DB::table('subjects')->updateOrInsert(
                 ['grade_id' => $row['grade_id'], 'name' => $row['name']],
                 [
                     'description' => $row['description'],

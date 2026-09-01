@@ -16,7 +16,9 @@ class ManageInstitutionMembers extends Page
     protected string $view = 'filament.resources.institution-resource.pages.manage-institution-members';
 
     public Institution $record;
+
     public array $members = [];
+
     public bool $isLoading = true;
 
     public function mount($record): void
@@ -84,7 +86,7 @@ class ManageInstitutionMembers extends Page
             if ($response->successful()) {
                 \Filament\Notifications\Notification::make()
                     ->title('Member Invited')
-                    ->body('Invitation sent to ' . $data['email'])
+                    ->body('Invitation sent to '.$data['email'])
                     ->success()
                     ->send();
                 $this->loadMembers();
@@ -136,7 +138,6 @@ class ManageInstitutionMembers extends Page
     /**
      * Retrieve the current authenticated user's plain text API token.
      *
-     * @return string
      *
      * @throws \Exception When the user isn't authenticated or token is missing.
      */
@@ -151,11 +152,12 @@ class ManageInstitutionMembers extends Page
         if (! $token) {
             throw new \Exception('No current access token available.');
         }
+
         return $token->plainTextToken;
     }
 
     public function getHeading(): string
     {
-        return 'Manage Members: ' . $this->record->name;
+        return 'Manage Members: '.$this->record->name;
     }
 }

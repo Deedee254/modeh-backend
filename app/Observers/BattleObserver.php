@@ -2,8 +2,8 @@
 
 namespace App\Observers;
 
-use App\Models\Battle;
 use App\Events\BattleResult;
+use App\Models\Battle;
 use App\Models\Notification as AppNotification;
 
 class BattleObserver
@@ -26,7 +26,8 @@ class BattleObserver
                         'type' => 'battle_result',
                         'data' => ['battle' => $data],
                     ]);
-                } catch (\Exception $__e) {}
+                } catch (\Exception $__e) {
+                }
 
                 $loser = $battle->initiator_id === $battle->winner_id ? $battle->opponent_id : $battle->initiator_id;
                 if ($loser) {
@@ -36,11 +37,14 @@ class BattleObserver
                             'type' => 'battle_result',
                             'data' => ['battle' => $data],
                         ]);
-                    } catch (\Exception $__e) {}
+                    } catch (\Exception $__e) {
+                    }
                 }
 
                 event(new BattleResult($battle->winner_id, $data));
-                if ($loser) event(new BattleResult($loser, $data));
+                if ($loser) {
+                    event(new BattleResult($loser, $data));
+                }
             }
         } catch (\Exception $e) {
             // ignore

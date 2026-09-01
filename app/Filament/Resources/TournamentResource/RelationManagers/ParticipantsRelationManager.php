@@ -2,17 +2,12 @@
 
 namespace App\Filament\Resources\TournamentResource\RelationManagers;
 
-use App\Models\User;
-use App\Models\OneOffPurchase;
-use App\Models\Subscription;
+use Filament\Actions\DetachAction;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\ImageColumn;
-use Filament\Actions\Action;
-use Filament\Actions\DetachAction;
-use Illuminate\Support\Facades\Auth;
+use Filament\Tables\Columns\TextColumn;
 
 class ParticipantsRelationManager extends RelationManager
 {

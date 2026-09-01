@@ -8,12 +8,12 @@ return new class extends Migration
 {
     public function up()
     {
-        if (!Schema::hasTable('tournaments')) {
+        if (! Schema::hasTable('tournaments')) {
             return;
         }
 
         Schema::table('tournaments', function (Blueprint $table) {
-            if (!Schema::hasColumn('tournaments', 'banner')) {
+            if (! Schema::hasColumn('tournaments', 'banner')) {
                 $table->string('banner')->nullable()->after('description');
             }
         });
@@ -21,7 +21,7 @@ return new class extends Migration
 
     public function down()
     {
-        if (!Schema::hasTable('tournaments')) {
+        if (! Schema::hasTable('tournaments')) {
             return;
         }
 

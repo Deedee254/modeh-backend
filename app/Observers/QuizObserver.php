@@ -20,12 +20,12 @@ class QuizObserver
             $subjectId = $quiz->subject_id ?? null;
             $topicId = $quiz->topic_id ?? null;
 
-            $quiz->questions()->where(function($q) use ($levelId, $gradeId, $subjectId, $topicId) {
-                $q->where(function($inner) use ($levelId, $gradeId, $subjectId, $topicId) {
+            $quiz->questions()->where(function ($q) use ($levelId, $gradeId, $subjectId, $topicId) {
+                $q->where(function ($inner) use ($levelId, $gradeId, $subjectId, $topicId) {
                     $inner->whereNull('level_id')->orWhere('level_id', '!=', $levelId)
-                      ->orWhereNull('grade_id')->orWhere('grade_id', '!=', $gradeId)
-                      ->orWhereNull('subject_id')->orWhere('subject_id', '!=', $subjectId)
-                      ->orWhereNull('topic_id')->orWhere('topic_id', '!=', $topicId);
+                        ->orWhereNull('grade_id')->orWhere('grade_id', '!=', $gradeId)
+                        ->orWhereNull('subject_id')->orWhere('subject_id', '!=', $subjectId)
+                        ->orWhereNull('topic_id')->orWhere('topic_id', '!=', $topicId);
                 });
             })->update([
                 'level_id' => $levelId,
@@ -34,7 +34,7 @@ class QuizObserver
                 'topic_id' => $topicId,
             ]);
         } catch (\Throwable $e) {
-            Log::warning('QuizObserver failed to sync question metadata: ' . $e->getMessage());
+            Log::warning('QuizObserver failed to sync question metadata: '.$e->getMessage());
         }
     }
 }

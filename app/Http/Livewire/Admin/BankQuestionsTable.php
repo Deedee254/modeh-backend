@@ -2,31 +2,33 @@
 
 namespace App\Http\Livewire\Admin;
 
-use Livewire\Component;
-use Filament\Actions\Concerns\InteractsWithActions;
-use Filament\Actions\Contracts\HasActions;
-use Filament\Actions\BulkAction;
-use Filament\Actions\Action;
-use Filament\Tables;
-use Filament\Tables\Concerns\InteractsWithTable;
-use Filament\Schemas\Concerns\InteractsWithSchemas;
-use Filament\Schemas\Contracts\HasSchemas;
-use Filament\Tables\Contracts\HasTable;
-use Filament\Support\Contracts\TranslatableContentDriver;
 use App\Models\Question;
 use App\Models\Tournament;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
+use Filament\Schemas\Concerns\InteractsWithSchemas;
+use Filament\Schemas\Contracts\HasSchemas;
+use Filament\Support\Contracts\TranslatableContentDriver;
+use Filament\Tables;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Contracts\HasTable;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Str;
+use Livewire\Component;
 
-class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasActions
+class BankQuestionsTable extends Component implements HasActions, HasSchemas, HasTable
 {
-    use InteractsWithTable;
-    use InteractsWithSchemas;
     use InteractsWithActions;
+    use InteractsWithSchemas;
+    use InteractsWithTable;
 
     public $tournamentId;
+
     public $targetField; // when set, component will emit selected IDs to the frontend instead of attaching
+
     public $initialFilters = [];
+
     public $selected = [];
     // The InteractsWithSchemas trait provides schema-caching helpers and the
     // underlying $isCachingSchemas property (protected). Do not redeclare the
@@ -44,7 +46,7 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
         $query = Question::query()->where('is_banked', true);
 
         // Filter by topic_id from the form (when creating)
-        if (!empty($this->initialFilters['topic_id'])) {
+        if (! empty($this->initialFilters['topic_id'])) {
             $query->where('topic_id', $this->initialFilters['topic_id']);
         }
         // Filter by topic_id from the tournament (when editing)
@@ -128,6 +130,7 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
 
                     if (empty($ids)) {
                         $this->dispatch('notify', ['type' => 'warning', 'message' => 'No questions selected']);
+
                         return;
                     }
 
@@ -135,6 +138,7 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
                         $t = Tournament::find($this->tournamentId);
                         if (! $t) {
                             $this->dispatch('notify', ['type' => 'danger', 'message' => 'Tournament not found']);
+
                             return;
                         }
 
@@ -143,7 +147,7 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
                             $this->dispatch('notify', ['type' => 'success', 'message' => sprintf('Added %d question(s) to tournament', count($ids))]);
                             $this->dispatch('modeh:bank-attached', ['tournamentId' => $this->tournamentId, 'ids' => $ids]);
                         } catch (\Exception $e) {
-                            $this->dispatch('notify', ['type' => 'danger', 'message' => 'Failed to attach questions: ' . $e->getMessage()]);
+                            $this->dispatch('notify', ['type' => 'danger', 'message' => 'Failed to attach questions: '.$e->getMessage()]);
                         }
 
                         return;
@@ -169,8 +173,6 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
         ];
     }
 
-    
-
     public function makeFilamentTranslatableContentDriver(): ?TranslatableContentDriver
     {
         return null;
@@ -185,7 +187,7 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
     {
         // Prefer manual selection (checkboxes) if used, otherwise fall back to Filament's selection API
         $ids = [];
-        if (!empty($this->selected)) {
+        if (! empty($this->selected)) {
             $ids = $this->selected;
         } else {
             $records = $this->getSelectedTableRecords();
@@ -194,13 +196,15 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
 
         if (empty($ids)) {
             $this->dispatch('notify', ['type' => 'warning', 'message' => 'No questions selected']);
+
             return;
         }
 
         if ($this->tournamentId) {
             $t = Tournament::find($this->tournamentId);
-                if (! $t) {
+            if (! $t) {
                 $this->dispatch('notify', ['type' => 'danger', 'message' => 'Tournament not found']);
+
                 return;
             }
 
@@ -210,7 +214,7 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
                 // notify parent Filament UI to refresh relation manager
                 $this->dispatch('modeh:bank-attached', ['tournamentId' => $this->tournamentId, 'ids' => $ids]);
             } catch (\Exception $e) {
-                $this->dispatch('notify', ['type' => 'danger', 'message' => 'Failed to attach questions: ' . $e->getMessage()]);
+                $this->dispatch('notify', ['type' => 'danger', 'message' => 'Failed to attach questions: '.$e->getMessage()]);
             }
         } elseif ($this->targetField) {
             // Ship selected ids back to the frontend so the create form can pick them up
@@ -222,7 +226,7 @@ class BankQuestionsTable extends Component implements HasTable, HasSchemas, HasA
     public function toggleRowSelection(int $id): void
     {
         if (in_array($id, $this->selected)) {
-            $this->selected = array_values(array_filter($this->selected, fn($v) => $v !== $id));
+            $this->selected = array_values(array_filter($this->selected, fn ($v) => $v !== $id));
         } else {
             $this->selected[] = $id;
         }

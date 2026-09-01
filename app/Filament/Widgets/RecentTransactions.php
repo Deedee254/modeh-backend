@@ -2,13 +2,13 @@
 
 namespace App\Filament\Widgets;
 
-use Filament\Widgets\TableWidget;
-use Filament\Widgets\Concerns\InteractsWithPageFilters;
+use App\Models\Quiz;
+use App\Models\Transaction;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
+use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use App\Models\Transaction;
-use App\Models\Quiz;
 
 class RecentTransactions extends TableWidget
 {
@@ -19,10 +19,10 @@ class RecentTransactions extends TableWidget
     protected function getTableQuery(): Builder|Relation|null
     {
         $q = Transaction::query()->with('user');
-        if (!empty($this->pageFilters['startDate'])) {
+        if (! empty($this->pageFilters['startDate'])) {
             $q->whereDate('created_at', '>=', $this->pageFilters['startDate']);
         }
-        if (!empty($this->pageFilters['endDate'])) {
+        if (! empty($this->pageFilters['endDate'])) {
             $q->whereDate('created_at', '<=', $this->pageFilters['endDate']);
         }
 
@@ -33,14 +33,20 @@ class RecentTransactions extends TableWidget
 
         if ($level || $grade || $creator) {
             $quizQ = Quiz::query();
-            if ($level) $quizQ->where('level_id', $level);
-            if ($grade) $quizQ->where('grade_id', $grade);
-            if ($creator) $quizQ->where('user_id', $creator);
+            if ($level) {
+                $quizQ->where('level_id', $level);
+            }
+            if ($grade) {
+                $quizQ->where('grade_id', $grade);
+            }
+            if ($creator) {
+                $quizQ->where('user_id', $creator);
+            }
             // Respect date filters as well for consistency
-            if (!empty($this->pageFilters['startDate'])) {
+            if (! empty($this->pageFilters['startDate'])) {
                 $quizQ->whereDate('created_at', '>=', $this->pageFilters['startDate']);
             }
-            if (!empty($this->pageFilters['endDate'])) {
+            if (! empty($this->pageFilters['endDate'])) {
                 $quizQ->whereDate('created_at', '<=', $this->pageFilters['endDate']);
             }
             $quizIds = $quizQ->pluck('id')->toArray();
@@ -50,6 +56,7 @@ class RecentTransactions extends TableWidget
                 $q->whereRaw('1 = 0');
             }
         }
+
         return $q->orderByDesc('created_at');
     }
 
@@ -63,17 +70,17 @@ class RecentTransactions extends TableWidget
                     if ($record->user) {
                         return $record->user->name ?? $record->user->email ?? $record->user->phone ?? 'Unknown User';
                     }
-                    
+
                     // Try to fetch phone number from M-Pesa transaction
                     $phone = \App\Models\MpesaTransaction::where('checkout_request_id', $record->tx_id)->value('phone');
                     if ($phone) {
-                        return 'Guest (' . $phone . ')';
+                        return 'Guest ('.$phone.')';
                     }
 
                     return 'Guest';
                 })
                 ->toggleable(),
-            TextColumn::make('amount')->label('Amount')->formatStateUsing(fn($state) => number_format($state,2)),
+            TextColumn::make('amount')->label('Amount')->formatStateUsing(fn ($state) => number_format($state, 2)),
             TextColumn::make('gateway')->label('Gateway')->toggleable(),
             TextColumn::make('status')->label('Status')->toggleable(),
             TextColumn::make('created_at')->label('When')->dateTime()->sortable()->toggleable(),

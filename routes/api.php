@@ -3,16 +3,17 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\MpesaController;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
 use App\Models\Quiz;
 use App\Models\Subject;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 // Custom route model binding for Quiz: resolve by slug if not numeric, else by ID
 Route::bind('quiz', function ($value) {
     if (is_numeric($value)) {
         return Quiz::findOrFail($value);
     }
+
     return Quiz::where('slug', $value)->firstOrFail();
 });
 
@@ -21,6 +22,7 @@ Route::bind('subject', function ($value) {
     if (is_numeric($value)) {
         return Subject::findOrFail($value);
     }
+
     return Subject::where('slug', $value)->firstOrFail();
 });
 
@@ -28,6 +30,7 @@ Route::bind('topic', function ($value) {
     if (is_numeric($value)) {
         return \App\Models\Topic::findOrFail($value);
     }
+
     return \App\Models\Topic::where('slug', $value)->firstOrFail();
 });
 
@@ -35,6 +38,7 @@ Route::bind('level', function ($value) {
     if (is_numeric($value)) {
         return \App\Models\Level::findOrFail($value);
     }
+
     return \App\Models\Level::where('slug', $value)->firstOrFail();
 });
 
@@ -42,6 +46,7 @@ Route::bind('grade', function ($value) {
     if (is_numeric($value)) {
         return \App\Models\Grade::findOrFail($value);
     }
+
     return \App\Models\Grade::where('slug', $value)->firstOrFail();
 });
 // Allow battles to be resolved by uuid or id
@@ -49,6 +54,7 @@ Route::bind('battle', function ($value) {
     if (is_numeric($value)) {
         return \App\Models\Battle::findOrFail($value);
     }
+
     return \App\Models\Battle::where('uuid', $value)->firstOrFail();
 });
 
@@ -222,6 +228,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Institution quizzes
     Route::get('/institutions/{institution}/quizzes', function (\Illuminate\Http\Request $request, \App\Models\Institution $institution) {
         $request->merge(['institution_id' => $institution->id]);
+
         return app(\App\Http\Controllers\Api\QuizController::class)->index($request);
     });
 
@@ -341,11 +348,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Question import (parse CSV/Excel files)
     Route::post('/questions/import/parse', [\App\Http\Controllers\Api\QuestionImportController::class, 'parse']);
 
-	    // Question bank
-	    Route::get('/questions', [\App\Http\Controllers\Api\QuestionController::class, 'index']);
-	    Route::get('/questions/summary', [\App\Http\Controllers\Api\QuestionController::class, 'summary']);
-	    // Public question bank endpoint (global bank queries)
-	    Route::get('/question-bank', [\App\Http\Controllers\Api\QuestionController::class, 'bank']);
+    // Question bank
+    Route::get('/questions', [\App\Http\Controllers\Api\QuestionController::class, 'index']);
+    Route::get('/questions/summary', [\App\Http\Controllers\Api\QuestionController::class, 'summary']);
+    // Public question bank endpoint (global bank queries)
+    Route::get('/question-bank', [\App\Http\Controllers\Api\QuestionController::class, 'bank']);
     Route::post('/questions', [\App\Http\Controllers\Api\QuestionController::class, 'store']);
     Route::get('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'show']);
     // Per-quiz question endpoints (used by quiz-master UI)
@@ -359,7 +366,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Support PATCH for updates (clients may use PATCH) and allow deleting questions
     Route::patch('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'update']);
     Route::delete('/questions/{question}', [\App\Http\Controllers\Api\QuestionController::class, 'destroy']);
-    
+
     // Question Flagging
     Route::post('/questions/{question}/flag', [\App\Http\Controllers\Api\QuestionFlagController::class, 'store']);
     Route::post('/questions/{question}/resolve-flags', [\App\Http\Controllers\Api\QuestionFlagController::class, 'resolve']);
@@ -436,57 +443,57 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/admin/mpesa-transactions', [\App\Http\Controllers\Api\AdminController::class, 'mpesaTransactions']);
         Route::post('/admin/mpesa-transactions/{transactionId}/create-invoice', [\App\Http\Controllers\Api\AdminController::class, 'createMpesaInvoice']);
         Route::get('/admin/mpesa-transactions/{transactionId}/invoice', [\App\Http\Controllers\Api\AdminController::class, 'getMpesaInvoice']);
-	        Route::get('/admin/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
-	        Route::get('/admin/quiz-masters', [\App\Http\Controllers\Api\AdminController::class, 'quizMasters']);
-	        Route::get('/admin/quiz-masters/analytics', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'analytics']);
-	        Route::get('/admin/quiz-masters/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'insights']);
-	        Route::get('/admin/quiz-masters/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'userInsights']);
-	        Route::get('/admin/quiz-analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
-	        Route::get('/admin/quizzes/analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
-	        Route::get('/admin/quizzes/attempts', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'attempts']);
-	        Route::get('/admin/quizzes/{quiz}', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'show']);
-	        Route::get('/admin/quizzes/{slug}/insights', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'insightsBySlug']);
-	        Route::get('/admin/withdrawals', [\App\Http\Controllers\Api\AdminController::class, 'withdrawals']);
-	        Route::post('/admin/withdrawals/{id}/approve', [\App\Http\Controllers\Api\AdminController::class, 'approveWithdrawal']);
-	        Route::post('/admin/withdrawals/{id}/reject', [\App\Http\Controllers\Api\AdminController::class, 'rejectWithdrawal']);
-		Route::post('/admin/withdrawals/{id}/mark-paid', [\App\Http\Controllers\Api\AdminController::class, 'markWithdrawalAsPaid']);
-	        Route::post('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
-	        Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
-	        Route::get('/admin/quizees', [\App\Http\Controllers\Api\AdminController::class, 'quizees']);
-	        Route::get('/admin/quizees/analytics', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'analytics']);
-	        Route::get('/admin/quizees/insights', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'insights']);
-	        Route::get('/admin/quizees/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'userInsights']);
-	        Route::get('/admin/tournaments/analytics', [\App\Http\Controllers\Api\AdminTournamentAnalyticsController::class, 'analytics']);
-	        Route::get('/admin/tournaments/{id}/insights', [\App\Http\Controllers\Api\AdminTournamentAnalyticsController::class, 'insights']);
-	        Route::get('/admin/tournaments', [\App\Http\Controllers\Api\AdminController::class, 'tournaments']);
-	        Route::get('/admin/tournaments/{id}/participants', [\App\Http\Controllers\Api\AdminController::class, 'tournamentParticipants']);
+        Route::get('/admin/users', [\App\Http\Controllers\Api\AdminController::class, 'users']);
+        Route::get('/admin/quiz-masters', [\App\Http\Controllers\Api\AdminController::class, 'quizMasters']);
+        Route::get('/admin/quiz-masters/analytics', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'analytics']);
+        Route::get('/admin/quiz-masters/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'insights']);
+        Route::get('/admin/quiz-masters/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizMasterAnalyticsController::class, 'userInsights']);
+        Route::get('/admin/quiz-analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
+        Route::get('/admin/quizzes/analytics', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'analytics']);
+        Route::get('/admin/quizzes/attempts', [\App\Http\Controllers\Api\AdminQuizAnalyticsController::class, 'attempts']);
+        Route::get('/admin/quizzes/{quiz}', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'show']);
+        Route::get('/admin/quizzes/{slug}/insights', [\App\Http\Controllers\Api\AdminQuizInsightsController::class, 'insightsBySlug']);
+        Route::get('/admin/withdrawals', [\App\Http\Controllers\Api\AdminController::class, 'withdrawals']);
+        Route::post('/admin/withdrawals/{id}/approve', [\App\Http\Controllers\Api\AdminController::class, 'approveWithdrawal']);
+        Route::post('/admin/withdrawals/{id}/reject', [\App\Http\Controllers\Api\AdminController::class, 'rejectWithdrawal']);
+        Route::post('/admin/withdrawals/{id}/mark-paid', [\App\Http\Controllers\Api\AdminController::class, 'markWithdrawalAsPaid']);
+        Route::post('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
+        Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminController::class, 'settings']);
+        Route::get('/admin/quizees', [\App\Http\Controllers\Api\AdminController::class, 'quizees']);
+        Route::get('/admin/quizees/analytics', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'analytics']);
+        Route::get('/admin/quizees/insights', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'insights']);
+        Route::get('/admin/quizees/{userId}/insights', [\App\Http\Controllers\Api\AdminQuizeeAnalyticsController::class, 'userInsights']);
+        Route::get('/admin/tournaments/analytics', [\App\Http\Controllers\Api\AdminTournamentAnalyticsController::class, 'analytics']);
+        Route::get('/admin/tournaments/{id}/insights', [\App\Http\Controllers\Api\AdminTournamentAnalyticsController::class, 'insights']);
+        Route::get('/admin/tournaments', [\App\Http\Controllers\Api\AdminController::class, 'tournaments']);
+        Route::get('/admin/tournaments/{id}/participants', [\App\Http\Controllers\Api\AdminController::class, 'tournamentParticipants']);
 
         // Promo Codes
         Route::apiResource('/admin/promo-codes', \App\Http\Controllers\Api\Admin\PromoCodeController::class);
-	        Route::get('/admin/battles', [\App\Http\Controllers\Api\AdminBattleController::class, 'index']);
-	        Route::get('/admin/battles/{id}', [\App\Http\Controllers\Api\AdminBattleController::class, 'show']);
-	        Route::get('/admin/daily-challenges/analytics', [\App\Http\Controllers\Api\AdminDailyChallengeAnalyticsController::class, 'analytics']);
-	
-            // Gamification Management Routes
-            Route::get('/admin/quizee-levels', [\App\Http\Controllers\Api\AdminGamificationController::class, 'getQuizeeLevels']);
-            Route::post('/admin/quizee-levels', [\App\Http\Controllers\Api\AdminGamificationController::class, 'storeQuizeeLevel']);
-            Route::put('/admin/quizee-levels/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'updateQuizeeLevel']);
-            Route::delete('/admin/quizee-levels/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'destroyQuizeeLevel']);
-            
-            Route::get('/admin/badges', [\App\Http\Controllers\Api\AdminGamificationController::class, 'getBadges']);
-            Route::post('/admin/badges', [\App\Http\Controllers\Api\AdminGamificationController::class, 'storeBadge']);
-            Route::put('/admin/badges/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'updateBadge']);
-            Route::delete('/admin/badges/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'destroyBadge']);
-            
-            Route::get('/admin/achievements', [\App\Http\Controllers\Api\AdminGamificationController::class, 'getAchievements']);
-            Route::post('/admin/achievements', [\App\Http\Controllers\Api\AdminGamificationController::class, 'storeAchievement']);
-            Route::put('/admin/achievements/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'updateAchievement']);
-            Route::delete('/admin/achievements/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'destroyAchievement']);
+        Route::get('/admin/battles', [\App\Http\Controllers\Api\AdminBattleController::class, 'index']);
+        Route::get('/admin/battles/{id}', [\App\Http\Controllers\Api\AdminBattleController::class, 'show']);
+        Route::get('/admin/daily-challenges/analytics', [\App\Http\Controllers\Api\AdminDailyChallengeAnalyticsController::class, 'analytics']);
 
-	        // Affiliate Management Routes
-	        Route::get('/admin/affiliates', [\App\Http\Controllers\Api\AffiliateController::class, 'adminIndex']);
-	        Route::get('/admin/affiliate-referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'adminReferrals']);
-	        Route::get('/admin/affiliate-clicks', [\App\Http\Controllers\Api\AffiliateController::class, 'adminClicks']);
+        // Gamification Management Routes
+        Route::get('/admin/quizee-levels', [\App\Http\Controllers\Api\AdminGamificationController::class, 'getQuizeeLevels']);
+        Route::post('/admin/quizee-levels', [\App\Http\Controllers\Api\AdminGamificationController::class, 'storeQuizeeLevel']);
+        Route::put('/admin/quizee-levels/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'updateQuizeeLevel']);
+        Route::delete('/admin/quizee-levels/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'destroyQuizeeLevel']);
+
+        Route::get('/admin/badges', [\App\Http\Controllers\Api\AdminGamificationController::class, 'getBadges']);
+        Route::post('/admin/badges', [\App\Http\Controllers\Api\AdminGamificationController::class, 'storeBadge']);
+        Route::put('/admin/badges/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'updateBadge']);
+        Route::delete('/admin/badges/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'destroyBadge']);
+
+        Route::get('/admin/achievements', [\App\Http\Controllers\Api\AdminGamificationController::class, 'getAchievements']);
+        Route::post('/admin/achievements', [\App\Http\Controllers\Api\AdminGamificationController::class, 'storeAchievement']);
+        Route::put('/admin/achievements/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'updateAchievement']);
+        Route::delete('/admin/achievements/{id}', [\App\Http\Controllers\Api\AdminGamificationController::class, 'destroyAchievement']);
+
+        // Affiliate Management Routes
+        Route::get('/admin/affiliates', [\App\Http\Controllers\Api\AffiliateController::class, 'adminIndex']);
+        Route::get('/admin/affiliate-referrals', [\App\Http\Controllers\Api\AffiliateController::class, 'adminReferrals']);
+        Route::get('/admin/affiliate-clicks', [\App\Http\Controllers\Api\AffiliateController::class, 'adminClicks']);
         Route::get('/admin/affiliate-metrics', [\App\Http\Controllers\Api\AffiliateController::class, 'adminMetrics']);
 
         Route::patch('/admin/affiliates/{affiliateId}/commission-rate', [\App\Http\Controllers\Api\AffiliateController::class, 'updateCommissionRate']);
@@ -504,7 +511,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/admin/wallet/transaction-flow/{transactionId}', [\App\Http\Controllers\Api\WalletController::class, 'transactionFlow']);
         Route::get('/admin/wallet/transaction-history', [\App\Http\Controllers\Api\WalletController::class, 'transactionHistory']);
         Route::get('/admin/wallet/platform-summary', [\App\Http\Controllers\Api\WalletController::class, 'platformSummary']);
-        
+
         // NEW: Admin payment recovery - view pending payments and send messages
         Route::get('/admin/pending-payments', [\App\Http\Controllers\Api\WalletController::class, 'adminPendingPayments']);
         Route::post('/admin/chat/send', [\App\Http\Controllers\Api\WalletController::class, 'adminSendChatMessage']);
@@ -516,11 +523,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/wallet/transactions', [\App\Http\Controllers\Api\WalletController::class, 'transactions']);
     Route::post('/wallet/withdraw', [\App\Http\Controllers\Api\WalletController::class, 'requestWithdrawal']);
     Route::get('/wallet/withdrawals', [\App\Http\Controllers\Api\WalletController::class, 'myWithdrawals']);
-    
+
     // NEW: Pending payments endpoints (payment recovery system)
     Route::get('/my/unpaid-quizzes', [\App\Http\Controllers\Api\WalletController::class, 'myUnpaidQuizzes']);
     Route::post('/pending-payments/{id}/send-reminder', [\App\Http\Controllers\Api\WalletController::class, 'sendPendingPaymentReminder']);
-    
+
     // NEW: Process payment (auto-settlement or pending tracking)
     Route::post('/checkout/process-payment', [\App\Http\Controllers\Api\WalletController::class, 'processPayment']);
 
@@ -635,21 +642,21 @@ Route::post('/broadcasting/auth', function (Request $request) {
         $user = $request->user();
 
         // Validate required inputs
-        if (!$channel || !$socketId) {
+        if (! $channel || ! $socketId) {
             return response()->json(['error' => 'Missing required parameters'], 400);
         }
 
         // Check if this is a public channel (no private/presence prefix)
-        $isPublic = !str_starts_with($channel, 'private-') &&
-            !str_starts_with($channel, 'presence-');
-        
+        $isPublic = ! str_starts_with($channel, 'private-') &&
+            ! str_starts_with($channel, 'presence-');
+
         if ($isPublic) {
             // Public channels don't require authentication
             return response()->json(['auth' => ''], 200);
         }
 
         // For private/presence channels, require authentication
-        if (!$user) {
+        if (! $user) {
             return response()->json(['error' => 'Unauthenticated'], 403);
         }
 
@@ -663,7 +670,7 @@ Route::post('/broadcasting/auth', function (Request $request) {
         $pusherKey = $connConfig['key'] ?? $connConfig['app_key'] ?? null;
         $pusherSecret = $connConfig['secret'] ?? $connConfig['app_secret'] ?? null;
 
-        if (!$pusherKey || !$pusherSecret) {
+        if (! $pusherKey || ! $pusherSecret) {
             return response()->json(['error' => 'Broadcasting not configured'], 500);
         }
 
@@ -689,11 +696,11 @@ Route::post('/broadcasting/auth', function (Request $request) {
                 // Fallback to an empty user_info object if encoding fails
                 $channelData = json_encode([
                     'user_id' => (string) $user->id,
-                    'user_info' => (object)[],
+                    'user_info' => (object) [],
                 ]);
                 if ($channelData === false) {
                     // As a last resort, provide an empty JSON object string
-                    $channelData = json_encode((object)[]);
+                    $channelData = json_encode((object) []);
                 }
             } else {
                 $channelData = $encoded;
@@ -701,28 +708,29 @@ Route::post('/broadcasting/auth', function (Request $request) {
         }
 
         // Build the signing payload
-        $signingPayload = $socketId . ':' . $channel;
+        $signingPayload = $socketId.':'.$channel;
         if ($isPresence) {
             // Append channel_data for presence channels; it will always be
             // a string after the logic above (fallback ensures this).
-            $signingPayload .= ':' . ($channelData ?? json_encode((object)[]));
+            $signingPayload .= ':'.($channelData ?? json_encode((object) []));
         }
 
         $signature = hash_hmac('sha256', $signingPayload, $pusherSecret);
 
         $response = [
-            'auth' => $pusherKey . ':' . $signature,
+            'auth' => $pusherKey.':'.$signature,
         ];
 
         // Always include channel_data in the response for presence channels
         // (the client expects this field and will fail if it's absent).
         if ($isPresence) {
-            $response['channel_data'] = $channelData ?? json_encode((object)[]);
+            $response['channel_data'] = $channelData ?? json_encode((object) []);
         }
 
         return response()->json($response, 200);
     } catch (\Exception $e) {
         \Illuminate\Support\Facades\Log::error('Broadcasting auth error:', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+
         return response()->json(['error' => 'Broadcasting auth failed', 'message' => $e->getMessage()], 500);
     }
 })->middleware(['auth:sanctum']); // Authenticate via Sanctum (CORS is handled globally)

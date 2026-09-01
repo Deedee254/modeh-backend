@@ -11,7 +11,7 @@ class AdminBattleController extends Controller
 {
     public function index(Request $request)
     {
-        if (!\Illuminate\Support\Facades\Gate::allows('viewFilament')) {
+        if (! \Illuminate\Support\Facades\Gate::allows('viewFilament')) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -22,10 +22,10 @@ class AdminBattleController extends Controller
         ]);
 
         if ($request->filled('from')) {
-            $query->where('created_at', '>=', $request->input('from') . ' 00:00:00');
+            $query->where('created_at', '>=', $request->input('from').' 00:00:00');
         }
         if ($request->filled('to')) {
-            $query->where('created_at', '<=', $request->input('to') . ' 23:59:59');
+            $query->where('created_at', '<=', $request->input('to').' 23:59:59');
         }
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
@@ -34,14 +34,14 @@ class AdminBattleController extends Controller
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
-                $q->where('uuid', 'like', '%' . $search . '%')
+                $q->where('uuid', 'like', '%'.$search.'%')
                     ->orWhereHas('initiator.user', function ($u) use ($search) {
-                        $u->where('name', 'like', '%' . $search . '%')
-                            ->orWhere('email', 'like', '%' . $search . '%');
+                        $u->where('name', 'like', '%'.$search.'%')
+                            ->orWhere('email', 'like', '%'.$search.'%');
                     })
                     ->orWhereHas('opponent.user', function ($u) use ($search) {
-                        $u->where('name', 'like', '%' . $search . '%')
-                            ->orWhere('email', 'like', '%' . $search . '%');
+                        $u->where('name', 'like', '%'.$search.'%')
+                            ->orWhere('email', 'like', '%'.$search.'%');
                     });
             });
         }
@@ -70,13 +70,13 @@ class AdminBattleController extends Controller
                     'one_off_price' => (float) ($b->one_off_price ?? 0),
                     'initiator' => [
                         'id' => $b->initiator_id,
-                        'name' => $initiatorUser?->name ?? trim(($b->initiator?->first_name ?? '') . ' ' . ($b->initiator?->last_name ?? '')) ?: null,
+                        'name' => $initiatorUser?->name ?? trim(($b->initiator?->first_name ?? '').' '.($b->initiator?->last_name ?? '')) ?: null,
                         'email' => $initiatorUser?->email,
                         'points' => (int) ($b->initiator_points ?? 0),
                     ],
                     'opponent' => [
                         'id' => $b->opponent_id,
-                        'name' => $opponentUser?->name ?? trim(($b->opponent?->first_name ?? '') . ' ' . ($b->opponent?->last_name ?? '')) ?: null,
+                        'name' => $opponentUser?->name ?? trim(($b->opponent?->first_name ?? '').' '.($b->opponent?->last_name ?? '')) ?: null,
                         'email' => $opponentUser?->email,
                         'points' => (int) ($b->opponent_points ?? 0),
                     ],
@@ -99,7 +99,7 @@ class AdminBattleController extends Controller
 
     public function show(Request $request, $id)
     {
-        if (!\Illuminate\Support\Facades\Gate::allows('viewFilament')) {
+        if (! \Illuminate\Support\Facades\Gate::allows('viewFilament')) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
@@ -107,7 +107,7 @@ class AdminBattleController extends Controller
             ->where('b.id', (int) $id)
             ->first();
 
-        if (!$battle) {
+        if (! $battle) {
             return response()->json(['ok' => false, 'message' => 'Battle not found'], 404);
         }
 
@@ -152,7 +152,7 @@ class AdminBattleController extends Controller
 
         $subsByUserQuestion = [];
         foreach ($subs as $s) {
-            $subsByUserQuestion[(int) $s->user_id . ':' . (int) $s->question_id] = $s;
+            $subsByUserQuestion[(int) $s->user_id.':'.(int) $s->question_id] = $s;
         }
 
         $initiatorId = (int) ($battle->initiator_id ?? 0);
@@ -167,20 +167,24 @@ class AdminBattleController extends Controller
 
         $outQuestions = [];
         foreach ($questions as $q) {
-            $initSub = $subsByUserQuestion[$initiatorId . ':' . (int) $q->question_id] ?? null;
-            $oppSub = $subsByUserQuestion[$opponentId . ':' . (int) $q->question_id] ?? null;
+            $initSub = $subsByUserQuestion[$initiatorId.':'.(int) $q->question_id] ?? null;
+            $oppSub = $subsByUserQuestion[$opponentId.':'.(int) $q->question_id] ?? null;
 
             $initCorrect = $initSub ? (bool) $initSub->correct_flag : null;
             $oppCorrect = $oppSub ? (bool) $oppSub->correct_flag : null;
 
             if ($initSub) {
                 $initiatorAnswered++;
-                if ($initCorrect) $initiatorCorrect++;
+                if ($initCorrect) {
+                    $initiatorCorrect++;
+                }
                 $initiatorTime += (float) ($initSub->time_taken ?? 0);
             }
             if ($oppSub) {
                 $opponentAnswered++;
-                if ($oppCorrect) $opponentCorrect++;
+                if ($oppCorrect) {
+                    $opponentCorrect++;
+                }
                 $opponentTime += (float) ($oppSub->time_taken ?? 0);
             }
 

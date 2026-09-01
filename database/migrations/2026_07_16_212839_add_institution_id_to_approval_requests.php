@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('institution_approval_requests', function (Blueprint $table) {
             $table->unsignedBigInteger('institution_id')->nullable()->after('institution_name');
             $table->text('rejection_reason')->nullable()->after('notes');
-            
+
             $table->foreign('institution_id')->references('id')->on('institutions')->onDelete('cascade');
         });
     }

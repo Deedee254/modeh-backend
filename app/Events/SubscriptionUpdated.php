@@ -4,7 +4,6 @@ namespace App\Events;
 
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -18,7 +17,9 @@ class SubscriptionUpdated implements ShouldBroadcast, ShouldQueue
     public $afterCommit = true;
 
     public $userId;
+
     public $subscription;
+
     public $tx;
 
     public function __construct($userId, $subscription, $tx = null)

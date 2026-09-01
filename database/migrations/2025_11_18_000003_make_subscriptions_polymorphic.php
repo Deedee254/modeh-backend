@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -13,10 +13,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('subscriptions', function (Blueprint $table) {
-            if (!Schema::hasColumn('subscriptions', 'owner_type')) {
+            if (! Schema::hasColumn('subscriptions', 'owner_type')) {
                 $table->string('owner_type')->nullable()->after('id');
             }
-            if (!Schema::hasColumn('subscriptions', 'owner_id')) {
+            if (! Schema::hasColumn('subscriptions', 'owner_id')) {
                 $table->unsignedBigInteger('owner_id')->nullable()->after('owner_type');
             }
         });

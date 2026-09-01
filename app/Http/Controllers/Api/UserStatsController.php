@@ -14,12 +14,12 @@ class UserStatsController extends Controller
     public function stats(Request $request)
     {
         $user = $request->user();
-        $points = (int)($user->points ?? 0);
-        
+        $points = (int) ($user->points ?? 0);
+
         // Get current level and next level
         $currentLevel = QuizeeLevel::getLevel($points);
         $nextLevel = QuizeeLevel::getNextLevel($points);
-        
+
         // Calculate progress to next level
         $levelProgress = 0;
         if ($currentLevel && $nextLevel) {
@@ -27,16 +27,16 @@ class UserStatsController extends Controller
             $userProgress = $points - $currentLevel->min_points;
             $levelProgress = ($userProgress / $levelRange) * 100;
         }
-        
+
         // Get global rank (cached for 5 minutes)
-        $globalRank = (int)Cache::remember("user_{$user->id}_rank", 300, function () use ($points) {
+        $globalRank = (int) Cache::remember("user_{$user->id}_rank", 300, function () use ($points) {
             return User::where('points', '>', $points)->count() + 1;
         });
-        
+
         // Get institution rank if user has an institution
         $institutionRank = null;
         if ($user->institution_id) {
-            $institutionRank = (int)Cache::remember(
+            $institutionRank = (int) Cache::remember(
                 "user_{$user->id}_institution_rank",
                 300,
                 function () use ($user, $points) {
@@ -64,13 +64,14 @@ class UserStatsController extends Controller
                     if ($quiz) {
                         $quizTitle = $quiz->title;
                     }
-                } catch (\Throwable $_) {}
+                } catch (\Throwable $_) {
+                }
 
                 $activity[] = [
                     'id' => $attempt->id,
                     'description' => "Quiz completed: {$quizTitle} ({$attempt->score}%)",
                     'created_at' => $attempt->created_at,
-                    'points' => (int)($attempt->points_earned ?? 0),
+                    'points' => (int) ($attempt->points_earned ?? 0),
                     'quiz_id' => $attempt->quiz_id,
                     'score' => $attempt->score,
                 ];
@@ -120,35 +121,36 @@ class UserStatsController extends Controller
                 $unlockedAchievements = $user->achievements()->count();
                 $totalAchievements = DB::table('achievements')->count();
             }
-        } catch (\Throwable $_) {}
+        } catch (\Throwable $_) {
+        }
 
         return response()->json([
-            'points' => (int)$points,
+            'points' => (int) $points,
             'level' => $currentLevel ? [
                 'name' => $currentLevel->name,
                 'icon' => $currentLevel->icon,
                 'description' => $currentLevel->description,
                 'color_scheme' => $currentLevel->color_scheme,
-                'progress' => (float)round($levelProgress, 1),
-                'min_points' => (int)$currentLevel->min_points,
-                'max_points' => (int)$currentLevel->max_points,
+                'progress' => (float) round($levelProgress, 1),
+                'min_points' => (int) $currentLevel->min_points,
+                'max_points' => (int) $currentLevel->max_points,
             ] : null,
             'next_level' => $nextLevel ? [
                 'name' => $nextLevel->name,
-                'points_needed' => (int)($nextLevel->min_points - $points),
-                'min_points' => (int)$nextLevel->min_points,
+                'points_needed' => (int) ($nextLevel->min_points - $points),
+                'min_points' => (int) $nextLevel->min_points,
             ] : null,
             'ranks' => [
-                'global' => (int)$globalRank,
-                'institution' => $institutionRank ? (int)$institutionRank : null,
+                'global' => (int) $globalRank,
+                'institution' => $institutionRank ? (int) $institutionRank : null,
             ],
-            'streak' => (int)$streak,
-            'best_streak' => (int)$bestStreak,
-            'total_quizzes_taken' => (int)$totalQuizzes,
-            'average_score' => (float)$averageScore,
+            'streak' => (int) $streak,
+            'best_streak' => (int) $bestStreak,
+            'total_quizzes_taken' => (int) $totalQuizzes,
+            'average_score' => (float) $averageScore,
             'last_activity' => $lastActivity,
-            'unlocked_achievements' => (int)$unlockedAchievements,
-            'total_achievements' => (int)$totalAchievements,
+            'unlocked_achievements' => (int) $unlockedAchievements,
+            'total_achievements' => (int) $totalAchievements,
             'activity' => $activity,
         ]);
     }

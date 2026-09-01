@@ -19,7 +19,7 @@ class EditPackage extends EditRecord
                 $name = $item['feature'] ?? null;
                 if ($name) {
                     $display[] = $name;
-                    $key = (!empty($item['key'])) ? $item['key'] : Str::slug($name);
+                    $key = (! empty($item['key'])) ? $item['key'] : Str::slug($name);
                     $limits[$key] = array_key_exists('limit', $item) ? $item['limit'] : null;
                 }
             }

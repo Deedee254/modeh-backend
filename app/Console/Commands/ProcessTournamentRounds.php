@@ -2,14 +2,15 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\Tournament;
 use App\Models\TournamentAttempt;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
 class ProcessTournamentRounds extends Command
 {
     protected $signature = 'tournaments:process-rounds';
+
     protected $description = 'Finalize ended simple-flow tournaments';
 
     public function handle()
@@ -22,7 +23,7 @@ class ProcessTournamentRounds extends Command
             ->get();
 
         foreach ($tournaments as $t) {
-            if (!$t instanceof Tournament) {
+            if (! $t instanceof Tournament) {
                 continue;
             }
 
@@ -31,8 +32,8 @@ class ProcessTournamentRounds extends Command
                     $this->info("Tournament {$t->id}: finalized simple flow winner");
                 }
             } catch (\Throwable $e) {
-                Log::error('Failed processing tournament rounds for ' . $t->id . ': ' . $e->getMessage());
-                $this->error('Failed processing tournament ' . $t->id . ': ' . $e->getMessage());
+                Log::error('Failed processing tournament rounds for '.$t->id.': '.$e->getMessage());
+                $this->error('Failed processing tournament '.$t->id.': '.$e->getMessage());
             }
         }
 
@@ -49,7 +50,7 @@ class ProcessTournamentRounds extends Command
             return false;
         }
 
-        if (!$tournament->end_date || now()->lt($tournament->end_date)) {
+        if (! $tournament->end_date || now()->lt($tournament->end_date)) {
             return false;
         }
 

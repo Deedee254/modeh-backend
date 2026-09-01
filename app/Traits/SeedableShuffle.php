@@ -12,7 +12,8 @@ trait SeedableShuffle
         $copy = array_values($items);
         $state = crc32($seed) & 0xFFFFFFFF;
         $lcg = function () use (&$state) {
-            $state = (1103515245 * $state + 12345) & 0x7fffffff;
+            $state = (1103515245 * $state + 12345) & 0x7FFFFFFF;
+
             return $state / 2147483647;
         };
 

@@ -3,30 +3,28 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Institution;
-use App\Models\User;
 use App\Models\Subscription;
 use App\Models\SubscriptionAssignment;
+use App\Models\User;
 use App\Services\InstitutionPackageUsageService;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 /**
  * Institution Member Controller
- * 
+ *
  * Manages institution members, invitations, and member analytics
  */
 class InstitutionMemberController extends Controller
 {
     /**
      * List institution members with optional filtering
-     * 
-     * @param Request $request
-     * @param Institution $institution
+     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function index(Request $request, Institution $institution)
@@ -35,7 +33,9 @@ class InstitutionMemberController extends Controller
         $user = $request->user();
         // Only institution managers can list full members
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         $perPage = (int) $request->input('per_page', 10);
         $page = (int) $request->input('page', 1);
@@ -56,19 +56,29 @@ class InstitutionMemberController extends Controller
         if ($levelId || $gradeId) {
             $query->where(function ($q) use ($levelId, $gradeId) {
                 $q->whereHas('quizeeProfile', function ($qq) use ($levelId, $gradeId) {
-                    if ($levelId) $qq->where('level_id', $levelId);
-                    if ($gradeId) $qq->where('grade_id', $gradeId);
+                    if ($levelId) {
+                        $qq->where('level_id', $levelId);
+                    }
+                    if ($gradeId) {
+                        $qq->where('grade_id', $gradeId);
+                    }
                 });
                 $q->orWhereHas('quizMasterProfile', function ($qq) use ($levelId, $gradeId) {
-                    if ($levelId) $qq->where('level_id', $levelId);
-                    if ($gradeId) $qq->where('grade_id', $gradeId);
+                    if ($levelId) {
+                        $qq->where('level_id', $levelId);
+                    }
+                    if ($gradeId) {
+                        $qq->where('grade_id', $gradeId);
+                    }
                 });
             });
         }
 
         // Eager-load the pivot for this institution and profiles with their level and grade relations
         $query->with([
-            'institutions' => function ($q) use ($institution) { $q->where('institutions.id', $institution->id); },
+            'institutions' => function ($q) use ($institution) {
+                $q->where('institutions.id', $institution->id);
+            },
             'quizMasterProfile.level',
             'quizMasterProfile.grade',
             'quizeeProfile.level',
@@ -80,7 +90,7 @@ class InstitutionMemberController extends Controller
         /**
          * Map users to member response format
          */
-        $members = collect($paginator->items())->map(function ($u) use ($institution) {
+        $members = collect($paginator->items())->map(function ($u) {
             // pivot info for this institution is available under institutions relation (filtered)
             /** @var User $u */
             /** @var \Illuminate\Database\Eloquent\Collection $instCollection */
@@ -92,7 +102,7 @@ class InstitutionMemberController extends Controller
             // Get profile (quizee or quiz-master)
             $quizeeProfile = null;
             $quizMasterProfile = null;
-            
+
             if ($u->quizeeProfile) {
                 /** @var \App\Models\Quizee $qp */
                 $qp = $u->quizeeProfile;
@@ -103,7 +113,7 @@ class InstitutionMemberController extends Controller
                     'grade' => $qp->grade ? ['id' => $qp->grade->id, 'name' => $qp->grade->name] : null,
                 ];
             }
-            
+
             if ($u->quizMasterProfile) {
                 /** @var \App\Models\QuizMaster $qmp */
                 $qmp = $u->quizMasterProfile;
@@ -134,7 +144,7 @@ class InstitutionMemberController extends Controller
                 'per_page' => $paginator->perPage(),
                 'current_page' => $paginator->currentPage(),
                 'last_page' => $paginator->lastPage(),
-            ]
+            ],
         ]);
     }
 
@@ -143,7 +153,9 @@ class InstitutionMemberController extends Controller
         /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         $perPage = (int) $request->input('per_page', 10);
         $page = (int) $request->input('page', 1);
@@ -208,19 +220,27 @@ class InstitutionMemberController extends Controller
         /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         $data = $request->validate([
             'user_id' => 'required|integer',
         ]);
 
         $u = User::find($data['user_id']);
-        if (!$u) return response()->json(['ok' => false, 'message' => 'User not found'], 404);
+        if (! $u) {
+            return response()->json(['ok' => false, 'message' => 'User not found'], 404);
+        }
 
         // Determine pivot role based on user's global role
         $pivotRole = 'member';
-        if ($u->role === 'quizee') $pivotRole = 'quizee';
-        if ($u->role === 'quiz-master') $pivotRole = 'quiz-master';
+        if ($u->role === 'quizee') {
+            $pivotRole = 'quizee';
+        }
+        if ($u->role === 'quiz-master') {
+            $pivotRole = 'quiz-master';
+        }
 
         // Seat enforcement: check active institution subscription for seat limit
         $activeSub = Subscription::where('owner_type', Institution::class)
@@ -231,7 +251,7 @@ class InstitutionMemberController extends Controller
 
         if ($activeSub && $activeSub->package) {
             $available = $activeSub->availableSeats();
-            if (!is_null($available) && $available <= 0) {
+            if (! is_null($available) && $available <= 0) {
                 return response()->json(['ok' => false, 'message' => 'Seat limit reached for this institution package'], 422);
             }
         }
@@ -250,7 +270,7 @@ class InstitutionMemberController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            
+
             // Record seat usage when new member is added
             try {
                 InstitutionPackageUsageService::recordSeatUsage($institution, $u);
@@ -259,7 +279,7 @@ class InstitutionMemberController extends Controller
                     'user_id' => $u->id,
                 ]);
             } catch (\Throwable $e) {
-                Log::warning('[Institution] Failed to record seat usage for new member: ' . $e->getMessage());
+                Log::warning('[Institution] Failed to record seat usage for new member: '.$e->getMessage());
             }
         }
 
@@ -280,15 +300,17 @@ class InstitutionMemberController extends Controller
         if ($activeSub && $activeSub->package) {
             try {
                 $assignment = $activeSub->assignUser($u->id, $user->id);
-                if (!$assignment) {
+                if (! $assignment) {
                     // rollback pivot change
                     // mark the pivot back to pending or delete (we'll mark pending)
                     DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->update(['status' => 'pending', 'updated_at' => now()]);
+
                     return response()->json(['ok' => false, 'message' => 'Failed to assign subscription seat: limit reached'], 422);
                 }
             } catch (\Throwable $e) {
                 // best-effort: revert pivot and surface error
                 DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $u->id)->update(['status' => 'pending', 'updated_at' => now()]);
+
                 return response()->json(['ok' => false, 'message' => 'Failed to assign subscription seat'], 500);
             }
         }
@@ -301,9 +323,12 @@ class InstitutionMemberController extends Controller
         /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $userId)->delete();
+
         return response()->json(['ok' => true, 'message' => 'User removed from institution']);
     }
 
@@ -315,7 +340,9 @@ class InstitutionMemberController extends Controller
         /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         $activeSub = Subscription::where('owner_type', Institution::class)
             ->where('owner_id', $institution->id)
@@ -323,7 +350,7 @@ class InstitutionMemberController extends Controller
             ->orderByDesc('started_at')
             ->first();
 
-        if (!$activeSub) {
+        if (! $activeSub) {
             return response()->json(['ok' => true, 'subscription' => null, 'available_seats' => null, 'assignments' => []]);
         }
 
@@ -354,7 +381,9 @@ class InstitutionMemberController extends Controller
         /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         $data = $request->validate([
             'user_id' => 'required|integer',
@@ -366,14 +395,16 @@ class InstitutionMemberController extends Controller
             ->orderByDesc('started_at')
             ->first();
 
-        if (!$activeSub) return response()->json(['ok' => false, 'message' => 'No active institution package found'], 404);
+        if (! $activeSub) {
+            return response()->json(['ok' => false, 'message' => 'No active institution package found'], 404);
+        }
 
         $assignment = SubscriptionAssignment::where('subscription_id', $activeSub->id)
             ->where('user_id', $data['user_id'])
             ->whereNull('revoked_at')
             ->first();
 
-        if (!$assignment) {
+        if (! $assignment) {
             return response()->json(['ok' => false, 'message' => 'Assignment not found'], 404);
         }
 
@@ -383,7 +414,8 @@ class InstitutionMemberController extends Controller
         // Optionally mark the pivot as removed so the member no longer counts as active
         try {
             DB::table('institution_user')->where('institution_id', $institution->id)->where('user_id', $data['user_id'])->update(['status' => 'removed', 'updated_at' => now()]);
-        } catch (\Throwable $_) {}
+        } catch (\Throwable $_) {
+        }
 
         return response()->json(['ok' => true, 'message' => 'Assignment revoked']);
     }
@@ -397,14 +429,14 @@ class InstitutionMemberController extends Controller
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) {
+        if (! $isManager) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
         $data = $request->validate([
             'email' => 'required|email',
             'role' => 'nullable|in:quizee,quiz-master',
-            'expires_in_days' => 'nullable|integer|min:1|max:30'
+            'expires_in_days' => 'nullable|integer|min:1|max:30',
         ]);
 
         $existingUser = User::where('email', $data['email'])->first();
@@ -419,17 +451,17 @@ class InstitutionMemberController extends Controller
         if ($existingInvite) {
             return response()->json([
                 'ok' => false,
-                'message' => 'User already invited'
+                'message' => 'User already invited',
             ], 422);
         }
 
         $activeSub = $institution->activeSubscription();
         if ($activeSub && $activeSub->package) {
             $available = $activeSub->availableSeats();
-            if (!is_null($available) && $available <= 0) {
+            if (! is_null($available) && $available <= 0) {
                 return response()->json([
                     'ok' => false,
-                    'message' => 'No available seats'
+                    'message' => 'No available seats',
                 ], 422);
             }
         }
@@ -447,7 +479,7 @@ class InstitutionMemberController extends Controller
             if ($existing) {
                 return response()->json([
                     'ok' => false,
-                    'message' => 'User is already a member'
+                    'message' => 'User is already a member',
                 ], 422);
             }
 
@@ -461,7 +493,7 @@ class InstitutionMemberController extends Controller
                 'invited_email' => $data['email'],
                 'invited_by' => $user->id,
                 'created_at' => now(),
-                'updated_at' => now()
+                'updated_at' => now(),
             ]);
         } else {
             DB::table('institution_user')->insert([
@@ -474,7 +506,7 @@ class InstitutionMemberController extends Controller
                 'invited_email' => $data['email'],
                 'invited_by' => $user->id,
                 'created_at' => now(),
-                'updated_at' => now()
+                'updated_at' => now(),
             ]);
         }
 
@@ -484,7 +516,7 @@ class InstitutionMemberController extends Controller
         try {
             $frontend = env('FRONTEND_URL', config('app.url'));
             $ftoken = \Illuminate\Support\Str::random(48);
-            $cacheKey = 'invite_frontend_token:' . $ftoken;
+            $cacheKey = 'invite_frontend_token:'.$ftoken;
             $ttlMinutes = max(60, (int) round($expiresAt->diffInMinutes(now())));
             Cache::put($cacheKey, ['invitation_token' => $token, 'institution_id' => $institution->id], now()->addMinutes($ttlMinutes));
 
@@ -503,16 +535,16 @@ class InstitutionMemberController extends Controller
             Log::error('Failed to send institution invitation email', [
                 'email' => $data['email'],
                 'institution_id' => $institution->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
             // Don't fail the invitation creation if email fails
         }
 
         return response()->json([
             'ok' => true,
-            'message' => 'Invitation sent to ' . $data['email'],
+            'message' => 'Invitation sent to '.$data['email'],
             'invitation_token' => $token,
-            'expires_at' => $expiresAt
+            'expires_at' => $expiresAt,
         ], 201);
     }
 
@@ -527,14 +559,14 @@ class InstitutionMemberController extends Controller
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) {
+        if (! $isManager) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
         $data = $request->validate([
             'email' => 'required|email',
             'role' => 'nullable|in:quizee,quiz-master',
-            'expires_in_days' => 'nullable|integer|min:1|max:30'
+            'expires_in_days' => 'nullable|integer|min:1|max:30',
         ]);
 
         $existingUser = User::where('email', $data['email'])->first();
@@ -549,7 +581,7 @@ class InstitutionMemberController extends Controller
         if ($existingInvite) {
             return response()->json([
                 'ok' => false,
-                'message' => 'User already invited'
+                'message' => 'User already invited',
             ], 422);
         }
 
@@ -568,7 +600,7 @@ class InstitutionMemberController extends Controller
                 'invited_email' => $data['email'],
                 'invited_by' => $user->id,
                 'created_at' => now(),
-                'updated_at' => now()
+                'updated_at' => now(),
             ]);
         } else {
             DB::table('institution_user')->insert([
@@ -581,21 +613,21 @@ class InstitutionMemberController extends Controller
                 'invited_email' => $data['email'],
                 'invited_by' => $user->id,
                 'created_at' => now(),
-                'updated_at' => now()
+                'updated_at' => now(),
             ]);
         }
 
-    $frontend = env('FRONTEND_URL', config('app.url'));
-    // Generate a short-lived frontend token (ftoken) so a single frontend URL
-    // can carry a one-time token that maps back to this invitation. Store in cache
-    // for the same duration as the invitation expiry.
-    $ftoken = \Illuminate\Support\Str::random(48);
-    $cacheKey = 'invite_frontend_token:' . $ftoken;
-    $ttlMinutes = max(60, (int) round($expiresAt->diffInMinutes(now())));
-    \Illuminate\Support\Facades\Cache::put($cacheKey, ['invitation_token' => $token, 'institution_id' => $institution->id], now()->addMinutes($ttlMinutes));
+        $frontend = env('FRONTEND_URL', config('app.url'));
+        // Generate a short-lived frontend token (ftoken) so a single frontend URL
+        // can carry a one-time token that maps back to this invitation. Store in cache
+        // for the same duration as the invitation expiry.
+        $ftoken = \Illuminate\Support\Str::random(48);
+        $cacheKey = 'invite_frontend_token:'.$ftoken;
+        $ttlMinutes = max(60, (int) round($expiresAt->diffInMinutes(now())));
+        \Illuminate\Support\Facades\Cache::put($cacheKey, ['invitation_token' => $token, 'institution_id' => $institution->id], now()->addMinutes($ttlMinutes));
 
-    // Use the email-verified flow on the frontend so recipients land on the verification page
-    $inviteUrl = $frontend . '/email-verified?invite=' . $token . '&ftoken=' . $ftoken . '&email=' . urlencode($data['email']);
+        // Use the email-verified flow on the frontend so recipients land on the verification page
+        $inviteUrl = $frontend.'/email-verified?invite='.$token.'&ftoken='.$ftoken.'&email='.urlencode($data['email']);
 
         return response()->json([
             'ok' => true,
@@ -616,10 +648,10 @@ class InstitutionMemberController extends Controller
             ->where('invitation_expires_at', '>', now())
             ->first();
 
-        if (!$invitation) {
+        if (! $invitation) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Invalid or expired invitation'
+                'message' => 'Invalid or expired invitation',
             ], 404);
         }
 
@@ -632,8 +664,8 @@ class InstitutionMemberController extends Controller
                 'institution_name' => $institution->name,
                 'institution_slug' => $institution->slug,
                 'role' => $invitation->role,
-                'expires_at' => $invitation->invitation_expires_at
-            ]
+                'expires_at' => $invitation->invitation_expires_at,
+            ],
         ]);
     }
 
@@ -650,17 +682,17 @@ class InstitutionMemberController extends Controller
             ->where('invitation_token', $token)
             ->first();
 
-        if (!$invitation) {
+        if (! $invitation) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Invalid invitation'
+                'message' => 'Invalid invitation',
             ], 404);
         }
 
         if ($invitation->invitation_expires_at && now()->isAfter($invitation->invitation_expires_at)) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Invitation expired'
+                'message' => 'Invitation expired',
             ], 422);
         }
 
@@ -672,7 +704,7 @@ class InstitutionMemberController extends Controller
                 'status' => 'active',
                 'invitation_token' => null,
                 'invitation_expires_at' => null,
-                'updated_at' => now()
+                'updated_at' => now(),
             ]);
 
         $activeSub = $institution->activeSubscription();
@@ -703,7 +735,7 @@ class InstitutionMemberController extends Controller
 
         return response()->json([
             'ok' => true,
-            'message' => 'Successfully joined ' . $institution->name
+            'message' => 'Successfully joined '.$institution->name,
         ]);
     }
 
@@ -715,7 +747,9 @@ class InstitutionMemberController extends Controller
         /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         // Join with users table to include inviter name when available
         $invites = DB::table('institution_user as iu')
@@ -750,7 +784,9 @@ class InstitutionMemberController extends Controller
         /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         // Find pivot rows that were created as invites and later accepted (user_id set and invitation_status active)
         $rows = DB::table('institution_user as iu')
@@ -763,7 +799,7 @@ class InstitutionMemberController extends Controller
             ->select([
                 'iu.id', 'iu.invited_email', 'iu.role', 'iu.invited_by', 'inviter.name as invited_by_name',
                 'iu.user_id as accepted_user_id', 'accepted.name as accepted_user_name',
-                'iu.created_at as invited_at', 'iu.updated_at as accepted_at'
+                'iu.created_at as invited_at', 'iu.updated_at as accepted_at',
             ])
             ->get();
 
@@ -792,7 +828,9 @@ class InstitutionMemberController extends Controller
         /** @var Institution $institution */
         $user = $request->user();
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         $inv = DB::table('institution_user')
             ->where('institution_id', $institution->id)
@@ -800,7 +838,7 @@ class InstitutionMemberController extends Controller
             ->where('invitation_status', 'invited')
             ->first();
 
-        if (!$inv) {
+        if (! $inv) {
             return response()->json(['ok' => false, 'message' => 'Invitation not found or already handled'], 404);
         }
 
@@ -825,7 +863,7 @@ class InstitutionMemberController extends Controller
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) {
+        if (! $isManager) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
@@ -840,7 +878,7 @@ class InstitutionMemberController extends Controller
 
         $activeToday = 0;
         $activeThisWeek = 0;
-        if (!empty($memberIds)) {
+        if (! empty($memberIds)) {
             // Count distinct users who have made at least one attempt today
             $activeToday = DB::table('quiz_attempts')
                 ->whereIn('user_id', $memberIds)
@@ -859,7 +897,7 @@ class InstitutionMemberController extends Controller
 
         $totalAttempts = 0;
         $avgScore = 0;
-        if (!empty($memberIds)) {
+        if (! empty($memberIds)) {
             // Use SQL aggregates instead of loading all rows into memory,
             // which could exhaust PHP memory for large institutions.
             $totalAttempts = DB::table('quiz_attempts')
@@ -887,19 +925,19 @@ class InstitutionMemberController extends Controller
                     'quizees' => $quizees,
                     'quiz_masters' => $quizMasters,
                     'active_today' => $activeToday,
-                    'active_this_week' => $activeThisWeek
+                    'active_this_week' => $activeThisWeek,
                 ],
                 'quizzes' => [
                     'total_attempts' => $totalAttempts,
-                    'avg_score' => $avgScore
+                    'avg_score' => $avgScore,
                 ],
                 'subscription' => [
                     'seats_total' => $seatsTotal,
                     'seats_assigned' => $seatsAssigned,
                     'seats_available' => $seatsAvailable,
-                    'utilization_rate' => $utilizationRate
-                ]
-            ]
+                    'utilization_rate' => $utilizationRate,
+                ],
+            ],
         ]);
     }
 
@@ -912,7 +950,7 @@ class InstitutionMemberController extends Controller
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) {
+        if (! $isManager) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
@@ -933,8 +971,8 @@ class InstitutionMemberController extends Controller
             'ok' => true,
             'analytics' => [
                 'period_days' => $days,
-                'activity_by_date' => $activity
-            ]
+                'activity_by_date' => $activity,
+            ],
         ]);
     }
 
@@ -947,7 +985,7 @@ class InstitutionMemberController extends Controller
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) {
+        if (! $isManager) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
@@ -969,7 +1007,7 @@ class InstitutionMemberController extends Controller
                 ->count();
             $distribution[] = [
                 'range' => $range['label'],
-                'count' => $count
+                'count' => $count,
             ];
         }
 
@@ -987,7 +1025,7 @@ class InstitutionMemberController extends Controller
                     'user_id' => $item->user_id,
                     'name' => $item->user_name ?? 'Unknown',
                     'avg_score' => round($item->avg_score, 2),
-                    'attempts' => $item->attempts
+                    'attempts' => $item->attempts,
                 ];
             });
 
@@ -995,8 +1033,8 @@ class InstitutionMemberController extends Controller
             'ok' => true,
             'analytics' => [
                 'score_distribution' => $distribution,
-                'top_performers' => $topPerformersFormatted
-            ]
+                'top_performers' => $topPerformersFormatted,
+            ],
         ]);
     }
 
@@ -1009,12 +1047,12 @@ class InstitutionMemberController extends Controller
         $user = $request->user();
 
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) {
+        if (! $isManager) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
         $member = $institution->users()->where('users.id', $userId)->first();
-        if (!$member) {
+        if (! $member) {
             return response()->json(['ok' => false, 'message' => 'Member not found'], 404);
         }
 
@@ -1043,9 +1081,9 @@ class InstitutionMemberController extends Controller
                 'activity' => [
                     'total_attempts' => $totalAttempts,
                     'avg_score' => $avgScore,
-                    'last_activity' => $lastActivity ? $lastActivity->created_at : null
-                ]
-            ]
+                    'last_activity' => $lastActivity ? $lastActivity->created_at : null,
+                ],
+            ],
         ]);
     }
 
@@ -1053,10 +1091,12 @@ class InstitutionMemberController extends Controller
     {
         /** @var Institution $institution */
         $user = $request->user();
-        
+
         // Only institution managers can create members directly
         $isManager = $institution->users()->where('users.id', $user->id)->wherePivot('role', 'institution-manager')->exists();
-        if (!$isManager) return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        if (! $isManager) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
         $data = $request->validate([
             'name' => 'required|string|max:255',
@@ -1089,7 +1129,7 @@ class InstitutionMemberController extends Controller
                     'institution_verified' => true,
                     'verified_institution_id' => $institution->id,
                 ]);
-            } else if ($data['role'] === 'quiz-master') {
+            } elseif ($data['role'] === 'quiz-master') {
                 \App\Models\QuizMaster::create([
                     'user_id' => $newUser->id,
                     'institution' => $institution->name,
@@ -1116,7 +1156,7 @@ class InstitutionMemberController extends Controller
             try {
                 InstitutionPackageUsageService::recordSeatUsage($institution, $newUser);
             } catch (\Throwable $e) {
-                Log::warning('[Institution] Failed to record seat usage for directly created member: ' . $e->getMessage());
+                Log::warning('[Institution] Failed to record seat usage for directly created member: '.$e->getMessage());
             }
 
             // 5. Try to assign active subscription seat if available
@@ -1125,17 +1165,17 @@ class InstitutionMemberController extends Controller
                 try {
                     $activeSub->assignUser($newUser->id, $user->id);
                 } catch (\Throwable $e) {
-                    Log::warning('[Institution] Failed to assign subscription seat to directly created member: ' . $e->getMessage());
+                    Log::warning('[Institution] Failed to assign subscription seat to directly created member: '.$e->getMessage());
                 }
             }
 
             // Refresh user model and evaluate profile completion status
             $newUser->refresh();
             try {
-                $onboardingService = new \App\Services\OnboardingService();
+                $onboardingService = new \App\Services\OnboardingService;
                 $onboardingService->syncProfileCompletionStatus($newUser);
             } catch (\Throwable $e) {
-                Log::error('[Institution] Failed to sync profile completion status for directly created member: ' . $e->getMessage());
+                Log::error('[Institution] Failed to sync profile completion status for directly created member: '.$e->getMessage());
             }
 
             return response()->json([
@@ -1148,7 +1188,7 @@ class InstitutionMemberController extends Controller
                     'role' => $data['role'],
                     'status' => 'active',
                     'avatar' => null,
-                ]
+                ],
             ], 201);
         });
     }

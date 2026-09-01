@@ -2,11 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
 use App\Models\Grade;
 use App\Models\Level;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class TertiaryAndEYESeeder extends Seeder
 {
@@ -25,8 +24,8 @@ class TertiaryAndEYESeeder extends Seeder
         }
 
         // Map Pre-Primary grades (EYE)
-    // find pre-primary level by name or fallback to first level
-    $prePrimaryLevel = Level::where('name', 'Pre-Primary')->first() ?: Level::first();
+        // find pre-primary level by name or fallback to first level
+        $prePrimaryLevel = Level::where('name', 'Pre-Primary')->first() ?: Level::first();
 
         $prePrimaryGrades = [
             ['name' => 'Pre-Primary 1 (PP1)', 'slug' => 'pp1'],
@@ -40,7 +39,9 @@ class TertiaryAndEYESeeder extends Seeder
                 'display_name' => $g['name'],
                 'is_active' => true,
             ];
-            if ($prePrimaryLevel) $data['level_id'] = $prePrimaryLevel->id;
+            if ($prePrimaryLevel) {
+                $data['level_id'] = $prePrimaryLevel->id;
+            }
             // Create or update grade by name (slug removed)
             Grade::updateOrCreate(['name' => $g['name']], $data);
         }
@@ -48,7 +49,7 @@ class TertiaryAndEYESeeder extends Seeder
         // Tertiary courses and their subjects
         $courses = [
             'Education (Early Childhood, Primary, Secondary, Special Needs)' => [
-                'Early Childhood Education', 'Primary Education', 'Secondary Education', 'Special Needs Education'
+                'Early Childhood Education', 'Primary Education', 'Secondary Education', 'Special Needs Education',
             ],
             'Business & Economics' => ['Accounting', 'Finance', 'Marketing', 'Entrepreneurship', 'Economics'],
             'Computer Science & Information Technology' => ['Software Development', 'Networking', 'Data Science', 'Artificial Intelligence'],

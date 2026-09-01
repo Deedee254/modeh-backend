@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\ChatResource\Pages;
 
-use Filament\Resources\Pages\EditRecord;
 use App\Filament\Resources\ChatResource;
+use Filament\Resources\Pages\EditRecord;
 
 class EditMessage extends EditRecord
 {

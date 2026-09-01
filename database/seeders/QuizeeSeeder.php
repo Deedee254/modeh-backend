@@ -2,12 +2,12 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\User;
-use App\Models\Quizee;
-use App\Models\Subject;
 use App\Models\Grade;
 use App\Models\Level;
+use App\Models\Quizee;
+use App\Models\Subject;
+use App\Models\User;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 class QuizeeSeeder extends Seeder
@@ -16,7 +16,7 @@ class QuizeeSeeder extends Seeder
     {
         // Ensure tertiary level exists
         $tertiaryLevel = Level::where('name', 'Tertiary / Higher Education')->first();
-        if (!$tertiaryLevel) {
+        if (! $tertiaryLevel) {
             $this->command->info('Tertiary level not found. Running LevelsTableSeeder...');
             $this->call(LevelsTableSeeder::class);
             $tertiaryLevel = Level::where('name', 'Tertiary / Higher Education')->first();
@@ -24,7 +24,7 @@ class QuizeeSeeder extends Seeder
 
         // Ensure Law course exists
         $lawCourse = Grade::where('name', 'Law')->where('type', 'course')->first();
-        if (!$lawCourse) {
+        if (! $lawCourse) {
             $this->command->info('Law course not found. Running TertiaryAndEYESeeder...');
             $this->call(TertiaryAndEYESeeder::class);
             $lawCourse = Grade::where('name', 'Law')->where('type', 'course')->first();
@@ -59,7 +59,7 @@ class QuizeeSeeder extends Seeder
         // Create main test quizee with tertiary (Law) level
         $user = User::updateOrCreate([
             'email' => 'quizee@example.com',
-        ],[
+        ], [
             'name' => 'Quizee One',
             'password' => Hash::make('password123'),
             'role' => 'quizee',
@@ -67,7 +67,7 @@ class QuizeeSeeder extends Seeder
 
         Quizee::updateOrCreate([
             'user_id' => $user->id,
-        ],[
+        ], [
             'profile' => 'Seeded quizee',
             'institution' => $faker->randomElement($institutions),
             'grade_id' => $lawCourse->id, // Use Law course

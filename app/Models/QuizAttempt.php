@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Quiz attempt model
@@ -22,7 +22,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property \DateTimeInterface|null $started_at When the attempt was started
  * @property \DateTimeInterface $created_at
  * @property \DateTimeInterface $updated_at
- *
  * @property-read \App\Models\Quiz $quiz
  * @property-read \App\Models\User $user
  * @property-read \App\Models\Institution|null $institution
@@ -32,7 +31,9 @@ class QuizAttempt extends Model
     use HasFactory;
 
     protected $table = 'quiz_attempts';
+
     protected $fillable = ['user_id', 'quiz_id', 'paid_for', 'institution_access', 'institution_id', 'answers', 'score', 'points_earned', 'total_time_seconds', 'per_question_time'];
+
     protected $attributes = [
         'points_earned' => null,
         'paid_for' => false,

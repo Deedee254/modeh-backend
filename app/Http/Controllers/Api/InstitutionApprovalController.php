@@ -7,8 +7,8 @@ use App\Models\Institution;
 use App\Models\InstitutionApprovalRequest;
 use App\Services\InstitutionPackageUsageService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class InstitutionApprovalController extends Controller
 {
@@ -19,7 +19,7 @@ class InstitutionApprovalController extends Controller
     {
         $user = $request->user();
 
-        if (!$this->isInstitutionManager($institution, $user)) {
+        if (! $this->isInstitutionManager($institution, $user)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -40,7 +40,7 @@ class InstitutionApprovalController extends Controller
     {
         $user = $request->user();
 
-        if (!$this->isAnyInstitutionManager($user)) {
+        if (! $this->isAnyInstitutionManager($user)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -52,12 +52,12 @@ class InstitutionApprovalController extends Controller
         $approvalRequest->approve($institution->id, $user->id);
 
         // Add user to institution if not already member
-        if (!$institution->users()->where('users.id', $approvalRequest->user_id)->exists()) {
+        if (! $institution->users()->where('users.id', $approvalRequest->user_id)->exists()) {
             $institution->users()->attach($approvalRequest->user_id, [
                 'role' => $approvalRequest->profile_type,
                 'status' => 'active',
             ]);
-            
+
             // Record seat usage when approved user is added
             try {
                 $approvedUser = \App\Models\User::find($approvalRequest->user_id);
@@ -69,7 +69,7 @@ class InstitutionApprovalController extends Controller
                     ]);
                 }
             } catch (\Throwable $e) {
-                Log::warning('[Institution] Failed to record seat usage for approved member: ' . $e->getMessage());
+                Log::warning('[Institution] Failed to record seat usage for approved member: '.$e->getMessage());
             }
         }
 
@@ -87,7 +87,7 @@ class InstitutionApprovalController extends Controller
     {
         $user = $request->user();
 
-        if (!$this->isAnyInstitutionManager($user)) {
+        if (! $this->isAnyInstitutionManager($user)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -131,7 +131,7 @@ class InstitutionApprovalController extends Controller
             ->orWhere('slug', Str::slug($name))
             ->first();
 
-        if (!$institution) {
+        if (! $institution) {
             $institution = Institution::create([
                 'name' => $name,
                 'slug' => Str::slug($name),

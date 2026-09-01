@@ -8,11 +8,10 @@ use App\Models\Package;
 use App\Models\Subscription;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * InstitutionPackageUsageService
- * 
+ *
  * Tracks and enforces institution package limits:
  * - Seats: Number of members that can be assigned
  * - Quiz attempts: Number of quiz attempts per day/month
@@ -21,12 +20,9 @@ class InstitutionPackageUsageService
 {
     /**
      * Record a quiz attempt for an institution member
-     * 
-     * @param Institution $institution
-     * @param User $user
-     * @param Subscription|null $subscription The institution's active subscription (if any)
-     * @param array $metadata Additional context (quiz_id, etc)
-     * @return void
+     *
+     * @param  Subscription|null  $subscription  The institution's active subscription (if any)
+     * @param  array  $metadata  Additional context (quiz_id, etc)
      */
     public static function recordQuizAttempt(
         Institution $institution,
@@ -47,11 +43,8 @@ class InstitutionPackageUsageService
 
     /**
      * Record a seat assignment for a new institution member
-     * 
-     * @param Institution $institution
-     * @param User $user
-     * @param Subscription|null $subscription The institution's active subscription (if any)
-     * @return void
+     *
+     * @param  Subscription|null  $subscription  The institution's active subscription (if any)
      */
     public static function recordSeatUsage(
         Institution $institution,
@@ -70,8 +63,7 @@ class InstitutionPackageUsageService
 
     /**
      * Check if institution has available seats in their package
-     * 
-     * @param Institution $institution
+     *
      * @return array{
      *     has_limit: bool,
      *     available: int|null,
@@ -88,13 +80,13 @@ class InstitutionPackageUsageService
             ->where('status', 'active')
             ->first();
 
-        if (!$subscription || !$subscription->package) {
+        if (! $subscription || ! $subscription->package) {
             return [
                 'has_limit' => false,
                 'available' => null,
                 'used' => 0,
                 'limit' => null,
-                'message' => 'No active package'
+                'message' => 'No active package',
             ];
         }
 
@@ -106,7 +98,7 @@ class InstitutionPackageUsageService
                 'available' => null,
                 'used' => 0,
                 'limit' => null,
-                'message' => 'Unlimited seats'
+                'message' => 'Unlimited seats',
             ];
         }
 
@@ -119,14 +111,13 @@ class InstitutionPackageUsageService
             'available' => $available,
             'used' => $used,
             'limit' => $limit,
-            'message' => "Used {$used}/{$limit} seats"
+            'message' => "Used {$used}/{$limit} seats",
         ];
     }
 
     /**
      * Check if institution can attempt quiz (if there are daily attempt limits)
-     * 
-     * @param Institution $institution
+     *
      * @return array{
      *     has_limit: bool,
      *     available: int|null,
@@ -142,13 +133,13 @@ class InstitutionPackageUsageService
             ->where('status', 'active')
             ->first();
 
-        if (!$subscription || !$subscription->package) {
+        if (! $subscription || ! $subscription->package) {
             return [
                 'has_limit' => false,
                 'available' => null,
                 'used_today' => 0,
                 'limit' => null,
-                'message' => 'No active package'
+                'message' => 'No active package',
             ];
         }
 
@@ -160,7 +151,7 @@ class InstitutionPackageUsageService
                 'available' => null,
                 'used_today' => 0,
                 'limit' => null,
-                'message' => 'Unlimited daily attempts'
+                'message' => 'Unlimited daily attempts',
             ];
         }
 
@@ -178,17 +169,15 @@ class InstitutionPackageUsageService
             'available' => $available,
             'used_today' => $usedToday,
             'limit' => $limit,
-            'message' => "Used {$usedToday}/{$limit} attempts today"
+            'message' => "Used {$usedToday}/{$limit} attempts today",
         ];
     }
 
     /**
      * Get usage report for an institution
-     * 
-     * @param Institution $institution
-     * @param string $startDate Format: Y-m-d
-     * @param string $endDate Format: Y-m-d
-     * @return array
+     *
+     * @param  string  $startDate  Format: Y-m-d
+     * @param  string  $endDate  Format: Y-m-d
      */
     public static function getUsageReport(
         Institution $institution,

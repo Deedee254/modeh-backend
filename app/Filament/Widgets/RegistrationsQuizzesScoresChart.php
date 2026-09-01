@@ -2,14 +2,12 @@
 
 namespace App\Filament\Widgets;
 
-use Filament\Widgets\LineChartWidget;
-use Filament\Widgets\Concerns\InteractsWithPageFilters;
-use App\Models\User;
-use App\Models\QuizAttempt;
 use App\Models\Quiz;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
+use Filament\Widgets\LineChartWidget;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class RegistrationsQuizzesScoresChart extends LineChartWidget
 {
@@ -27,8 +25,8 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
     protected function getData(): array
     {
         // Determine the date range: respect page filters if provided, otherwise last 14 days
-        $start = !empty($this->pageFilters['startDate']) ? Carbon::parse($this->pageFilters['startDate'])->startOfDay() : now()->copy()->subDays(13)->startOfDay();
-        $end = !empty($this->pageFilters['endDate']) ? Carbon::parse($this->pageFilters['endDate'])->endOfDay() : now()->endOfDay();
+        $start = ! empty($this->pageFilters['startDate']) ? Carbon::parse($this->pageFilters['startDate'])->startOfDay() : now()->copy()->subDays(13)->startOfDay();
+        $end = ! empty($this->pageFilters['endDate']) ? Carbon::parse($this->pageFilters['endDate'])->endOfDay() : now()->endOfDay();
 
         // Build quiz-scoped filters for attempts (level/grade/creator)
         $level = $this->pageFilters['level'] ?? null;
@@ -36,15 +34,15 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
         $creator = $this->pageFilters['creator'] ?? null;
 
         // Cache key depends on filters and date range
-        $cacheKey = 'dashboard:reg_quiz_scores:' . $start->toDateString() . ':' . $end->toDateString()
-            . ':' . ($level ?? 'n') . ':' . ($grade ?? 'n') . ':' . ($creator ?? 'n');
+        $cacheKey = 'dashboard:reg_quiz_scores:'.$start->toDateString().':'.$end->toDateString()
+            .':'.($level ?? 'n').':'.($grade ?? 'n').':'.($creator ?? 'n');
 
         // Use tagged cache when supported so we can flush dashboard-related caches easily.
         if (Cache::getStore() instanceof \Illuminate\Cache\TaggableStore) {
             [$registrationsRows, $attemptsRows] = Cache::tags(['dashboard_charts'])->remember($cacheKey, 60, function () use ($start, $end, $level, $grade, $creator) {
                 // Registrations grouped by day
                 $registrationsRows = DB::table('users')
-                    ->select(DB::raw("DATE(created_at) AS day"), DB::raw('COUNT(*) as cnt'))
+                    ->select(DB::raw('DATE(created_at) AS day'), DB::raw('COUNT(*) as cnt'))
                     ->whereBetween('created_at', [$start, $end])
                     ->groupBy('day')
                     ->pluck('cnt', 'day')
@@ -52,19 +50,22 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
 
                 // Quiz attempts grouped by day with avg score
                 $attemptsQuery = DB::table('quiz_attempts')
-                    ->select(DB::raw("DATE(quiz_attempts.created_at) as day"), DB::raw('COUNT(*) as attempts'), DB::raw('AVG(quiz_attempts.score) as avg_score'))
+                    ->select(DB::raw('DATE(quiz_attempts.created_at) as day'), DB::raw('COUNT(*) as attempts'), DB::raw('AVG(quiz_attempts.score) as avg_score'))
                     ->whereBetween('quiz_attempts.created_at', [$start, $end])
                     ->join('quizzes', 'quiz_attempts.quiz_id', '=', 'quizzes.id');
 
-                if ($level)
+                if ($level) {
                     $attemptsQuery->where('quizzes.level_id', $level);
-                if ($grade)
+                }
+                if ($grade) {
                     $attemptsQuery->where('quizzes.grade_id', $grade);
-                if ($creator)
+                }
+                if ($creator) {
                     $attemptsQuery->where('quizzes.user_id', $creator);
+                }
 
                 $attemptsRows = $attemptsQuery->groupBy('day')->orderBy('day')->get()
-                    ->mapWithKeys(fn($r) => [$r->day => ['attempts' => (int) $r->attempts, 'avg' => (float) $r->avg_score]])
+                    ->mapWithKeys(fn ($r) => [$r->day => ['attempts' => (int) $r->attempts, 'avg' => (float) $r->avg_score]])
                     ->toArray();
 
                 return [$registrationsRows, $attemptsRows];
@@ -73,7 +74,7 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
             [$registrationsRows, $attemptsRows] = Cache::remember($cacheKey, 60, function () use ($start, $end, $level, $grade, $creator) {
                 // Registrations grouped by day
                 $registrationsRows = DB::table('users')
-                    ->select(DB::raw("DATE(created_at) AS day"), DB::raw('COUNT(*) as cnt'))
+                    ->select(DB::raw('DATE(created_at) AS day'), DB::raw('COUNT(*) as cnt'))
                     ->whereBetween('created_at', [$start, $end])
                     ->groupBy('day')
                     ->pluck('cnt', 'day')
@@ -81,19 +82,22 @@ class RegistrationsQuizzesScoresChart extends LineChartWidget
 
                 // Quiz attempts grouped by day with avg score
                 $attemptsQuery = DB::table('quiz_attempts')
-                    ->select(DB::raw("DATE(quiz_attempts.created_at) as day"), DB::raw('COUNT(*) as attempts'), DB::raw('AVG(quiz_attempts.score) as avg_score'))
+                    ->select(DB::raw('DATE(quiz_attempts.created_at) as day'), DB::raw('COUNT(*) as attempts'), DB::raw('AVG(quiz_attempts.score) as avg_score'))
                     ->whereBetween('quiz_attempts.created_at', [$start, $end])
                     ->join('quizzes', 'quiz_attempts.quiz_id', '=', 'quizzes.id');
 
-                if ($level)
+                if ($level) {
                     $attemptsQuery->where('quizzes.level_id', $level);
-                if ($grade)
+                }
+                if ($grade) {
                     $attemptsQuery->where('quizzes.grade_id', $grade);
-                if ($creator)
+                }
+                if ($creator) {
                     $attemptsQuery->where('quizzes.user_id', $creator);
+                }
 
                 $attemptsRows = $attemptsQuery->groupBy('day')->orderBy('day')->get()
-                    ->mapWithKeys(fn($r) => [$r->day => ['attempts' => (int) $r->attempts, 'avg' => (float) $r->avg_score]])
+                    ->mapWithKeys(fn ($r) => [$r->day => ['attempts' => (int) $r->attempts, 'avg' => (float) $r->avg_score]])
                     ->toArray();
 
                 return [$registrationsRows, $attemptsRows];

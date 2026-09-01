@@ -49,8 +49,8 @@ use Illuminate\Support\Facades\Auth;
  */
 class Quiz extends Model
 {
-    use HasFactory, \App\Traits\SeedableShuffle;
-    
+    use \App\Traits\SeedableShuffle, HasFactory;
+
     protected $appends = ['price'];
 
     // Include user_id so tests and factory-created quizzes can set the owning user
@@ -74,13 +74,13 @@ class Quiz extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            if (empty($model->slug) && !empty($model->title)) {
+            if (empty($model->slug) && ! empty($model->title)) {
                 $model->slug = \App\Services\SlugService::makeUniqueSlug($model->title, static::class);
             }
         });
 
         static::updating(function ($model) {
-            if ($model->isDirty('title') && !empty($model->title)) {
+            if ($model->isDirty('title') && ! empty($model->title)) {
                 $model->slug = \App\Services\SlugService::makeUniqueSlug($model->title, static::class, $model->id);
             }
         });
@@ -157,6 +157,7 @@ class Quiz extends Model
         $avg = $this->questions()->avg('difficulty') ?: 0;
         $this->difficulty = $avg;
         $this->save();
+
         return $this->difficulty;
     }
 
@@ -165,15 +166,15 @@ class Quiz extends Model
      * Rules:
      * - If quiz is not institutional: free for everyone
      * - If quiz is institutional: free only for institution members, others must pay
-     * 
-     * @param \App\Models\User $user
+     *
+     * @param  \App\Models\User  $user
      * @return bool
      */
     public function isFreeForUser($user)
     {
         // If not an institutional quiz, it's free (unless one_off_price is set separately)
-        if (!$this->is_institutional || !$this->institution_id) {
-            return !$this->is_paid; // Free if not marked as paid
+        if (! $this->is_institutional || ! $this->institution_id) {
+            return ! $this->is_paid; // Free if not marked as paid
         }
 
         // If institutional, check if user is a member of that institution
@@ -186,12 +187,10 @@ class Quiz extends Model
      * Accessor for the effective one-off price of the quiz.
      * Takes into account the quiz-specific price and the global default.
      * Respects the is_paid status (returns 0 if not paid).
-     *
-     * @return float
      */
     public function getPriceAttribute(): float
     {
-        if (!$this->is_paid) {
+        if (! $this->is_paid) {
             return 0.0;
         }
 
@@ -201,6 +200,7 @@ class Quiz extends Model
 
         try {
             $pricingSetting = PricingSetting::singleton();
+
             return (float) ($pricingSetting->default_quiz_one_off_price ?? 0);
         } catch (\Throwable $e) {
             return 0.0;
@@ -211,8 +211,8 @@ class Quiz extends Model
      * Get the price a user needs to pay for this quiz.
      * Returns null if free, or the amount they need to pay.
      * Tries per-quiz price first, then falls back to global default.
-     * 
-     * @param \App\Models\User $user
+     *
+     * @param  \App\Models\User  $user
      * @return float|null
      */
     public function getPriceForUser($user)
@@ -240,7 +240,7 @@ class Quiz extends Model
 
         if ($this->shuffle_questions) {
             if ($seed !== '') {
-                $qs = $this->baseSeededShuffle($qs, $seed . '::questions');
+                $qs = $this->baseSeededShuffle($qs, $seed.'::questions');
             } else {
                 shuffle($qs);
             }
@@ -248,12 +248,12 @@ class Quiz extends Model
 
         $prepared = [];
         foreach ($qs as $q) {
-            if ($this->shuffle_answers && !empty($q->options)) {
+            if ($this->shuffle_answers && ! empty($q->options)) {
                 $opts = $q->options;
                 $shuffledOpts = $opts;
 
                 if ($seed !== '') {
-                    $shuffledOpts = $this->baseSeededShuffle($opts, $seed . '::q' . $q->id);
+                    $shuffledOpts = $this->baseSeededShuffle($opts, $seed.'::q'.$q->id);
                 } else {
                     shuffle($shuffledOpts);
                 }
@@ -262,13 +262,15 @@ class Quiz extends Model
                 $indexMap = [];
                 foreach ($opts as $oldIdx => $opt) {
                     $newIdx = array_search($opt, $shuffledOpts);
-                    if ($newIdx !== false) $indexMap[$oldIdx] = $newIdx;
+                    if ($newIdx !== false) {
+                        $indexMap[$oldIdx] = $newIdx;
+                    }
                 }
 
                 // Update the model's attributes temporarily for toPublicArray
                 $q->options = $shuffledOpts;
 
-                if (!empty($q->answers) && is_array($q->answers)) {
+                if (! empty($q->answers) && is_array($q->answers)) {
                     $newAnswers = [];
                     foreach ($q->answers as $ans) {
                         if (isset($indexMap[$ans])) {
@@ -285,7 +287,4 @@ class Quiz extends Model
 
         return $prepared;
     }
-
 }
-
-

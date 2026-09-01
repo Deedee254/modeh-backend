@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Achievement;
+use Illuminate\Database\Seeder;
 
 class LevelAchievementsSeeder extends Seeder
 {
@@ -20,7 +20,7 @@ class LevelAchievementsSeeder extends Seeder
                 'criteria' => json_encode(['action' => 'create_quiz', 'count' => 1]),
                 'criteria_value' => 1,
                 'slug' => 'first-quiz-in-level',
-                'category' => 'level'
+                'category' => 'level',
             ],
             [
                 'name' => 'Level Builder',
@@ -31,7 +31,7 @@ class LevelAchievementsSeeder extends Seeder
                 'criteria' => json_encode(['action' => 'create_quiz', 'count' => 3]),
                 'criteria_value' => 3,
                 'slug' => 'create-3-quizzes-in-level',
-                'category' => 'level'
+                'category' => 'level',
             ],
             [
                 'name' => 'Course Creator',
@@ -42,7 +42,7 @@ class LevelAchievementsSeeder extends Seeder
                 'criteria' => json_encode(['action' => 'create_quiz', 'count' => 1, 'require_course' => true]),
                 'criteria_value' => 1,
                 'slug' => 'first-quiz-in-course',
-                'category' => 'course'
+                'category' => 'course',
             ],
             [
                 'name' => 'Course Builder',
@@ -53,7 +53,7 @@ class LevelAchievementsSeeder extends Seeder
                 'criteria' => json_encode(['action' => 'create_quiz', 'count' => 5, 'require_course' => true, 'per_grade' => true]),
                 'criteria_value' => 5,
                 'slug' => 'create-5-quizzes-in-course',
-                'category' => 'course'
+                'category' => 'course',
             ],
             [
                 'name' => 'Level Authority',
@@ -64,14 +64,14 @@ class LevelAchievementsSeeder extends Seeder
                 'criteria' => json_encode(['action' => 'create_quiz', 'count' => 10]),
                 'criteria_value' => 10,
                 'slug' => 'create-10-quizzes-in-level',
-                'category' => 'level'
+                'category' => 'level',
             ],
         ];
 
         foreach ($achievements as $achievement) {
             // Use updateOrCreate to make seeder idempotent
             Achievement::updateOrCreate([
-                'slug' => $achievement['slug']
+                'slug' => $achievement['slug'],
             ], $achievement);
         }
     }

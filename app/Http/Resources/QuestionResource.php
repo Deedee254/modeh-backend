@@ -21,12 +21,12 @@ class QuestionResource extends JsonResource
                 if (is_array($opt)) {
                     $text = isset($opt['text']) ? (string) $opt['text'] : (isset($opt['option']) ? (string) $opt['option'] : '');
                     $media = $opt['media'] ?? $opt['media_path'] ?? null;
-                    $mediaUrl = $media ? ((\Illuminate\Support\Str::startsWith($media, ['http://', 'https://'])) ? $media : (\Illuminate\Support\Str::startsWith($media, '/') ? url($media) : url('storage/' . $media))) : null;
-                    
-                    // Prioritize is_correct flag if it exists in the option array, 
+                    $mediaUrl = $media ? ((\Illuminate\Support\Str::startsWith($media, ['http://', 'https://'])) ? $media : (\Illuminate\Support\Str::startsWith($media, '/') ? url($media) : url('storage/'.$media))) : null;
+
+                    // Prioritize is_correct flag if it exists in the option array,
                     // otherwise fall back to checking if the index is in the answers array.
-                    $isCorrect = !empty($opt['is_correct']) || in_array((string)$idx, $answers, true);
-                    
+                    $isCorrect = ! empty($opt['is_correct']) || in_array((string) $idx, $answers, true);
+
                     return [
                         'option' => $text,
                         'text' => $text,
@@ -37,10 +37,11 @@ class QuestionResource extends JsonResource
                     ];
                 }
                 $text = is_string($opt) ? $opt : (string) ($opt ?? '');
+
                 return [
                     'option' => $text,
                     'text' => $text,
-                    'is_correct' => in_array((string)$idx, $answers, true),
+                    'is_correct' => in_array((string) $idx, $answers, true),
                 ];
             }, $this->options, array_keys($this->options)));
         }
@@ -65,18 +66,18 @@ class QuestionResource extends JsonResource
             'answers' => $answers,
             'explanation' => $this->explanation ?? null,
             'media_path' => $this->media_path ?? null,
-            'media_url' => $this->media_path ? ((\Illuminate\Support\Str::startsWith($this->media_path, ['http://', 'https://'])) ? $this->media_path : (\Illuminate\Support\Str::startsWith($this->media_path, '/') ? url($this->media_path) : url('storage/' . $this->media_path))) : null,
+            'media_url' => $this->media_path ? ((\Illuminate\Support\Str::startsWith($this->media_path, ['http://', 'https://'])) ? $this->media_path : (\Illuminate\Support\Str::startsWith($this->media_path, '/') ? url($this->media_path) : url('storage/'.$this->media_path))) : null,
             'media_type' => $this->media_type ?? null,
             'media_metadata' => $this->media_metadata ?? null,
             'youtube_url' => $this->youtube_url ?? null,
             'created_by' => $this->created_by ?? null,
             'quiz_id' => $this->quiz_id ?? null,
             'quiz_title' => $this->quiz->title ?? ($this->quiz->name ?? null),
-            'tournaments' => $this->relationLoaded('tournaments') 
-                ? $this->tournaments->map(fn($t) => ['id' => $t->id, 'name' => $t->name]) 
-                : ($this->tournaments ? $this->tournaments->map(fn($t) => ['id' => $t->id, 'name' => $t->name]) : []),
-            'tournament_name' => $this->relationLoaded('tournaments') 
-                ? ($this->tournaments->first()->name ?? null) 
+            'tournaments' => $this->relationLoaded('tournaments')
+                ? $this->tournaments->map(fn ($t) => ['id' => $t->id, 'name' => $t->name])
+                : ($this->tournaments ? $this->tournaments->map(fn ($t) => ['id' => $t->id, 'name' => $t->name]) : []),
+            'tournament_name' => $this->relationLoaded('tournaments')
+                ? ($this->tournaments->first()->name ?? null)
                 : ($this->tournaments ? ($this->tournaments->first()->name ?? null) : null),
             'subject_id' => $this->subject_id ?? null,
             'subject_name' => $this->subject->name ?? null,

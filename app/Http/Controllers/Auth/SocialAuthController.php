@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Services\SocialAuthService;
 use App\Models\UserOnboarding;
+use App\Services\SocialAuthService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -50,10 +50,10 @@ class SocialAuthController extends Controller
 
             $user->load('onboarding');
 
-            $hasRole = !empty($user->role);
-            $needsOnboarding = !$hasRole || !$user->is_profile_completed;
+            $hasRole = ! empty($user->role);
+            $needsOnboarding = ! $hasRole || ! $user->is_profile_completed;
 
-            if ($needsOnboarding && !$user->onboarding) {
+            if ($needsOnboarding && ! $user->onboarding) {
                 UserOnboarding::firstOrCreate(
                     ['user_id' => $user->id],
                     [
@@ -63,7 +63,7 @@ class SocialAuthController extends Controller
                         'subject_selected' => false,
                         'grade_selected' => false,
                         'completed_steps' => ['social_auth'],
-                        'last_step_completed_at' => now()
+                        'last_step_completed_at' => now(),
                     ]
                 );
                 $user->load('onboarding');
@@ -85,7 +85,7 @@ class SocialAuthController extends Controller
             }
 
             $frontend = config('app.frontend_url');
-            $redirectUrl = rtrim($frontend, '/') . '/auth/callback';
+            $redirectUrl = rtrim($frontend, '/').'/auth/callback';
 
             // Explicitly save session one more time to be absolutely sure
             $request->session()->save();
@@ -95,7 +95,7 @@ class SocialAuthController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'An error occurred during social authentication.',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -115,23 +115,24 @@ class SocialAuthController extends Controller
         // If there's no onboarding record yet, create one or determine based on role
         // For existing users without onboarding record, check if they have a role
         // If they have a role and profile is complete, they're done
-        if (!$onboarding) {
+        if (! $onboarding) {
             // Existing user without onboarding record but has role and completed profile
-            if (!empty($user->role) && $user->is_profile_completed) {
+            if (! empty($user->role) && $user->is_profile_completed) {
                 return 'complete';
             }
+
             // Otherwise, they need to start onboarding - choose role first
             return 'new-user';
         }
 
         // Priority: role selection comes first for new users
         // If role is not selected, go to role selection
-        if (empty($onboarding->role_selected) || !$onboarding->role_selected) {
+        if (empty($onboarding->role_selected) || ! $onboarding->role_selected) {
             return 'new-user';
         }
 
         // After role is selected, check institution
-        if (empty($onboarding->institution_added) || !$onboarding->institution_added) {
+        if (empty($onboarding->institution_added) || ! $onboarding->institution_added) {
             return 'institution';
         }
 
@@ -143,11 +144,11 @@ class SocialAuthController extends Controller
         }
 
         // Check role-specific requirements
-        if ($user->role === 'quizee' && (empty($onboarding->grade_selected) || !$onboarding->grade_selected)) {
+        if ($user->role === 'quizee' && (empty($onboarding->grade_selected) || ! $onboarding->grade_selected)) {
             return 'grade';
         }
 
-        if ($user->role === 'quiz-master' && (empty($onboarding->subject_selected) || !$onboarding->subject_selected)) {
+        if ($user->role === 'quiz-master' && (empty($onboarding->subject_selected) || ! $onboarding->subject_selected)) {
             return 'subjects';
         }
 

@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 /**
  * Institution model
- * 
+ *
  * @property int $id
  * @property string $name
  * @property string $slug
@@ -74,7 +74,7 @@ class Institution extends Model
     public function profileQuizMasters()
     {
         // Match either explicit foreign key (institution_id) or the legacy/text field
-        return QuizMaster::where(function($q) {
+        return QuizMaster::where(function ($q) {
             $q->where('institution_id', $this->id);
             $this->addInstitutionTextProfileMatch($q);
         });
@@ -87,13 +87,14 @@ class Institution extends Model
     {
         $explicit = $this->quizMasters()->get();
         $profile = $this->profileQuizMasters()->get();
+
         return $explicit->merge($profile)->unique('id')->values();
     }
 
     public function profileQuizees()
     {
         // Match either explicit foreign key (institution_id) or the legacy/text field
-        return Quizee::where(function($q) {
+        return Quizee::where(function ($q) {
             $q->where('institution_id', $this->id);
             $this->addInstitutionTextProfileMatch($q);
         });
@@ -103,6 +104,7 @@ class Institution extends Model
     {
         $explicit = $this->quizees()->get();
         $profile = $this->profileQuizees()->get();
+
         return $explicit->merge($profile)->unique('id')->values();
     }
 
@@ -117,11 +119,14 @@ class Institution extends Model
         $qz = $this->profileQuizees()->pluck('user_id')->filter()->unique()->values()->toArray();
         $userIds = array_values(array_unique(array_merge($qm, $qz)));
 
-        if (empty($userIds)) return collect([]);
+        if (empty($userIds)) {
+            return collect([]);
+        }
 
         // exclude those already in pivot
         $existing = DB::table('institution_user')->where('institution_id', $this->id)->whereIn('user_id', $userIds)->pluck('user_id')->toArray();
         $pendingIds = array_values(array_diff($userIds, $existing));
+
         return User::whereIn('id', $pendingIds)->get();
     }
 

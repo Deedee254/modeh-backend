@@ -16,7 +16,7 @@ class AdminTournamentController extends Controller
     public function show(Tournament $tournament)
     {
         $tournament->load(['subject', 'topic', 'grade', 'level', 'questions']);
-        
+
         return response()->json([
             'tournament' => $tournament,
             'questions' => $tournament->questions()->get(),
@@ -68,6 +68,7 @@ class AdminTournamentController extends Controller
         }
 
         $tournament = Tournament::create($data);
+
         return response()->json($tournament);
     }
 
@@ -133,6 +134,7 @@ class AdminTournamentController extends Controller
     public function destroy(Tournament $tournament)
     {
         $tournament->delete();
+
         return response()->json(['message' => 'Tournament deleted successfully']);
     }
 }

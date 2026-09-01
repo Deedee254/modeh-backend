@@ -28,11 +28,11 @@ class ListQuestions extends ListRecords
                     $record->save();
                 })
                 ->requiresConfirmation()
-                ->visible(fn ($record) => !$record->is_approved),
+                ->visible(fn ($record) => ! $record->is_approved),
             \Filament\Actions\Action::make('toggleApprove')
                 ->label('Toggle Approve')
                 ->action(function ($record) {
-                    $record->is_approved = !$record->is_approved;
+                    $record->is_approved = ! $record->is_approved;
                     $record->save();
                 })
                 ->requiresConfirmation(),

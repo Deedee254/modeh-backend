@@ -13,13 +13,13 @@ class QuizeeLevel extends Model
         'icon',
         'description',
         'color_scheme',
-        'order'
+        'order',
     ];
 
     protected $casts = [
         'min_points' => 'integer',
         'max_points' => 'integer',
-        'order' => 'integer'
+        'order' => 'integer',
     ];
 
     public static function getLevel(int $points): ?self

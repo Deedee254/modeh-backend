@@ -2,9 +2,9 @@
 
 namespace App\Observers;
 
-use App\Models\UserBadge;
 use App\Events\BadgeAwarded;
 use App\Models\Notification as AppNotification;
+use App\Models\UserBadge;
 
 class UserBadgeObserver
 {

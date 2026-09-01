@@ -1,18 +1,17 @@
 <?php
 
+use App\Services\SlugService;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
-use App\Services\SlugService;
-use App\Models\Quiz;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
         Schema::table('quizzes', function (Blueprint $table) {
-            if (!Schema::hasColumn('quizzes', 'slug')) {
+            if (! Schema::hasColumn('quizzes', 'slug')) {
                 $table->string('slug', 191)->nullable()->after('title');
                 $table->unique('slug');
                 $table->index('slug');
@@ -25,7 +24,9 @@ return new class extends Migration
                 foreach ($quizzes as $quiz) {
                     // Use SlugService.generateSlug to produce a base slug (no DB queries)
                     $baseSlug = \App\Services\SlugService::generateSlug($quiz->title ?? '');
-                    if (empty($baseSlug)) $baseSlug = 'quiz';
+                    if (empty($baseSlug)) {
+                        $baseSlug = 'quiz';
+                    }
                     $baseSlug = substr($baseSlug, 0, 180);
 
                     $slug = $baseSlug;
@@ -33,7 +34,7 @@ return new class extends Migration
 
                     // Ensure uniqueness using DB checks
                     while (DB::table('quizzes')->where('slug', $slug)->where('id', '!=', $quiz->id)->exists()) {
-                        $slug = $baseSlug . '-' . $count;
+                        $slug = $baseSlug.'-'.$count;
                         $count++;
                     }
 
@@ -42,7 +43,7 @@ return new class extends Migration
                 }
             });
         } catch (\Exception $e) {
-            \Log::warning('Error backfilling slugs: ' . $e->getMessage());
+            \Log::warning('Error backfilling slugs: '.$e->getMessage());
         }
 
         // Make slug non-nullable after backfill

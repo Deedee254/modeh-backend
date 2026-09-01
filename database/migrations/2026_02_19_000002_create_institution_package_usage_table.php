@@ -12,7 +12,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (!Schema::hasTable('institution_package_usage')) {
+        if (! Schema::hasTable('institution_package_usage')) {
             Schema::create('institution_package_usage', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('institution_id');

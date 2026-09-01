@@ -11,10 +11,10 @@ class AchievementController extends Controller
     public function progress(Request $request)
     {
         $user = $request->user();
-        
+
         // Get all achievements with their criteria
         $achievements = Achievement::all();
-        
+
         // Get user's unlocked achievements with completion dates
         $userAchievements = $user->achievements()
             ->withPivot('completed_at', 'progress')
@@ -48,7 +48,7 @@ class AchievementController extends Controller
                     case 'streak':
                         // Use quizee profile's current_streak when available
                         if ($quizeeProfile && isset($quizeeProfile->current_streak)) {
-                            $progress = min((int)$quizeeProfile->current_streak, (int)$criteriaValue);
+                            $progress = min((int) $quizeeProfile->current_streak, (int) $criteriaValue);
                         }
                         break;
 
@@ -57,7 +57,7 @@ class AchievementController extends Controller
                         // Count completed daily challenges (relation on Quizee)
                         if ($quizeeProfile) {
                             try {
-                                $progress = min($quizeeProfile->dailyChallenges()->count(), (int)$criteriaValue);
+                                $progress = min($quizeeProfile->dailyChallenges()->count(), (int) $criteriaValue);
                             } catch (\Throwable $e) {
                                 $progress = 0;
                             }
@@ -73,29 +73,29 @@ class AchievementController extends Controller
                             if (is_array($entry) && isset($entry['progress'])) {
                                 // subject_progress.progress is stored as percent (0..100)
                                 $entryProgress = (float) $entry['progress'];
-                                $progress = (int) round(($entryProgress / 100) * (int)$criteriaValue);
+                                $progress = (int) round(($entryProgress / 100) * (int) $criteriaValue);
                             }
                         }
                         break;
 
                     case 'completion':
                         // Count total quiz attempts (completion of quizzes)
-                        $progress = min($attemptCount, (int)$criteriaValue);
+                        $progress = min($attemptCount, (int) $criteriaValue);
                         break;
 
                     case 'score':
                         // Use user's best score seen in attempts as progress (capped to criteria_value)
-                        $progress = min((int)round($maxScore), (int)$criteriaValue);
+                        $progress = min((int) round($maxScore), (int) $criteriaValue);
                         break;
 
                     case 'improvement':
                         // Improvement between last two attempts
                         if ($attemptCount >= 2) {
                             $latest = $attempts->first();
-                            $second = $attempts->slice(1,1)->first();
+                            $second = $attempts->slice(1, 1)->first();
                             if ($latest && $second && isset($latest->score) && isset($second->score)) {
                                 $improv = max(0, $latest->score - $second->score);
-                                $progress = min((int)round($improv), (int)$criteriaValue);
+                                $progress = min((int) round($improv), (int) $criteriaValue);
                             }
                         }
                         break;
@@ -109,7 +109,7 @@ class AchievementController extends Controller
 
             // Ensure progress is a non-negative integer and does not exceed criteria_value
             $criteriaValue = $achievement->criteria_value ?? 0;
-            $progress = (int) max(0, min($progress, (int)$criteriaValue));
+            $progress = (int) max(0, min($progress, (int) $criteriaValue));
 
             return [
                 'id' => $achievement->id,
@@ -122,7 +122,7 @@ class AchievementController extends Controller
                 'unlocked' => $unlocked,
                 'progress' => $progress,
                 'completed_at' => $userAchievement ? $userAchievement->pivot->completed_at : null,
-                'slug' => $achievement->slug
+                'slug' => $achievement->slug,
             ];
         });
 
@@ -131,8 +131,8 @@ class AchievementController extends Controller
             'stats' => [
                 'total_achievements' => $achievements->count(),
                 'unlocked_achievements' => $userAchievements->count(),
-                'total_points' => $userAchievements->sum('points')
-            ]
+                'total_points' => $userAchievements->sum('points'),
+            ],
         ]);
     }
 }

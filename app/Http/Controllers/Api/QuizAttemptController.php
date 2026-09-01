@@ -3,28 +3,25 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\Quiz;
 use App\Models\Question;
-use App\Models\Topic;
-use App\Models\Subject;
+use App\Models\Quiz;
 use App\Models\QuizAttempt;
-use App\Models\DailyUsageTracking;
+use App\Models\Topic;
 use App\Services\AchievementService;
-use App\Services\QuizAccessService;
 use App\Services\InstitutionPackageUsageService;
+use App\Services\QuestionMarkingService;
+use App\Services\QuizAccessService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Auth;
-
-
-use App\Services\QuestionMarkingService;
 use Illuminate\Support\Facades\Storage;
 
 class QuizAttemptController extends Controller
 {
     protected AchievementService $achievementService;
+
     protected QuestionMarkingService $markingService;
 
     public function __construct(AchievementService $achievementService, QuestionMarkingService $markingService)
@@ -33,17 +30,8 @@ class QuizAttemptController extends Controller
         $this->markingService = $markingService;
     }
 
-
-
-
     /**
      * Build the payload for the AchievementService.
-     *
-     * @param \App\Models\QuizAttempt $attempt
-     * @param \App\Models\Quiz $quiz
-     * @param float $score
-     * @param \Illuminate\Http\Request $request
-     * @return array
      */
     private function buildAchievementPayload(QuizAttempt $attempt, Quiz $quiz, float $score, Request $request): array
     {
@@ -63,14 +51,13 @@ class QuizAttemptController extends Controller
             'subject_id' => $quiz->subject_id ?? null,
             'streak' => $request->input('streak', 0),
             'previous_score' => $previousAttempt ? $previousAttempt->score : null,
-            'total' => 100 * (count($attempt->answers ?? []) / max(1, $quiz->questions()->count()))
+            'total' => 100 * (count($attempt->answers ?? []) / max(1, $quiz->questions()->count())),
         ];
     }
 
     /**
      * Calculate rank and percentile for a given attempt.
-     * 
-     * @param QuizAttempt $attempt
+     *
      * @return array {rank: int, total_participants: int, percentile: float}
      */
     private function calculateRankAndPercentile(QuizAttempt $attempt): array
@@ -84,7 +71,7 @@ class QuizAttemptController extends Controller
             return [
                 'rank' => null,
                 'total_participants' => $totalParticipants,
-                'percentile' => null
+                'percentile' => null,
             ];
         }
 
@@ -105,9 +92,10 @@ class QuizAttemptController extends Controller
         return [
             'rank' => $rank,
             'total_participants' => $totalParticipants,
-            'percentile' => $percentile
+            'percentile' => $percentile,
         ];
     }
+
     public function show(Request $request, Quiz $quiz)
     {
         $user = $request->user() ?: Auth::guard('sanctum')->user();
@@ -118,13 +106,13 @@ class QuizAttemptController extends Controller
             $isOwner = false;
             try {
                 $isOwner = ($quiz->created_by && (string) $quiz->created_by === (string) $user?->id) || ($quiz->user_id && (string) $quiz->user_id === (string) $user?->id);
-        
-        // Security check: Only allow access to approved/published quizzes for non-owners
-        if (!$quiz->is_approved || $quiz->visibility !== 'published') {
-            if (!$user || !($isOwner || ($user->is_admin ?? false))) {
-                return response()->json(['message' => 'Quiz not found or not yet approved'], 404);
-            }
-        }
+
+                // Security check: Only allow access to approved/published quizzes for non-owners
+                if (! $quiz->is_approved || $quiz->visibility !== 'published') {
+                    if (! $user || ! ($isOwner || ($user->is_admin ?? false))) {
+                        return response()->json(['message' => 'Quiz not found or not yet approved'], 404);
+                    }
+                }
             } catch (\Exception $e) {
                 $isOwner = false;
             }
@@ -132,6 +120,7 @@ class QuizAttemptController extends Controller
             // If owner/admin AND not explicitly requesting "take" mode, return the full edit payload
             if (($isOwner || ($user->is_admin ?? false)) && $request->input('mode') !== 'take') {
                 $quiz->load(['topic.subject', 'subject', 'grade.level', 'questions']);
+
                 return response()->json(['quiz' => $quiz]);
             }
         }
@@ -139,7 +128,7 @@ class QuizAttemptController extends Controller
         // --- TAKING THE QUIZ ---
         // For students (or owners in take mode), prepare the questions (shuffle, hide answers, etc.)
         $quiz->load(['topic.subject', 'subject', 'grade.level', 'questions', 'author']);
-        $shuffleSeed = (string)$request->input('shuffle_seed', bin2hex(random_bytes(4)));
+        $shuffleSeed = (string) $request->input('shuffle_seed', bin2hex(random_bytes(4)));
         $prepared = $quiz->getPreparedQuestions($shuffleSeed);
 
         // Calculate total marks dynamically (defaulting to 1 per question if marks is null/0)
@@ -167,10 +156,10 @@ class QuizAttemptController extends Controller
                 'description' => $quiz->description,
                 'timer_seconds' => $quiz->timer_seconds,
                 'per_question_seconds' => $quiz->per_question_seconds,
-                'use_per_question_timer' => (bool)$quiz->use_per_question_timer,
+                'use_per_question_timer' => (bool) $quiz->use_per_question_timer,
                 'attempts_allowed' => $quiz->attempts_allowed,
-                'shuffle_questions' => (bool)$quiz->shuffle_questions,
-                'shuffle_answers' => (bool)$quiz->shuffle_answers,
+                'shuffle_questions' => (bool) $quiz->shuffle_questions,
+                'shuffle_answers' => (bool) $quiz->shuffle_answers,
                 'shuffle_seed' => $shuffleSeed,
                 'youtube_url' => $quiz->youtube_url,
                 'cover_image' => $quiz->cover_image,
@@ -178,7 +167,7 @@ class QuizAttemptController extends Controller
                 'questions_count' => count($prepared),
                 'total_marks' => $totalMarks,
                 'marks' => $totalMarks, // Backward compatibility
-                'is_paid' => (bool)$quiz->is_paid,
+                'is_paid' => (bool) $quiz->is_paid,
                 'one_off_price' => $quiz->one_off_price,
                 'price' => $quiz->price,
                 'liked' => $liked,
@@ -202,16 +191,15 @@ class QuizAttemptController extends Controller
                 'level' => $level,
                 'level_name' => $level ? ($level->name === 'Tertiary' ? ($level->course_name ?? $level->name) : $level->name) : null,
                 'level_slug' => $level?->slug,
-            ]
+            ],
         ]);
     }
 
     /**
      * Validate that a user has access to attempt a quiz
      * Returns access result or error response
-     * 
-     * @param Quiz $quiz
-     * @param \App\Models\User $user
+     *
+     * @param  \App\Models\User  $user
      * @return array|object {ok: bool, access_result?: array, error?: string, requires_payment?: bool, price?: float}
      */
     private function validateQuizAccess(Quiz $quiz, $user)
@@ -222,7 +210,7 @@ class QuizAttemptController extends Controller
         QuizAccessService::logAccess($quiz, $user, $access);
 
         // Access denied regardless of payment (e.g., non-member on institutional quiz)
-        if (!($access['can_access'] ?? false)) {
+        if (! ($access['can_access'] ?? false)) {
             return [
                 'ok' => false,
                 'requires_payment' => false,
@@ -256,7 +244,7 @@ class QuizAttemptController extends Controller
     public function access(Request $request, Quiz $quiz)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
 
@@ -272,38 +260,39 @@ class QuizAttemptController extends Controller
     public function validateAccess(Request $request, Quiz $quiz)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
 
         $result = $this->validateQuizAccess($quiz, $user);
+
         return response()->json($result, ($result['ok'] ?? false) ? 200 : 403);
     }
 
-	    public function submit(Request $request, Quiz $quiz)
-	    {
-	        $user = $request->user();
-	        if (!$user) {
-	            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
-	        }
+    public function submit(Request $request, Quiz $quiz)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
-	        // Validate that the user can take this quiz (institutional membership checks).
-	        // Do NOT block submission for unpaid public paid quizzes; payment is enforced when viewing results.
-	        $accessResult = QuizAccessService::checkAccess($quiz, $user);
-	        QuizAccessService::logAccess($quiz, $user, $accessResult);
-	        if (!($accessResult['can_access'] ?? false)) {
-	            return response()->json([
-	                'ok' => false,
-	                'requires_payment' => false,
-	                'message' => $accessResult['message'] ?? 'Access denied',
-	                'access_result' => $accessResult,
-	            ], 403);
-	        }
+        // Validate that the user can take this quiz (institutional membership checks).
+        // Do NOT block submission for unpaid public paid quizzes; payment is enforced when viewing results.
+        $accessResult = QuizAccessService::checkAccess($quiz, $user);
+        QuizAccessService::logAccess($quiz, $user, $accessResult);
+        if (! ($accessResult['can_access'] ?? false)) {
+            return response()->json([
+                'ok' => false,
+                'requires_payment' => false,
+                'message' => $accessResult['message'] ?? 'Access denied',
+                'access_result' => $accessResult,
+            ], 403);
+        }
 
-	        // allow missing or partial answers (accept empty submissions)
-	        $payload = $request->validate([
-	            'answers' => 'nullable|array',
-	            'question_times' => 'nullable|array',
+        // allow missing or partial answers (accept empty submissions)
+        $payload = $request->validate([
+            'answers' => 'nullable|array',
+            'question_times' => 'nullable|array',
             'total_time_seconds' => 'nullable|numeric',
             'started_at' => 'nullable|date',
             'attempt_id' => 'nullable|integer',
@@ -318,7 +307,7 @@ class QuizAttemptController extends Controller
         // Eager load all questions for the quiz to avoid N+1 queries
         $quizQuestions = $quiz->questions;
         $shuffleSeed = $payload['shuffle_seed'] ?? '';
-        
+
         // Unmap shuffled answers before processing and persistence
         if ($shuffleSeed !== '') {
             foreach ($answers as &$a) {
@@ -335,15 +324,15 @@ class QuizAttemptController extends Controller
         $results = $scoringResult['results'];
         $score = $scoringResult['score'];
         $earnedMarks = $scoringResult['earned_marks'];
-	        $attempted = count($answers);
+        $attempted = count($answers);
 
-	        // Allow submit to only persist answers and defer marking (score calculation, points, achievements)
-	        $defer = $request->boolean('defer_marking', false);
+        // Allow submit to only persist answers and defer marking (score calculation, points, achievements)
+        $defer = $request->boolean('defer_marking', false);
 
-	        // Track whether this attempt was paid for or via institutional access
-	        $paidFor = QuizAccessService::hasAccessOrPaid($quiz, $user);
-	        $isInstitutionalAccess = $accessResult['institution_member'] ?? false;
-	        $institutionId = $accessResult['institution_id'] ?? null;
+        // Track whether this attempt was paid for or via institutional access
+        $paidFor = QuizAccessService::hasAccessOrPaid($quiz, $user);
+        $isInstitutionalAccess = $accessResult['institution_member'] ?? false;
+        $institutionId = $accessResult['institution_id'] ?? null;
 
         // persist attempt
         try {
@@ -353,60 +342,60 @@ class QuizAttemptController extends Controller
                 // persist attempt without scoring/points; marking will be performed later via markAttempt
                 if ($attemptId) {
                     $attempt = QuizAttempt::where('id', $attemptId)->where('user_id', $user->id)->first();
-	                    if ($attempt) {
-	                        $attempt->answers = $answers;
-	                        $attempt->total_time_seconds = $totalTimeSeconds;
-	                        $attempt->per_question_time = $questionTimes;
-	                        $attempt->paid_for = $paidFor;
-	                        $attempt->institution_access = $isInstitutionalAccess;
-	                        $attempt->institution_id = $institutionId;
-	                        $attempt->save();
-	                    }
-	                } else {
-	                    $attempt = QuizAttempt::create([
-	                        'user_id' => $user->id,
-	                        'quiz_id' => $quiz->id,
-	                        'answers' => $answers,
-	                        'score' => null,
-	                        'points_earned' => null,
-	                        'total_time_seconds' => $totalTimeSeconds,
-	                        'per_question_time' => $questionTimes,
-	                        'paid_for' => $paidFor,
-	                        'institution_access' => $isInstitutionalAccess,
-	                        'institution_id' => $institutionId,
-	                    ]);
-	                }
-	            } else {
+                    if ($attempt) {
+                        $attempt->answers = $answers;
+                        $attempt->total_time_seconds = $totalTimeSeconds;
+                        $attempt->per_question_time = $questionTimes;
+                        $attempt->paid_for = $paidFor;
+                        $attempt->institution_access = $isInstitutionalAccess;
+                        $attempt->institution_id = $institutionId;
+                        $attempt->save();
+                    }
+                } else {
+                    $attempt = QuizAttempt::create([
+                        'user_id' => $user->id,
+                        'quiz_id' => $quiz->id,
+                        'answers' => $answers,
+                        'score' => null,
+                        'points_earned' => null,
+                        'total_time_seconds' => $totalTimeSeconds,
+                        'per_question_time' => $questionTimes,
+                        'paid_for' => $paidFor,
+                        'institution_access' => $isInstitutionalAccess,
+                        'institution_id' => $institutionId,
+                    ]);
+                }
+            } else {
                 // Use actual earned marks calculated by calculateScore
                 $pointsEarned = $scoringResult['earned_marks'] ?? 0;
 
                 if ($attemptId) {
                     $attempt = QuizAttempt::where('id', $attemptId)->where('user_id', $user->id)->first();
-	                    if ($attempt) {
-	                        $attempt->answers = $answers;
-	                        $attempt->score = $score;
-	                        $attempt->points_earned = $pointsEarned;
-	                        $attempt->total_time_seconds = $totalTimeSeconds;
-	                        $attempt->per_question_time = $questionTimes;
-	                        $attempt->paid_for = $paidFor;
-	                        $attempt->institution_access = $isInstitutionalAccess;
-	                        $attempt->institution_id = $institutionId;
-	                        $attempt->save();
-	                    }
-	                } else {
-	                    $attempt = QuizAttempt::create([
-	                        'user_id' => $user->id,
-	                        'quiz_id' => $quiz->id,
-	                        'answers' => $answers,
-	                        'score' => $score,
-	                        'points_earned' => $pointsEarned,
-	                        'total_time_seconds' => $totalTimeSeconds,
-	                        'per_question_time' => $questionTimes,
-	                        'paid_for' => $paidFor,
-	                        'institution_access' => $isInstitutionalAccess,
-	                        'institution_id' => $institutionId,
-	                    ]);
-	                }
+                    if ($attempt) {
+                        $attempt->answers = $answers;
+                        $attempt->score = $score;
+                        $attempt->points_earned = $pointsEarned;
+                        $attempt->total_time_seconds = $totalTimeSeconds;
+                        $attempt->per_question_time = $questionTimes;
+                        $attempt->paid_for = $paidFor;
+                        $attempt->institution_access = $isInstitutionalAccess;
+                        $attempt->institution_id = $institutionId;
+                        $attempt->save();
+                    }
+                } else {
+                    $attempt = QuizAttempt::create([
+                        'user_id' => $user->id,
+                        'quiz_id' => $quiz->id,
+                        'answers' => $answers,
+                        'score' => $score,
+                        'points_earned' => $pointsEarned,
+                        'total_time_seconds' => $totalTimeSeconds,
+                        'per_question_time' => $questionTimes,
+                        'paid_for' => $paidFor,
+                        'institution_access' => $isInstitutionalAccess,
+                        'institution_id' => $institutionId,
+                    ]);
+                }
 
                 // Record institution usage if applicable
                 if ($isInstitutionalAccess && $institutionId) {
@@ -421,21 +410,24 @@ class QuizAttemptController extends Controller
                             );
                         }
                     } catch (\Throwable $e) {
-                        Log::warning('Failed to record institution usage: ' . $e->getMessage());
+                        Log::warning('Failed to record institution usage: '.$e->getMessage());
                     }
                 }
 
                 // persist points to user atomically; don't let missing column break the attempt.
                 // SECURITY FIX: Only award points if the user has paid or the quiz is free
-                $requiresPayment = (!$paidFor) && !($accessResult['is_free'] ?? false);
-                if (!$requiresPayment && $attempt && method_exists($user, 'increment')) {
+                $requiresPayment = (! $paidFor) && ! ($accessResult['is_free'] ?? false);
+                if (! $requiresPayment && $attempt && method_exists($user, 'increment')) {
                     try {
                         $user->increment('points', $pointsEarned);
                         // Clear cached /api/me payload so frontend sees updated points immediately
-                        try { Cache::forget("user_me_{$user->id}"); } catch (\Throwable $_) {}
+                        try {
+                            Cache::forget("user_me_{$user->id}");
+                        } catch (\Throwable $_) {
+                        }
                     } catch (\Exception $e) {
                         // log and continue; some test DBs may not have a points column
-                        Log::warning('Could not increment user points: ' . $e->getMessage());
+                        Log::warning('Could not increment user points: '.$e->getMessage());
                     }
                 }
             }
@@ -443,20 +435,20 @@ class QuizAttemptController extends Controller
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed saving quiz attempt: ' . $e->getMessage());
+            Log::error('Failed saving quiz attempt: '.$e->getMessage());
             $attempt = null;
         }
 
         // Invalidate user stats cache on successful attempt submission
         if ($attempt) {
-            Cache::forget('user-stats:' . $user->id);
+            Cache::forget('user-stats:'.$user->id);
         }
 
-        $requiresPayment = (!$paidFor) && !($accessResult['is_free'] ?? false);
+        $requiresPayment = (! $paidFor) && ! ($accessResult['is_free'] ?? false);
 
         // Check achievements only when marking occurred (not deferred) and payment is cleared
         $awarded = [];
-        if ($attempt && !$defer && !$requiresPayment) {
+        if ($attempt && ! $defer && ! $requiresPayment) {
             $achievementPayload = $this->buildAchievementPayload($attempt, $quiz, $score, $request);
 
             try {
@@ -465,91 +457,93 @@ class QuizAttemptController extends Controller
                     $awarded = array_merge($awarded, $achievements);
                 }
             } catch (\Throwable $e) {
-                Log::warning('Failed to check achievements: ' . $e->getMessage());
+                Log::warning('Failed to check achievements: '.$e->getMessage());
             }
         }
 
         // Return attempt id (if created) and details. If attempt creation failed, return 500 so client knows to retry.
-        if (!$attempt) {
+        if (! $attempt) {
             return response()->json(['ok' => false, 'message' => 'Failed to persist attempt'], 500);
-	        }
+        }
 
         // SECURITY FIX: Scrub exact correct/incorrect results if payment is required to prevent brute-forcing
         if ($requiresPayment) {
             $results = [];
         }
 
-	        $refreshedUser = $user->fresh()->load('achievements');
-            
-            // Calculate rank/percentile for the result modal
-            $rankInfo = $this->calculateRankAndPercentile($attempt);
+        $refreshedUser = $user->fresh()->load('achievements');
 
-	        return response()->json([
-	            'ok' => true,
-	            'results' => $results,
-	            'score' => $score,
-	            'attempt_id' => $attempt->id ?? null,
-	            // If payment required, don't show the points they would earn
-	            'points_delta' => $requiresPayment ? 0 : ($attempt->points_earned ?? 0),
-	            'deferred' => $defer,
-	            'awarded_achievements' => $awarded,
-	            'user' => $refreshedUser,
-	            'requires_payment' => $requiresPayment,
-	            'price' => $accessResult['price'] ?? null,
-                'rank' => $rankInfo['rank'],
-                'total_participants' => $rankInfo['total_participants'],
-                'percentile' => $rankInfo['percentile'],
-	        ]);
-	    }
+        // Calculate rank/percentile for the result modal
+        $rankInfo = $this->calculateRankAndPercentile($attempt);
+
+        return response()->json([
+            'ok' => true,
+            'results' => $results,
+            'score' => $score,
+            'attempt_id' => $attempt->id ?? null,
+            // If payment required, don't show the points they would earn
+            'points_delta' => $requiresPayment ? 0 : ($attempt->points_earned ?? 0),
+            'deferred' => $defer,
+            'awarded_achievements' => $awarded,
+            'user' => $refreshedUser,
+            'requires_payment' => $requiresPayment,
+            'price' => $accessResult['price'] ?? null,
+            'rank' => $rankInfo['rank'],
+            'total_participants' => $rankInfo['total_participants'],
+            'percentile' => $rankInfo['percentile'],
+        ]);
+    }
 
     /**
      * Server-side attempt start: create a draft attempt with started_at controlled by server.
      * Returns attempt id which the client should include in subsequent submit calls.
      */
-	    public function startAttempt(Request $request, Quiz $quiz)
-	    {
-	        $user = $request->user();
-	        if (!$user)
-	            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+    public function startAttempt(Request $request, Quiz $quiz)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
-	        // Only enforce institutional membership rules. Do not require payment to start an attempt.
-	        $accessResult = QuizAccessService::checkAccess($quiz, $user);
-	        QuizAccessService::logAccess($quiz, $user, $accessResult);
-	        if (!($accessResult['can_access'] ?? false)) {
-	            return response()->json([
-	                'ok' => false,
-	                'requires_payment' => false,
-	                'message' => $accessResult['message'] ?? 'Access denied',
-	                'access_result' => $accessResult,
-	            ], 403);
-	        }
+        // Only enforce institutional membership rules. Do not require payment to start an attempt.
+        $accessResult = QuizAccessService::checkAccess($quiz, $user);
+        QuizAccessService::logAccess($quiz, $user, $accessResult);
+        if (! ($accessResult['can_access'] ?? false)) {
+            return response()->json([
+                'ok' => false,
+                'requires_payment' => false,
+                'message' => $accessResult['message'] ?? 'Access denied',
+                'access_result' => $accessResult,
+            ], 403);
+        }
 
-	        $paidFor = QuizAccessService::hasAccessOrPaid($quiz, $user);
-	        $isInstitutionalAccess = $accessResult['institution_member'] ?? false;
-	        $institutionId = $accessResult['institution_id'] ?? null;
+        $paidFor = QuizAccessService::hasAccessOrPaid($quiz, $user);
+        $isInstitutionalAccess = $accessResult['institution_member'] ?? false;
+        $institutionId = $accessResult['institution_id'] ?? null;
 
-	        $payload = $request->validate([
-	            'meta' => 'nullable|array',
-	            'settings' => 'nullable|array',
-	        ]);
+        $payload = $request->validate([
+            'meta' => 'nullable|array',
+            'settings' => 'nullable|array',
+        ]);
 
         try {
-	            $attempt = QuizAttempt::create([
-	                'user_id' => $user->id,
-	                'quiz_id' => $quiz->id,
-	                'answers' => [],
-	                'score' => null,
-	                'points_earned' => null,
-	                'total_time_seconds' => null,
-	                'per_question_time' => null,
-	                'paid_for' => $paidFor,
-	                'institution_access' => $isInstitutionalAccess,
-	                'institution_id' => $institutionId,
-	                'started_at' => now(),
-	            ]);
-	        } catch (\Exception $e) {
-	            Log::error('Failed creating server-start attempt: ' . $e->getMessage());
-	            return response()->json(['ok' => false, 'message' => 'Failed to start attempt'], 500);
+            $attempt = QuizAttempt::create([
+                'user_id' => $user->id,
+                'quiz_id' => $quiz->id,
+                'answers' => [],
+                'score' => null,
+                'points_earned' => null,
+                'total_time_seconds' => null,
+                'per_question_time' => null,
+                'paid_for' => $paidFor,
+                'institution_access' => $isInstitutionalAccess,
+                'institution_id' => $institutionId,
+                'started_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed creating server-start attempt: '.$e->getMessage());
+
+            return response()->json(['ok' => false, 'message' => 'Failed to start attempt'], 500);
         }
 
         return response()->json(['ok' => true, 'attempt_id' => $attempt->id, 'started_at' => $attempt->started_at]);
@@ -559,53 +553,53 @@ class QuizAttemptController extends Controller
      * Mark a previously saved (possibly deferred) attempt and return enriched result.
      * In the new institutional model, access is determined by QuizAccessService.
      */
-	    public function markAttempt(Request $request, QuizAttempt $attempt)
-	    {
-	        $user = $request->user();
-	        if (!$user) {
-	            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
-	        }
+    public function markAttempt(Request $request, QuizAttempt $attempt)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
-	        if ($attempt->user_id !== $user->id) {
-	            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
-	        }
+        if ($attempt->user_id !== $user->id) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
-	        // Enforce payment for paid quizzes before marking (prevents bypassing paywall).
-	        $quiz = $attempt->quiz()->first();
-	        if ($quiz) {
-	            $isLocked = !$attempt->paid_for && !\App\Services\QuizAccessService::hasAccessOrPaid($quiz, $user);
-	            
-	            if ($isLocked) {
-                    return response()->json([
-                        'ok' => false,
-                        'requires_payment' => true,
-                        'locked' => true,
-                        'attempt_id' => $attempt->id,
-                        'quiz_id' => $quiz->id,
-                        'price' => $quiz->price,
-                        'currency' => 'KES',
-                        'quiz' => [
-                            'id' => $quiz->id,
-                            'title' => $quiz->title,
-                            'one_off_price' => $quiz->price,
-                        ],
-                        'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
-                        'message' => 'Payment required',
-                    ], 403);
-	            } else {
-	                // They have access. Mark attempt as paid so we know it's unlocked for them.
-	                if (!$attempt->paid_for) {
-	                    $attempt->update(['paid_for' => true]);
-	                }
-	            }
-	        }
+        // Enforce payment for paid quizzes before marking (prevents bypassing paywall).
+        $quiz = $attempt->quiz()->first();
+        if ($quiz) {
+            $isLocked = ! $attempt->paid_for && ! \App\Services\QuizAccessService::hasAccessOrPaid($quiz, $user);
 
-	        // Recompute score from stored answers
-	        $answers = $attempt->answers ?? [];
-	        $quiz = $attempt->quiz()->with('questions')->first();
-	        $scoringResult = $this->markingService->calculateScore($answers, $quiz->questions, true, (string)$request->input('shuffle_seed'), true);
-	        $score = $scoringResult['score'];
-	        $pointsEarned = $scoringResult['earned_marks'] ?? 0;
+            if ($isLocked) {
+                return response()->json([
+                    'ok' => false,
+                    'requires_payment' => true,
+                    'locked' => true,
+                    'attempt_id' => $attempt->id,
+                    'quiz_id' => $quiz->id,
+                    'price' => $quiz->price,
+                    'currency' => 'KES',
+                    'quiz' => [
+                        'id' => $quiz->id,
+                        'title' => $quiz->title,
+                        'one_off_price' => $quiz->price,
+                    ],
+                    'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
+                    'message' => 'Payment required',
+                ], 403);
+            } else {
+                // They have access. Mark attempt as paid so we know it's unlocked for them.
+                if (! $attempt->paid_for) {
+                    $attempt->update(['paid_for' => true]);
+                }
+            }
+        }
+
+        // Recompute score from stored answers
+        $answers = $attempt->answers ?? [];
+        $quiz = $attempt->quiz()->with('questions')->first();
+        $scoringResult = $this->markingService->calculateScore($answers, $quiz->questions, true, (string) $request->input('shuffle_seed'), true);
+        $score = $scoringResult['score'];
+        $pointsEarned = $scoringResult['earned_marks'] ?? 0;
 
         try {
             DB::beginTransaction();
@@ -619,9 +613,12 @@ class QuizAttemptController extends Controller
                 try {
                     $user->increment('points', $pointsEarned);
                     // Ensure cached /me is refreshed after points update
-                    try { Cache::forget("user_me_{$user->id}"); } catch (\Throwable $_) {}
+                    try {
+                        Cache::forget("user_me_{$user->id}");
+                    } catch (\Throwable $_) {
+                    }
                 } catch (\Exception $e) {
-                    Log::warning('Could not increment user points on marking: ' . $e->getMessage());
+                    Log::warning('Could not increment user points on marking: '.$e->getMessage());
                 }
             }
 
@@ -634,13 +631,14 @@ class QuizAttemptController extends Controller
                     $awarded = array_merge($awarded, $achievements);
                 }
             } catch (\Throwable $e) {
-                Log::warning('Failed to check achievements: ' . $e->getMessage());
+                Log::warning('Failed to check achievements: '.$e->getMessage());
             }
 
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed marking quiz attempt: ' . $e->getMessage());
+            Log::error('Failed marking quiz attempt: '.$e->getMessage());
+
             return response()->json(['ok' => false, 'message' => 'Failed to mark attempt'], 500);
         }
 
@@ -651,47 +649,48 @@ class QuizAttemptController extends Controller
     /**
      * Return a single QuizAttempt for the authenticated user with enriched data
      */
-	    public function showAttempt(Request $request, QuizAttempt $attempt)
-	    {
-	        $user = $request->user();
-	        if (!$user)
-	            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+    public function showAttempt(Request $request, QuizAttempt $attempt)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
-	        if ($attempt->user_id !== $user->id) {
-	            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
-	        }
+        if ($attempt->user_id !== $user->id) {
+            return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
 
-	        // Get the quiz early to check if it's free
-	        $quiz = $attempt->quiz()->with('questions')->first();
-	        if ($quiz) {
-	            $effectivePrice = $quiz->price;
-	            $isLocked = ($attempt->paid_for === false) && ((bool) ($quiz->is_paid ?? false) || $effectivePrice > 0);
-	            if ($isLocked) {
-	                return response()->json([
-	                    'ok' => false,
-	                    'can_view' => false,
-	                    'locked' => true,
-	                    'requires_payment' => true,
-	                    'attempt_id' => $attempt->id,
-	                    'quiz_id' => $quiz->id,
-	                    'price' => $effectivePrice,
-	                    'currency' => 'KES',
-                        'score' => $attempt->score !== null ? $attempt->score : $this->markingService->calculateScore($attempt->answers ?? [], $quiz->questions, true, (string)$request->input('shuffle_seed'), true)['score'],
-                        'percentile' => $this->calculateRankAndPercentile($attempt)['percentile'],
-	                    'quiz' => [
-	                        'id' => $quiz->id,
-	                        'title' => $quiz->title,
-	                        'one_off_price' => $effectivePrice,
-	                    ],
-	                    'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
-	                    'message' => 'Payment required',
-	                ], 403);
-	            }
-	        }
+        // Get the quiz early to check if it's free
+        $quiz = $attempt->quiz()->with('questions')->first();
+        if ($quiz) {
+            $effectivePrice = $quiz->price;
+            $isLocked = ($attempt->paid_for === false) && ((bool) ($quiz->is_paid ?? false) || $effectivePrice > 0);
+            if ($isLocked) {
+                return response()->json([
+                    'ok' => false,
+                    'can_view' => false,
+                    'locked' => true,
+                    'requires_payment' => true,
+                    'attempt_id' => $attempt->id,
+                    'quiz_id' => $quiz->id,
+                    'price' => $effectivePrice,
+                    'currency' => 'KES',
+                    'score' => $attempt->score !== null ? $attempt->score : $this->markingService->calculateScore($attempt->answers ?? [], $quiz->questions, true, (string) $request->input('shuffle_seed'), true)['score'],
+                    'percentile' => $this->calculateRankAndPercentile($attempt)['percentile'],
+                    'quiz' => [
+                        'id' => $quiz->id,
+                        'title' => $quiz->title,
+                        'one_off_price' => $effectivePrice,
+                    ],
+                    'checkout_url' => "/quizee/payments/checkout?type=quiz&attempt_id={$attempt->id}",
+                    'message' => 'Payment required',
+                ], 403);
+            }
+        }
 
-	        // Build per-question correctness info (answers stored on attempt)
-	        $answers = $attempt->answers ?? [];
-	        $details = [];
+        // Build per-question correctness info (answers stored on attempt)
+        $answers = $attempt->answers ?? [];
+        $details = [];
         $questions = $quiz ? $quiz->questions : [];
         foreach ($questions as $q) {
             $provided = null;
@@ -747,10 +746,11 @@ class QuizAttemptController extends Controller
         // Response Time Analysis
         $fastestAnswer = null;
         $slowestAnswer = null;
-        if (!empty($attempt->per_question_time)) {
+        if (! empty($attempt->per_question_time)) {
             $times = $attempt->per_question_time;
-            if (is_string($times))
+            if (is_string($times)) {
                 $times = json_decode($times, true);
+            }
             if (is_array($times) && count($times) > 0) {
                 asort($times); // Sort by time ascending
 
@@ -768,14 +768,14 @@ class QuizAttemptController extends Controller
                     $fastestAnswer = [
                         'id' => $fastestId,
                         'time' => $fastestTime,
-                        'body' => \Illuminate\Support\Str::limit(strip_tags($fastestQ->body), 50)
+                        'body' => \Illuminate\Support\Str::limit(strip_tags($fastestQ->body), 50),
                     ];
                 }
                 if ($slowestQ) {
                     $slowestAnswer = [
                         'id' => $slowestId,
                         'time' => $slowestTime,
-                        'body' => \Illuminate\Support\Str::limit(strip_tags($slowestQ->body), 50)
+                        'body' => \Illuminate\Support\Str::limit(strip_tags($slowestQ->body), 50),
                     ];
                 }
             }
@@ -806,7 +806,7 @@ class QuizAttemptController extends Controller
             'total_participants' => $totalParticipants,
             'response_analysis' => [
                 'fastest' => $fastestAnswer,
-                'slowest' => $slowestAnswer
+                'slowest' => $slowestAnswer,
             ],
             'attempt_counts' => [
                 'quiz_attempts_count' => $quizAttemptsCount,
@@ -822,8 +822,9 @@ class QuizAttemptController extends Controller
     public function reviewAttempt(Request $request, QuizAttempt $attempt)
     {
         $user = $request->user();
-        if (!$user)
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
         if ($attempt->user_id !== $user->id) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
@@ -868,7 +869,7 @@ class QuizAttemptController extends Controller
                 'quiz_id' => $attempt->quiz_id,
                 'answers' => $resolvedAnswers,
                 'created_at' => $attempt->created_at,
-            ]
+            ],
         ]);
     }
 
@@ -878,16 +879,17 @@ class QuizAttemptController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        if (!$user)
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
         $perPage = max(1, (int) $request->get('per_page', 10));
-        
+
         $q = QuizAttempt::query()
             ->where('user_id', $user->id)
             ->with(['quiz:id,title,one_off_price,is_paid'])
             ->orderBy('created_at', 'desc');
-        
+
         $data = $q->paginate($perPage);
 
         // map attempts to a simple shape with payment and access info
@@ -928,16 +930,16 @@ class QuizAttemptController extends Controller
      *     that `$question->topic->name` always exists. The controller defends
      *   against missing properties and normalizes the topic name.
      *
-     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function getUserStats(Request $request)
     {
         $user = $request->user();
-        if (!$user)
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+        }
 
-        $cacheKey = 'user-stats:' . $user->id;
+        $cacheKey = 'user-stats:'.$user->id;
         $cacheDuration = now()->addMinutes(5); // Cache for 5 minutes
 
         $stats = Cache::remember($cacheKey, $cacheDuration, function () use ($user) {
@@ -957,10 +959,12 @@ class QuizAttemptController extends Controller
             $allQuestionTimes = $attempts->pluck('per_question_time')->filter()->flatMap(function ($pqt) {
                 if (is_string($pqt)) {
                     $decoded = json_decode($pqt, true);
+
                     return is_array($decoded) ? $decoded : [];
                 }
+
                 return is_array($pqt) ? $pqt : [];
-            })->filter(fn($time) => is_numeric($time));
+            })->filter(fn ($time) => is_numeric($time));
 
             $avgQuestionTime = $allQuestionTimes->isNotEmpty() ? round($allQuestionTimes->avg(), 2) : 0;
 
@@ -972,30 +976,33 @@ class QuizAttemptController extends Controller
 
             foreach ($attempts as $attempt) {
                 $answers = $attempt->answers ?? [];
-                if (!is_array($answers))
+                if (! is_array($answers)) {
                     continue;
+                }
 
                 // Map answers to question ID
                 $answerMap = [];
                 foreach ($answers as $ans) {
                     $qid = (int) ($ans['question_id'] ?? 0);
-                    if ($qid)
+                    if ($qid) {
                         $answerMap[$qid] = $ans;
+                    }
                 }
 
                 if ($attempt->quiz && $attempt->quiz->questions) {
                     foreach ($attempt->quiz->questions as $q) {
                         $qid = $q->id;
-                        if (!isset($answerMap[$qid]))
-                            continue; // Skip unattempted questions for topic strength? Or count as wrong? Standard is usually specific attempts.
+                        if (! isset($answerMap[$qid])) {
+                            continue;
+                        } // Skip unattempted questions for topic strength? Or count as wrong? Standard is usually specific attempts.
 
                         $ans = $answerMap[$qid];
                         // Determine topic name safely. Topic may be an object, array, string or null.
                         $topicName = 'General';
                         try {
                             if (isset($q->topic)) {
-                    if (is_object($q->topic) && isset($q->topic->name) && $q->topic->name) {
-                        $topicName = $q->topic->name;
+                                if (is_object($q->topic) && isset($q->topic->name) && $q->topic->name) {
+                                    $topicName = $q->topic->name;
                                 } elseif (is_array($q->topic) && isset($q->topic['name']) && $q->topic['name']) {
                                     $topicName = $q->topic['name'];
                                 } elseif (is_string($q->topic) && trim($q->topic) !== '') {
@@ -1017,14 +1024,14 @@ class QuizAttemptController extends Controller
                             $topicName = 'General';
                         }
 
-                        if (!isset($topicStats[$topicName])) {
+                        if (! isset($topicStats[$topicName])) {
                             $topicStats[$topicName] = ['correct' => 0, 'total' => 0];
                         }
 
                         $topicStats[$topicName]['total']++;
 
                         // Determine correctness (simplified logic reusing what we know or re-evaluating)
-                        // Since we don't want to re-run full grading logic here efficiently, 
+                        // Since we don't want to re-run full grading logic here efficiently,
                         // we might rely on the fact that if we had per-question correctness stored it would be easier.
                         // But we don't stored per-question specific correctness easily accessible without parsing.
                         // Let's do a quick check if "selected" matches "answers".
@@ -1033,7 +1040,7 @@ class QuizAttemptController extends Controller
                         $isCorrect = false;
                         $selected = $ans['selected'] ?? null;
 
-                        // We can reuse the controller's instance method if we make it public or static, 
+                        // We can reuse the controller's instance method if we make it public or static,
                         // but for now, let's implement a basic check or assumes it was graded?
                         // Actually, re-evaluating correctness for EVERY question in history is very heavy.
                         // Alternative: Use the loop to just gather IDs and do a batch check?
@@ -1044,21 +1051,22 @@ class QuizAttemptController extends Controller
                         // Let's implement the basic check:
                         // 1. Get correct answer from question
                         $correctAnswers = $q->answers;
-                        if (is_string($correctAnswers))
+                        if (is_string($correctAnswers)) {
                             $correctAnswers = json_decode($correctAnswers, true);
+                        }
 
                         // 2. Normalize
                         $selectedVal = is_array($selected) ? sort($selected) : $selected; // rough sort
                         // This is getting too complex for a simplified stats view.
 
-                        // NEW STRATEGY: 
-                        // When `markAttempt` or `submit` happens, we compute results. 
+                        // NEW STRATEGY:
+                        // When `markAttempt` or `submit` happens, we compute results.
                         // We should arguably store `topic_breakdown` in `attempts` table or `user_stats` table for performance.
                         // But since we can't change schema right now easily without migration...
 
-                        // Let's try to do it: 
+                        // Let's try to do it:
                         // We'll rely on a simplified check: if we have the grading logic available.
-                        // Actually, we can just instantiate the OptionMap logic locally? 
+                        // Actually, we can just instantiate the OptionMap logic locally?
                         // No, too much code duplication.
 
                         // Hack/Shortcut: For now, let's assume if it's MCQ and matches exactly.
@@ -1073,7 +1081,7 @@ class QuizAttemptController extends Controller
                             sort($correctAnswers);
                             sort($selected);
                             $correct = ($correctAnswers == $selected);
-                        } elseif (!is_array($correctAnswers) && !is_array($selected)) {
+                        } elseif (! is_array($correctAnswers) && ! is_array($selected)) {
                             $correct = ((string) $correctAnswers === (string) $selected);
                         }
 
@@ -1090,7 +1098,7 @@ class QuizAttemptController extends Controller
                     $topicStrength[] = [
                         'name' => $name,
                         'accuracy' => round(($stat['correct'] / $stat['total']) * 100),
-                        'total_questions' => $stat['total']
+                        'total_questions' => $stat['total'],
                     ];
                 }
             }
@@ -1110,7 +1118,7 @@ class QuizAttemptController extends Controller
                 'points_today' => $pointsToday,
                 'current_streak' => $user->current_streak ?? 0,
                 'total_points' => $user->points ?? 0,
-                'topic_strength' => $topicStrength
+                'topic_strength' => $topicStrength,
             ];
         });
 
@@ -1124,7 +1132,7 @@ class QuizAttemptController extends Controller
     public function syncGuestAttempt(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
 
@@ -1144,12 +1152,12 @@ class QuizAttemptController extends Controller
             DB::beginTransaction();
 
             $quiz = Quiz::findOrFail($payload['quiz_id']);
-            
+
             // Calculate points from the guest attempt score
             $pointsEarned = (int) (($payload['score'] ?? 0) * ($quiz->points_per_question ?? 1));
 
             $paidFor = false;
-            if (!empty($payload['guest_identifier'])) {
+            if (! empty($payload['guest_identifier'])) {
                 $paidFor = \App\Models\OneOffPurchase::whereNull('user_id')
                     ->where('guest_identifier', $payload['guest_identifier'])
                     ->where('item_type', 'quiz')
@@ -1165,7 +1173,7 @@ class QuizAttemptController extends Controller
 
             // Map and persist detailed guest results into standard QuizAttempt format
             $answers = [];
-            if (!empty($payload['results'])) {
+            if (! empty($payload['results'])) {
                 foreach ($payload['results'] as $resItem) {
                     if (isset($resItem['question_id'])) {
                         $answers[] = [
@@ -1194,7 +1202,7 @@ class QuizAttemptController extends Controller
                     $user->increment('points', $pointsEarned);
                     Cache::forget("user_me_{$user->id}");
                 } catch (\Exception $e) {
-                    Log::warning('Could not increment user points during sync: ' . $e->getMessage());
+                    Log::warning('Could not increment user points during sync: '.$e->getMessage());
                 }
             }
 
@@ -1215,15 +1223,16 @@ class QuizAttemptController extends Controller
                     $awarded = array_merge($awarded, $achievements);
                 }
             } catch (\Throwable $e) {
-                Log::warning('Failed to check achievements during sync: ' . $e->getMessage());
+                Log::warning('Failed to check achievements during sync: '.$e->getMessage());
             }
 
             // Invalidate caches
-            Cache::forget('user-stats:' . $user->id);
+            Cache::forget('user-stats:'.$user->id);
 
             DB::commit();
 
             $refreshedUser = $user->fresh()->load('achievements');
+
             return response()->json([
                 'ok' => true,
                 'message' => 'Guest attempt synced successfully',
@@ -1234,7 +1243,8 @@ class QuizAttemptController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed to sync guest attempt: ' . $e->getMessage());
+            Log::error('Failed to sync guest attempt: '.$e->getMessage());
+
             return response()->json(['ok' => false, 'message' => 'Failed to sync attempt'], 500);
         }
     }
@@ -1242,37 +1252,36 @@ class QuizAttemptController extends Controller
     /**
      * Check if user has access to view quiz attempt results
      * Used when user wants to view results of a previous attempt
-     * 
-     * @param Request $request
-     * @param QuizAttempt $attempt
+     *
      * @return \Illuminate\Http\JsonResponse
-     * 
+     *
      * Route: GET /api/quiz-attempts/{attempt}/access
      */
     public function checkAttemptAccess(Request $request, QuizAttempt $attempt)
     {
         $user = $request->user();
-        
+
         // Verify ownership
-        if (!$user || $attempt->user_id !== $user->id) {
+        if (! $user || $attempt->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         $quiz = $attempt->quiz;
-        if (!$quiz) {
+        if (! $quiz) {
             return response()->json(['message' => 'Quiz not found'], 404);
         }
 
         $effectivePrice = $quiz->price;
 
         // Determine if results are locked
-        $isLocked = !$attempt->paid_for && !\App\Services\QuizAccessService::hasAccessOrPaid($quiz, $user);
-        
-        if (!$isLocked) {
+        $isLocked = ! $attempt->paid_for && ! \App\Services\QuizAccessService::hasAccessOrPaid($quiz, $user);
+
+        if (! $isLocked) {
             // They have access. Mark as paid
-            if (!$attempt->paid_for) {
+            if (! $attempt->paid_for) {
                 $attempt->update(['paid_for' => true]);
             }
+
             // Results are accessible
             return response()->json([
                 'can_view' => true,
@@ -1292,7 +1301,7 @@ class QuizAttemptController extends Controller
         if ($existingPurchase) {
             // User has paid for this quiz - mark this attempt as paid
             $attempt->update(['paid_for' => true]);
-            
+
             return response()->json([
                 'can_view' => true,
                 'locked' => false,
@@ -1304,7 +1313,7 @@ class QuizAttemptController extends Controller
 
         // Results are locked and not paid - return payment info
         $price = $effectivePrice;
-        
+
         return response()->json([
             'can_view' => false,
             'locked' => true,
@@ -1322,5 +1331,3 @@ class QuizAttemptController extends Controller
         ], 403);
     }
 }
-
-

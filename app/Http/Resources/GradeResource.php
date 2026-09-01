@@ -24,7 +24,6 @@ class GradeResource extends JsonResource
     /**
      * Transform the resource into an array.
      *
-     * @param Request $request
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
@@ -49,14 +48,16 @@ class GradeResource extends JsonResource
      */
     protected function getLevelName(): ?string
     {
-        if (!$this->level) return null;
-        
+        if (! $this->level) {
+            return null;
+        }
+
         $name = $this->level->name;
         $lowerName = strtolower($name);
         if (str_contains($lowerName, 'tertiary') || str_contains($lowerName, 'higher education') || str_contains($lowerName, 'university')) {
-             return $this->level->course_name ?? $name;
+            return $this->level->course_name ?? $name;
         }
-        
+
         return $name;
     }
 
@@ -74,7 +75,7 @@ class GradeResource extends JsonResource
             return $this->quizzes_count;
         }
 
-        return $this->subjects->sum(function($subject) {
+        return $this->subjects->sum(function ($subject) {
             return $subject->topics->sum('quizzes_count');
         });
     }

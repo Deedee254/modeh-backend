@@ -67,7 +67,9 @@ class NotificationController extends Controller
     public function counts(Request $request)
     {
         $user = $request->user();
-        if (!$user) return response()->json(['unread_count' => 0]);
+        if (! $user) {
+            return response()->json(['unread_count' => 0]);
+        }
 
         $counts = [
             'unread_notifications' => $user->unreadNotifications()->count(),

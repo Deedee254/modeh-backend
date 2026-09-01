@@ -24,7 +24,6 @@ class LevelResource extends JsonResource
     /**
      * Transform the resource into an array.
      *
-     * @param Request $request
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
@@ -32,7 +31,7 @@ class LevelResource extends JsonResource
         $name = $this->name;
         $lowerName = strtolower($name);
         if (str_contains($lowerName, 'tertiary') || str_contains($lowerName, 'higher education') || str_contains($lowerName, 'university')) {
-             $name = $this->course_name ?? $name;
+            $name = $this->course_name ?? $name;
         }
 
         return [
@@ -49,8 +48,6 @@ class LevelResource extends JsonResource
     /**
      * Get the total count of quizzes across all grades in this level.
      * Calculates from nested grades if loaded, otherwise returns 0.
-     *
-     * @return int
      */
     protected function getQuizzesCount(): int
     {
@@ -67,6 +64,7 @@ class LevelResource extends JsonResource
                         return $subjectCarry + ($subject->quizzes_count ?? 0);
                     }, 0);
                 }
+
                 return $carry + $gradeCount;
             }, 0);
         }

@@ -5,8 +5,8 @@ namespace App\Filament\Resources\QuizResource\Pages;
 use App\Filament\Resources\QuizResource;
 use App\Models\Quiz;
 use Filament\Actions\Action;
-use Filament\Tables\Filters\Filter;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Tables\Filters\Filter;
 
 class ListQuizzes extends ListRecords
 {
@@ -23,11 +23,11 @@ class ListQuizzes extends ListRecords
                     $record->save();
                 })
                 ->requiresConfirmation()
-                ->visible(fn (Quiz $record) => !$record->is_approved),
+                ->visible(fn (Quiz $record) => ! $record->is_approved),
             Action::make('toggleApprove')
                 ->label('Toggle Approve')
                 ->action(function (Quiz $record) {
-                    $record->is_approved = !$record->is_approved;
+                    $record->is_approved = ! $record->is_approved;
                     $record->save();
                 })
                 ->requiresConfirmation(),

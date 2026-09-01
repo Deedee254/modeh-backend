@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ChatMetricsSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
-use App\Models\ChatMetricsSetting;
 
 class EchoAdminController extends Controller
 {
@@ -18,7 +18,9 @@ class EchoAdminController extends Controller
         if ($days < 1) {
             $setting = ChatMetricsSetting::first();
             $days = $setting ? intval($setting->retention_days) : 30;
-            if ($days < 1) $days = 30;
+            if ($days < 1) {
+                $days = 30;
+            }
         }
 
         // call the artisan command programmatically
@@ -33,6 +35,7 @@ class EchoAdminController extends Controller
     {
         $this->authorize('viewFilament');
         $setting = ChatMetricsSetting::first();
+
         return response()->json(['retention_days' => $setting ? intval($setting->retention_days) : 30]);
     }
 }

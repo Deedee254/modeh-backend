@@ -2,12 +2,11 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Transaction;
-use App\Models\Wallet;
 use App\Models\Quiz;
+use App\Models\Transaction;
 use App\Models\User;
+use App\Models\Wallet;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
 class TestTransactionShares extends Command
 {
@@ -42,44 +41,50 @@ class TestTransactionShares extends Command
 
         // Step 1: Identify quiz and quiz-master
         $this->info('Step 1: Identifying quiz and quiz-master...');
-        
+
         if ($quizMasterId) {
             $quizMaster = User::find($quizMasterId);
-            if (!$quizMaster) {
+            if (! $quizMaster) {
                 $this->error("Quiz-master user #{$quizMasterId} not found.");
+
                 return 1;
             }
             $this->line("Using specified quiz-master: {$quizMaster->name} (ID: {$quizMaster->id})");
-            
-            if (!$quizId) {
+
+            if (! $quizId) {
                 // Find a quiz created by this user
                 $quiz = Quiz::where('user_id', $quizMasterId)->first();
-                if (!$quiz) {
+                if (! $quiz) {
                     $this->error("No quiz found for quiz-master #{$quizMasterId}. Please provide --quiz-id");
+
                     return 1;
                 }
             } else {
                 $quiz = Quiz::find($quizId);
-                if (!$quiz) {
+                if (! $quiz) {
                     $this->error("Quiz #{$quizId} not found.");
+
                     return 1;
                 }
             }
         } else {
-            if (!$quizId) {
+            if (! $quizId) {
                 $this->error('Please provide either --quiz-id or --quiz-master-id');
+
                 return 1;
             }
 
             $quiz = Quiz::find($quizId);
-            if (!$quiz) {
+            if (! $quiz) {
                 $this->error("Quiz #{$quizId} not found.");
+
                 return 1;
             }
 
             $quizMasterId = $quiz->user_id;
-            if (!$quizMasterId) {
+            if (! $quizMasterId) {
                 $this->error("Quiz #{$quizId} has no user_id set.");
+
                 return 1;
             }
 
@@ -94,7 +99,7 @@ class TestTransactionShares extends Command
         $this->info('Step 2: Getting payment settings...');
         $platformSharePct = $this->getPlatformSharePercentage();
         $quizMasterSharePct = 100 - $platformSharePct;
-        
+
         $quizMasterShare = round(($amount * $quizMasterSharePct) / 100, 2);
         $platformShare = round($amount - $quizMasterShare, 2);
 
@@ -108,15 +113,15 @@ class TestTransactionShares extends Command
             ['Component', 'Percentage', 'Amount (KES)'],
             [
                 ['Total Amount', '100%', $amount],
-                ['Platform Share', $platformSharePct . '%', $platformShare],
-                ['Quiz-Master Share', $quizMasterSharePct . '%', $quizMasterShare],
+                ['Platform Share', $platformSharePct.'%', $platformShare],
+                ['Quiz-Master Share', $quizMasterSharePct.'%', $quizMasterShare],
             ]
         );
         $this->newLine();
 
         // Step 4: Check current wallet balances
         $this->info('Step 4: Current wallet balances (BEFORE transaction):');
-        
+
         $quizMasterWallet = Wallet::firstOrCreate(
             ['user_id' => $quizMasterId],
             ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
@@ -132,8 +137,8 @@ class TestTransactionShares extends Command
 
         // Step 5: Create test transaction
         $this->info('Step 5: Creating test transaction...');
-        $txId = 'TEST-' . now()->timestamp . '-' . random_int(1000, 9999);
-        
+        $txId = 'TEST-'.now()->timestamp.'-'.random_int(1000, 9999);
+
         try {
             $transaction = Transaction::create([
                 'tx_id' => $txId,
@@ -151,19 +156,20 @@ class TestTransactionShares extends Command
                 ],
             ]);
 
-            $this->line("Transaction created successfully!");
+            $this->line('Transaction created successfully!');
             /** @var \App\Models\Transaction $transaction */
             $this->line("Transaction ID: {$transaction->id}");
             $this->line("TX Reference: {$txId}");
         } catch (\Exception $e) {
             $this->error("Failed to create transaction: {$e->getMessage()}");
+
             return 1;
         }
         $this->newLine();
 
         // Step 6: Simulate wallet credit (as done in PaymentController)
         $this->info('Step 6: Simulating wallet credit (as done in PaymentController)...');
-        
+
         try {
             $quizMasterWallet->increment('available', $quizMasterShare);
             $quizMasterWallet->increment('lifetime_earned', $quizMasterShare);
@@ -174,9 +180,10 @@ class TestTransactionShares extends Command
             } catch (\Throwable $_) {
                 // Ignore if columns don't exist in older schemas
             }
-            $this->line("Wallet credited successfully!");
+            $this->line('Wallet credited successfully!');
         } catch (\Exception $e) {
             $this->error("Failed to credit wallet: {$e->getMessage()}");
+
             return 1;
         }
         $this->newLine();
@@ -184,9 +191,10 @@ class TestTransactionShares extends Command
         // Step 7: Verify transaction was created correctly
         $this->info('Step 7: Verifying transaction in database...');
         $verifyTx = Transaction::find($transaction->id);
-        
-        if (!$verifyTx) {
-            $this->error("Transaction not found in database!");
+
+        if (! $verifyTx) {
+            $this->error('Transaction not found in database!');
+
             return 1;
         }
 
@@ -206,9 +214,9 @@ class TestTransactionShares extends Command
 
         // Step 8: Check wallet balance after credit
         $this->info('Step 8: Wallet balance AFTER transaction and credit:');
-        
+
         $quizMasterWallet->refresh();
-        
+
         $this->table(
             ['User', 'Available (KES)', 'Pending (KES)', 'Lifetime Earned (KES)'],
             [
@@ -219,10 +227,10 @@ class TestTransactionShares extends Command
 
         // Step 9: Validate amounts
         $this->info('Step 9: Validation:');
-        
+
         $expectedAvailable = $quizMasterWallet->available;
         $expectedLifetimeEarned = $quizMasterWallet->lifetime_earned;
-        
+
         $validations = [
             [
                 'Quiz-Master Received Share',
@@ -251,18 +259,20 @@ class TestTransactionShares extends Command
 
         // Step 10: Summary
         $this->info('Step 10: Test Summary:');
-        
-        $allPassed = collect($validations)->every(fn($v) => $v[2] === 'PASS');
-        
+
+        $allPassed = collect($validations)->every(fn ($v) => $v[2] === 'PASS');
+
         if ($allPassed) {
-            $this->info("âœ“ All tests PASSED!");
+            $this->info('âœ“ All tests PASSED!');
             $this->info("Quiz-Master {$quizMaster->name} has received KES {$quizMasterShare}");
             $this->info("Platform has received KES {$platformShare}");
             $this->info("Total distributed: KES {$amount}");
+
             return 0;
         } else {
-            $this->error("âœ— Some tests FAILED!");
-            $this->warn("Please review the results above.");
+            $this->error('âœ— Some tests FAILED!');
+            $this->warn('Please review the results above.');
+
             return 1;
         }
     }

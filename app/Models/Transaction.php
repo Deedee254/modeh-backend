@@ -9,8 +9,6 @@ class Transaction extends Model
 {
     use HasFactory;
 
-    
-
     protected $fillable = [
         'tx_id',
         'user_id',
@@ -42,25 +40,32 @@ class Transaction extends Model
      * Transaction type constants
      */
     public const TYPE_PAYMENT = 'payment';
+
     public const TYPE_AFFILIATE_PAYOUT = 'affiliate_payout';
+
     public const TYPE_QUIZ_MASTER_PAYOUT = 'quiz_master_payout';
+
     public const TYPE_PLATFORM_CREDIT = 'platform_credit';
+
     public const TYPE_WITHDRAWAL = 'withdrawal';
+
     public const TYPE_SETTLEMENT = 'settlement';
+
     public const TYPE_REFUND = 'refund';
 
     /**
      * Status constants
      */
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_COMPLETED = 'completed';
+
     public const STATUS_FAILED = 'failed';
 
     public function quizMaster()
     {
         return $this->belongsTo(User::class, 'quiz_master_id');
     }
-    
 
     public function user()
     {
@@ -77,7 +82,7 @@ class Transaction extends Model
      */
     public function getTypeLabel(): string
     {
-        return match($this->type) {
+        return match ($this->type) {
             self::TYPE_PAYMENT => 'Quiz Payment',
             self::TYPE_AFFILIATE_PAYOUT => 'Affiliate Payout',
             self::TYPE_QUIZ_MASTER_PAYOUT => 'Quiz Master Payout',

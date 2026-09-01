@@ -8,11 +8,11 @@ return new class extends Migration
 {
     public function up()
     {
-        if (!Schema::hasTable('messages')) {
+        if (! Schema::hasTable('messages')) {
             return;
         }
 
-        if (!Schema::hasColumn('messages', 'attachments')) {
+        if (! Schema::hasColumn('messages', 'attachments')) {
             Schema::table('messages', function (Blueprint $table) {
                 // JSON column to store simple attachment metadata
                 $table->json('attachments')->nullable()->after('content');
@@ -22,7 +22,7 @@ return new class extends Migration
 
     public function down()
     {
-        if (!Schema::hasTable('messages')) {
+        if (! Schema::hasTable('messages')) {
             return;
         }
 

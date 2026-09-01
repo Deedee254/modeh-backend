@@ -12,7 +12,7 @@ use Illuminate\Validation\Rules\Password;
 
 /**
  * Invitation Controller
- * 
+ *
  * Handles referral and signup invitations with token-based validation.
  * Supports viewing invitation details, registering new users via invitation,
  * and claiming/accepting invitations for existing users.
@@ -21,31 +21,29 @@ class InvitationController extends Controller
 {
     /**
      * Get invitation details by token (public endpoint)
-     * 
-     * @param string $token
+     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function show(string $token)
     {
         $invitation = Invitation::findByToken($token);
 
-        if (!$invitation) {
+        if (! $invitation) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Invalid or expired invitation'
+                'message' => 'Invalid or expired invitation',
             ], 404);
         }
 
         return response()->json([
             'ok' => true,
-            'invitation' => $invitation->getPublicDetails()
+            'invitation' => $invitation->getPublicDetails(),
         ]);
     }
 
     /**
      * Register a new user via invitation (unauthenticated)
-     * 
-     * @param Request $request
+     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function register(Request $request)
@@ -59,10 +57,10 @@ class InvitationController extends Controller
 
         $invitation = Invitation::findByToken($validated['token']);
 
-        if (!$invitation) {
+        if (! $invitation) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Invalid or expired invitation'
+                'message' => 'Invalid or expired invitation',
             ], 404);
         }
 
@@ -70,7 +68,7 @@ class InvitationController extends Controller
         if ($invitation->email !== $validated['email']) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Email does not match invitation'
+                'message' => 'Email does not match invitation',
             ], 422);
         }
 
@@ -89,7 +87,7 @@ class InvitationController extends Controller
             Log::info('User registered via invitation', [
                 'user_id' => $user->id,
                 'email' => $user->email,
-                'invited_by' => $invitation->inviter_id
+                'invited_by' => $invitation->inviter_id,
             ]);
 
             // Generate authentication token
@@ -103,25 +101,24 @@ class InvitationController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                 ],
-                'token' => $token
+                'token' => $token,
             ], 201);
         } catch (\Throwable $e) {
             Log::error('Registration via invitation failed', [
                 'error' => $e->getMessage(),
-                'token' => $validated['token']
+                'token' => $validated['token'],
             ]);
 
             return response()->json([
                 'ok' => false,
-                'message' => 'Registration failed'
+                'message' => 'Registration failed',
             ], 500);
         }
     }
 
     /**
      * Claim/accept an invitation for an authenticated user
-     * 
-     * @param Request $request
+     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function claim(Request $request)
@@ -135,10 +132,10 @@ class InvitationController extends Controller
 
         $invitation = Invitation::findByToken($validated['token']);
 
-        if (!$invitation) {
+        if (! $invitation) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Invalid or expired invitation'
+                'message' => 'Invalid or expired invitation',
             ], 404);
         }
 
@@ -149,52 +146,51 @@ class InvitationController extends Controller
             // Log the claim
             Log::info('Invitation claimed', [
                 'user_id' => $user->id,
-                'invited_by' => $invitation->inviter_id
+                'invited_by' => $invitation->inviter_id,
             ]);
 
             return response()->json([
                 'ok' => true,
-                'message' => 'Invitation accepted successfully'
+                'message' => 'Invitation accepted successfully',
             ]);
         } catch (\Throwable $e) {
             Log::error('Failed to claim invitation', [
                 'error' => $e->getMessage(),
                 'user_id' => $user->id,
-                'token' => $validated['token']
+                'token' => $validated['token'],
             ]);
 
             return response()->json([
                 'ok' => false,
-                'message' => 'Failed to accept invitation'
+                'message' => 'Failed to accept invitation',
             ], 500);
         }
     }
 
     /**
      * Validate an invitation token (check if valid/not expired)
-     * 
-     * @param Request $request
+     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function validateToken(Request $request)
     {
         $token = $request->query('token');
 
-        if (!$token) {
+        if (! $token) {
             return response()->json([
                 'ok' => false,
                 'valid' => false,
-                'message' => 'Token is required'
+                'message' => 'Token is required',
             ], 400);
         }
 
         $invitation = Invitation::where('token', $token)->first();
 
-        if (!$invitation) {
+        if (! $invitation) {
             return response()->json([
                 'ok' => true,
                 'valid' => false,
-                'message' => 'Invitation not found'
+                'message' => 'Invitation not found',
             ]);
         }
 
@@ -203,7 +199,7 @@ class InvitationController extends Controller
                 'ok' => true,
                 'valid' => false,
                 'message' => 'Invitation expired',
-                'expired' => true
+                'expired' => true,
             ]);
         }
 
@@ -211,7 +207,7 @@ class InvitationController extends Controller
             return response()->json([
                 'ok' => true,
                 'valid' => false,
-                'message' => 'Invitation already ' . $invitation->status
+                'message' => 'Invitation already '.$invitation->status,
             ]);
         }
 
@@ -220,7 +216,7 @@ class InvitationController extends Controller
             'valid' => true,
             'message' => 'Invitation is valid',
             'email' => $invitation->email,
-            'expires_at' => $invitation->expires_at
+            'expires_at' => $invitation->expires_at,
         ]);
     }
 }

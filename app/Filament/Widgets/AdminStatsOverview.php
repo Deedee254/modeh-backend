@@ -2,17 +2,17 @@
 
 namespace App\Filament\Widgets;
 
+use App\Models\Question;
+use App\Models\Quiz;
+use App\Models\QuizAttempt;
+use App\Models\Subject;
+use App\Models\Subscription;
+use App\Models\Topic;
+use App\Models\Transaction;
+use App\Models\User;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use Filament\Widgets\Concerns\InteractsWithPageFilters;
-use App\Models\User;
-use App\Models\Quiz;
-use App\Models\Subject;
-use App\Models\Topic;
-use App\Models\Question;
-use App\Models\Subscription;
-use App\Models\Transaction;
-use App\Models\QuizAttempt;
 
 class AdminStatsOverview extends StatsOverviewWidget
 {
@@ -95,12 +95,15 @@ class AdminStatsOverview extends StatsOverviewWidget
         if ($level || $grade || $creator) {
             // apply quiz-related filters by joining to quizzes
             $avgScoreQuery->whereHas('quiz', function ($q) use ($level, $grade, $creator) {
-                if ($level)
+                if ($level) {
                     $q->where('level_id', $level);
-                if ($grade)
+                }
+                if ($grade) {
                     $q->where('grade_id', $grade);
-                if ($creator)
+                }
+                if ($creator) {
                     $q->where('user_id', $creator);
+                }
             });
         }
         $avgScore = $avgScoreQuery->avg('score') ?? 0;

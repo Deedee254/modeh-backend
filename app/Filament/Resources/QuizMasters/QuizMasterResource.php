@@ -21,9 +21,13 @@ class QuizMasterResource extends Resource
     protected static ?string $model = QuizMaster::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Briefcase;
+
     protected static ?string $navigationLabel = 'Quiz Masters';
+
     protected static ?string $modelLabel = 'Quiz Master';
+
     protected static ?string $pluralLabel = 'Quiz Masters';
+
     protected static ?string $recordTitleAttribute = 'user.name';
 
     public static function getNavigationGroup(): ?string

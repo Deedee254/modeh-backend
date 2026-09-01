@@ -5,8 +5,8 @@ namespace App\Filament\Resources\TopicResource\Pages;
 use App\Filament\Resources\TopicResource;
 use App\Models\Topic;
 use Filament\Actions\Action;
-use Filament\Tables\Filters\Filter;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Tables\Filters\Filter;
 
 class ListTopics extends ListRecords
 {
@@ -30,11 +30,11 @@ class ListTopics extends ListRecords
                     $record->save();
                 })
                 ->requiresConfirmation()
-                ->visible(fn (Topic $record) => !$record->is_approved),
+                ->visible(fn (Topic $record) => ! $record->is_approved),
             Action::make('toggleApprove')
                 ->label('Toggle Approve')
                 ->action(function (Topic $record) {
-                    $record->is_approved = !$record->is_approved;
+                    $record->is_approved = ! $record->is_approved;
                     $record->save();
                 })
                 ->requiresConfirmation(),

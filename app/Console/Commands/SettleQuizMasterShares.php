@@ -58,6 +58,7 @@ class SettleQuizMasterShares extends Command
 
         if ($transactions->isEmpty()) {
             $this->info('No transactions found that need settlement.');
+
             return 0;
         }
 
@@ -69,21 +70,23 @@ class SettleQuizMasterShares extends Command
 
         foreach ($transactions as $transaction) {
             $quiz = $transaction->quiz;
-            if (!$quiz) {
+            if (! $quiz) {
                 $this->warn("Transaction #{$transaction->id} has no associated quiz - skipping");
+
                 continue;
             }
 
             $quizMasterId = $quiz->user_id;
-            if (!$quizMasterId) {
+            if (! $quizMasterId) {
                 $this->warn("Quiz #{$quiz->id} has no user_id - skipping");
+
                 continue;
             }
 
             $amount = $transaction->{'quiz-master_share'};
             $totalToSettle += $amount;
 
-            if (!isset($settledByUser[$quizMasterId])) {
+            if (! isset($settledByUser[$quizMasterId])) {
                 $settledByUser[$quizMasterId] = 0;
             }
             $settledByUser[$quizMasterId] += $amount;
@@ -95,19 +98,21 @@ class SettleQuizMasterShares extends Command
         $this->info("Total to be settled: KES {$totalToSettle}");
         $this->newLine();
 
-        $this->table(['Quiz Master ID', 'Total Amount'], 
-            collect($settledByUser)->map(fn($amount, $userId) => [$userId, "KES {$amount}"])->toArray()
+        $this->table(['Quiz Master ID', 'Total Amount'],
+            collect($settledByUser)->map(fn ($amount, $userId) => [$userId, "KES {$amount}"])->toArray()
         );
 
         $this->newLine();
 
         if ($dryRun) {
             $this->info('Dry run completed. Run without --dry-run to apply changes.');
+
             return 0;
         }
 
-        if (!$this->confirm('Do you want to proceed with settlement?')) {
+        if (! $this->confirm('Do you want to proceed with settlement?')) {
             $this->info('Cancelled.');
+
             return 0;
         }
 
@@ -121,7 +126,7 @@ class SettleQuizMasterShares extends Command
 
             foreach ($transactions as $transaction) {
                 $quiz = $transaction->quiz;
-                if (!$quiz || !$quiz->user_id) {
+                if (! $quiz || ! $quiz->user_id) {
                     continue;
                 }
 
@@ -154,7 +159,7 @@ class SettleQuizMasterShares extends Command
             DB::commit();
 
             $this->newLine();
-            $this->info("Settlement completed successfully!");
+            $this->info('Settlement completed successfully!');
             $this->info("Settled {$settledCount} transactions");
             $this->info("Total amount distributed: KES {$totalToSettle}");
 
@@ -162,6 +167,7 @@ class SettleQuizMasterShares extends Command
         } catch (\Exception $e) {
             DB::rollBack();
             $this->error("Settlement failed: {$e->getMessage()}");
+
             return 1;
         }
     }

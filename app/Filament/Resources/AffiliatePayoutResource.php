@@ -1,16 +1,19 @@
 <?php
+
 namespace App\Filament\Resources;
 
 use App\Models\AffiliatePayout;
 use Filament\Forms;
-use Filament\Schemas\Schema;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 
 class AffiliatePayoutResource extends Resource
 {
     protected static ?string $model = AffiliatePayout::class;
+
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-currency-dollar';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Affiliate Management';
 
     public static function form(Schema $schema): Schema

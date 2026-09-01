@@ -2,12 +2,12 @@
 
 namespace App\Events;
 
-use Illuminate\Queue\SerializesModels;
+use App\Models\Quiz;
+use App\Models\User;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use App\Models\Quiz;
-use App\Models\User;
+use Illuminate\Queue\SerializesModels;
 
 class QuizLiked implements ShouldBroadcast
 {
@@ -17,6 +17,7 @@ class QuizLiked implements ShouldBroadcast
     public $afterCommit = true;
 
     public $quiz;
+
     public $user;
 
     public function __construct(Quiz $quiz, User $user)
@@ -28,6 +29,6 @@ class QuizLiked implements ShouldBroadcast
     public function broadcastOn()
     {
         // Broadcast globally or to quiz owner channel as needed
-        return new PrivateChannel('quiz.' . $this->quiz['id']);
+        return new PrivateChannel('quiz.'.$this->quiz['id']);
     }
 }

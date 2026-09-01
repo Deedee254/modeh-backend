@@ -2,15 +2,15 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Sponsor;
+use Illuminate\Database\Seeder;
 
 class SponsorSeeder extends Seeder
 {
     public function run(): void
     {
         Sponsor::updateOrCreate([
-            'name' => 'Nescafe'
+            'name' => 'Nescafe',
         ], [
             'logo_url' => '/images/sponsors/nescafe.png',
             'website_url' => 'https://www.nescafe.com',
@@ -19,7 +19,7 @@ class SponsorSeeder extends Seeder
         ]);
 
         Sponsor::updateOrCreate([
-            'name' => 'Kellogg'
+            'name' => 'Kellogg',
         ], [
             'logo_url' => '/images/sponsors/kellogg.png',
             'website_url' => 'https://www.kelloggs.com',
@@ -28,7 +28,7 @@ class SponsorSeeder extends Seeder
         ]);
 
         Sponsor::updateOrCreate([
-            'name' => 'Coca-Cola'
+            'name' => 'Coca-Cola',
         ], [
             'logo_url' => '/images/sponsors/coca-cola.png',
             'website_url' => 'https://www.coca-cola.com',
@@ -37,7 +37,7 @@ class SponsorSeeder extends Seeder
         ]);
 
         Sponsor::updateOrCreate([
-            'name' => 'Pepsi'
+            'name' => 'Pepsi',
         ], [
             'logo_url' => '/images/sponsors/pepsi.png',
             'website_url' => 'https://www.pepsi.com',
@@ -46,7 +46,7 @@ class SponsorSeeder extends Seeder
         ]);
 
         Sponsor::updateOrCreate([
-            'name' => 'McDonald\'s'
+            'name' => 'McDonald\'s',
         ], [
             'logo_url' => '/images/sponsors/mcdonalds.png',
             'website_url' => 'https://www.mcdonalds.com',
@@ -55,7 +55,7 @@ class SponsorSeeder extends Seeder
         ]);
 
         Sponsor::updateOrCreate([
-            'name' => 'Burger King'
+            'name' => 'Burger King',
         ], [
             'logo_url' => '/images/sponsors/burger-king.png',
             'website_url' => 'https://www.bk.com',
@@ -64,7 +64,7 @@ class SponsorSeeder extends Seeder
         ]);
 
         Sponsor::updateOrCreate([
-            'name' => 'Nike'
+            'name' => 'Nike',
         ], [
             'logo_url' => '/images/sponsors/nike.png',
             'website_url' => 'https://www.nike.com',
@@ -73,7 +73,7 @@ class SponsorSeeder extends Seeder
         ]);
 
         Sponsor::updateOrCreate([
-            'name' => 'Adidas'
+            'name' => 'Adidas',
         ], [
             'logo_url' => '/images/sponsors/adidas.png',
             'website_url' => 'https://www.adidas.com',
@@ -82,7 +82,7 @@ class SponsorSeeder extends Seeder
         ]);
 
         Sponsor::updateOrCreate([
-            'name' => 'Apple'
+            'name' => 'Apple',
         ], [
             'logo_url' => '/images/sponsors/apple.png',
             'website_url' => 'https://www.apple.com',
@@ -91,7 +91,7 @@ class SponsorSeeder extends Seeder
         ]);
 
         Sponsor::updateOrCreate([
-            'name' => 'Samsung'
+            'name' => 'Samsung',
         ], [
             'logo_url' => '/images/sponsors/samsung.png',
             'website_url' => 'https://www.samsung.com',

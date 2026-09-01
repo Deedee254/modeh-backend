@@ -30,24 +30,24 @@ class VerifyCsrfToken extends BaseVerifier
         'api/questions',
         'api/questions/*',
         'api/grades',
-        
+
         // Guest quiz endpoints (public, no authentication)
         'api/guest/quizzes/*/submit',
         'api/guest/quizzes/*/mark',
         'api/guest/one-off-purchases',
         'api/guest/one-off-purchases/status',
-        
+
         // Authentication endpoints (Nuxt-Auth doesn't send CSRF)
         'api/login',
         'api/auth/*',
         'api/auth/social-sync',
-        
+
         // User onboarding (authenticated, no CSRF needed)
         'api/onboarding/*',
-        
+
         // Real-time broadcasting (Bearer token auth)
         'api/broadcasting/auth',
-        
+
         // Quiz attempts (may be marked without CSRF)
         'api/quiz-attempts/*/mark',
 
@@ -56,7 +56,7 @@ class VerifyCsrfToken extends BaseVerifier
         'api/quizzes/*/unlike',
         'api/quiz-masters/*/follow',
         'api/quiz-masters/*/unfollow',
-        
+
         // Admin routes (separate from API)
         'admin/login',
     ];

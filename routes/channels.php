@@ -2,7 +2,6 @@
 
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Route;
 
 /**
  * Private channel for individual users. Only allow if the authenticated user id matches.
@@ -21,7 +20,8 @@ Broadcast::channel('group.{groupId}', function ($user, $groupId) {
             $q->where('users.id', $user->id);
         })->exists();
     } catch (\Throwable $e) {
-        Log::warning('Group channel auth error: ' . $e->getMessage());
+        Log::warning('Group channel auth error: '.$e->getMessage());
+
         return false;
     }
 });

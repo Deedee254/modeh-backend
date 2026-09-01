@@ -2,24 +2,23 @@
 
 namespace App\Http\Livewire\Admin;
 
-use Livewire\Component;
-use Filament\Tables;
-use Filament\Tables\Concerns\InteractsWithTable;
-use Filament\Tables\Contracts\HasTable;
+use App\Models\Message;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
-use Illuminate\Database\Eloquent\Builder;
-use App\Models\Message;
-use Filament\Tables\Columns\TextColumn;
+use Filament\Tables;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Contracts\HasTable;
+use Illuminate\Database\Eloquent\Builder;
+use Livewire\Component;
 
-class SenderMessagesTable extends Component implements HasTable, HasSchemas
+class SenderMessagesTable extends Component implements HasSchemas, HasTable
 {
-    use InteractsWithTable;
     use InteractsWithSchemas;
+    use InteractsWithTable;
 
     public ?int $senderId = null;
-
 
     public function mount($senderId = null)
     {

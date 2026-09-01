@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            if (!Schema::hasColumn('users', 'points')) {
+            if (! Schema::hasColumn('users', 'points')) {
                 $table->decimal('points', 10, 2)->default(0)->after('email');
             } else {
                 // If column exists but needs to be modified

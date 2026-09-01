@@ -21,7 +21,7 @@ return new class extends Migration
             $table->integer('processed_rows')->default(0);
             $table->integer('successful_rows')->default(0);
             $table->timestamps();
-            
+
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->index('created_at');
         });

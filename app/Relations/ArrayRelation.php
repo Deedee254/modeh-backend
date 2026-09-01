@@ -2,9 +2,9 @@
 
 namespace App\Relations;
 
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Collection;
 
 /**
@@ -18,7 +18,6 @@ class ArrayRelation extends Relation
 {
     /**
      * Attribute name on the parent model that contains array of related ids
-     * @var string
      */
     protected string $attribute;
 
@@ -35,7 +34,7 @@ class ArrayRelation extends Relation
     {
         $ids = $this->parent->{$this->attribute} ?? [];
         if (is_array($ids) && count($ids) > 0) {
-            $this->query->whereIn($this->query->getModel()->getTable() . '.id', $ids);
+            $this->query->whereIn($this->query->getModel()->getTable().'.id', $ids);
         } else {
             // No ids -> ensure empty result
             $this->query->whereRaw('1 = 0');
@@ -58,7 +57,7 @@ class ArrayRelation extends Relation
         $ids = array_values(array_filter(array_unique($ids)));
 
         if (count($ids) > 0) {
-            $this->query->whereIn($this->query->getModel()->getTable() . '.id', $ids);
+            $this->query->whereIn($this->query->getModel()->getTable().'.id', $ids);
         } else {
             // ensure empty result set
             $this->query->whereRaw('1 = 0');
@@ -73,6 +72,7 @@ class ArrayRelation extends Relation
         foreach ($models as $model) {
             $model->setRelation($relation, collect([]));
         }
+
         return $models;
     }
 
@@ -87,6 +87,7 @@ class ArrayRelation extends Relation
                 return in_array($item->id, (array) $ids);
             })->values());
         }
+
         return $models;
     }
 
@@ -96,7 +97,10 @@ class ArrayRelation extends Relation
     public function getResults()
     {
         $ids = $this->parent->{$this->attribute} ?? [];
-        if (empty($ids) || !is_array($ids)) return collect([]);
-        return $this->query->whereIn($this->query->getModel()->getTable() . '.id', $ids)->get();
+        if (empty($ids) || ! is_array($ids)) {
+            return collect([]);
+        }
+
+        return $this->query->whereIn($this->query->getModel()->getTable().'.id', $ids)->get();
     }
 }

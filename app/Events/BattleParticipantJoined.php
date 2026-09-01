@@ -5,7 +5,6 @@ namespace App\Events;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -18,6 +17,7 @@ class BattleParticipantJoined implements ShouldBroadcast
     public $afterCommit = true;
 
     public $battle;
+
     public $userId;
 
     public function __construct($battle, $userId)
@@ -35,7 +35,8 @@ class BattleParticipantJoined implements ShouldBroadcast
     {
         // Broadcast to the battle's private channel for participants
         $id = $this->battle['uuid'] ?? $this->battle['id'] ?? null;
-        return new PrivateChannel('battle.' . $id);
+
+        return new PrivateChannel('battle.'.$id);
     }
 
     public function broadcastAs()

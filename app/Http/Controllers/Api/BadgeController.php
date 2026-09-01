@@ -23,11 +23,11 @@ class BadgeController extends Controller
                         'daily_challenge' => 'daily_completion',
                         'quiz' => 'quiz_score',
                         'battle' => 'battle_wins',
-                        'tournament' => 'tournament_wins'
+                        'tournament' => 'tournament_wins',
                     ];
                     $criteriaType = $typeMap[$requestedType] ?? $requestedType;
                     $query->where('criteria_type', $criteriaType)
-                          ->where('is_active', true);
+                        ->where('is_active', true);
                 }
 
                 // Return only necessary fields
@@ -38,27 +38,28 @@ class BadgeController extends Controller
                     'description',
                     'icon',
                     'criteria_type',
-                    'points_reward'
+                    'points_reward',
                 ])->get();
 
                 \Log::info('Badges query result', ['count' => $badges->count(), 'badges' => $badges->toArray()]);
             } catch (\Exception $e) {
-                \Log::error('Error in badge query: ' . $e->getMessage());
+                \Log::error('Error in badge query: '.$e->getMessage());
                 throw $e;
             }
 
             return response()->json([
                 'data' => $badges,
                 'meta' => [
-                    'total' => $badges->count()
-                ]
+                    'total' => $badges->count(),
+                ],
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching badges: ' . $e->getMessage());
+            Log::error('Error fetching badges: '.$e->getMessage());
+
             return response()->json([
                 'message' => 'Error fetching badges',
                 'data' => [],
-                'meta' => ['total' => 0]
+                'meta' => ['total' => 0],
             ], 500);
         }
     }

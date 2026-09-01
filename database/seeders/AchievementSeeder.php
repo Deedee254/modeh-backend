@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Achievement;
+use Illuminate\Database\Seeder;
 
 class AchievementSeeder extends Seeder
 {
@@ -19,7 +19,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'time',
                 'criteria_value' => 300,
                 'slug' => 'speed-demon',
-                'category' => 'time'
+                'category' => 'time',
             ],
             [
                 'name' => 'Night Owl',
@@ -29,9 +29,9 @@ class AchievementSeeder extends Seeder
                 'type' => 'time',
                 'criteria_value' => 5,
                 'slug' => 'night-owl',
-                'category' => 'time'
+                'category' => 'time',
             ],
-            
+
             // Subject-based Achievements
             [
                 'name' => 'Math Master',
@@ -41,7 +41,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'subject',
                 'criteria_value' => 10,
                 'slug' => 'math-master',
-                'category' => 'subject'
+                'category' => 'subject',
             ],
             [
                 'name' => 'Science Whiz',
@@ -51,9 +51,9 @@ class AchievementSeeder extends Seeder
                 'type' => 'subject',
                 'criteria_value' => 15,
                 'slug' => 'science-whiz',
-                'category' => 'subject'
+                'category' => 'subject',
             ],
-            
+
             // Improvement-based Achievements
             [
                 'name' => 'Rising Star',
@@ -63,7 +63,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'improvement',
                 'criteria_value' => 20,
                 'slug' => 'rising-star',
-                'category' => 'improvement'
+                'category' => 'improvement',
             ],
             [
                 'name' => 'Steady Progress',
@@ -73,9 +73,9 @@ class AchievementSeeder extends Seeder
                 'type' => 'improvement',
                 'criteria_value' => 5,
                 'slug' => 'steady-progress',
-                'category' => 'improvement'
+                'category' => 'improvement',
             ],
-            
+
             // Weekend Warrior Achievements
             [
                 'name' => 'Weekend Warrior',
@@ -85,7 +85,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'weekend',
                 'criteria_value' => 10,
                 'slug' => 'weekend-warrior',
-                'category' => 'weekend'
+                'category' => 'weekend',
             ],
             [
                 'name' => 'Saturday Scholar',
@@ -95,9 +95,9 @@ class AchievementSeeder extends Seeder
                 'type' => 'weekend',
                 'criteria_value' => 3,
                 'slug' => 'saturday-scholar',
-                'category' => 'weekend'
+                'category' => 'weekend',
             ],
-            
+
             // Topic-based Achievements
             [
                 'name' => 'Topic Explorer',
@@ -107,7 +107,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'topic',
                 'criteria_value' => 5,
                 'slug' => 'topic-explorer',
-                'category' => 'topic'
+                'category' => 'topic',
             ],
             [
                 'name' => 'Topic Master',
@@ -117,9 +117,9 @@ class AchievementSeeder extends Seeder
                 'type' => 'topic',
                 'criteria_value' => 1,
                 'slug' => 'topic-master',
-                'category' => 'topic'
+                'category' => 'topic',
             ],
-            
+
             // Daily Challenge Achievements
             [
                 'name' => 'Challenge Champion',
@@ -129,7 +129,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'daily_challenge',
                 'criteria_value' => 7,
                 'slug' => 'challenge-champion',
-                'category' => 'daily_challenge'
+                'category' => 'daily_challenge',
             ],
             [
                 'name' => 'Daily Dedication',
@@ -139,9 +139,9 @@ class AchievementSeeder extends Seeder
                 'type' => 'daily_challenge',
                 'criteria_value' => 30,
                 'slug' => 'daily-dedication',
-                'category' => 'daily_challenge'
+                'category' => 'daily_challenge',
             ],
-            
+
             // Streak Achievements
             [
                 'name' => 'Streak Starter',
@@ -151,7 +151,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'streak',
                 'criteria_value' => 3,
                 'slug' => 'streak-starter',
-                'category' => 'streak'
+                'category' => 'streak',
             ],
             [
                 'name' => 'Hot Streak',
@@ -160,7 +160,7 @@ class AchievementSeeder extends Seeder
                 'points' => 100,
                 'type' => 'streak',
                 'criteria_value' => 5,
-                'slug' => 'hot-streak'
+                'slug' => 'hot-streak',
             ],
             [
                 'name' => 'Unstoppable',
@@ -169,7 +169,7 @@ class AchievementSeeder extends Seeder
                 'points' => 250,
                 'type' => 'streak',
                 'criteria_value' => 10,
-                'slug' => 'unstoppable'
+                'slug' => 'unstoppable',
             ],
 
             // Score Achievements
@@ -180,7 +180,7 @@ class AchievementSeeder extends Seeder
                 'points' => 500,
                 'type' => 'score',
                 'criteria_value' => 100,
-                'slug' => 'perfect-score'
+                'slug' => 'perfect-score',
             ],
             [
                 'name' => 'Excellence',
@@ -189,7 +189,7 @@ class AchievementSeeder extends Seeder
                 'points' => 200,
                 'type' => 'score',
                 'criteria_value' => 90,
-                'slug' => 'excellence'
+                'slug' => 'excellence',
             ],
             [
                 'name' => 'Great Work',
@@ -198,7 +198,7 @@ class AchievementSeeder extends Seeder
                 'points' => 100,
                 'type' => 'score',
                 'criteria_value' => 80,
-                'slug' => 'great-work'
+                'slug' => 'great-work',
             ],
 
             // Completion Achievements
@@ -209,7 +209,7 @@ class AchievementSeeder extends Seeder
                 'points' => 150,
                 'type' => 'completion',
                 'criteria_value' => 100,
-                'slug' => 'completionist'
+                'slug' => 'completionist',
             ],
 
             // Tournament Battle Achievements
@@ -221,7 +221,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'tournament_battle_won',
                 'criteria_value' => 5,
                 'slug' => 'battle-master',
-                'category' => 'tournament'
+                'category' => 'tournament',
             ],
             [
                 'name' => 'Battle Warrior',
@@ -231,7 +231,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'tournament_battle_completed',
                 'criteria_value' => 10,
                 'slug' => 'battle-warrior',
-                'category' => 'tournament'
+                'category' => 'tournament',
             ],
             [
                 'name' => 'Perfect Match',
@@ -241,7 +241,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'tournament_battle_perfect',
                 'criteria_value' => 100,
                 'slug' => 'perfect-match',
-                'category' => 'tournament'
+                'category' => 'tournament',
             ],
             [
                 'name' => 'Tournament Champion',
@@ -251,7 +251,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'tournament_won',
                 'criteria_value' => 1,
                 'slug' => 'tournament-champion',
-                'category' => 'tournament'
+                'category' => 'tournament',
             ],
             [
                 'name' => 'Qualifier Star',
@@ -261,7 +261,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'tournament_qualifier',
                 'criteria_value' => 10,
                 'slug' => 'qualifier-star',
-                'category' => 'tournament'
+                'category' => 'tournament',
             ],
             [
                 'name' => 'Finalist',
@@ -271,7 +271,7 @@ class AchievementSeeder extends Seeder
                 'type' => 'tournament_finalist',
                 'criteria_value' => 1,
                 'slug' => 'finalist',
-                'category' => 'tournament'
+                'category' => 'tournament',
             ],
             [
                 'name' => 'Multi-Tournament Winner',
@@ -281,8 +281,8 @@ class AchievementSeeder extends Seeder
                 'type' => 'tournament_multi_win',
                 'criteria_value' => 3,
                 'slug' => 'multi-tournament-winner',
-                'category' => 'tournament'
-            ]
+                'category' => 'tournament',
+            ],
         ];
 
         foreach ($achievements as $achievement) {

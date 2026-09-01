@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Group;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class GroupController extends Controller
@@ -27,7 +27,7 @@ class GroupController extends Controller
         $v = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'emails' => 'array',
-            'emails.*' => 'email'
+            'emails.*' => 'email',
         ]);
 
         if ($v->fails()) {

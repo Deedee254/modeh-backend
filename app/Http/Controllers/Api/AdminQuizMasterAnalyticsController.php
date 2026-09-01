@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class AdminQuizMasterAnalyticsController extends Controller
@@ -14,7 +14,9 @@ class AdminQuizMasterAnalyticsController extends Controller
     private function resolveQuizMasterUserId(string $identifier): ?int
     {
         $identifier = trim($identifier);
-        if ($identifier === '') return null;
+        if ($identifier === '') {
+            return null;
+        }
 
         if (ctype_digit($identifier)) {
             $userId = (int) $identifier;
@@ -31,7 +33,7 @@ class AdminQuizMasterAnalyticsController extends Controller
 
         $match = DB::table('users')
             ->where('role', 'quiz-master')
-            ->where(function ($q) use ($identifier, $normalized, $slugLike) {
+            ->where(function ($q) use ($normalized, $slugLike) {
                 $q->whereRaw('LOWER(email) = ?', [$normalized])
                     ->orWhereRaw('LOWER(name) = ?', [$normalized])
                     ->orWhereRaw("LOWER(REPLACE(name, ' ', '-')) = ?", [$slugLike]);
@@ -39,11 +41,13 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->select('id')
             ->first();
 
-        if ($match) return (int) $match->id;
+        if ($match) {
+            return (int) $match->id;
+        }
 
         $fallback = DB::table('users')
             ->where('role', 'quiz-master')
-            ->whereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE ?", ['%' . $slugLike . '%'])
+            ->whereRaw("LOWER(REPLACE(name, ' ', '-')) LIKE ?", ['%'.$slugLike.'%'])
             ->orderBy('id')
             ->select('id')
             ->first();
@@ -82,13 +86,18 @@ class AdminQuizMasterAnalyticsController extends Controller
             ? Carbon::parse($validated['from'])->toDateString()
             : Carbon::parse($to)->subDays(29)->toDateString();
 
-        if ($from > $to) [$from, $to] = [$to, $from];
+        if ($from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+
         return [$from, $to];
     }
 
     public function analytics(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -96,8 +105,8 @@ class AdminQuizMasterAnalyticsController extends Controller
         ]);
 
         [$from, $to] = $this->resolveRange($validated);
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $totalQuizMasters = (int) DB::table('users')->where('role', 'quiz-master')->count();
         $newQuizMasters = (int) DB::table('users')
@@ -142,7 +151,9 @@ class AdminQuizMasterAnalyticsController extends Controller
         $fromDt = Carbon::parse($from);
         $toDt = Carbon::parse($to);
         $dates = [];
-        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) $dates[] = $d->toDateString();
+        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) {
+            $dates[] = $d->toDateString();
+        }
 
         $signupRows = DB::table('users')
             ->where('role', 'quiz-master')
@@ -152,7 +163,9 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $signupByDate = [];
-        foreach ($signupRows as $r) $signupByDate[$r->date] = (int) $r->value;
+        foreach ($signupRows as $r) {
+            $signupByDate[$r->date] = (int) $r->value;
+        }
 
         $quizRows = (clone $quizQ)
             ->whereBetween('q.created_at', [$fromTs, $toTs])
@@ -162,7 +175,9 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $quizByDate = [];
-        foreach ($quizRows as $r) $quizByDate[$r->date] = (int) ($r->quizzes ?? 0);
+        foreach ($quizRows as $r) {
+            $quizByDate[$r->date] = (int) ($r->quizzes ?? 0);
+        }
 
         $attemptRows = (clone $attemptsQ)
             ->selectRaw('DATE(a.created_at) as date')
@@ -172,7 +187,9 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $attemptByDate = [];
-        foreach ($attemptRows as $r) $attemptByDate[$r->date] = $r;
+        foreach ($attemptRows as $r) {
+            $attemptByDate[$r->date] = $r;
+        }
 
         $earningRows = (clone $earningsQ)
             ->selectRaw('DATE(t.created_at) as date')
@@ -181,7 +198,9 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $earnByDate = [];
-        foreach ($earningRows as $r) $earnByDate[$r->date] = (float) ($r->earnings ?? 0);
+        foreach ($earningRows as $r) {
+            $earnByDate[$r->date] = (float) ($r->earnings ?? 0);
+        }
 
         $series = [
             'signups' => [],
@@ -277,7 +296,9 @@ class AdminQuizMasterAnalyticsController extends Controller
 
     public function insights(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -288,25 +309,25 @@ class AdminQuizMasterAnalyticsController extends Controller
         ]);
 
         [$from, $to] = $this->resolveRange($validated);
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $page = (int) ($validated['page'] ?? 1);
         $limit = (int) ($validated['limit'] ?? 50);
         $search = trim((string) ($validated['search'] ?? ''));
 
         $txAll = DB::table('transactions as t')
-            ->selectRaw("t.`quiz_master_id` as user_id")
+            ->selectRaw('t.`quiz_master_id` as user_id')
             ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN COALESCE(t.`quiz-master_share`,0) ELSE 0 END) as lifetime_earnings")
             ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as lifetime_transactions")
-            ->groupBy(DB::raw("t.`quiz_master_id`"));
+            ->groupBy(DB::raw('t.`quiz_master_id`'));
 
         $txRange = DB::table('transactions as t')
             ->whereBetween('t.created_at', [$fromTs, $toTs])
-            ->selectRaw("t.`quiz_master_id` as user_id")
+            ->selectRaw('t.`quiz_master_id` as user_id')
             ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN COALESCE(t.`quiz-master_share`,0) ELSE 0 END) as earnings_in_range")
             ->selectRaw("SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as transactions_in_range")
-            ->groupBy(DB::raw("t.`quiz_master_id`"));
+            ->groupBy(DB::raw('t.`quiz_master_id`'));
 
         $quizAll = DB::table('quizzes as q')
             ->selectRaw('IFNULL(q.created_by, q.user_id) as user_id')
@@ -379,8 +400,8 @@ class AdminQuizMasterAnalyticsController extends Controller
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
-                $q->where('u.name', 'like', '%' . $search . '%')
-                    ->orWhere('u.email', 'like', '%' . $search . '%');
+                $q->where('u.name', 'like', '%'.$search.'%')
+                    ->orWhere('u.email', 'like', '%'.$search.'%');
             });
         }
 
@@ -446,10 +467,12 @@ class AdminQuizMasterAnalyticsController extends Controller
 
     public function userInsights(Request $request, $userId)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $resolvedUserId = $this->resolveQuizMasterUserId((string) $userId);
-        if (!$resolvedUserId) {
+        if (! $resolvedUserId) {
             return response()->json(['ok' => false, 'message' => 'Not found'], 404);
         }
 
@@ -458,8 +481,8 @@ class AdminQuizMasterAnalyticsController extends Controller
             'to' => 'nullable|date',
         ]);
         [$from, $to] = $this->resolveRange($validated);
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $user = DB::table('users as u')
             ->where('u.id', $resolvedUserId)
@@ -473,7 +496,9 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->selectRaw('g.name as grade_name, l.name as level_name, qm.first_name, qm.last_name, qm.headline, qm.bio, qm.institution')
             ->first();
 
-        if (!$user) return response()->json(['ok' => false, 'message' => 'Not found'], 404);
+        if (! $user) {
+            return response()->json(['ok' => false, 'message' => 'Not found'], 404);
+        }
 
         $quizzesAll = DB::table('quizzes as q')
             ->whereRaw('IFNULL(q.created_by, q.user_id) = ?', [$resolvedUserId]);
@@ -498,17 +523,19 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->first();
 
         $txAll = DB::table('transactions as t')
-            ->whereRaw("t.`quiz_master_id` = ?", [$resolvedUserId])
+            ->whereRaw('t.`quiz_master_id` = ?', [$resolvedUserId])
             ->where('t.status', 'completed');
         $txRange = (clone $txAll)->whereBetween('t.created_at', [$fromTs, $toTs]);
-        $earningsAll = (float) ((clone $txAll)->sum(DB::raw("COALESCE(t.`quiz-master_share`,0)")) ?? 0);
-        $earningsRange = (float) ((clone $txRange)->sum(DB::raw("COALESCE(t.`quiz-master_share`,0)")) ?? 0);
+        $earningsAll = (float) ((clone $txAll)->sum(DB::raw('COALESCE(t.`quiz-master_share`,0)')) ?? 0);
+        $earningsRange = (float) ((clone $txRange)->sum(DB::raw('COALESCE(t.`quiz-master_share`,0)')) ?? 0);
 
         // Date series
         $fromDt = Carbon::parse($from);
         $toDt = Carbon::parse($to);
         $dates = [];
-        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) $dates[] = $d->toDateString();
+        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) {
+            $dates[] = $d->toDateString();
+        }
 
         $quizRows = (clone $quizzesRange)
             ->selectRaw('DATE(q.created_at) as date, COUNT(*) as quizzes')
@@ -516,7 +543,9 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $quizByDate = [];
-        foreach ($quizRows as $r) $quizByDate[$r->date] = (int) ($r->quizzes ?? 0);
+        foreach ($quizRows as $r) {
+            $quizByDate[$r->date] = (int) ($r->quizzes ?? 0);
+        }
 
         $attemptRows = (clone $attemptsRange)
             ->selectRaw('DATE(a.created_at) as date, COUNT(*) as attempts, AVG(a.score) as avg_score')
@@ -524,7 +553,9 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $attemptByDate = [];
-        foreach ($attemptRows as $r) $attemptByDate[$r->date] = $r;
+        foreach ($attemptRows as $r) {
+            $attemptByDate[$r->date] = $r;
+        }
 
         $earnRows = (clone $txRange)
             ->selectRaw('DATE(t.created_at) as date, SUM(COALESCE(t.`quiz-master_share`,0)) as earnings')
@@ -532,7 +563,9 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $earnByDate = [];
-        foreach ($earnRows as $r) $earnByDate[$r->date] = (float) ($r->earnings ?? 0);
+        foreach ($earnRows as $r) {
+            $earnByDate[$r->date] = (float) ($r->earnings ?? 0);
+        }
 
         $series = [
             'quizzes_created' => [],
@@ -561,7 +594,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderByDesc('quizzes')
             ->limit(8)
             ->get()
-            ->map(fn($r) => ['id' => $r->id, 'name' => $r->name, 'quizzes' => (int) $r->quizzes])
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name, 'quizzes' => (int) $r->quizzes])
             ->values();
 
         $topTopics = (clone $taxonomy)
@@ -570,7 +603,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderByDesc('quizzes')
             ->limit(8)
             ->get()
-            ->map(fn($r) => ['id' => $r->id, 'name' => $r->name, 'quizzes' => (int) $r->quizzes])
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name, 'quizzes' => (int) $r->quizzes])
             ->values();
 
         $topGrades = (clone $taxonomy)
@@ -579,7 +612,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderByDesc('quizzes')
             ->limit(8)
             ->get()
-            ->map(fn($r) => ['id' => $r->id, 'name' => $r->name, 'quizzes' => (int) $r->quizzes])
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name, 'quizzes' => (int) $r->quizzes])
             ->values();
 
         $topLevels = (clone $taxonomy)
@@ -588,7 +621,7 @@ class AdminQuizMasterAnalyticsController extends Controller
             ->orderByDesc('quizzes')
             ->limit(8)
             ->get()
-            ->map(fn($r) => ['id' => $r->id, 'name' => $r->name, 'quizzes' => (int) $r->quizzes])
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name, 'quizzes' => (int) $r->quizzes])
             ->values();
 
         $topQuizzes = DB::table('quiz_attempts as a')

@@ -3,7 +3,6 @@
 namespace App\Events\Tournament;
 
 use App\Models\TournamentBattle;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -26,7 +25,7 @@ class BattleCompleted implements ShouldBroadcast
 
     public function broadcastOn()
     {
-        return new PresenceChannel('tournament.' . $this->battle->tournament_id);
+        return new PresenceChannel('tournament.'.$this->battle->tournament_id);
     }
 
     public function broadcastWith()
@@ -40,8 +39,8 @@ class BattleCompleted implements ShouldBroadcast
                 'is_draw' => $this->battle->is_draw,
                 'player1_score' => $this->battle->player1_score,
                 'player2_score' => $this->battle->player2_score,
-                'battle_duration' => $this->battle->battle_duration
-            ]
+                'battle_duration' => $this->battle->battle_duration,
+            ],
         ];
     }
 }

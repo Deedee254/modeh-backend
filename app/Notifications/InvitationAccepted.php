@@ -11,6 +11,7 @@ class InvitationAccepted extends Notification
     use Queueable;
 
     protected $institution;
+
     protected $user;
 
     public function __construct($institution, $user)
@@ -27,11 +28,12 @@ class InvitationAccepted extends Notification
     public function toMail($notifiable)
     {
         $frontend = env('FRONTEND_URL', config('app.url'));
+
         return (new MailMessage)
-                    ->subject('A user accepted an invitation')
-                    ->line("{$this->user->name} ({$this->user->email}) has accepted an invitation to join {$this->institution->name}.")
-                    ->action('View institution', $frontend . '/institution-manager/institutions/' . ($this->institution->slug ?? $this->institution->id))
-                    ->line('Thank you for using Modeh!');
+            ->subject('A user accepted an invitation')
+            ->line("{$this->user->name} ({$this->user->email}) has accepted an invitation to join {$this->institution->name}.")
+            ->action('View institution', $frontend.'/institution-manager/institutions/'.($this->institution->slug ?? $this->institution->id))
+            ->line('Thank you for using Modeh!');
     }
 
     public function toDatabase($notifiable)

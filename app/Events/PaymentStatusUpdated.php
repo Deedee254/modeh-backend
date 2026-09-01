@@ -19,12 +19,11 @@ class PaymentStatusUpdated implements ShouldBroadcastNow
         public ?string $kind = null,
         public ?string $mpesaReceipt = null,
         public ?string $resultDesc = null,
-    ) {
-    }
+    ) {}
 
     public function broadcastOn(): PrivateChannel
     {
-        return new PrivateChannel('users.' . $this->userId);
+        return new PrivateChannel('users.'.$this->userId);
     }
 
     public function broadcastAs(): string

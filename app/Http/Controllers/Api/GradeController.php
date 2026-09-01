@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Grade;
 use App\Http\Resources\GradeResource;
 use App\Http\Resources\TopicResource;
+use App\Models\Grade;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -52,7 +52,7 @@ class GradeController extends Controller
                 Log::warning('Failed to cache data', [
                     'key' => $key,
                     'error' => $e->getMessage(),
-                    'error_type' => get_class($e)
+                    'error_type' => get_class($e),
                 ]);
             }
 
@@ -61,8 +61,9 @@ class GradeController extends Controller
             // If cache retrieval fails, just execute the callback
             Log::warning('Cache operation failed, falling back to direct query', [
                 'key' => $key,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return $callback();
         }
     }
@@ -71,7 +72,7 @@ class GradeController extends Controller
     // OPTIMIZED: Uses selective fields, pagination limits, and efficient caching
     public function index(Request $request)
     {
-        $cacheKey = 'grades_index_' . md5(serialize($request->all()));
+        $cacheKey = 'grades_index_'.md5(serialize($request->all()));
 
         $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($request) {
             // Strategy B: Select only essential fields to reduce cache size
@@ -87,12 +88,12 @@ class GradeController extends Controller
                             ->withCount('topics')
                             ->with([
                                 'topics' => function ($t) {
-                            // Strategy A: Only cache counts, not full topic data
-                            $t->select('id', 'name', 'slug', 'subject_id')
-                                ->withCount('quizzes');
-                        }
+                                    // Strategy A: Only cache counts, not full topic data
+                                    $t->select('id', 'name', 'slug', 'subject_id')
+                                        ->withCount('quizzes');
+                                },
                             ]);
-                    }
+                    },
                 ]);
 
             if ($q = $request->get('q')) {
@@ -125,7 +126,7 @@ class GradeController extends Controller
     public function show(Grade|string|int $grade)
     {
         $grade = $this->resolveGrade($grade);
-        $cacheKey = 'grade_show_' . $grade->id;
+        $cacheKey = 'grade_show_'.$grade->id;
 
         $grade = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($grade) {
             // Strategy B: Load only essential fields
@@ -140,9 +141,9 @@ class GradeController extends Controller
                                 // Strategy A: Only counts, minimal topic data
                                 $t->select('id', 'name', 'slug', 'subject_id')
                                     ->withCount('quizzes');
-                            }
+                            },
                         ]);
-                }
+                },
             ]);
 
             $grade->subjects->each(function ($sub) {
@@ -162,7 +163,7 @@ class GradeController extends Controller
     {
         $grade = $this->resolveGrade($grade);
         $perPage = min(200, max(1, (int) request()->get('per_page', 50))); // Strategy C: Limit max items
-        $cacheKey = 'grade_topics_' . $grade->id . '_' . $perPage;
+        $cacheKey = 'grade_topics_'.$grade->id.'_'.$perPage;
 
         return $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($grade, $perPage) {
             // Strategy B: Select only needed fields
@@ -174,7 +175,7 @@ class GradeController extends Controller
                         $q->select('id', 'name', 'slug', 'subject_id', 'image', 'description')
                             ->withCount('quizzes')
                             ->with(['representativeQuiz:quizzes.id,quizzes.cover_image,quizzes.topic_id']); // Only needed quiz fields
-                    }
+                    },
                 ])
                 ->get()
                 ->pluck('topics')
@@ -193,7 +194,7 @@ class GradeController extends Controller
             }
 
             return [
-                'topics' => TopicResource::collection($topics)
+                'topics' => TopicResource::collection($topics),
             ];
         });
     }
@@ -209,12 +210,14 @@ class GradeController extends Controller
             'display_name' => 'nullable|string|max:255',
             'is_active' => 'sometimes|boolean',
         ]);
-        if ($v->fails())
+        if ($v->fails()) {
             return response()->json(['errors' => $v->errors()], 422);
+        }
 
         $data = $request->only(['name', 'level_id', 'description', 'type', 'display_name']);
-        if ($request->has('is_active'))
+        if ($request->has('is_active')) {
             $data['is_active'] = (bool) $request->get('is_active');
+        }
 
         $grade = Grade::create($data);
 
@@ -232,10 +235,12 @@ class GradeController extends Controller
             'display_name' => 'sometimes|nullable|string|max:255',
             'is_active' => 'sometimes|boolean',
         ]);
-        if ($v->fails())
+        if ($v->fails()) {
             return response()->json(['errors' => $v->errors()], 422);
+        }
 
         $grade->update($request->only(['name', 'level_id', 'description', 'type', 'display_name', 'is_active']));
+
         return response()->json(['grade' => $grade]);
     }
 
@@ -243,6 +248,7 @@ class GradeController extends Controller
     public function destroy(Grade $grade)
     {
         $grade->delete();
+
         return response()->json(['deleted' => true]);
     }
 }

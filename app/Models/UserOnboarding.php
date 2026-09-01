@@ -9,6 +9,7 @@ class UserOnboarding extends Model
     // Migration creates the table named `user_onboarding` (singular).
     // Eloquent would otherwise look for `user_onboardings` (plural).
     protected $table = 'user_onboarding';
+
     protected $fillable = [
         'user_id',
         'profile_completed',
@@ -17,7 +18,7 @@ class UserOnboarding extends Model
         'subject_selected',
         'grade_selected',
         'completed_steps',
-        'last_step_completed_at'
+        'last_step_completed_at',
     ];
 
     protected $casts = [
@@ -27,7 +28,7 @@ class UserOnboarding extends Model
         'subject_selected' => 'boolean',
         'grade_selected' => 'boolean',
         'completed_steps' => 'array',
-        'last_step_completed_at' => 'datetime'
+        'last_step_completed_at' => 'datetime',
     ];
 
     public function user()

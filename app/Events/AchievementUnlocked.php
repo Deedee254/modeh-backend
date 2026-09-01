@@ -4,7 +4,6 @@ namespace App\Events;
 
 use App\Models\Achievement;
 use App\Models\User;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -19,6 +18,7 @@ class AchievementUnlocked implements ShouldBroadcast
     public $afterCommit = true;
 
     public $user;
+
     public $achievement;
 
     public function __construct(User $user, Achievement $achievement)
@@ -29,7 +29,7 @@ class AchievementUnlocked implements ShouldBroadcast
 
     public function broadcastOn()
     {
-        return new PresenceChannel('user.' . $this->user->id);
+        return new PresenceChannel('user.'.$this->user->id);
     }
 
     public function broadcastAs()

@@ -17,7 +17,7 @@ return new class extends Migration
     public function down()
     {
         Schema::table('packages', function (Blueprint $table) {
-            $table->dropColumn(['duration_days','cover_image']);
+            $table->dropColumn(['duration_days', 'cover_image']);
         });
     }
 };

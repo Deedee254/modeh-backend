@@ -2,9 +2,8 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast as ShouldBroadcastContract;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -14,9 +13,11 @@ class DailyChallengeCompleted implements ShouldBroadcastContract
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $userId;
+
     public $challenge;
-        // Ensure broadcasting happens after DB transaction commit
-        public $afterCommit = true;
+
+    // Ensure broadcasting happens after DB transaction commit
+    public $afterCommit = true;
 
     public function __construct(int $userId, array $challenge)
     {

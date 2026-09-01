@@ -2,13 +2,11 @@
 
 namespace App\Http\Livewire\EmbeddedTables;
 
+use App\Models\Tournament;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Illuminate\Database\Eloquent\Model;
 use Livewire\Component;
-use App\Models\Tournament;
 
 class QuestionsTable extends Component implements HasTable
 {

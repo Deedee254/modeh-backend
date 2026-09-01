@@ -36,7 +36,7 @@ return new class extends Migration
             $table->timestamp('approval_requested_at')->nullable();
 
             // indexes & foreign keys
-            $table->index(['subject_id','topic_id','grade_id']);
+            $table->index(['subject_id', 'topic_id', 'grade_id']);
             $table->index(['level_id']);
             $table->foreign('subject_id')->references('id')->on('subjects')->onDelete('set null');
             $table->foreign('topic_id')->references('id')->on('topics')->onDelete('set null');

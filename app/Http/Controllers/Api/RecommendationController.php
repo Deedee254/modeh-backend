@@ -21,8 +21,8 @@ class RecommendationController extends Controller
 
         // Determine grade (allow override via query param).
         $grade = $request->get('for_grade');
-        if (!$grade && $user && $user->role === 'quizee') {
-            // optimize: eager load profile if not responsible for N+1 issues in this context, 
+        if (! $grade && $user && $user->role === 'quizee') {
+            // optimize: eager load profile if not responsible for N+1 issues in this context,
             // but $request->user() is usually singular.
             // Access quizeeProfile relation (assuming loaded or loose read)
             $grade = $user->quizeeProfile->grade_id ?? null;
@@ -49,6 +49,7 @@ class RecommendationController extends Controller
             $quiz->level_slug = $quiz->level?->slug ?? null;
             $quiz->topic_slug = $quiz->topic?->slug ?? null;
             $quiz->subject_slug = $quiz->topic?->subject?->slug ?? null;
+
             return $quiz;
         });
 

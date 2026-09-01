@@ -2,13 +2,12 @@
 
 namespace App\Services;
 
+use App\Events\AchievementUnlocked;
 use App\Models\Achievement;
-use App\Models\User;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
-use App\Events\AchievementUnlocked;
+use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class AchievementService
 {
@@ -28,9 +27,14 @@ class AchievementService
         foreach ($streakAchievements as $achievement) {
             try {
                 $a = $this->awardAchievement($user, $achievement, $attemptId);
-                if ($a) $awarded[] = $a;
+                if ($a) {
+                    $awarded[] = $a;
+                }
             } catch (\Throwable $e) {
-                try { \Log::warning('Failed to award streak achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+                try {
+                    \Log::warning('Failed to award streak achievement: '.$e->getMessage());
+                } catch (\Throwable $_) {
+                }
             }
         }
 
@@ -53,9 +57,14 @@ class AchievementService
         foreach ($completionAchievements as $achievement) {
             try {
                 $a = $this->awardAchievement($user, $achievement, $attemptId);
-                if ($a) $awarded[] = $a;
+                if ($a) {
+                    $awarded[] = $a;
+                }
             } catch (\Throwable $e) {
-                try { \Log::warning('Failed to award completion achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+                try {
+                    \Log::warning('Failed to award completion achievement: '.$e->getMessage());
+                } catch (\Throwable $_) {
+                }
             }
         }
 
@@ -78,9 +87,14 @@ class AchievementService
         foreach ($scoreAchievements as $achievement) {
             try {
                 $a = $this->awardAchievement($user, $achievement, $attemptId);
-                if ($a) $awarded[] = $a;
+                if ($a) {
+                    $awarded[] = $a;
+                }
             } catch (\Throwable $e) {
-                try { \Log::warning('Failed to award score achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+                try {
+                    \Log::warning('Failed to award score achievement: '.$e->getMessage());
+                } catch (\Throwable $_) {
+                }
             }
         }
 
@@ -92,10 +106,6 @@ class AchievementService
      */
     /**
      * Award an achievement to a user. Optionally associate it with a quiz attempt.
-     *
-     * @param User $user
-     * @param Achievement $achievement
-     * @param int|null $attemptId
      */
     protected function awardAchievement(User $user, Achievement $achievement, ?int $attemptId = null): Achievement
     {
@@ -108,7 +118,7 @@ class AchievementService
             $payload['attempt_id'] = $attemptId;
         }
 
-    $user->achievements()->attach($achievement->id, $payload);
+        $user->achievements()->attach($achievement->id, $payload);
 
         // Add points from achievement only for quizee users. Quiz-masters use wallet earnings
         // and shouldn't have their leaderboard points changed here.
@@ -116,11 +126,17 @@ class AchievementService
             if (isset($user->role) && $user->role === 'quizee') {
                 $user->increment('points', $achievement->points);
             } else {
-                try { \Log::info("Achievement awarded to non-quizee (no points increment): user={$user->id}, role={$user->role}, achievement={$achievement->id}"); } catch (\Throwable $_) {}
+                try {
+                    \Log::info("Achievement awarded to non-quizee (no points increment): user={$user->id}, role={$user->role}, achievement={$achievement->id}");
+                } catch (\Throwable $_) {
+                }
             }
         } catch (\Throwable $e) {
             // Log and continue; we don't want achievements to fail due to points column issues
-            try { \Log::warning('Could not increment user points for achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+            try {
+                \Log::warning('Could not increment user points for achievement: '.$e->getMessage());
+            } catch (\Throwable $_) {
+            }
         }
 
         // Broadcast achievement
@@ -135,14 +151,14 @@ class AchievementService
      * Accepts either a User instance or a user id and a payload with keys like 'type', 'score', 'total'.
      * This finds achievements that match the given type and criteria and awards them.
      *
-     * @param User|int $userOrId
-     * @param array $payload
-     * @return array
+     * @param  User|int  $userOrId
      */
     public function checkAchievements($userOrId, array $payload): array
     {
         $user = $userOrId instanceof User ? $userOrId : User::find($userOrId);
-        if (!$user) return [];
+        if (! $user) {
+            return [];
+        }
 
         $awarded = [];
 
@@ -224,7 +240,9 @@ class AchievementService
                 $q->where('user_id', $user->id);
             })->get();
 
-        if (!$achievements || $achievements->isEmpty()) return [];
+        if (! $achievements || $achievements->isEmpty()) {
+            return [];
+        }
 
         // Determine context from payload
         $levelId = $payload['level_id'] ?? null;
@@ -237,21 +255,29 @@ class AchievementService
                 if (is_string($criteria)) {
                     $criteria = json_decode($criteria, true) ?: [];
                 }
-                if (!is_array($criteria)) $criteria = [];
+                if (! is_array($criteria)) {
+                    $criteria = [];
+                }
 
                 $requiredCount = $criteria['count'] ?? ($ach->criteria_value ?? 1);
 
                 // If achievement requires a course (tertiary), ensure the quiz points to a grade of type 'course'
-                if (!empty($criteria['require_course'])) {
+                if (! empty($criteria['require_course'])) {
                     // If gradeId isn't provided, try to infer via level+quiz_id
                     if ($gradeId) {
                         $g = \App\Models\Grade::find($gradeId);
-                        if (!($g && ($g->type ?? null) === 'course')) continue; // not a course quiz
-                    } else if (!empty($payload['quiz_id'])) {
+                        if (! ($g && ($g->type ?? null) === 'course')) {
+                            continue;
+                        } // not a course quiz
+                    } elseif (! empty($payload['quiz_id'])) {
                         $q = Quiz::find($payload['quiz_id']);
-                        if (!$q || !$q->grade_id) continue;
+                        if (! $q || ! $q->grade_id) {
+                            continue;
+                        }
                         $g = \App\Models\Grade::find($q->grade_id);
-                        if (!($g && ($g->type ?? null) === 'course')) continue;
+                        if (! ($g && ($g->type ?? null) === 'course')) {
+                            continue;
+                        }
                         // set gradeId for counting below
                         $gradeId = $q->grade_id;
                     } else {
@@ -261,8 +287,11 @@ class AchievementService
 
                 // Determine counting scope: prefer grade if criteria has 'per_grade' true, else level if levelId available, else global per-user quizzes
                 $scope = 'user';
-                if (!empty($criteria['per_grade']) && $gradeId) $scope = 'grade';
-                elseif ($levelId) $scope = 'level';
+                if (! empty($criteria['per_grade']) && $gradeId) {
+                    $scope = 'grade';
+                } elseif ($levelId) {
+                    $scope = 'level';
+                }
 
                 $count = 0;
                 if ($scope === 'grade' && $gradeId) {
@@ -278,7 +307,10 @@ class AchievementService
                     $awarded[] = $this->awardAchievement($user, $ach, $payload['attempt_id'] ?? null);
                 }
             } catch (\Throwable $e) {
-                try { \Log::warning('Failed to evaluate quiz_created achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+                try {
+                    \Log::warning('Failed to evaluate quiz_created achievement: '.$e->getMessage());
+                } catch (\Throwable $_) {
+                }
             }
         }
 
@@ -296,7 +328,7 @@ class AchievementService
         $score = $payload['score'] ?? 0;
         $tournamentId = $payload['tournament_id'] ?? null;
 
-        if (!$type || !$tournamentId) {
+        if (! $type || ! $tournamentId) {
             return [];
         }
 
@@ -337,7 +369,10 @@ class AchievementService
                         }
                     }
                 } catch (\Throwable $e) {
-                    try { \Log::warning('Failed to award tournament battle achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+                    try {
+                        \Log::warning('Failed to award tournament battle achievement: '.$e->getMessage());
+                    } catch (\Throwable $_) {
+                    }
                 }
             }
         }
@@ -351,7 +386,7 @@ class AchievementService
                         $battleCount = \App\Models\TournamentBattle::where('tournament_id', $tournamentId)
                             ->where(function ($q) use ($user) {
                                 $q->where('player1_id', $user->id)
-                                  ->orWhere('player2_id', $user->id);
+                                    ->orWhere('player2_id', $user->id);
                             })
                             ->where('status', \App\Models\TournamentBattle::STATUS_COMPLETED)
                             ->count();
@@ -364,7 +399,10 @@ class AchievementService
                         }
                     }
                 } catch (\Throwable $e) {
-                    try { \Log::warning('Failed to award tournament battle achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+                    try {
+                        \Log::warning('Failed to award tournament battle achievement: '.$e->getMessage());
+                    } catch (\Throwable $_) {
+                    }
                 }
             }
         }
@@ -378,7 +416,9 @@ class AchievementService
     private function checkStandardAchievements(User $user, array $payload): array
     {
         $type = $payload['type'] ?? null;
-        if (!$type) return [];
+        if (! $type) {
+            return [];
+        }
 
         // Build a query for achievements matching this type and criteria
         $query = Achievement::where('type', $type);
@@ -399,9 +439,14 @@ class AchievementService
             $attemptId = $payload['attempt_id'] ?? null;
             try {
                 $awardedAchievement = $this->awardAchievement($user, $a, $attemptId);
-                if ($awardedAchievement) $awarded[] = $awardedAchievement;
+                if ($awardedAchievement) {
+                    $awarded[] = $awardedAchievement;
+                }
             } catch (\Throwable $e) {
-                try { \Log::warning('Failed to award achievement: '.$e->getMessage()); } catch (\Throwable $_) {}
+                try {
+                    \Log::warning('Failed to award achievement: '.$e->getMessage());
+                } catch (\Throwable $_) {
+                }
             }
         }
 
@@ -538,7 +583,7 @@ class AchievementService
                 ->where('score', '>=', 80)
                 ->whereBetween('created_at', [
                     $now->copy()->startOfWeek()->addDays(5), // Friday
-                    $now->copy()->endOfWeek()                // Sunday
+                    $now->copy()->endOfWeek(),                // Sunday
                 ])
                 ->count();
 
@@ -553,6 +598,7 @@ class AchievementService
                 }
             }
         }
+
         return null;
     }
 

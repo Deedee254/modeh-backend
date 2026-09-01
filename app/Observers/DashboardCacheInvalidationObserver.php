@@ -37,7 +37,7 @@ class DashboardCacheInvalidationObserver
             }
         } catch (\Throwable $e) {
             // Swallow exceptions to avoid breaking model operations; log if needed.
-            logger()->warning('Failed to clear dashboard cache: ' . $e->getMessage());
+            logger()->warning('Failed to clear dashboard cache: '.$e->getMessage());
         }
     }
 }

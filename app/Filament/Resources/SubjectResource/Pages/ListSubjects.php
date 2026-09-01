@@ -5,9 +5,9 @@ namespace App\Filament\Resources\SubjectResource\Pages;
 use App\Filament\Resources\SubjectResource;
 use App\Models\Subject;
 use Filament\Actions\Action;
-use Filament\Tables\Filters\Filter;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Tables\Filters\Filter;
 
 class ListSubjects extends ListRecords
 {
@@ -31,11 +31,11 @@ class ListSubjects extends ListRecords
                     $record->save();
                 })
                 ->requiresConfirmation()
-                ->visible(fn (Subject $record) => !$record->is_approved),
+                ->visible(fn (Subject $record) => ! $record->is_approved),
             Action::make('toggleApprove')
                 ->label('Toggle Approve')
                 ->action(function (Subject $record) {
-                    $record->is_approved = !$record->is_approved;
+                    $record->is_approved = ! $record->is_approved;
                     $record->save();
                 })
                 ->requiresConfirmation(),

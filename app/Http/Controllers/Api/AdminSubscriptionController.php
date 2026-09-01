@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\User;
 use App\Models\Package;
 use App\Models\Subscription;
+use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
 class AdminSubscriptionController extends Controller
@@ -38,6 +38,7 @@ class AdminSubscriptionController extends Controller
         }
         if ($existing && $existing->status === 'active' && (is_null($existing->ends_at) || $endsAtValid)) {
             $existing->load('package');
+
             return response()->json(['ok' => true, 'subscription' => $existing]);
         }
 

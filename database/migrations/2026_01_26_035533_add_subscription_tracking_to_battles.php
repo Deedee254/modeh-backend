@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('battles', function (Blueprint $table) {
             $table->unsignedBigInteger('subscription_id')->nullable()->after('completed_at');
             $table->enum('subscription_type', ['personal', 'institution', 'one_off'])->nullable()->after('subscription_id');
-            
+
             $table->foreign('subscription_id')->references('id')->on('subscriptions')->onDelete('set null');
             $table->index(['initiator_id', 'subscription_id']);
         });

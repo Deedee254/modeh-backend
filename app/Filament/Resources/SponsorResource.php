@@ -15,8 +15,11 @@ class SponsorResource extends Resource
 
     // Use Heroicons v2 naming: 'building-office' (outline variant prefixed with 'o-')
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-building-office';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Tournaments';
+
     protected static ?int $navigationSort = 3;
+
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([

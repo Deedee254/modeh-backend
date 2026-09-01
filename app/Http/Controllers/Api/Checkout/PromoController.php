@@ -13,16 +13,16 @@ class PromoController extends Controller
     {
         $request->validate([
             'code' => 'required|string',
-            'amount' => 'required|numeric|min:0'
+            'amount' => 'required|numeric|min:0',
         ]);
 
         $promo = PromoCode::where('code', $request->code)->first();
 
-        if (!$promo) {
+        if (! $promo) {
             return response()->json(['message' => 'Invalid promo code'], 404);
         }
 
-        if (!$promo->isValid()) {
+        if (! $promo->isValid()) {
             return response()->json(['message' => 'Promo code is expired or reached its usage limit'], 400);
         }
 
@@ -44,7 +44,7 @@ class PromoController extends Controller
             'discount_type' => $promo->discount_type,
             'discount_amount' => $promo->discount_amount,
             'calculated_discount' => $discount,
-            'final_amount' => $finalAmount
+            'final_amount' => $finalAmount,
         ]);
     }
 }

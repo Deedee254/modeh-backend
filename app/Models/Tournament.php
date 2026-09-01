@@ -3,10 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\Level;
-use App\Models\Question;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Class Tournament
@@ -111,14 +109,14 @@ class Tournament extends Model
         'requires_approval' => 'boolean',
         'is_featured' => 'boolean',
         'auto_start' => 'boolean',
-        'auto_complete' => 'boolean'
+        'auto_complete' => 'boolean',
     ];
 
     protected $appends = ['registration_open', 'can_start'];
 
     public function getRegistrationOpenAttribute()
     {
-        if (!in_array($this->status, ['upcoming', 'active'], true)) {
+        if (! in_array($this->status, ['upcoming', 'active'], true)) {
             return false;
         }
 
@@ -143,10 +141,9 @@ class Tournament extends Model
     }
 
     public function scopeUpcoming(Builder $query)
-    
     {
         return $query->where('status', 'upcoming')
-                    ->where('start_date', '>', now());
+            ->where('start_date', '>', now());
     }
 
     public function scopeCompleted(Builder $query)
@@ -208,7 +205,6 @@ class Tournament extends Model
         return $this->hasMany(TournamentAttempt::class);
     }
 
-
     /**
      * Finalize tournament when only one winner remains: mark participant rank and complete tournament.
      */
@@ -241,7 +237,7 @@ class Tournament extends Model
      * Calculate recommended and minimum question counts based on tournament qualifier settings.
      * Since the tournament is qualifier-only (static quiz flow), we simply need enough questions
      * in the pool to satisfy the configured quiz length.
-     * 
+     *
      * @return array ['minimum' => int, 'optimum' => int, 'current' => int, 'breakdown' => array]
      */
     public function getQuestionRecommendations(): array
@@ -266,24 +262,22 @@ class Tournament extends Model
                     'questions_per_battle' => $questionCount,
                     'minimum_questions' => $minimum,
                     'optimum_questions' => $optimum,
-                ]
+                ],
             ],
-            'status' => $currentCount >= $optimum ? 'excellent' 
+            'status' => $currentCount >= $optimum ? 'excellent'
                       : ($currentCount >= $minimum ? 'good' : 'warning'),
-            'message' => $currentCount >= $optimum 
+            'message' => $currentCount >= $optimum
                 ? "Excellent! Your {$currentCount} questions exceed the optimum recommended ({$optimum} questions) for healthy variety and shuffling."
-                : ($currentCount >= $minimum 
+                : ($currentCount >= $minimum
                     ? "Good! Your {$currentCount} questions cover the required quiz length ({$minimum}). Organizers are encouraged to add up to {$optimum} questions for better variety."
-                    : "Warning: You have only {$currentCount} questions but the tournament requires {$minimum} questions per attempt (short by " . ($minimum - $currentCount) . "). Users will not be able to complete attempts!"),
+                    : "Warning: You have only {$currentCount} questions but the tournament requires {$minimum} questions per attempt (short by ".($minimum - $currentCount).'). Users will not be able to complete attempts!'),
         ];
     }
 
     /**
      * Calculate recommended max participants based on question count.
-     * Since the tournament is qualifier-only, all participants take the same quiz, 
+     * Since the tournament is qualifier-only, all participants take the same quiz,
      * so we can support unlimited participants regardless of question pool size.
-     * 
-     * @return array
      */
     public function getMaxParticipantsRecommendation(): array
     {
@@ -299,10 +293,9 @@ class Tournament extends Model
             'question_per_battle' => $questionCount,
             'recommended_min_max_participants' => $this->max_participants ?? 1000,
             'recommended_max_max_participants' => $this->max_participants ?? 1000,
-            'message' => $isSufficient 
+            'message' => $isSufficient
                 ? "✅ Perfect! Your question pool of {$currentQuestions} questions is sufficient to support any number of participants (current: {$currentParticipants})."
                 : "⚠️ Warning: The question pool has only {$currentQuestions} questions, which is less than the required {$questionCount} questions per attempt. Please add more questions.",
         ];
     }
-
 }

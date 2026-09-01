@@ -1,9 +1,9 @@
-﻿<?php
+<?php
 
 namespace Database\Factories;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Models\WithdrawalRequest;
+use Illuminate\Database\Eloquent\Factories\Factory;
 
 class WithdrawalRequestFactory extends Factory
 {

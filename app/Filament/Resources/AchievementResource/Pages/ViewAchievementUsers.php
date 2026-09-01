@@ -3,15 +3,15 @@
 namespace App\Filament\Resources\AchievementResource\Pages;
 
 use App\Filament\Resources\AchievementResource;
+use App\Models\Achievement;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
+use Filament\Forms;
 use Filament\Resources\Pages\Page;
+use Filament\Tables;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
-use Filament\Tables;
-use Filament\Forms;
-use Filament\Actions\Action;
-use Filament\Actions\BulkAction;
-use App\Models\Achievement;
 use Illuminate\Database\Eloquent\Builder;
 
 class ViewAchievementUsers extends Page implements HasTable
@@ -41,7 +41,7 @@ class ViewAchievementUsers extends Page implements HasTable
                     ->sortable(),
                 Tables\Columns\TextColumn::make('pivot.attempt_id')
                     ->label('Quiz Attempt')
-                    ->url(fn ($record) => $record->pivot->attempt_id 
+                    ->url(fn ($record) => $record->pivot->attempt_id
                         ? route('filament.resources.quiz-attempts.view', ['record' => $record->pivot->attempt_id])
                         : null
                     ),
@@ -74,7 +74,7 @@ class ViewAchievementUsers extends Page implements HasTable
                     ->action(function ($record) {
                         // Detach the achievement from the user
                         $record->achievements()->detach($this->getRecord()->id);
-                        
+
                         // Remove the points that were awarded
                         $record->decrement('points', $this->getRecord()->points);
                     }),
@@ -88,7 +88,7 @@ class ViewAchievementUsers extends Page implements HasTable
                         foreach ($records as $user) {
                             // Detach the achievement from the user
                             $user->achievements()->detach($this->getRecord()->id);
-                            
+
                             // Remove the points that were awarded
                             $user->decrement('points', $this->getRecord()->points);
                         }

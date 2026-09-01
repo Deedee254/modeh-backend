@@ -36,7 +36,9 @@ class AdminQuizAnalyticsController extends Controller
 
     public function analytics(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -49,9 +51,11 @@ class AdminQuizAnalyticsController extends Controller
 
         $to = isset($validated['to']) ? Carbon::parse($validated['to'])->toDateString() : now()->toDateString();
         $from = isset($validated['from']) ? Carbon::parse($validated['from'])->toDateString() : Carbon::parse($to)->subDays(29)->toDateString();
-        if ($from > $to) [$from, $to] = [$to, $from];
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        if ($from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $levelId = $validated['level_id'] ?? null;
         $gradeId = $validated['grade_id'] ?? null;
@@ -59,10 +63,18 @@ class AdminQuizAnalyticsController extends Controller
         $topicId = $validated['topic_id'] ?? null;
 
         $quizBase = DB::table('quizzes as q');
-        if ($levelId) $quizBase->where('q.level_id', $levelId);
-        if ($gradeId) $quizBase->where('q.grade_id', $gradeId);
-        if ($subjectId) $quizBase->where('q.subject_id', $subjectId);
-        if ($topicId) $quizBase->where('q.topic_id', $topicId);
+        if ($levelId) {
+            $quizBase->where('q.level_id', $levelId);
+        }
+        if ($gradeId) {
+            $quizBase->where('q.grade_id', $gradeId);
+        }
+        if ($subjectId) {
+            $quizBase->where('q.subject_id', $subjectId);
+        }
+        if ($topicId) {
+            $quizBase->where('q.topic_id', $topicId);
+        }
 
         $totalQuizzes = (int) (clone $quizBase)->count();
 
@@ -78,10 +90,18 @@ class AdminQuizAnalyticsController extends Controller
         // Questions tied to quizzes (exclude banked questions)
         $questionBase = DB::table('questions as qs')
             ->join('quizzes as q', 'q.id', '=', 'qs.quiz_id');
-        if ($levelId) $questionBase->where('q.level_id', $levelId);
-        if ($gradeId) $questionBase->where('q.grade_id', $gradeId);
-        if ($subjectId) $questionBase->where('q.subject_id', $subjectId);
-        if ($topicId) $questionBase->where('q.topic_id', $topicId);
+        if ($levelId) {
+            $questionBase->where('q.level_id', $levelId);
+        }
+        if ($gradeId) {
+            $questionBase->where('q.grade_id', $gradeId);
+        }
+        if ($subjectId) {
+            $questionBase->where('q.subject_id', $subjectId);
+        }
+        if ($topicId) {
+            $questionBase->where('q.topic_id', $topicId);
+        }
 
         $totalQuestions = (int) (clone $questionBase)->count();
         $questionsCreatedInRange = (int) (clone $questionBase)->whereBetween('qs.created_at', [$fromTs, $toTs])->count();
@@ -89,10 +109,18 @@ class AdminQuizAnalyticsController extends Controller
         // Attempts
         $attemptBase = DB::table('quiz_attempts as a')
             ->join('quizzes as q', 'q.id', '=', 'a.quiz_id');
-        if ($levelId) $attemptBase->where('q.level_id', $levelId);
-        if ($gradeId) $attemptBase->where('q.grade_id', $gradeId);
-        if ($subjectId) $attemptBase->where('q.subject_id', $subjectId);
-        if ($topicId) $attemptBase->where('q.topic_id', $topicId);
+        if ($levelId) {
+            $attemptBase->where('q.level_id', $levelId);
+        }
+        if ($gradeId) {
+            $attemptBase->where('q.grade_id', $gradeId);
+        }
+        if ($subjectId) {
+            $attemptBase->where('q.subject_id', $subjectId);
+        }
+        if ($topicId) {
+            $attemptBase->where('q.topic_id', $topicId);
+        }
         $attemptBase->whereBetween('a.created_at', [$fromTs, $toTs]);
 
         $attemptRow = (clone $attemptBase)
@@ -108,10 +136,18 @@ class AdminQuizAnalyticsController extends Controller
         // Likes
         $likesBase = DB::table('quiz_likes as l')
             ->join('quizzes as q', 'q.id', '=', 'l.quiz_id');
-        if ($levelId) $likesBase->where('q.level_id', $levelId);
-        if ($gradeId) $likesBase->where('q.grade_id', $gradeId);
-        if ($subjectId) $likesBase->where('q.subject_id', $subjectId);
-        if ($topicId) $likesBase->where('q.topic_id', $topicId);
+        if ($levelId) {
+            $likesBase->where('q.level_id', $levelId);
+        }
+        if ($gradeId) {
+            $likesBase->where('q.grade_id', $gradeId);
+        }
+        if ($subjectId) {
+            $likesBase->where('q.subject_id', $subjectId);
+        }
+        if ($topicId) {
+            $likesBase->where('q.topic_id', $topicId);
+        }
         $likesBase->whereBetween('l.created_at', [$fromTs, $toTs]);
         $likesInRange = (int) (clone $likesBase)->count();
 
@@ -123,10 +159,18 @@ class AdminQuizAnalyticsController extends Controller
             ->whereBetween('t.created_at', [$fromTs, $toTs]);
         if ($levelId || $gradeId || $subjectId || $topicId) {
             $txBase->join('quizzes as q', 'q.id', '=', 't.quiz_id');
-            if ($levelId) $txBase->where('q.level_id', $levelId);
-            if ($gradeId) $txBase->where('q.grade_id', $gradeId);
-            if ($subjectId) $txBase->where('q.subject_id', $subjectId);
-            if ($topicId) $txBase->where('q.topic_id', $topicId);
+            if ($levelId) {
+                $txBase->where('q.level_id', $levelId);
+            }
+            if ($gradeId) {
+                $txBase->where('q.grade_id', $gradeId);
+            }
+            if ($subjectId) {
+                $txBase->where('q.subject_id', $subjectId);
+            }
+            if ($topicId) {
+                $txBase->where('q.topic_id', $topicId);
+            }
         }
 
         $txRow = (clone $txBase)
@@ -141,7 +185,9 @@ class AdminQuizAnalyticsController extends Controller
         $fromDt = Carbon::parse($from);
         $toDt = Carbon::parse($to);
         $dates = [];
-        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) $dates[] = $d->toDateString();
+        for ($d = $fromDt->copy(); $d->lte($toDt); $d->addDay()) {
+            $dates[] = $d->toDateString();
+        }
 
         $quizRows = (clone $quizBase)
             ->whereBetween('q.created_at', [$fromTs, $toTs])
@@ -150,7 +196,9 @@ class AdminQuizAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $quizByDate = [];
-        foreach ($quizRows as $r) $quizByDate[$r->date] = (int) ($r->value ?? 0);
+        foreach ($quizRows as $r) {
+            $quizByDate[$r->date] = (int) ($r->value ?? 0);
+        }
 
         $questionRows = (clone $questionBase)
             ->whereBetween('qs.created_at', [$fromTs, $toTs])
@@ -159,7 +207,9 @@ class AdminQuizAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $questionByDate = [];
-        foreach ($questionRows as $r) $questionByDate[$r->date] = (int) ($r->value ?? 0);
+        foreach ($questionRows as $r) {
+            $questionByDate[$r->date] = (int) ($r->value ?? 0);
+        }
 
         $attemptRows = (clone $attemptBase)
             ->selectRaw('DATE(a.created_at) as date')
@@ -170,7 +220,9 @@ class AdminQuizAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $attemptByDate = [];
-        foreach ($attemptRows as $r) $attemptByDate[$r->date] = $r;
+        foreach ($attemptRows as $r) {
+            $attemptByDate[$r->date] = $r;
+        }
 
         $likeRows = (clone $likesBase)
             ->selectRaw('DATE(l.created_at) as date, COUNT(*) as value')
@@ -178,7 +230,9 @@ class AdminQuizAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $likeByDate = [];
-        foreach ($likeRows as $r) $likeByDate[$r->date] = (int) ($r->value ?? 0);
+        foreach ($likeRows as $r) {
+            $likeByDate[$r->date] = (int) ($r->value ?? 0);
+        }
 
         $revRows = (clone $txBase)
             ->selectRaw('DATE(t.created_at) as date, SUM(COALESCE(t.amount,0)) as gross')
@@ -186,7 +240,9 @@ class AdminQuizAnalyticsController extends Controller
             ->orderBy('date', 'asc')
             ->get();
         $revByDate = [];
-        foreach ($revRows as $r) $revByDate[$r->date] = (float) ($r->gross ?? 0);
+        foreach ($revRows as $r) {
+            $revByDate[$r->date] = (float) ($r->gross ?? 0);
+        }
 
         $series = [
             'quizzes_created' => [],
@@ -209,164 +265,164 @@ class AdminQuizAnalyticsController extends Controller
         }
 
         // Top quizzes
-	        $topByAttempts = (clone $attemptBase)
-	            ->join('quizzes as q2', 'q2.id', '=', 'a.quiz_id')
-	            ->selectRaw('a.quiz_id as quiz_id')
-	            ->selectRaw('MAX(q2.title) as title')
-	            ->selectRaw('MAX(q2.slug) as slug')
-	            ->selectRaw('COUNT(*) as attempts')
-	            ->selectRaw('AVG(a.score) as avg_score')
-	            ->groupBy('a.quiz_id')
-	            ->orderByDesc('attempts')
-	            ->limit(10)
-	            ->get()
-	            ->map(fn($r) => [
-	                'quiz_id' => (int) $r->quiz_id,
-	                'title' => $r->title,
-	                'slug' => $r->slug,
-	                'attempts' => (int) ($r->attempts ?? 0),
-	                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
-	            ])->values();
+        $topByAttempts = (clone $attemptBase)
+            ->join('quizzes as q2', 'q2.id', '=', 'a.quiz_id')
+            ->selectRaw('a.quiz_id as quiz_id')
+            ->selectRaw('MAX(q2.title) as title')
+            ->selectRaw('MAX(q2.slug) as slug')
+            ->selectRaw('COUNT(*) as attempts')
+            ->selectRaw('AVG(a.score) as avg_score')
+            ->groupBy('a.quiz_id')
+            ->orderByDesc('attempts')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => [
+                'quiz_id' => (int) $r->quiz_id,
+                'title' => $r->title,
+                'slug' => $r->slug,
+                'attempts' => (int) ($r->attempts ?? 0),
+                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
+            ])->values();
 
-	        $topByLikes = DB::table('quiz_likes as l')
-	            ->join('quizzes as q', 'q.id', '=', 'l.quiz_id')
-	            ->whereBetween('l.created_at', [$fromTs, $toTs])
-	            ->when($levelId, fn($q) => $q->where('q.level_id', $levelId))
-	            ->when($gradeId, fn($q) => $q->where('q.grade_id', $gradeId))
-	            ->when($subjectId, fn($q) => $q->where('q.subject_id', $subjectId))
-	            ->when($topicId, fn($q) => $q->where('q.topic_id', $topicId))
-	            ->selectRaw('l.quiz_id as quiz_id')
-	            ->selectRaw('MAX(q.title) as title')
-	            ->selectRaw('MAX(q.slug) as slug')
-	            ->selectRaw('COUNT(*) as likes')
-	            ->groupBy('l.quiz_id')
-	            ->orderByDesc('likes')
-	            ->limit(10)
-	            ->get()
-	            ->map(fn($r) => [
-	                'quiz_id' => (int) $r->quiz_id,
-	                'title' => $r->title,
-	                'slug' => $r->slug,
-	                'likes' => (int) ($r->likes ?? 0),
-	            ])->values();
+        $topByLikes = DB::table('quiz_likes as l')
+            ->join('quizzes as q', 'q.id', '=', 'l.quiz_id')
+            ->whereBetween('l.created_at', [$fromTs, $toTs])
+            ->when($levelId, fn ($q) => $q->where('q.level_id', $levelId))
+            ->when($gradeId, fn ($q) => $q->where('q.grade_id', $gradeId))
+            ->when($subjectId, fn ($q) => $q->where('q.subject_id', $subjectId))
+            ->when($topicId, fn ($q) => $q->where('q.topic_id', $topicId))
+            ->selectRaw('l.quiz_id as quiz_id')
+            ->selectRaw('MAX(q.title) as title')
+            ->selectRaw('MAX(q.slug) as slug')
+            ->selectRaw('COUNT(*) as likes')
+            ->groupBy('l.quiz_id')
+            ->orderByDesc('likes')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => [
+                'quiz_id' => (int) $r->quiz_id,
+                'title' => $r->title,
+                'slug' => $r->slug,
+                'likes' => (int) ($r->likes ?? 0),
+            ])->values();
 
-	        $topByRevenue = (clone $txBase)
-	            ->leftJoin('quizzes as q2', 'q2.id', '=', 't.quiz_id')
-	            ->selectRaw('t.quiz_id as quiz_id')
-	            ->selectRaw('MAX(q2.title) as title')
-	            ->selectRaw('MAX(q2.slug) as slug')
-	            ->selectRaw('SUM(COALESCE(t.amount,0)) as gross')
-	            ->groupBy('t.quiz_id')
-	            ->orderByDesc('gross')
-	            ->limit(10)
-	            ->get()
-	            ->map(fn($r) => [
-	                'quiz_id' => (int) $r->quiz_id,
-	                'title' => $r->title,
-	                'slug' => $r->slug,
-	                'gross' => (float) ($r->gross ?? 0),
-	            ])->values();
+        $topByRevenue = (clone $txBase)
+            ->leftJoin('quizzes as q2', 'q2.id', '=', 't.quiz_id')
+            ->selectRaw('t.quiz_id as quiz_id')
+            ->selectRaw('MAX(q2.title) as title')
+            ->selectRaw('MAX(q2.slug) as slug')
+            ->selectRaw('SUM(COALESCE(t.amount,0)) as gross')
+            ->groupBy('t.quiz_id')
+            ->orderByDesc('gross')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => [
+                'quiz_id' => (int) $r->quiz_id,
+                'title' => $r->title,
+                'slug' => $r->slug,
+                'gross' => (float) ($r->gross ?? 0),
+            ])->values();
 
         // Breakdown by taxonomy (quizzes + attempts + avg score)
-	        $breakdownTopic = DB::table('quizzes as q')
-	            ->leftJoin('topics as t', 't.id', '=', 'q.topic_id')
-	            ->leftJoin('quiz_attempts as a', function ($join) use ($fromTs, $toTs) {
-	                $join->on('a.quiz_id', '=', 'q.id')->whereBetween('a.created_at', [$fromTs, $toTs]);
-	            })
-	            ->when($levelId, fn($q) => $q->where('q.level_id', $levelId))
-	            ->when($gradeId, fn($q) => $q->where('q.grade_id', $gradeId))
-	            ->when($subjectId, fn($q) => $q->where('q.subject_id', $subjectId))
-	            ->when($topicId, fn($q) => $q->where('q.topic_id', $topicId))
-	            ->selectRaw('q.topic_id as id, COALESCE(t.name, "Unassigned") as name')
-	            ->selectRaw('COUNT(DISTINCT q.id) as quizzes')
-	            ->selectRaw('COUNT(a.id) as attempts')
-	            ->selectRaw('AVG(a.score) as avg_score')
-	            ->groupBy('q.topic_id', 't.name')
-	            ->orderByDesc('attempts')
-	            ->limit(10)
-	            ->get()
-	            ->map(fn($r) => [
-	                'id' => $r->id,
-	                'name' => $r->name,
-	                'quizzes' => (int) ($r->quizzes ?? 0),
-	                'attempts' => (int) ($r->attempts ?? 0),
-	                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
-	            ])->values();
+        $breakdownTopic = DB::table('quizzes as q')
+            ->leftJoin('topics as t', 't.id', '=', 'q.topic_id')
+            ->leftJoin('quiz_attempts as a', function ($join) use ($fromTs, $toTs) {
+                $join->on('a.quiz_id', '=', 'q.id')->whereBetween('a.created_at', [$fromTs, $toTs]);
+            })
+            ->when($levelId, fn ($q) => $q->where('q.level_id', $levelId))
+            ->when($gradeId, fn ($q) => $q->where('q.grade_id', $gradeId))
+            ->when($subjectId, fn ($q) => $q->where('q.subject_id', $subjectId))
+            ->when($topicId, fn ($q) => $q->where('q.topic_id', $topicId))
+            ->selectRaw('q.topic_id as id, COALESCE(t.name, "Unassigned") as name')
+            ->selectRaw('COUNT(DISTINCT q.id) as quizzes')
+            ->selectRaw('COUNT(a.id) as attempts')
+            ->selectRaw('AVG(a.score) as avg_score')
+            ->groupBy('q.topic_id', 't.name')
+            ->orderByDesc('attempts')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'name' => $r->name,
+                'quizzes' => (int) ($r->quizzes ?? 0),
+                'attempts' => (int) ($r->attempts ?? 0),
+                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
+            ])->values();
 
-	        $breakdownGrade = DB::table('quizzes as q')
-	            ->leftJoin('grades as g', 'g.id', '=', 'q.grade_id')
-	            ->leftJoin('quiz_attempts as a', function ($join) use ($fromTs, $toTs) {
-	                $join->on('a.quiz_id', '=', 'q.id')->whereBetween('a.created_at', [$fromTs, $toTs]);
-	            })
-	            ->when($levelId, fn($q) => $q->where('q.level_id', $levelId))
-	            ->when($gradeId, fn($q) => $q->where('q.grade_id', $gradeId))
-	            ->when($subjectId, fn($q) => $q->where('q.subject_id', $subjectId))
-	            ->when($topicId, fn($q) => $q->where('q.topic_id', $topicId))
-	            ->selectRaw('q.grade_id as id, COALESCE(g.name, "Unassigned") as name')
-	            ->selectRaw('COUNT(DISTINCT q.id) as quizzes')
-	            ->selectRaw('COUNT(a.id) as attempts')
-	            ->selectRaw('AVG(a.score) as avg_score')
-	            ->groupBy('q.grade_id', 'g.name')
-	            ->orderByDesc('attempts')
-	            ->limit(10)
-	            ->get()
-	            ->map(fn($r) => [
-	                'id' => $r->id,
-	                'name' => $r->name,
-	                'quizzes' => (int) ($r->quizzes ?? 0),
-	                'attempts' => (int) ($r->attempts ?? 0),
-	                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
-	            ])->values();
+        $breakdownGrade = DB::table('quizzes as q')
+            ->leftJoin('grades as g', 'g.id', '=', 'q.grade_id')
+            ->leftJoin('quiz_attempts as a', function ($join) use ($fromTs, $toTs) {
+                $join->on('a.quiz_id', '=', 'q.id')->whereBetween('a.created_at', [$fromTs, $toTs]);
+            })
+            ->when($levelId, fn ($q) => $q->where('q.level_id', $levelId))
+            ->when($gradeId, fn ($q) => $q->where('q.grade_id', $gradeId))
+            ->when($subjectId, fn ($q) => $q->where('q.subject_id', $subjectId))
+            ->when($topicId, fn ($q) => $q->where('q.topic_id', $topicId))
+            ->selectRaw('q.grade_id as id, COALESCE(g.name, "Unassigned") as name')
+            ->selectRaw('COUNT(DISTINCT q.id) as quizzes')
+            ->selectRaw('COUNT(a.id) as attempts')
+            ->selectRaw('AVG(a.score) as avg_score')
+            ->groupBy('q.grade_id', 'g.name')
+            ->orderByDesc('attempts')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'name' => $r->name,
+                'quizzes' => (int) ($r->quizzes ?? 0),
+                'attempts' => (int) ($r->attempts ?? 0),
+                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
+            ])->values();
 
-	        $breakdownLevel = DB::table('quizzes as q')
-	            ->leftJoin('levels as l', 'l.id', '=', 'q.level_id')
-	            ->leftJoin('quiz_attempts as a', function ($join) use ($fromTs, $toTs) {
-	                $join->on('a.quiz_id', '=', 'q.id')->whereBetween('a.created_at', [$fromTs, $toTs]);
-	            })
-	            ->when($levelId, fn($q) => $q->where('q.level_id', $levelId))
-	            ->when($gradeId, fn($q) => $q->where('q.grade_id', $gradeId))
-	            ->when($subjectId, fn($q) => $q->where('q.subject_id', $subjectId))
-	            ->when($topicId, fn($q) => $q->where('q.topic_id', $topicId))
-	            ->selectRaw('q.level_id as id, COALESCE(l.name, "Unassigned") as name')
-	            ->selectRaw('COUNT(DISTINCT q.id) as quizzes')
-	            ->selectRaw('COUNT(a.id) as attempts')
-	            ->selectRaw('AVG(a.score) as avg_score')
-	            ->groupBy('q.level_id', 'l.name')
-	            ->orderByDesc('attempts')
-	            ->limit(10)
-	            ->get()
-	            ->map(fn($r) => [
-	                'id' => $r->id,
-	                'name' => $r->name,
-	                'quizzes' => (int) ($r->quizzes ?? 0),
-	                'attempts' => (int) ($r->attempts ?? 0),
-	                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
-	            ])->values();
+        $breakdownLevel = DB::table('quizzes as q')
+            ->leftJoin('levels as l', 'l.id', '=', 'q.level_id')
+            ->leftJoin('quiz_attempts as a', function ($join) use ($fromTs, $toTs) {
+                $join->on('a.quiz_id', '=', 'q.id')->whereBetween('a.created_at', [$fromTs, $toTs]);
+            })
+            ->when($levelId, fn ($q) => $q->where('q.level_id', $levelId))
+            ->when($gradeId, fn ($q) => $q->where('q.grade_id', $gradeId))
+            ->when($subjectId, fn ($q) => $q->where('q.subject_id', $subjectId))
+            ->when($topicId, fn ($q) => $q->where('q.topic_id', $topicId))
+            ->selectRaw('q.level_id as id, COALESCE(l.name, "Unassigned") as name')
+            ->selectRaw('COUNT(DISTINCT q.id) as quizzes')
+            ->selectRaw('COUNT(a.id) as attempts')
+            ->selectRaw('AVG(a.score) as avg_score')
+            ->groupBy('q.level_id', 'l.name')
+            ->orderByDesc('attempts')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'name' => $r->name,
+                'quizzes' => (int) ($r->quizzes ?? 0),
+                'attempts' => (int) ($r->attempts ?? 0),
+                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
+            ])->values();
 
-	        $breakdownSubject = DB::table('quizzes as q')
-	            ->leftJoin('subjects as s', 's.id', '=', 'q.subject_id')
-	            ->leftJoin('quiz_attempts as a', function ($join) use ($fromTs, $toTs) {
-	                $join->on('a.quiz_id', '=', 'q.id')->whereBetween('a.created_at', [$fromTs, $toTs]);
-	            })
-	            ->when($levelId, fn($q) => $q->where('q.level_id', $levelId))
-	            ->when($gradeId, fn($q) => $q->where('q.grade_id', $gradeId))
-	            ->when($subjectId, fn($q) => $q->where('q.subject_id', $subjectId))
-	            ->when($topicId, fn($q) => $q->where('q.topic_id', $topicId))
-	            ->selectRaw('q.subject_id as id, COALESCE(s.name, "Unassigned") as name')
-	            ->selectRaw('COUNT(DISTINCT q.id) as quizzes')
-	            ->selectRaw('COUNT(a.id) as attempts')
-	            ->selectRaw('AVG(a.score) as avg_score')
-	            ->groupBy('q.subject_id', 's.name')
-	            ->orderByDesc('attempts')
-	            ->limit(10)
-	            ->get()
-	            ->map(fn($r) => [
-	                'id' => $r->id,
-	                'name' => $r->name,
-	                'quizzes' => (int) ($r->quizzes ?? 0),
-	                'attempts' => (int) ($r->attempts ?? 0),
-	                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
-	            ])->values();
+        $breakdownSubject = DB::table('quizzes as q')
+            ->leftJoin('subjects as s', 's.id', '=', 'q.subject_id')
+            ->leftJoin('quiz_attempts as a', function ($join) use ($fromTs, $toTs) {
+                $join->on('a.quiz_id', '=', 'q.id')->whereBetween('a.created_at', [$fromTs, $toTs]);
+            })
+            ->when($levelId, fn ($q) => $q->where('q.level_id', $levelId))
+            ->when($gradeId, fn ($q) => $q->where('q.grade_id', $gradeId))
+            ->when($subjectId, fn ($q) => $q->where('q.subject_id', $subjectId))
+            ->when($topicId, fn ($q) => $q->where('q.topic_id', $topicId))
+            ->selectRaw('q.subject_id as id, COALESCE(s.name, "Unassigned") as name')
+            ->selectRaw('COUNT(DISTINCT q.id) as quizzes')
+            ->selectRaw('COUNT(a.id) as attempts')
+            ->selectRaw('AVG(a.score) as avg_score')
+            ->groupBy('q.subject_id', 's.name')
+            ->orderByDesc('attempts')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'name' => $r->name,
+                'quizzes' => (int) ($r->quizzes ?? 0),
+                'attempts' => (int) ($r->attempts ?? 0),
+                'avg_score' => round((float) ($r->avg_score ?? 0), 2),
+            ])->values();
 
         return response()->json([
             'ok' => true,
@@ -408,19 +464,21 @@ class AdminQuizAnalyticsController extends Controller
                     'by_likes' => $topByLikes,
                     'by_revenue' => $topByRevenue,
                 ],
-	                'breakdown' => [
-	                    'topics' => $breakdownTopic,
-	                    'subjects' => $breakdownSubject,
-	                    'grades' => $breakdownGrade,
-	                    'levels' => $breakdownLevel,
-	                ],
-	            ],
-	        ]);
+                'breakdown' => [
+                    'topics' => $breakdownTopic,
+                    'subjects' => $breakdownSubject,
+                    'grades' => $breakdownGrade,
+                    'levels' => $breakdownLevel,
+                ],
+            ],
+        ]);
     }
 
     public function attempts(Request $request)
     {
-        if ($resp = $this->requireAdmin()) return $resp;
+        if ($resp = $this->requireAdmin()) {
+            return $resp;
+        }
 
         $validated = $request->validate([
             'from' => 'nullable|date',
@@ -434,9 +492,11 @@ class AdminQuizAnalyticsController extends Controller
 
         $to = isset($validated['to']) ? Carbon::parse($validated['to'])->toDateString() : now()->toDateString();
         $from = isset($validated['from']) ? Carbon::parse($validated['from'])->toDateString() : Carbon::parse($to)->subDays(29)->toDateString();
-        if ($from > $to) [$from, $to] = [$to, $from];
-        $fromTs = $from . ' 00:00:00';
-        $toTs = $to . ' 23:59:59';
+        if ($from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+        $fromTs = $from.' 00:00:00';
+        $toTs = $to.' 23:59:59';
 
         $levelId = $validated['level_id'] ?? null;
         $gradeId = $validated['grade_id'] ?? null;
@@ -449,10 +509,18 @@ class AdminQuizAnalyticsController extends Controller
 
         if ($levelId || $gradeId || $subjectId || $topicId) {
             $query->whereHas('quiz', function ($q) use ($levelId, $gradeId, $subjectId, $topicId) {
-                if ($levelId) $q->where('level_id', $levelId);
-                if ($gradeId) $q->where('grade_id', $gradeId);
-                if ($subjectId) $q->where('subject_id', $subjectId);
-                if ($topicId) $q->where('topic_id', $topicId);
+                if ($levelId) {
+                    $q->where('level_id', $levelId);
+                }
+                if ($gradeId) {
+                    $q->where('grade_id', $gradeId);
+                }
+                if ($subjectId) {
+                    $q->where('subject_id', $subjectId);
+                }
+                if ($topicId) {
+                    $q->where('topic_id', $topicId);
+                }
             });
         }
 

@@ -2,18 +2,12 @@
 
 namespace App\Imports;
 
+use App\Models\Question;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
 use Filament\Actions\Imports\Models\Import;
-use App\Models\Question;
-use App\Models\Grade;
-use App\Models\Subject;
-use App\Models\Topic;
-use App\Models\Level;
-use Illuminate\Support\Str;
 use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Placeholder;
-use Filament\Schemas\Components\Utilities\Get;
+use Illuminate\Support\Str;
 
 class QuestionsImporter extends Importer
 {
@@ -27,10 +21,10 @@ class QuestionsImporter extends Importer
             ImportColumn::make('body')->label('Text')->requiredMapping()->exampleHeader('text'),
 
             // Four options
-            ImportColumn::make('option1')->label('Option 1')->guess(['option1','opt1'])->exampleHeader('option1'),
-            ImportColumn::make('option2')->label('Option 2')->guess(['option2','opt2'])->exampleHeader('option2'),
-            ImportColumn::make('option3')->label('Option 3')->guess(['option3','opt3'])->exampleHeader('option3'),
-            ImportColumn::make('option4')->label('Option 4')->guess(['option4','opt4'])->exampleHeader('option4'),
+            ImportColumn::make('option1')->label('Option 1')->guess(['option1', 'opt1'])->exampleHeader('option1'),
+            ImportColumn::make('option2')->label('Option 2')->guess(['option2', 'opt2'])->exampleHeader('option2'),
+            ImportColumn::make('option3')->label('Option 3')->guess(['option3', 'opt3'])->exampleHeader('option3'),
+            ImportColumn::make('option4')->label('Option 4')->guess(['option4', 'opt4'])->exampleHeader('option4'),
 
             ImportColumn::make('answers')->label('Answers')->guess(['answers'])->exampleHeader('answers'),
             ImportColumn::make('marks')->label('Marks')->guess(['marks'])->exampleHeader('marks'),
@@ -60,12 +54,12 @@ class QuestionsImporter extends Importer
             return static::getModel()::find($this->data[$keyColumnName]);
         }
 
-        return new Question();
+        return new Question;
     }
 
     public function fillRecord(): void
     {
-        $record = $this->record ?? new Question();
+        $record = $this->record ?? new Question;
         $data = $this->data;
         $options = $this->options ?? [];
 
@@ -93,7 +87,7 @@ class QuestionsImporter extends Importer
         $opts = [];
         for ($i = 1; $i <= 4; $i++) {
             $k = "option{$i}";
-            if (! isset($data[$k]) || (string)($data[$k]) === '') {
+            if (! isset($data[$k]) || (string) ($data[$k]) === '') {
                 continue;
             }
 
@@ -129,7 +123,7 @@ class QuestionsImporter extends Importer
                 }
             }
 
-            $value = is_string($value) ? trim($value) : (string)$value;
+            $value = is_string($value) ? trim($value) : (string) $value;
             if ($value !== '') {
                 $opts[] = $value;
             }
@@ -142,7 +136,7 @@ class QuestionsImporter extends Importer
         $answers = [];
         if (is_string($answersRaw) && $answersRaw !== '') {
             $parts = preg_split('/[,|]+/', $answersRaw);
-            $answers = array_map(fn($v) => trim($v), array_filter($parts, fn($v) => $v !== ''));
+            $answers = array_map(fn ($v) => trim($v), array_filter($parts, fn ($v) => $v !== ''));
         }
 
         // Handle MCQ answers
@@ -158,32 +152,32 @@ class QuestionsImporter extends Importer
                 }
             } else {
                 // Match by text
-                $firstTrimmed = trim((string)$first);
+                $firstTrimmed = trim((string) $first);
                 foreach (($record->options ?? []) as $ii => $opt) {
-                    if (trim((string)$opt) === $firstTrimmed) {
+                    if (trim((string) $opt) === $firstTrimmed) {
                         $correctIndex = $ii;
                         break;
                     }
                 }
             }
-            
+
             // Store as array in answers field (as strings to match frontend format)
             if ($correctIndex !== null) {
-                $record->answers = [(string)$correctIndex];
+                $record->answers = [(string) $correctIndex];
             }
         }
 
         // Automatically assign tournament taxonomy to imported questions
-        if (!empty($options['level_id'])) {
+        if (! empty($options['level_id'])) {
             $record->level_id = intval($options['level_id']);
         }
-        if (!empty($options['grade_id'])) {
+        if (! empty($options['grade_id'])) {
             $record->grade_id = intval($options['grade_id']);
         }
-        if (!empty($options['subject_id'])) {
+        if (! empty($options['subject_id'])) {
             $record->subject_id = intval($options['subject_id']);
         }
-        if (!empty($options['topic_id'])) {
+        if (! empty($options['topic_id'])) {
             $record->topic_id = intval($options['topic_id']);
         }
 
@@ -205,6 +199,7 @@ class QuestionsImporter extends Importer
         if ($this->record) {
             $this->record->save();
         }
+
         return $this;
     }
 }

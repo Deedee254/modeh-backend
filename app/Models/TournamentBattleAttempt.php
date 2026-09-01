@@ -26,7 +26,7 @@ class TournamentBattleAttempt extends Model
         'player_id',
         'question_id',
         'answer',
-        'points'
+        'points',
     ];
 
     protected $casts = [

@@ -695,7 +695,7 @@ class TopicSeeder extends Seeder
                     ->where('name', $subjectName)
                     ->first();
 
-                if (!$subject) {
+                if (! $subject) {
                     // Try matching simplified variants for combined labels
                     $altNames = [
                         // Grade 4–6 combined creative arts label
@@ -719,7 +719,7 @@ class TopicSeeder extends Seeder
                         ->first();
                 }
 
-                if (!$subject) {
+                if (! $subject) {
                     continue; // Skip if subject not present
                 }
 

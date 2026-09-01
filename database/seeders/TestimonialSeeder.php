@@ -2,15 +2,15 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Testimonial;
+use Illuminate\Database\Seeder;
 
 class TestimonialSeeder extends Seeder
 {
     public function run(): void
     {
         Testimonial::updateOrCreate([
-            'name' => 'Sarah Johnson'
+            'name' => 'Sarah Johnson',
         ], [
             'quote' => "I've created over 50 quizzes and earned more than $2,000 in just three months. The platform makes it incredibly easy to monetize my knowledge!",
             'role' => 'Quiz Creator',
@@ -20,7 +20,7 @@ class TestimonialSeeder extends Seeder
         ]);
 
         Testimonial::updateOrCreate([
-            'name' => 'Michael Chen'
+            'name' => 'Michael Chen',
         ], [
             'quote' => "Quitting my part-time job was the best decision ever. I now make double creating fun quizzes about topics I'm passionate about.",
             'role' => 'Top Earner',
@@ -30,7 +30,7 @@ class TestimonialSeeder extends Seeder
         ]);
 
         Testimonial::updateOrCreate([
-            'name' => 'David Rodriguez'
+            'name' => 'David Rodriguez',
         ], [
             'quote' => "The affiliate program is a game-changer. I've been earning passive income by just sharing my link with friends and followers.",
             'role' => 'Affiliate Marketer',
@@ -40,7 +40,7 @@ class TestimonialSeeder extends Seeder
         ]);
 
         Testimonial::updateOrCreate([
-            'name' => 'Emily White'
+            'name' => 'Emily White',
         ], [
             'quote' => "As a quizee, I love the variety of quizzes available. It's a fun way to learn and challenge myself.",
             'role' => 'quizee',

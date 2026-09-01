@@ -2,24 +2,26 @@
 
 namespace App\Filament\Pages;
 
-use Filament\Pages\Page;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Tables\Concerns\InteractsWithTable;
-
+use App\Models\Tournament;
+use App\Models\TournamentParticipant;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Notifications\Notification;
-use App\Models\Tournament;
-use App\Models\TournamentParticipant;
+use Filament\Pages\Page;
+use Filament\Tables;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Table;
 
 class PendingRegistrations extends Page implements Tables\Contracts\HasTable
 {
     use InteractsWithTable;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-users';
+
     protected static ?string $navigationLabel = 'Pending Registrations';
+
     protected static ?int $navigationSort = 2;
+
     protected string $view = 'filament.pages.pending-registrations';
 
     public function getTitle(): string

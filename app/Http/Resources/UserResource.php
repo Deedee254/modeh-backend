@@ -26,7 +26,6 @@ class UserResource extends JsonResource
     /**
      * Transform the resource into an array.
      *
-     * @param Request $request
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
@@ -40,7 +39,7 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'email' => $this->email,
             // Expose points so frontend profile pages can show authoritative points
-            'points' => (int)($this->points ?? 0),
+            'points' => (int) ($this->points ?? 0),
             'role' => $this->role,
             'phone' => $this->phone,
             // Return phones as array for payment modal (frontend expects this for M-PESA number selection)
@@ -56,7 +55,7 @@ class UserResource extends JsonResource
             'bio' => $this->bio,
             'email_verified_at' => $this->email_verified_at,
             'affiliate_code' => $this->affiliate_code,
-            'is_profile_completed' => (bool)$this->is_profile_completed,
+            'is_profile_completed' => (bool) $this->is_profile_completed,
             'created_at' => $this->created_at,
         ];
 
@@ -80,7 +79,7 @@ class UserResource extends JsonResource
         // Add profile completion status
         $missingFields = $this->getMissingProfileFields();
         $payload['profile_status'] = [
-            'is_completed' => (bool)$this->is_profile_completed,
+            'is_completed' => (bool) $this->is_profile_completed,
             'missing_fields' => $missingFields,
             'missing_messages' => $this->getMissingProfileMessages($missingFields),
         ];
@@ -95,33 +94,41 @@ class UserResource extends JsonResource
     protected function getMissingProfileFields()
     {
         $missing = [];
-        if (empty($this->role)) $missing[] = 'role';
+        if (empty($this->role)) {
+            $missing[] = 'role';
+        }
 
         $hasInstitution = false;
         if ($this->relationLoaded('institutions') && $this->institutions->count() > 0) {
             $hasInstitution = true;
         }
-        
-        if (!$hasInstitution) {
+
+        if (! $hasInstitution) {
             $quizee = $this->quizeeProfile;
             $quizMaster = $this->quizMasterProfile;
-            
+
             if ($this->role === 'quizee' && $quizee) {
-                $hasInstitution = !empty($quizee->institution) || !empty($quizee->institution_id) || !empty($quizee->verified_institution_id);
+                $hasInstitution = ! empty($quizee->institution) || ! empty($quizee->institution_id) || ! empty($quizee->verified_institution_id);
             } elseif ($this->role === 'quiz-master' && $quizMaster) {
-                $hasInstitution = !empty($quizMaster->institution) || !empty($quizMaster->institution_id) || !empty($quizMaster->verified_institution_id);
+                $hasInstitution = ! empty($quizMaster->institution) || ! empty($quizMaster->institution_id) || ! empty($quizMaster->verified_institution_id);
             }
         }
 
-        if (!$hasInstitution) $missing[] = 'institution';
+        if (! $hasInstitution) {
+            $missing[] = 'institution';
+        }
 
         if ($this->role === 'quizee') {
-            if (!optional($this->quizeeProfile)->grade_id) $missing[] = 'grade';
+            if (! optional($this->quizeeProfile)->grade_id) {
+                $missing[] = 'grade';
+            }
         }
 
         if ($this->role === 'quiz-master') {
             $subjects = optional($this->quizMasterProfile)->subjects;
-            if (!$subjects || (is_array($subjects) && count($subjects) === 0)) $missing[] = 'subjects';
+            if (! $subjects || (is_array($subjects) && count($subjects) === 0)) {
+                $missing[] = 'subjects';
+            }
         }
 
         return $missing;
@@ -137,8 +144,9 @@ class UserResource extends JsonResource
             'subjects' => 'Please select at least one subject specialization',
         ];
         foreach ($missing as $k) {
-            $messages[$k] = $map[$k] ?? 'Please complete: ' . $k;
+            $messages[$k] = $map[$k] ?? 'Please complete: '.$k;
         }
+
         return $messages;
     }
 }

@@ -2,18 +2,13 @@
 
 namespace App\Models;
 
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use App\Models\QuizMaster;
-use App\Models\Affiliate;
-use App\Models\Quizee;
-use App\Models\Institution;
-use App\Models\ParentUser;
-use Filament\Models\Contracts\FilamentUser;
-use Filament\Panel;
 
 /**
  * @property int $id

@@ -12,8 +12,11 @@ class ResourceRejected extends Notification implements ShouldQueue
     use Queueable;
 
     public string $resourceType;
+
     public $resource;
+
     public ?string $reason;
+
     public $adminUser;
 
     public function __construct(string $resourceType, $resource, ?string $reason = null, $adminUser = null)
@@ -37,16 +40,15 @@ class ResourceRejected extends Notification implements ShouldQueue
      */
     public function toMail($notifiable)
     {
-        $title = ucfirst($this->resourceType) . ' rejected';
+        $title = ucfirst($this->resourceType).' rejected';
         $reasonLine = $this->reason ? "Reason: {$this->reason}" : null;
 
         $id = $this->resource->id ?? '';
 
         $mail = (new MailMessage)
             ->subject("Your {$this->resourceType} was rejected")
-            ->greeting('Hello ' . ($notifiable->name ?? ''))
-            ->line("Your {$this->resourceType} (ID: {$id}) was reviewed by an administrator and marked as rejected.")
-            ;
+            ->greeting('Hello '.($notifiable->name ?? ''))
+            ->line("Your {$this->resourceType} (ID: {$id}) was reviewed by an administrator and marked as rejected.");
 
         if ($reasonLine) {
             $mail->line($reasonLine);

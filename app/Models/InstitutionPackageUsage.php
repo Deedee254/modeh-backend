@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * InstitutionPackageUsage Model
- * 
+ *
  * Tracks usage of institution packages for seat limits and quiz attempt quotas
- * 
+ *
  * @property int $id
  * @property int $institution_id
  * @property int|null $subscription_id The institution's active subscription
@@ -20,7 +20,6 @@ use Illuminate\Database\Eloquent\Model;
  * @property array|null $metadata Additional context
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
- * 
  * @property-read \App\Models\Institution $institution
  * @property-read \App\Models\Subscription|null $subscription
  * @property-read \App\Models\User $user

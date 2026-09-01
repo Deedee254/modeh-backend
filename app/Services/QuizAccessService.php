@@ -2,21 +2,21 @@
 
 namespace App\Services;
 
+use App\Models\Institution;
 use App\Models\Quiz;
 use App\Models\User;
-use App\Models\Institution;
 use Illuminate\Support\Facades\Log;
 
 /**
  * QuizAccessService
- * 
+ *
  * Determines whether a user has access to a quiz and what payment (if any) is required.
- * 
+ *
  * Business Rules:
  * 1. Institutional Quizzes (is_institutional=true):
  *    - Free for members of the quiz's institution
  *    - Must pay one_off_price for non-members
- * 
+ *
  * 2. Public Quizzes (is_institutional=false):
  *    - Free if not marked as paid (is_paid=false)
  *    - Must pay one_off_price if marked as paid (is_paid=true)
@@ -25,9 +25,7 @@ class QuizAccessService
 {
     /**
      * Determine the access level and any required payment for a user to take a quiz
-     * 
-     * @param Quiz $quiz
-     * @param User $user
+     *
      * @return array{
      *     can_access: bool,
      *     is_free: bool,
@@ -53,7 +51,7 @@ class QuizAccessService
                     'institution_member' => true,
                     'institution_id' => $quiz->institution_id,
                     'price' => null,
-                    'message' => 'Free access as institution member'
+                    'message' => 'Free access as institution member',
                 ];
             }
 
@@ -64,12 +62,12 @@ class QuizAccessService
                 'institution_member' => false,
                 'institution_id' => $quiz->institution_id,
                 'price' => null,
-                'message' => 'Only members of the assigned institution can take this assessment.'
+                'message' => 'Only members of the assigned institution can take this assessment.',
             ];
         }
 
         // Public quiz
-        if (!$quiz->is_paid) {
+        if (! $quiz->is_paid) {
             // Free public quiz
             return [
                 'can_access' => true,
@@ -77,7 +75,7 @@ class QuizAccessService
                 'institution_member' => false,
                 'institution_id' => null,
                 'price' => null,
-                'message' => 'Free access to public quiz'
+                'message' => 'Free access to public quiz',
             ];
         }
 
@@ -85,14 +83,14 @@ class QuizAccessService
         $price = $quiz->price;
 
         // Check for personal subscriptions (Quizee plans)
-        $personalSub = \App\Models\Subscription::where(function($q) use ($user) {
-                $q->where(function($q2) use ($user) {
-                    $q2->where('owner_type', \App\Models\User::class)
-                       ->where('owner_id', $user->id);
-                })->orWhere('user_id', $user->id);
-            })
+        $personalSub = \App\Models\Subscription::where(function ($q) use ($user) {
+            $q->where(function ($q2) use ($user) {
+                $q2->where('owner_type', \App\Models\User::class)
+                    ->where('owner_id', $user->id);
+            })->orWhere('user_id', $user->id);
+        })
             ->where('status', 'active')
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
             })
             ->first();
@@ -102,7 +100,7 @@ class QuizAccessService
         $institutionalSub = \App\Models\Subscription::where('owner_type', \App\Models\Institution::class)
             ->whereIn('owner_id', $institutionIds)
             ->where('status', 'active')
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
             })
             ->first();
@@ -126,7 +124,7 @@ class QuizAccessService
                         'institution_member' => false,
                         'institution_id' => null,
                         'price' => null,
-                        'message' => 'Free access via active subscription (Unlimited)'
+                        'message' => 'Free access via active subscription (Unlimited)',
                     ];
                 }
 
@@ -144,7 +142,7 @@ class QuizAccessService
                         'institution_member' => false,
                         'institution_id' => null,
                         'price' => null,
-                        'message' => "Free access via active subscription ({$used}/{$limit} used)"
+                        'message' => "Free access via active subscription ({$used}/{$limit} used)",
                     ];
                 }
             }
@@ -156,22 +154,18 @@ class QuizAccessService
             'institution_member' => false,
             'institution_id' => null,
             'price' => $price,
-            'message' => $activeSub ? "Daily subscription limit reached ({$limit}). Pay-per-attempt required." : "Pay-per-attempt required: {$price}"
+            'message' => $activeSub ? "Daily subscription limit reached ({$limit}). Pay-per-attempt required." : "Pay-per-attempt required: {$price}",
         ];
     }
 
     /**
      * Verify that a user has paid for a quiz attempt (if required)
      * For now, this checks if they have an active one_off_purchase or institutional membership
-     * 
-     * @param Quiz $quiz
-     * @param User $user
-     * @return bool
      */
     public static function hasAccessOrPaid(Quiz $quiz, User $user): bool
     {
         $access = self::checkAccess($quiz, $user);
-        
+
         if ($access['is_free']) {
             return true;
         }
@@ -183,20 +177,16 @@ class QuizAccessService
 
     /**
      * Check if a quiz can be accessed by a user without payment
-     * 
-     * @param Quiz $quiz
-     * @param User|null $user
-     * @return bool
      */
     public static function isFreeAccess(Quiz $quiz, ?User $user = null): bool
     {
         // Public free quizzes
-        if (!$quiz->is_institutional && !$quiz->is_paid) {
+        if (! $quiz->is_institutional && ! $quiz->is_paid) {
             return true;
         }
 
         // If no user, can only access if truly free
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
@@ -212,11 +202,8 @@ class QuizAccessService
 
     /**
      * Log an access attempt
-     * 
-     * @param Quiz $quiz
-     * @param User $user
-     * @param array $accessResult Result from checkAccess()
-     * @return void
+     *
+     * @param  array  $accessResult  Result from checkAccess()
      */
     public static function logAccess(Quiz $quiz, User $user, array $accessResult): void
     {
@@ -237,13 +224,12 @@ class QuizAccessService
     /**
      * Get the global default one-off price for quizzes.
      * Falls back to 0 if no setting is configured.
-     * 
-     * @return float
      */
     private static function getDefaultQuizPrice(): float
     {
         try {
             $setting = \App\Models\PricingSetting::singleton();
+
             return (float) ($setting->default_quiz_one_off_price ?? 0);
         } catch (\Throwable $e) {
             return 0;
@@ -253,13 +239,12 @@ class QuizAccessService
     /**
      * Get the global default one-off price for battles.
      * Falls back to 0 if no setting is configured.
-     * 
-     * @return float
      */
     private static function getDefaultBattlePrice(): float
     {
         try {
             $setting = \App\Models\PricingSetting::singleton();
+
             return (float) ($setting->default_battle_one_off_price ?? 0);
         } catch (\Throwable $e) {
             return 0;

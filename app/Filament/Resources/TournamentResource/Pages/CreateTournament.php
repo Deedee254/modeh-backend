@@ -3,17 +3,14 @@
 namespace App\Filament\Resources\TournamentResource\Pages;
 
 use App\Filament\Resources\TournamentResource;
-use Filament\Actions\CreateAction;
-use Filament\Resources\Pages\CreateRecord;
 use Filament\Notifications\Notification;
+use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class CreateTournament extends CreateRecord
 {
     protected static string $resource = TournamentResource::class;
-
-    
 
     protected function getRedirectUrl(): string
     {
@@ -27,7 +24,7 @@ class CreateTournament extends CreateRecord
 
         // Handle sponsor_details JSON structure
         if (isset($data['sponsor_details']) && is_array($data['sponsor_details'])) {
-            $data['sponsor_details'] = array_filter($data['sponsor_details'], fn($v) => $v !== null && $v !== '');
+            $data['sponsor_details'] = array_filter($data['sponsor_details'], fn ($v) => $v !== null && $v !== '');
             if (empty($data['sponsor_details'])) {
                 $data['sponsor_details'] = null;
             }
@@ -57,7 +54,7 @@ class CreateTournament extends CreateRecord
     {
         // Validate all required fields first
         $this->validateRequiredFields();
-        
+
         // Then validate dates
         $this->validateDates();
     }
@@ -65,43 +62,43 @@ class CreateTournament extends CreateRecord
     private function validateRequiredFields(): void
     {
         $errors = [];
-        
+
         // Check required fields
         if (empty($this->data['name'] ?? null)) {
             $errors['name'] = 'Tournament name is required.';
         }
-        
+
         if (empty($this->data['description'] ?? null)) {
             $errors['description'] = 'Tournament description is required.';
         }
-        
+
         if (empty($this->data['start_date'] ?? null)) {
             $errors['start_date'] = 'Tournament start date is required.';
         }
-        
+
         if (empty($this->data['end_date'] ?? null)) {
             $errors['end_date'] = 'Tournament end date is required.';
         }
-        
+
         if (empty($this->data['level_id'] ?? null)) {
             $errors['level_id'] = 'Level is required.';
         }
-        
+
         if (empty($this->data['grade_id'] ?? null)) {
             $errors['grade_id'] = 'Grade is required.';
         }
-        
+
         if (empty($this->data['subject_id'] ?? null)) {
             $errors['subject_id'] = 'Subject is required.';
         }
-        
+
         if (empty($this->data['topic_id'] ?? null)) {
             $errors['topic_id'] = 'Topic is required.';
         }
 
-        if (!empty($errors)) {
+        if (! empty($errors)) {
             $errorList = implode("\n", array_values($errors));
-            
+
             Log::warning('Tournament creation validation failed: missing required fields', [
                 'user_id' => Auth::id(),
                 'tournament_name' => $this->data['name'] ?? null,
@@ -112,14 +109,14 @@ class CreateTournament extends CreateRecord
             Notification::make()
                 ->danger()
                 ->title('Missing Required Fields')
-                ->body("Please fill in all required fields:\n\n" . $errorList)
+                ->body("Please fill in all required fields:\n\n".$errorList)
                 ->persistent()
                 ->send();
 
             foreach ($errors as $field => $error) {
                 $this->addError($field, $error);
             }
-            
+
             $this->halt();
         }
     }
@@ -128,12 +125,12 @@ class CreateTournament extends CreateRecord
     {
         // Validate dates - handle both string and Carbon instances
         try {
-            $startDate = $this->data['start_date'] instanceof \Carbon\Carbon 
-                ? $this->data['start_date'] 
+            $startDate = $this->data['start_date'] instanceof \Carbon\Carbon
+                ? $this->data['start_date']
                 : \Carbon\Carbon::parse($this->data['start_date']);
-            
-            $endDate = $this->data['end_date'] instanceof \Carbon\Carbon 
-                ? $this->data['end_date'] 
+
+            $endDate = $this->data['end_date'] instanceof \Carbon\Carbon
+                ? $this->data['end_date']
                 : \Carbon\Carbon::parse($this->data['end_date']);
 
             $now = now();
@@ -148,7 +145,7 @@ class CreateTournament extends CreateRecord
 
             if ($startDate->isBefore($now)) {
                 $errorMsg = "Start date must be in the future. Current date is {$now->format('M d, Y H:i')}. Please choose a date after {$now->addDay()->format('M d, Y')}";
-                
+
                 Log::warning('Tournament creation validation failed: start date in past', [
                     'user_id' => Auth::id(),
                     'tournament_name' => $this->data['name'] ?? null,
@@ -169,7 +166,7 @@ class CreateTournament extends CreateRecord
 
             if ($endDate->isBefore($startDate)) {
                 $errorMsg = "End date must be after start date. Start date: {$startDate->format('M d, Y H:i')}, End date: {$endDate->format('M d, Y H:i')}";
-                
+
                 Log::warning('Tournament creation validation failed: end date before start date', [
                     'user_id' => Auth::id(),
                     'tournament_name' => $this->data['name'] ?? null,
@@ -189,7 +186,7 @@ class CreateTournament extends CreateRecord
             }
         } catch (\Exception $e) {
             $errorMsg = 'Invalid date format. Please use the date picker to select valid dates.';
-            
+
             Log::error('Tournament creation validation error', [
                 'user_id' => Auth::id(),
                 'tournament_name' => $this->data['name'] ?? null,

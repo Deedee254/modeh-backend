@@ -13,8 +13,11 @@ class QuestionResource extends Resource
     protected static ?string $model = Question::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-question-mark-circle';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Academic Content';
+
     protected static ?int $navigationSort = 2;
+
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
     {
         return $schema->schema([
@@ -54,7 +57,7 @@ class QuestionResource extends Resource
                         ->createItemButtonLabel('Add option')
                         ->minItems(2)
                         ->maxItems(6)
-                        ->visible(fn($get) => in_array($get('type'), ['mcq', 'multi'])),
+                        ->visible(fn ($get) => in_array($get('type'), ['mcq', 'multi'])),
                     Forms\Components\Textarea::make('answers')
                         ->label('Correct Answers (JSON array)')
                         ->rows(3)
@@ -67,7 +70,7 @@ class QuestionResource extends Resource
                         ->label('Approved'),
                     Forms\Components\Toggle::make('is_banked')
                         ->label('Banked Question'),
-                ])
+                ]),
         ]);
     }
 
@@ -81,7 +84,7 @@ class QuestionResource extends Resource
                 \Filament\Tables\Columns\TextColumn::make('difficulty')
                     ->sortable()
                     ->badge()
-                    ->formatStateUsing(fn($state) => match((int)$state) {
+                    ->formatStateUsing(fn ($state) => match ((int) $state) {
                         1 => 'Very Easy',
                         2 => 'Easy',
                         3 => 'Medium',
@@ -89,7 +92,7 @@ class QuestionResource extends Resource
                         5 => 'Very Hard',
                         default => $state
                     })
-                    ->color(fn($state) => match((int)$state) {
+                    ->color(fn ($state) => match ((int) $state) {
                         1 => 'success',
                         2 => 'info',
                         3 => 'warning',
@@ -107,8 +110,8 @@ class QuestionResource extends Resource
             ->filters([
                 \Filament\Tables\Filters\SelectFilter::make('difficulty')
                     ->options([1 => 'Very Easy', 2 => 'Easy', 3 => 'Medium', 4 => 'Hard', 5 => 'Very Hard']),
-                \Filament\Tables\Filters\SelectFilter::make('grade')->relationship('grade','name'),
-                \Filament\Tables\Filters\SelectFilter::make('subject')->relationship('subject','name'),
+                \Filament\Tables\Filters\SelectFilter::make('grade')->relationship('grade', 'name'),
+                \Filament\Tables\Filters\SelectFilter::make('subject')->relationship('subject', 'name'),
             ])
             ->actions([
                 \Filament\Actions\Action::make('approve')
@@ -119,21 +122,21 @@ class QuestionResource extends Resource
                         $record->save();
                     })
                     ->requiresConfirmation()
-                    ->visible(fn($record) => !$record->is_approved),
+                    ->visible(fn ($record) => ! $record->is_approved),
                 \Filament\Actions\Action::make('toggleApprove')
                     ->label('Toggle Approve')
                     ->action(function ($record) {
-                        $record->is_approved = !$record->is_approved;
+                        $record->is_approved = ! $record->is_approved;
                         $record->save();
                     })
                     ->requiresConfirmation(),
             ])
             ->bulkActions([
-                    \Filament\Actions\EditAction::make(),
-                    \Filament\Actions\DeleteAction::make(),
-                ])
-                ->bulkActions([
-                    \Filament\Actions\DeleteBulkAction::make(),
+                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                \Filament\Actions\DeleteBulkAction::make(),
             ]);
     }
 

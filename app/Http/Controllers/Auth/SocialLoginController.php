@@ -11,6 +11,7 @@ use Symfony\Component\HttpFoundation\RedirectResponse;
 class SocialLoginController extends Controller
 {
     protected $socialAuthService;
+
     protected $sessionService;
 
     public function __construct(SocialAuthService $socialAuthService, SessionService $sessionService)
@@ -21,9 +22,6 @@ class SocialLoginController extends Controller
 
     /**
      * Redirect the user to the provider's authentication page.
-     *
-     * @param  string  $provider
-     * @return \Symfony\Component\HttpFoundation\RedirectResponse
      */
     public function redirectToProvider(string $provider): RedirectResponse
     {
@@ -33,7 +31,6 @@ class SocialLoginController extends Controller
     /**
      * Obtain the user information from the provider.
      *
-     * @param  string  $provider
      * @return \Illuminate\Http\RedirectResponse
      */
     public function handleProviderCallback(string $provider)
@@ -43,15 +40,17 @@ class SocialLoginController extends Controller
         } catch (\Exception $e) {
             \Log::error('Social login callback error', ['provider' => $provider, 'error' => $e->getMessage()]);
             $frontend = config('app.frontend_url');
-            return redirect(rtrim($frontend, '/') . '/login?error=oauth_failed');
+
+            return redirect(rtrim($frontend, '/').'/login?error=oauth_failed');
         }
 
         $user = $this->socialAuthService->findOrCreateUser($socialUser, $provider);
 
-        if (!$user) {
+        if (! $user) {
             \Log::error('Social login: failed to find or create user', ['provider' => $provider, 'email' => $socialUser->getEmail()]);
             $frontend = config('app.frontend_url');
-            return redirect(rtrim($frontend, '/') . '/login?error=user_creation_failed');
+
+            return redirect(rtrim($frontend, '/').'/login?error=user_creation_failed');
         }
 
         // Create session and ensure it's saved
@@ -62,7 +61,7 @@ class SocialLoginController extends Controller
         // Always redirect to frontend callback page
         // The frontend will handle routing based on user state (onboarding, dashboard, etc.)
         $frontend = config('app.frontend_url');
-        $redirectUrl = rtrim($frontend, '/') . '/auth/callback';
+        $redirectUrl = rtrim($frontend, '/').'/auth/callback';
 
         return redirect()->to($redirectUrl);
     }

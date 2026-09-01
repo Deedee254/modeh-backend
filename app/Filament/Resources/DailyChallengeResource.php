@@ -5,29 +5,27 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\DailyChallengeResource\Pages;
 use App\Models\DailyChallenge;
 // avoid importing Filament\Forms\Form to prevent signature mismatches with installed Filament
-use Filament\Tables\Table;
-use Filament\Resources\Resource;
-use Filament\Actions\ViewAction;
-use Filament\Actions\EditAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Tables\Columns\TextColumn;
+use Filament\Resources\Resource;
 use Filament\Tables\Columns\BooleanColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
-use Filament\Tables\Filters\Filter;
+use Filament\Tables\Table;
 
 class DailyChallengeResource extends Resource
 {
     protected static ?string $model = DailyChallenge::class;
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-calendar-days';
+
     protected static \UnitEnum|string|null $navigationGroup = 'Content Management';
+
     protected static ?int $navigationSort = 5;
 
     public static function form(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
@@ -95,8 +93,13 @@ class DailyChallengeResource extends Resource
                     })
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
-                        if ($data['from'] ?? null) $indicators[] = 'From '.$data['from'];
-                        if ($data['until'] ?? null) $indicators[] = 'Until '.$data['until'];
+                        if ($data['from'] ?? null) {
+                            $indicators[] = 'From '.$data['from'];
+                        }
+                        if ($data['until'] ?? null) {
+                            $indicators[] = 'Until '.$data['until'];
+                        }
+
                         return $indicators;
                     }),
             ]);

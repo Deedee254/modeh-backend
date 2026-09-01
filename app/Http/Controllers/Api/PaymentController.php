@@ -2,22 +2,22 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Events\PaymentStatusUpdated;
-use Illuminate\Http\Request;
-use App\Models\Subscription;
-use App\Models\PaymentSetting;
-use App\Models\Package;
+use App\Http\Controllers\Controller;
+use App\Models\GuestQuizAttempt;
+use App\Models\GuestUnlockToken;
 use App\Models\MpesaTransaction;
 use App\Models\OneOffPurchase;
-use App\Models\GuestUnlockToken;
-use App\Models\GuestQuizAttempt;
+use App\Models\Package;
+use App\Models\PaymentSetting;
+use App\Models\Subscription;
 use App\Services\MpesaService;
-use App\Services\WalletService;
 use App\Services\TransactionService;
+use App\Services\WalletService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class PaymentController extends Controller
@@ -31,21 +31,21 @@ class PaymentController extends Controller
     public function initiateMpesa(Request $request, Subscription $subscription)
     {
         $user = Auth::user();
-        if (!$user || $subscription->user_id !== $user->id) {
+        if (! $user || $subscription->user_id !== $user->id) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
 
         $amount = $subscription->package->price ?? 0;
         $rawPhone = $request->phone ?? ($subscription->gateway_meta['phone'] ?? null) ?? ($subscription->user->phone ?? null);
 
-        if (!$rawPhone || !is_string($rawPhone) || trim($rawPhone) === '') {
+        if (! $rawPhone || ! is_string($rawPhone) || trim($rawPhone) === '') {
             return response()->json(['ok' => false, 'message' => 'Phone number required for mpesa payments'], 422);
         }
 
         // Use MpesaService with config from env
         $service = new MpesaService(config('services.mpesa'));
         $phone = $service->normalizePhone($rawPhone);
-        if (!$phone) {
+        if (! $phone) {
             return response()->json(['ok' => false, 'message' => 'Invalid phone number. Use 2547XXXXXXXX or 07XXXXXXXX'], 422);
         }
         $res = $service->initiateStkPush($phone, $amount, 'Subscription-'.$subscription->id);
@@ -58,7 +58,7 @@ class PaymentController extends Controller
                     'tx' => $checkoutRequestId,
                     'checkout_request_id' => $checkoutRequestId,
                     'initiated_at' => now(),
-                ])
+                ]),
             ]);
 
             // Create MpesaTransaction record for reconciliation
@@ -104,13 +104,15 @@ class PaymentController extends Controller
             $txId = $stk['CheckoutRequestID'] ?? $stk['MerchantRequestID'] ?? $txId;
             $resultCode = $stk['ResultCode'] ?? null;
             $resultDesc = $stk['ResultDesc'] ?? null;
-            $status = (isset($stk['ResultCode']) && (int)$stk['ResultCode'] === 0) ? 'success' : 'failed';
+            $status = (isset($stk['ResultCode']) && (int) $stk['ResultCode'] === 0) ? 'success' : 'failed';
 
             // Extract callback metadata items (Amount, MpesaReceiptNumber/TransactionID, PhoneNumber, TransactionDate)
             $metaItems = $stk['CallbackMetadata']['Item'] ?? [];
             $callbackMeta = [];
             foreach ($metaItems as $item) {
-                if (!isset($item['Name'])) continue;
+                if (! isset($item['Name'])) {
+                    continue;
+                }
                 $name = $item['Name'];
                 // Some items may not have a Value (e.g., Balance)
                 $value = $item['Value'] ?? null;
@@ -140,7 +142,7 @@ class PaymentController extends Controller
         $status = $this->normalizeMpesaStatus($status, $resultCode);
 
         $checkoutId = $payload['parsed_mpesa']['checkout_request_id'] ?? $txId;
-        if (!$checkoutId) {
+        if (! $checkoutId) {
             return response()->json(['ok' => false, 'message' => 'Missing checkout_request_id'], 400);
         }
 
@@ -160,14 +162,14 @@ class PaymentController extends Controller
         $sub = null;
         $purchase = null;
 
-        if (!$mpesaTx) {
+        if (! $mpesaTx) {
             // Attempt to find subscription by stored gateway_meta.tx or checkout_request_id (initial purchase)
             $sub = Subscription::where('gateway_meta->tx', $checkoutId)
                 ->orWhere('gateway_meta->checkout_request_id', $checkoutId)
                 ->first();
-            
+
             // If not found, check for renewal transaction
-            if (!$sub) {
+            if (! $sub) {
                 $sub = Subscription::where('gateway_meta->renewal_tx', $checkoutId)->first();
                 if ($sub) {
                     // Mark this as a renewal so handler knows to extend dates instead of creating new
@@ -175,7 +177,7 @@ class PaymentController extends Controller
                 }
             }
 
-            if (!$sub) {
+            if (! $sub) {
                 // Try one-off purchases
                 $purchase = OneOffPurchase::where('gateway_meta->tx', $checkoutId)
                     ->orWhere('gateway_meta->checkout_request_id', $checkoutId)
@@ -200,7 +202,7 @@ class PaymentController extends Controller
                         ], fn ($v) => $v !== null),
                     ]
                 );
-                if (!$mpesaTx->billable_type || !$mpesaTx->billable_id) {
+                if (! $mpesaTx->billable_type || ! $mpesaTx->billable_id) {
                     $mpesaTx->update([
                         'billable_type' => Subscription::class,
                         'billable_id' => $sub->id,
@@ -224,7 +226,7 @@ class PaymentController extends Controller
                         ], fn ($v) => $v !== null),
                     ]
                 );
-                if (!$mpesaTx->billable_type || !$mpesaTx->billable_id) {
+                if (! $mpesaTx->billable_type || ! $mpesaTx->billable_id) {
                     $mpesaTx->update([
                         'billable_type' => OneOffPurchase::class,
                         'billable_id' => $purchase->id,
@@ -261,11 +263,12 @@ class PaymentController extends Controller
                             'status' => 'failed',
                         ]);
                     }
+
                     return response()->json(['ok' => false, 'message' => 'Amount mismatch'], 409);
                 }
             }
 
-            if (!empty($receipt)) {
+            if (! empty($receipt)) {
                 $dup = MpesaTransaction::where('mpesa_receipt', $receipt)
                     ->where('id', '!=', $mpesaTx->id)
                     ->where('status', 'success')
@@ -276,6 +279,7 @@ class PaymentController extends Controller
                         'receipt' => $receipt,
                         'checkout_request_id' => $checkoutId,
                     ]);
+
                     return response()->json(['ok' => false, 'message' => 'Duplicate receipt'], 409);
                 }
             }
@@ -293,7 +297,7 @@ class PaymentController extends Controller
                 'status' => $status === 'success' ? 'success' : ($status === 'cancelled' ? 'cancelled' : 'failed'),
             ]);
 
-            if (!$sub && !$purchase) {
+            if (! $sub && ! $purchase) {
                 $billable = $mpesaTx->billable;
                 if ($billable instanceof Subscription) {
                     $sub = $billable;
@@ -303,12 +307,13 @@ class PaymentController extends Controller
             }
         }
 
-        if (!$sub && !$purchase) {
+        if (! $sub && ! $purchase) {
             Log::warning('[Payment] Callback TX not found in subscriptions or purchases', [
                 'trace_id' => $traceId,
                 'tx' => $checkoutId,
                 'status' => $status,
             ]);
+
             return response()->json(['ok' => false, 'message' => 'subscription or purchase not found'], 404);
         }
 
@@ -321,7 +326,7 @@ class PaymentController extends Controller
             ]);
 
             // Persist parsed mpesa details to purchase.gateway_meta if available
-            if (!empty($payload['parsed_mpesa'])) {
+            if (! empty($payload['parsed_mpesa'])) {
                 $purchase->gateway_meta = array_merge($purchase->gateway_meta ?? [], [
                     'mpesa' => $payload['parsed_mpesa'],
                     'mpesa_tx' => $checkoutId,
@@ -344,6 +349,7 @@ class PaymentController extends Controller
                     $payload['parsed_mpesa'] ?? [],
                     'one_off'
                 );
+
                 return $response;
             } catch (\Throwable $e) {
                 Log::error('[Payment] Exception during one-off purchase processing', [
@@ -383,7 +389,7 @@ class PaymentController extends Controller
         ]);
 
         // Persist parsed mpesa details to subscription.gateway_meta if available
-        if (!empty($payload['parsed_mpesa'])) {
+        if (! empty($payload['parsed_mpesa'])) {
             $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], [
                 'mpesa' => $payload['parsed_mpesa'],
                 'mpesa_tx' => $checkoutId,
@@ -405,12 +411,13 @@ class PaymentController extends Controller
             $payload['parsed_mpesa'] ?? [],
             'subscription'
         );
+
         return $response;
     }
 
     /**
      * Handle one-off purchase completion or cancellation.
-     * 
+     *
      * Uses pessimistic locking and database transactions to prevent:
      * - Duplicate invoices from concurrent webhook callbacks
      * - Partial payment processing if any operation fails
@@ -440,6 +447,7 @@ class PaymentController extends Controller
                 'status' => $status,
                 'saved_status' => $purchase->status,
             ]);
+
             return response()->json(['ok' => false]);
         }
 
@@ -454,19 +462,20 @@ class PaymentController extends Controller
                 'purchase_id' => $purchase->id,
                 'tx' => $txId,
             ]);
+
             return response()->json(['ok' => true, 'skipped' => true]);
         }
 
         // Wrap all subsequent operations in a transaction to ensure atomicity
         // If any step fails, all changes are rolled back
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($purchase, $txId, $traceId, $status) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($purchase, $txId) {
             // Mark purchase as confirmed
             $purchase->update([
                 'status' => 'confirmed',
                 'gateway_meta' => array_merge($purchase->gateway_meta ?? [], ['completed_at' => now()]),
             ]);
 
-            if (!$purchase->user_id) {
+            if (! $purchase->user_id) {
                 $this->createGuestUnlockToken($purchase);
             }
 
@@ -497,7 +506,7 @@ class PaymentController extends Controller
                     ->where('invoiceable_id', $purchase->id)
                     ->first();
 
-                if (!$existingInvoice) {
+                if (! $existingInvoice) {
                     try {
                         $itemType = ucfirst($purchase->item_type);
                         $invoice = \App\Models\Invoice::createWithUniqueNumber([
@@ -558,7 +567,7 @@ class PaymentController extends Controller
 
     private function createGuestUnlockToken(OneOffPurchase $purchase): void
     {
-        if (!$purchase->guest_identifier) {
+        if (! $purchase->guest_identifier) {
             return;
         }
 
@@ -568,7 +577,7 @@ class PaymentController extends Controller
             ->latest('id')
             ->first();
 
-        if (!$existing) {
+        if (! $existing) {
             $existing = GuestUnlockToken::create([
                 'token' => Str::random(64),
                 'guest_identifier' => $purchase->guest_identifier,
@@ -606,26 +615,28 @@ class PaymentController extends Controller
 
         try {
             $package = Package::find($purchase->item_id);
-            if (!$package) {
+            if (! $package) {
                 Log::warning('[Payment] Package purchase ignored: package not found', [
                     'purchase_id' => $purchase->id,
                     'package_id' => $purchase->item_id,
                 ]);
+
                 return;
             }
 
             $meta = is_array($purchase->gateway_meta) ? $purchase->gateway_meta : [];
             $audience = $package->audience ?? 'quizee';
-            
+
             $ownerType = null;
             $ownerId = null;
 
             if ($audience === 'institution') {
                 $institutionId = $meta['institution_id'] ?? null;
-                if (!$institutionId) {
+                if (! $institutionId) {
                     Log::warning('[Payment] Package purchase ignored: missing institution_id', [
                         'purchase_id' => $purchase->id,
                     ]);
+
                     return;
                 }
                 $ownerType = \App\Models\Institution::class;
@@ -636,11 +647,12 @@ class PaymentController extends Controller
                 $ownerId = $purchase->user_id;
             }
 
-            if (!$ownerId) {
+            if (! $ownerId) {
                 Log::warning('[Payment] Package purchase ignored: missing owner_id', [
                     'purchase_id' => $purchase->id,
-                    'audience' => $audience
+                    'audience' => $audience,
                 ]);
+
                 return;
             }
 
@@ -705,6 +717,7 @@ class PaymentController extends Controller
                 'tx' => $txId,
                 'is_renewal' => $request->input('is_renewal', false),
             ]);
+
             return $this->completeSubscription($sub, $txId, $request);
         }
 
@@ -717,7 +730,7 @@ class PaymentController extends Controller
         ]);
 
         $isRenewal = $request->input('is_renewal', false);
-        if (!$isRenewal) {
+        if (! $isRenewal) {
             $gwMeta = is_array($sub->gateway_meta) ? $sub->gateway_meta : [];
             if (($gwMeta['renewal_tx'] ?? null) === $txId) {
                 $isRenewal = true;
@@ -751,7 +764,7 @@ class PaymentController extends Controller
             $user = $sub->user;
             $user->notify(new \App\Notifications\SubscriptionStatusNotification($sub, 'Subscription cancelled'));
             event(new \App\Events\SubscriptionUpdated($user->id, $sub, $txId));
-            
+
             Log::info('[Payment] Subscription cancellation notification sent', [
                 'subscription_id' => $sub->id,
                 'user_id' => $user->id,
@@ -792,18 +805,19 @@ class PaymentController extends Controller
                 'subscription_id' => $sub->id,
                 'tx' => $txId,
             ]);
+
             return response()->json(['ok' => true, 'skipped' => true]);
         }
 
         $existingMeta = is_array($sub->gateway_meta) ? $sub->gateway_meta : [];
         $existingTx = $existingMeta['mpesa_tx'] ?? ($existingMeta['tx'] ?? null);
-        if ($existingTx && $existingTx === $txId && $sub->status === 'active' && !empty($existingMeta['completed_at'])) {
+        if ($existingTx && $existingTx === $txId && $sub->status === 'active' && ! empty($existingMeta['completed_at'])) {
             return response()->json(['ok' => true, 'skipped' => true]);
         }
 
         // Mark subscription active
         $sub->status = 'active';
-        
+
         if ($isRenewal) {
             // For renewal: extend existing ends_at date by duration_days
             $sub->ends_at = \Carbon\Carbon::make($sub->ends_at)->addDays($days);
@@ -816,7 +830,7 @@ class PaymentController extends Controller
             $sub->started_at = now();
             $sub->ends_at = now()->addDays($days);
         }
-        
+
         $sub->gateway_meta = array_merge($sub->gateway_meta ?? [], ['completed_at' => now()]);
         $sub->save();
 
@@ -830,7 +844,7 @@ class PaymentController extends Controller
         $quizId = $meta['quiz_id'] ?? null;
         $quizMasterId = $meta['quiz_master_id'] ?? null;
 
-        if (!$quizMasterId && $quizId) {
+        if (! $quizMasterId && $quizId) {
             $quizMasterId = \App\Models\Quiz::whereKey($quizId)->value('user_id')
                 ?? \App\Models\Quiz::whereKey($quizId)->value('created_by');
         }
@@ -900,7 +914,7 @@ class PaymentController extends Controller
             $user = $sub->user;
             $user->notify(new \App\Notifications\SubscriptionStatusNotification($sub, 'Subscription activated'));
             event(new \App\Events\SubscriptionUpdated($user->id, $sub, $txId));
-            
+
             Log::info('[Payment] Subscription activation notification sent', [
                 'subscription_id' => $sub->id,
                 'user_id' => $user->id,
@@ -916,7 +930,7 @@ class PaymentController extends Controller
         // Create invoice and send email notification
         try {
             $invoiceService = app(\App\Services\InvoiceService::class);
-            
+
             if ($isRenewal) {
                 $description = "Renewal: {$pkg->name} - {$days} days";
                 Log::info('[Renewal] Creating renewal invoice', [
@@ -927,15 +941,15 @@ class PaymentController extends Controller
             } else {
                 $description = "Subscription: {$pkg->name} - {$days} days";
             }
-            
+
             $invoice = $invoiceService->createForSubscription($sub, $description);
-            
+
             // Mark invoice as paid with transaction details
             $invoiceService->markAsPaid($invoice, $txId, 'mpesa');
-            
+
             // Send email with invoice attached
             $sub->user->notify(new \App\Notifications\InvoiceGeneratedNotification($invoice));
-            
+
             Log::info('[Payment] Invoice created and email sent', [
                 'invoice_id' => $invoice->id,
                 'invoice_number' => $invoice->invoice_number,
@@ -1013,11 +1027,11 @@ class PaymentController extends Controller
         }
 
         // Mark quiz attempt as paid if one was specified in the purchase
-        if (!empty($purchase->meta['attempt_id'])) {
+        if (! empty($purchase->meta['attempt_id'])) {
             $attempt = \App\Models\QuizAttempt::find($purchase->meta['attempt_id']);
-            if ($attempt && $attempt->user_id === $purchase->user_id && $attempt->quiz_id === $purchase->item_id && !$attempt->paid_for) {
+            if ($attempt && $attempt->user_id === $purchase->user_id && $attempt->quiz_id === $purchase->item_id && ! $attempt->paid_for) {
                 $attempt->update(['paid_for' => true]);
-                
+
                 // GRANT DEFERRED POINTS
                 if ($attempt->points_earned > 0) {
                     $user = $purchase->user;
@@ -1026,11 +1040,11 @@ class PaymentController extends Controller
                             $user->increment('points', $attempt->points_earned);
                             \Illuminate\Support\Facades\Cache::forget("user_me_{$user->id}");
                         } catch (\Exception $e) {
-                            Log::warning('Could not increment user points on payment: ' . $e->getMessage());
+                            Log::warning('Could not increment user points on payment: '.$e->getMessage());
                         }
                     }
                 }
-                
+
                 // GRANT DEFERRED ACHIEVEMENTS
                 try {
                     $quiz = \App\Models\Quiz::find($purchase->item_id);
@@ -1046,7 +1060,7 @@ class PaymentController extends Controller
                         $totalQuestionsCount = $quiz->questions()->count() ?: 1;
                         $answersCount = is_array($attempt->answers) ? count($attempt->answers) : 0;
                         $scorePercentage = $score ?? 0;
-                        
+
                         $achievementPayload = [
                             'type' => 'quiz',
                             'score' => $attempt->score ?? 0,
@@ -1057,13 +1071,13 @@ class PaymentController extends Controller
                             'subject_id' => $quiz->subject_id ?? null,
                             'streak' => 0,
                             'previous_score' => $previousAttempt ? $previousAttempt->score : null,
-                            'total' => 100 * ($answersCount / $totalQuestionsCount)
+                            'total' => 100 * ($answersCount / $totalQuestionsCount),
                         ];
-                        
+
                         $achievementService->checkAchievements($user, $achievementPayload);
                     }
                 } catch (\Throwable $e) {
-                    Log::warning('Failed to check deferred achievements on payment: ' . $e->getMessage());
+                    Log::warning('Failed to check deferred achievements on payment: '.$e->getMessage());
                 }
 
                 Log::info('[Payment] Quiz attempt marked as paid and deferred rewards granted', [
@@ -1079,127 +1093,129 @@ class PaymentController extends Controller
     /**
      * Create transaction for battle one-off purchase with distributed quiz-master shares.
      */
-	    private function createTransactionForBattle(\App\Models\OneOffPurchase $purchase, string $txId, float $amount)
-	    {
-	        $battle = \App\Models\Battle::with('questions')->find($purchase->item_id);
-	        if (!$battle) {
-	            return;
-	        }
-            
-            // Calculate shares inside to remove fallbacks from the main flow
-            $platformPct = $this->getPlatformSharePercentage();
-            $totalQuizMasterShare = round(($amount * (100.0 - $platformPct)) / 100.0, 2);
-            $platformShare = round($amount - $totalQuizMasterShare, 2);
+    private function createTransactionForBattle(\App\Models\OneOffPurchase $purchase, string $txId, float $amount)
+    {
+        $battle = \App\Models\Battle::with('questions')->find($purchase->item_id);
+        if (! $battle) {
+            return;
+        }
 
-	        try {
-	            $questionCount = $battle->questions?->count() ?? 0;
+        // Calculate shares inside to remove fallbacks from the main flow
+        $platformPct = $this->getPlatformSharePercentage();
+        $totalQuizMasterShare = round(($amount * (100.0 - $platformPct)) / 100.0, 2);
+        $platformShare = round($amount - $totalQuizMasterShare, 2);
 
-	            // Split the quiz-master share pool across question owners (multiple owners supported).
-	            // Any unassigned amount (questions with no owner / rounding) goes back to platform.
-	            $split = $this->splitBattleQuestionOwnerShares($battle, $totalQuizMasterShare);
-	            $owners = $split['owners'];
-	            $unassigned = $split['unassigned'];
+        try {
+            $questionCount = $battle->questions?->count() ?? 0;
 
-	            DB::transaction(function () use ($purchase, $txId, $amount, $platformShare, $totalQuizMasterShare, $battle, $questionCount, $owners, $unassigned) {
-	                $platformWallet = \App\Models\Wallet::firstOrCreate(
-	                    ['user_id' => 0, 'type' => \App\Models\Wallet::TYPE_PLATFORM],
-	                    ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
-	                );
-	                $platformCredit = round((float) $platformShare + (float) $unassigned, 2);
-	                $platformWallet->available = bcadd((string) ($platformWallet->available ?? 0), (string) $platformCredit, 2);
-	                $platformWallet->lifetime_earned = bcadd((string) ($platformWallet->lifetime_earned ?? 0), (string) $platformCredit, 2);
-	                $platformWallet->save();
+            // Split the quiz-master share pool across question owners (multiple owners supported).
+            // Any unassigned amount (questions with no owner / rounding) goes back to platform.
+            $split = $this->splitBattleQuestionOwnerShares($battle, $totalQuizMasterShare);
+            $owners = $split['owners'];
+            $unassigned = $split['unassigned'];
 
-	                // Audit transaction (platform-level). Not tied to a specific quiz master.
-	                \App\Models\Transaction::create([
-	                    'tx_id' => $txId,
-	                    'user_id' => $purchase->user_id,
-	                    'quiz_master_id' => null,
-	                    'quiz_id' => null,
-	                    'amount' => $amount,
-	                    'affiliate_share' => 0,
-	                    'quiz-master_share' => $totalQuizMasterShare,
-	                    'platform_share' => round($platformShare + $unassigned, 2),
-	                    'gateway' => $purchase->gateway ?? 'mpesa',
-	                    'type' => \App\Models\Transaction::TYPE_PAYMENT,
-	                    'status' => \App\Models\Transaction::STATUS_COMPLETED,
-	                    'description' => 'One-off battle purchase',
-	                    'reference_id' => $txId,
-	                    'meta' => [
-	                        'battle_id' => $battle->id,
-	                        'total_questions' => $questionCount,
-	                        'question_owner_count' => count($owners),
-	                        'unassigned_to_platform' => (float) $unassigned,
-	                    ],
-	                ]);
+            DB::transaction(function () use ($purchase, $txId, $amount, $platformShare, $totalQuizMasterShare, $battle, $questionCount, $owners, $unassigned) {
+                $platformWallet = \App\Models\Wallet::firstOrCreate(
+                    ['user_id' => 0, 'type' => \App\Models\Wallet::TYPE_PLATFORM],
+                    ['available' => 0, 'pending' => 0, 'lifetime_earned' => 0]
+                );
+                $platformCredit = round((float) $platformShare + (float) $unassigned, 2);
+                $platformWallet->available = bcadd((string) ($platformWallet->available ?? 0), (string) $platformCredit, 2);
+                $platformWallet->lifetime_earned = bcadd((string) ($platformWallet->lifetime_earned ?? 0), (string) $platformCredit, 2);
+                $platformWallet->save();
 
-	                foreach ($owners as $ownerId => $info) {
-	                    $share = (float) ($info['share'] ?? 0);
-	                    if ($share <= 0) continue;
+                // Audit transaction (platform-level). Not tied to a specific quiz master.
+                \App\Models\Transaction::create([
+                    'tx_id' => $txId,
+                    'user_id' => $purchase->user_id,
+                    'quiz_master_id' => null,
+                    'quiz_id' => null,
+                    'amount' => $amount,
+                    'affiliate_share' => 0,
+                    'quiz-master_share' => $totalQuizMasterShare,
+                    'platform_share' => round($platformShare + $unassigned, 2),
+                    'gateway' => $purchase->gateway ?? 'mpesa',
+                    'type' => \App\Models\Transaction::TYPE_PAYMENT,
+                    'status' => \App\Models\Transaction::STATUS_COMPLETED,
+                    'description' => 'One-off battle purchase',
+                    'reference_id' => $txId,
+                    'meta' => [
+                        'battle_id' => $battle->id,
+                        'total_questions' => $questionCount,
+                        'question_owner_count' => count($owners),
+                        'unassigned_to_platform' => (float) $unassigned,
+                    ],
+                ]);
 
-	                    $wallet = \App\Models\Wallet::firstOrCreate(
-	                        ['user_id' => (int) $ownerId],
-	                        ['available' => 0, 'withdrawn_pending' => 0, 'settled' => 0, 'earned_this_month' => 0, 'lifetime_earned' => 0]
-	                    );
+                foreach ($owners as $ownerId => $info) {
+                    $share = (float) ($info['share'] ?? 0);
+                    if ($share <= 0) {
+                        continue;
+                    }
 
-	                    $wallet->pending = bcadd((string) ($wallet->pending ?? 0), (string) $share, 2);
-	                    $wallet->earned_this_month = bcadd((string) ($wallet->earned_this_month ?? 0), (string) $share, 2);
-	                    $wallet->lifetime_earned = bcadd((string) ($wallet->lifetime_earned ?? 0), (string) $share, 2);
-	                    $wallet->earned_from_battles = bcadd((string) ($wallet->earned_from_battles ?? 0), (string) $share, 2);
-	                    $wallet->save();
+                    $wallet = \App\Models\Wallet::firstOrCreate(
+                        ['user_id' => (int) $ownerId],
+                        ['available' => 0, 'withdrawn_pending' => 0, 'settled' => 0, 'earned_this_month' => 0, 'lifetime_earned' => 0]
+                    );
 
-	                    // Payout transaction visible to the question owner
-	                    \App\Models\Transaction::create([
-	                        'tx_id' => "{$txId}-battle-qm-{$ownerId}",
-	                        'user_id' => $purchase->user_id,
-	                        'quiz_master_id' => (int) $ownerId,
-	                        'quiz_id' => null,
-	                        'amount' => $share,
-	                        'quiz-master_share' => $share,
-	                        'platform_share' => 0,
-	                        'affiliate_share' => 0,
-	                        'gateway' => $purchase->gateway ?? 'mpesa',
-	                        'type' => \App\Models\Transaction::TYPE_QUIZ_MASTER_PAYOUT,
-	                        'status' => \App\Models\Transaction::STATUS_COMPLETED,
-	                        'description' => "Battle question earnings (Battle #{$battle->id})",
-	                        'reference_id' => $txId,
-	                        'balance_after' => (float) ($wallet->pending ?? null),
-	                        'meta' => [
-	                            'battle_id' => $battle->id,
-	                            'total_questions' => $questionCount,
-	                            'question_count' => (int) ($info['question_count'] ?? 0),
-	                            'question_ids' => array_values($info['question_ids'] ?? []),
-	                        ],
-	                    ]);
+                    $wallet->pending = bcadd((string) ($wallet->pending ?? 0), (string) $share, 2);
+                    $wallet->earned_this_month = bcadd((string) ($wallet->earned_this_month ?? 0), (string) $share, 2);
+                    $wallet->lifetime_earned = bcadd((string) ($wallet->lifetime_earned ?? 0), (string) $share, 2);
+                    $wallet->earned_from_battles = bcadd((string) ($wallet->earned_from_battles ?? 0), (string) $share, 2);
+                    $wallet->save();
 
-	                    try {
-	                        event(new \App\Events\WalletUpdated($wallet->toArray(), (int) $ownerId));
-	                    } catch (\Throwable $_) {
-	                    }
+                    // Payout transaction visible to the question owner
+                    \App\Models\Transaction::create([
+                        'tx_id' => "{$txId}-battle-qm-{$ownerId}",
+                        'user_id' => $purchase->user_id,
+                        'quiz_master_id' => (int) $ownerId,
+                        'quiz_id' => null,
+                        'amount' => $share,
+                        'quiz-master_share' => $share,
+                        'platform_share' => 0,
+                        'affiliate_share' => 0,
+                        'gateway' => $purchase->gateway ?? 'mpesa',
+                        'type' => \App\Models\Transaction::TYPE_QUIZ_MASTER_PAYOUT,
+                        'status' => \App\Models\Transaction::STATUS_COMPLETED,
+                        'description' => "Battle question earnings (Battle #{$battle->id})",
+                        'reference_id' => $txId,
+                        'balance_after' => (float) ($wallet->pending ?? null),
+                        'meta' => [
+                            'battle_id' => $battle->id,
+                            'total_questions' => $questionCount,
+                            'question_count' => (int) ($info['question_count'] ?? 0),
+                            'question_ids' => array_values($info['question_ids'] ?? []),
+                        ],
+                    ]);
 
-	                    Log::info('[Payment] Battle question owner credited', [
-	                        'owner_id' => (int) $ownerId,
-	                        'amount' => $share,
-	                        'purchase_id' => $purchase->id,
-	                        'battle_id' => $battle->id,
-	                        'question_count' => (int) ($info['question_count'] ?? 0),
-	                    ]);
-	                }
-	            });
+                    try {
+                        event(new \App\Events\WalletUpdated($wallet->toArray(), (int) $ownerId));
+                    } catch (\Throwable $_) {
+                    }
 
-	            Log::info('[Payment] Battle purchase processed (question-owner split)', [
-	                'purchase_id' => $purchase->id,
-	                'user_id' => $purchase->user_id,
-	                'battle_id' => $purchase->item_id,
-	                'amount' => $amount,
-	                'total_questions' => $questionCount,
-	                'question_owner_count' => count($owners),
-	                'unassigned_to_platform' => (float) $unassigned,
-	            ]);
-	        } catch (\Throwable $e) {
-	            Log::error('[Payment] Failed to process battle purchase', [
-	                'purchase_id' => $purchase->id,
-	                'user_id' => $purchase->user_id,
+                    Log::info('[Payment] Battle question owner credited', [
+                        'owner_id' => (int) $ownerId,
+                        'amount' => $share,
+                        'purchase_id' => $purchase->id,
+                        'battle_id' => $battle->id,
+                        'question_count' => (int) ($info['question_count'] ?? 0),
+                    ]);
+                }
+            });
+
+            Log::info('[Payment] Battle purchase processed (question-owner split)', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
+                'battle_id' => $purchase->item_id,
+                'amount' => $amount,
+                'total_questions' => $questionCount,
+                'question_owner_count' => count($owners),
+                'unassigned_to_platform' => (float) $unassigned,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[Payment] Failed to process battle purchase', [
+                'purchase_id' => $purchase->id,
+                'user_id' => $purchase->user_id,
                 'error' => $e->getMessage(),
             ]);
             throw $e;
@@ -1215,11 +1231,12 @@ class PaymentController extends Controller
         try {
             // Get tournament to find creator/organizer
             $tournament = \App\Models\Tournament::find($purchase->item_id);
-            if (!$tournament) {
+            if (! $tournament) {
                 Log::warning('[Payment] Tournament not found for entry fee payment', [
                     'purchase_id' => $purchase->id,
                     'tournament_id' => $purchase->item_id,
                 ]);
+
                 // Fall back to generic handler
                 return $this->createGenericTransaction($purchase, $txId, $amount);
             }
@@ -1352,54 +1369,58 @@ class PaymentController extends Controller
         }
     }
 
-	    /**
-	     * Split the quiz-master share pool across battle question owners.
-	     *
-	     * - Multiple question owners supported.
-	     * - Split is proportional to number of owned questions (equal weight per question).
-	     * - Any unassigned amount (questions without owner and rounding) is returned so it can go to platform.
-	     *
-	     * @return array{owners: array<int,array{share: float, question_count: int, question_ids: array<int,int>}>, unassigned: float}
-	     */
-	    private function splitBattleQuestionOwnerShares(\App\Models\Battle $battle, float $totalShare): array
-	    {
-	        $questions = $battle->questions;
-	        if ($questions->isEmpty()) {
-	            return ['owners' => [], 'unassigned' => round($totalShare, 2)];
-	        }
+    /**
+     * Split the quiz-master share pool across battle question owners.
+     *
+     * - Multiple question owners supported.
+     * - Split is proportional to number of owned questions (equal weight per question).
+     * - Any unassigned amount (questions without owner and rounding) is returned so it can go to platform.
+     *
+     * @return array{owners: array<int,array{share: float, question_count: int, question_ids: array<int,int>}>, unassigned: float}
+     */
+    private function splitBattleQuestionOwnerShares(\App\Models\Battle $battle, float $totalShare): array
+    {
+        $questions = $battle->questions;
+        if ($questions->isEmpty()) {
+            return ['owners' => [], 'unassigned' => round($totalShare, 2)];
+        }
 
-	        $totalQuestions = $questions->count();
-	        if ($totalQuestions <= 0) {
-	            return ['owners' => [], 'unassigned' => round($totalShare, 2)];
-	        }
+        $totalQuestions = $questions->count();
+        if ($totalQuestions <= 0) {
+            return ['owners' => [], 'unassigned' => round($totalShare, 2)];
+        }
 
-	        $owners = [];
-	        $perQuestion = $totalShare / $totalQuestions;
+        $owners = [];
+        $perQuestion = $totalShare / $totalQuestions;
 
-	        foreach ($questions as $question) {
-	            $ownerId = $question->created_by ?? null;
-	            if (!$ownerId) continue;
+        foreach ($questions as $question) {
+            $ownerId = $question->created_by ?? null;
+            if (! $ownerId) {
+                continue;
+            }
 
-	            $ownerId = (int) $ownerId;
-	            if (!isset($owners[$ownerId])) {
-	                $owners[$ownerId] = [
-	                    'share' => 0.0,
-	                    'question_count' => 0,
-	                    'question_ids' => [],
-	                ];
-	            }
+            $ownerId = (int) $ownerId;
+            if (! isset($owners[$ownerId])) {
+                $owners[$ownerId] = [
+                    'share' => 0.0,
+                    'question_count' => 0,
+                    'question_ids' => [],
+                ];
+            }
 
-	            $owners[$ownerId]['share'] = round(((float) $owners[$ownerId]['share']) + $perQuestion, 2);
-	            $owners[$ownerId]['question_count'] = (int) $owners[$ownerId]['question_count'] + 1;
-	            $owners[$ownerId]['question_ids'][] = (int) $question->id;
-	        }
+            $owners[$ownerId]['share'] = round(((float) $owners[$ownerId]['share']) + $perQuestion, 2);
+            $owners[$ownerId]['question_count'] = (int) $owners[$ownerId]['question_count'] + 1;
+            $owners[$ownerId]['question_ids'][] = (int) $question->id;
+        }
 
-	        $assigned = 0.0;
-	        foreach ($owners as $row) $assigned += (float) ($row['share'] ?? 0);
-	        $unassigned = round($totalShare - $assigned, 2);
+        $assigned = 0.0;
+        foreach ($owners as $row) {
+            $assigned += (float) ($row['share'] ?? 0);
+        }
+        $unassigned = round($totalShare - $assigned, 2);
 
-	        return ['owners' => $owners, 'unassigned' => $unassigned];
-	    }
+        return ['owners' => $owners, 'unassigned' => $unassigned];
+    }
 
     /**
      * Credit a user's wallet with the given amount.
@@ -1422,12 +1443,12 @@ class PaymentController extends Controller
                 ->where('status', 'active')
                 ->first();
 
-            if (!$referral) {
+            if (! $referral) {
                 return;
             }
 
             $affiliate = $referral->affiliate;
-            if (!$affiliate || !$affiliate->isActive()) {
+            if (! $affiliate || ! $affiliate->isActive()) {
                 return;
             }
 
@@ -1438,13 +1459,13 @@ class PaymentController extends Controller
             }
 
             // Prevent duplicate commission transactions
-            if (\App\Models\Transaction::where('tx_id', 'aff_' . $txId)->exists()) {
+            if (\App\Models\Transaction::where('tx_id', 'aff_'.$txId)->exists()) {
                 return;
             }
 
             // Create commission transaction
             \App\Models\Transaction::create([
-                'tx_id' => 'aff_' . $txId,
+                'tx_id' => 'aff_'.$txId,
                 'user_id' => $affiliate->user_id, // Commission goes to affiliate owner
                 'quiz_master_id' => null,
                 'quiz_id' => null,
@@ -1557,44 +1578,61 @@ class PaymentController extends Controller
         $s = strtolower(trim($status));
         if ($resultCode !== null && $resultCode !== '') {
             $rc = (int) $resultCode;
-            if ($rc === 0) return 'success';
-            if ($rc === 1032) return 'cancelled';
+            if ($rc === 0) {
+                return 'success';
+            }
+            if ($rc === 1032) {
+                return 'cancelled';
+            }
+
             return 'failed';
         }
-        if (in_array($s, ['success', 'succeeded', 'ok'])) return 'success';
-        if (in_array($s, ['cancelled', 'canceled'])) return 'cancelled';
-        if (in_array($s, ['failed', 'failure', 'error'])) return 'failed';
+        if (in_array($s, ['success', 'succeeded', 'ok'])) {
+            return 'success';
+        }
+        if (in_array($s, ['cancelled', 'canceled'])) {
+            return 'cancelled';
+        }
+        if (in_array($s, ['failed', 'failure', 'error'])) {
+            return 'failed';
+        }
+
         return $s ?: 'failed';
     }
 
     private function maskPhone(?string $phone): ?string
     {
-        if (!$phone) return null;
+        if (! $phone) {
+            return null;
+        }
         $value = preg_replace('/\s+/', '', (string) $phone);
-        if (strlen($value) <= 5) return $value;
-        return substr($value, 0, 4) . str_repeat('*', max(0, strlen($value) - 6)) . substr($value, -2);
+        if (strlen($value) <= 5) {
+            return $value;
+        }
+
+        return substr($value, 0, 4).str_repeat('*', max(0, strlen($value) - 6)).substr($value, -2);
     }
 
     private function resolveTraceId(?MpesaTransaction $mpesaTx = null, ?Subscription $sub = null, ?OneOffPurchase $purchase = null): ?string
     {
-        if ($mpesaTx && is_array($mpesaTx->raw_response) && !empty($mpesaTx->raw_response['trace_id'])) {
+        if ($mpesaTx && is_array($mpesaTx->raw_response) && ! empty($mpesaTx->raw_response['trace_id'])) {
             return (string) $mpesaTx->raw_response['trace_id'];
         }
 
-        if ($purchase && is_array($purchase->gateway_meta) && !empty($purchase->gateway_meta['trace_id'])) {
+        if ($purchase && is_array($purchase->gateway_meta) && ! empty($purchase->gateway_meta['trace_id'])) {
             return (string) $purchase->gateway_meta['trace_id'];
         }
 
-        if ($sub && is_array($sub->gateway_meta) && !empty($sub->gateway_meta['trace_id'])) {
+        if ($sub && is_array($sub->gateway_meta) && ! empty($sub->gateway_meta['trace_id'])) {
             return (string) $sub->gateway_meta['trace_id'];
         }
 
         return null;
     }
 
-    private function emitPaymentStatusUpdate(int|null $userId, string $txId, string $status, array $parsedMpesa = [], ?string $kind = null): void
+    private function emitPaymentStatusUpdate(?int $userId, string $txId, string $status, array $parsedMpesa = [], ?string $kind = null): void
     {
-        if (!$userId) {
+        if (! $userId) {
             return;
         }
 
@@ -1638,7 +1676,6 @@ class PaymentController extends Controller
         return response()->json(['ok' => false, 'message' => 'Unsupported billable type'], 422);
     }
 
-
     private function expectedAmountForBillable(Subscription|OneOffPurchase $billable): ?float
     {
         if ($billable instanceof Subscription) {
@@ -1647,6 +1684,7 @@ class PaymentController extends Controller
         if ($billable instanceof OneOffPurchase) {
             return (float) ($billable->amount ?? 0);
         }
+
         return null;
     }
 
@@ -1677,7 +1715,4 @@ class PaymentController extends Controller
             ]);
         }
     }
-
 }
-
-

@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\InstitutionResource\Pages;
 
-use App\Models\Institution;
 use App\Models\User;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Facades\Auth;
@@ -15,9 +14,13 @@ class InvitationAcceptance extends Page
     protected static bool $shouldRegisterNavigation = false;
 
     public ?string $token = null;
+
     public ?array $invitationData = null;
+
     public bool $isLoading = true;
+
     public bool $isProcessing = false;
+
     public string $error = '';
 
     public function mount(?string $token = null): void
@@ -47,8 +50,9 @@ class InvitationAcceptance extends Page
 
     public function acceptInvitation(): void
     {
-        if (!$this->token || !Auth::check()) {
+        if (! $this->token || ! Auth::check()) {
             $this->error = 'You must be logged in to accept an invitation.';
+
             return;
         }
 
@@ -63,7 +67,7 @@ class InvitationAcceptance extends Page
             if ($response->successful()) {
                 \Filament\Notifications\Notification::make()
                     ->title('Invitation Accepted')
-                    ->body('You have successfully joined ' . $this->invitationData['institution']['name'])
+                    ->body('You have successfully joined '.$this->invitationData['institution']['name'])
                     ->success()
                     ->send();
 
@@ -80,7 +84,7 @@ class InvitationAcceptance extends Page
 
     public function declineInvitation(): void
     {
-        session(['declined_invitation_' . $this->token => true]);
+        session(['declined_invitation_'.$this->token => true]);
         $this->error = 'You have declined the invitation.';
         redirect()->route('filament.admin.dashboard');
     }

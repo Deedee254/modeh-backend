@@ -2,14 +2,12 @@
 
 namespace App\Http\Livewire\EmbeddedTables;
 
+use App\Models\Tournament;
+use Filament\Support\Contracts\TranslatableContentDriver;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Support\Contracts\TranslatableContentDriver;
-use Illuminate\Database\Eloquent\Model;
 use Livewire\Component;
-use App\Models\Tournament;
 
 class BattlesTable extends Component implements HasTable
 {

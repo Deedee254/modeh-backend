@@ -15,7 +15,9 @@ class GroupMembershipChanged implements ShouldBroadcast
     public $afterCommit = true;
 
     public $groupId;
+
     public $action; // 'created', 'member_added', 'member_removed'
+
     public $members; // array of member ids/emails
 
     public function __construct($groupId, $action, $members = [])
@@ -27,7 +29,7 @@ class GroupMembershipChanged implements ShouldBroadcast
 
     public function broadcastOn()
     {
-        return new PrivateChannel('group.' . $this->groupId);
+        return new PrivateChannel('group.'.$this->groupId);
     }
 
     public function broadcastWith()

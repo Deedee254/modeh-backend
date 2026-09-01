@@ -2,7 +2,6 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -16,6 +15,7 @@ class WalletUpdated implements ShouldBroadcast
     public $afterCommit = true;
 
     public $wallet;
+
     public $userId;
 
     public function __construct($userId, $wallet)
@@ -26,7 +26,7 @@ class WalletUpdated implements ShouldBroadcast
 
     public function broadcastOn()
     {
-        return new PrivateChannel('user.' . $this->userId);
+        return new PrivateChannel('user.'.$this->userId);
     }
 
     public function broadcastWith()

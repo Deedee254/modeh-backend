@@ -90,10 +90,13 @@ class PendingQuizPayment extends Model
      */
     public function getReminderCount(): int
     {
-        if ($this->reminder_status === 'not_sent') return 0;
-        
+        if ($this->reminder_status === 'not_sent') {
+            return 0;
+        }
+
         preg_match('/sent_(\d+)/', $this->reminder_status, $matches);
-        return isset($matches[1]) ? (int)$matches[1] : 0;
+
+        return isset($matches[1]) ? (int) $matches[1] : 0;
     }
 
     /**
@@ -146,7 +149,7 @@ class PendingQuizPayment extends Model
 
         $this->reminder_status = "sent_{$newCount}";
         $this->last_reminder_at = now();
-        
+
         if ($currentCount === 0) {
             $this->first_reminder_at = now();
         }

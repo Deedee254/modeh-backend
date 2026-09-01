@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Invoice Model
- * 
+ *
  * Represents invoices for transactions (subscriptions, one-off purchases, etc.)
  * Uses polymorphic relationships to support different invoiceable types
- * 
+ *
  * @property int $id
  * @property int $user_id
  * @property string $invoice_number
@@ -79,6 +79,7 @@ class Invoice extends Model
             'transaction_id' => $transactionId,
             'payment_method' => $paymentMethod,
         ]);
+
         return $this;
     }
 
@@ -90,14 +91,14 @@ class Invoice extends Model
     {
         return \Illuminate\Support\Facades\DB::transaction(function () use ($attributes) {
             $year = now()->year;
-            
+
             // Lock all invoices for this year to guarantee atomicity
             // This prevents concurrent threads from generating the same invoice number
             $lastInvoice = self::where(\Illuminate\Support\Facades\DB::raw('YEAR(created_at)'), $year)
                 ->lockForUpdate()
                 ->orderByDesc('id')
                 ->first();
-            
+
             $nextCount = 1;
             if ($lastInvoice) {
                 // Extract numeric suffix from last invoice (e.g., "INV-2026-0042" → 42)
@@ -105,8 +106,9 @@ class Invoice extends Model
                     $nextCount = (int) $matches[1] + 1;
                 }
             }
-            
+
             $attributes['invoice_number'] = sprintf('INV-%d-%04d', $year, $nextCount);
+
             return self::create($attributes);
         });
     }
@@ -120,7 +122,7 @@ class Invoice extends Model
         $lastInvoice = self::where(\Illuminate\Support\Facades\DB::raw('YEAR(created_at)'), $year)
             ->orderByDesc('id')
             ->first();
-        
+
         $count = 1;
         if ($lastInvoice && preg_match('/(\d{4})$/', $lastInvoice->invoice_number, $matches)) {
             $count = (int) $matches[1] + 1;

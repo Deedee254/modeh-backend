@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Grade model - represents grade levels within a learning level
- * 
+ *
  * @property int $id
  * @property string $name
  * @property string $slug Grade slug for SEO URLs
@@ -35,13 +35,13 @@ class Grade extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            if (empty($model->slug) && !empty($model->name)) {
+            if (empty($model->slug) && ! empty($model->name)) {
                 $model->slug = \App\Services\SlugService::makeUniqueSlug($model->name, static::class);
             }
         });
 
         static::updating(function ($model) {
-            if ($model->isDirty('name') && !empty($model->name)) {
+            if ($model->isDirty('name') && ! empty($model->name)) {
                 $model->slug = \App\Services\SlugService::makeUniqueSlug($model->name, static::class, $model->id);
             }
         });
@@ -60,7 +60,7 @@ class Grade extends Model
         $id = $this->attributes['id'] ?? null;
 
         if ($id !== null) {
-            return 'Grade ' . $id;
+            return 'Grade '.$id;
         }
 
         return '';

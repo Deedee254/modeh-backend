@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\Subject;
 use App\Models\Topic;
-use App\Models\Question;
 use Illuminate\Http\Request;
 
 class SearchController extends Controller
@@ -31,7 +31,7 @@ class SearchController extends Controller
             ]);
         }
 
-        $like = '%' . $term . '%';
+        $like = '%'.$term.'%';
 
         $quizBase = Quiz::query()
             ->select('id', 'slug', 'title', 'description', 'cover_image', 'difficulty', 'topic_id', 'subject_id', 'grade_id', 'level_id', 'is_paid', 'one_off_price')
@@ -74,6 +74,7 @@ class SearchController extends Controller
             ->map(function ($t) {
                 $t->subject_name = $t->subject?->name;
                 $t->grade_name = $t->subject?->grade?->name;
+
                 return $t;
             })
             ->values();
@@ -91,7 +92,7 @@ class SearchController extends Controller
                 'grade:id,name,slug,level_id',
                 'topics' => function ($q) {
                     $q->select('id', 'subject_id')->withCount('quizzes');
-                }
+                },
             ])
             ->orderBy('name', 'asc')
             ->skip($offset)
@@ -100,6 +101,7 @@ class SearchController extends Controller
             ->map(function ($s) {
                 $s->quizzes_count = $s->topics->sum('quizzes_count');
                 unset($s->topics);
+
                 return $s;
             })
             ->values();

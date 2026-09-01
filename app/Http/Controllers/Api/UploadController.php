@@ -51,14 +51,16 @@ class UploadController extends Controller
 
         // sanitize type into folder name
         $folder = preg_replace('/[^a-z0-9_\-]/i', '_', $type);
-        if (empty($folder)) $folder = 'uploads';
+        if (empty($folder)) {
+            $folder = 'uploads';
+        }
 
         $path = Storage::disk('public')->putFile($folder, $file);
         $url = url(Storage::url($path));
 
         return response()->json([
             'url' => $url,
-            'path' => $path
+            'path' => $path,
         ], 201);
     }
 }

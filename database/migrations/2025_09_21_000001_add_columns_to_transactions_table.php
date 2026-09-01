@@ -10,22 +10,22 @@ return new class extends Migration
     {
         Schema::table('transactions', function (Blueprint $table) {
             // Add missing columns to transactions table
-            if (!Schema::hasColumn('transactions', 'affiliate_share')) {
+            if (! Schema::hasColumn('transactions', 'affiliate_share')) {
                 $table->decimal('affiliate_share', 12, 2)->default(0)->after('quiz-master_share');
             }
-            if (!Schema::hasColumn('transactions', 'type')) {
+            if (! Schema::hasColumn('transactions', 'type')) {
                 $table->string('type')->default('payment')->after('gateway');
             }
-            if (!Schema::hasColumn('transactions', 'status')) {
+            if (! Schema::hasColumn('transactions', 'status')) {
                 $table->string('status')->default('completed')->after('type');
             }
-            if (!Schema::hasColumn('transactions', 'description')) {
+            if (! Schema::hasColumn('transactions', 'description')) {
                 $table->string('description')->nullable()->after('status');
             }
-            if (!Schema::hasColumn('transactions', 'reference_id')) {
+            if (! Schema::hasColumn('transactions', 'reference_id')) {
                 $table->string('reference_id')->nullable()->after('description');
             }
-            if (!Schema::hasColumn('transactions', 'balance_after')) {
+            if (! Schema::hasColumn('transactions', 'balance_after')) {
                 $table->decimal('balance_after', 12, 2)->nullable()->after('reference_id');
             }
         });

@@ -2,14 +2,13 @@
 
 namespace App\Models;
 
+use App\Relations\ArrayRelation;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Institution;
-use App\Relations\ArrayRelation;
 
 /**
  * QuizMaster model - represents quiz creator profile
- * 
+ *
  * @property int $id
  * @property int $user_id
  * @property string|null $first_name
@@ -67,6 +66,7 @@ class QuizMaster extends Model
     {
         $firstName = $this->first_name ?? '';
         $lastName = $this->last_name ?? '';
+
         return trim("{$firstName} {$lastName}") ?: 'Unknown';
     }
 

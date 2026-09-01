@@ -3,12 +3,11 @@
 namespace App\Filament\Resources\TournamentResource\Pages;
 
 use App\Filament\Resources\TournamentResource;
-use Filament\Actions\EditAction;
 use Filament\Actions\Action;
+use Filament\Actions\EditAction;
 use Filament\Forms\Components\Placeholder;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Section;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Section;
 
 class ViewTournament extends ViewRecord
 {
@@ -46,16 +45,16 @@ class ViewTournament extends ViewRecord
                         ->label('Tournament Name')
                         ->content(fn () => $this->record->name)
                         ->columnSpan('full'),
-                    
+
                     Placeholder::make('description')
                         ->label('Description')
                         ->content(fn () => $this->record->description)
                         ->columnSpan('full'),
-                    
+
                     Placeholder::make('status')
                         ->label('Status')
                         ->content(fn () => ucfirst($this->record->status)),
-                    
+
                     Placeholder::make('format')
                         ->label('Format')
                         ->content(fn () => $this->record->format),
@@ -68,18 +67,18 @@ class ViewTournament extends ViewRecord
                     Placeholder::make('start_date')
                         ->label('Start Date')
                         ->content(fn () => $this->record->start_date?->format('Y-m-d H:i') ?? 'N/A'),
-                    
+
                     Placeholder::make('end_date')
                         ->label('End Date')
                         ->content(fn () => $this->record->end_date?->format('Y-m-d H:i') ?? 'N/A'),
-                    
+
                     Placeholder::make('entry_fee')
                         ->label('Entry Fee')
-                        ->content(fn () => '$' . ($this->record->entry_fee ?? '0.00')),
-                    
+                        ->content(fn () => '$'.($this->record->entry_fee ?? '0.00')),
+
                     Placeholder::make('prize_pool')
                         ->label('Prize Pool')
-                        ->content(fn () => '$' . ($this->record->prize_pool ?? '0.00')),
+                        ->content(fn () => '$'.($this->record->prize_pool ?? '0.00')),
                 ]),
 
             // Configuration Section
@@ -89,15 +88,15 @@ class ViewTournament extends ViewRecord
                     Placeholder::make('question_count')
                         ->label('Questions')
                         ->content(fn () => (string) ($this->record->question_count ?? '10')),
-                    
+
                     Placeholder::make('per_question_seconds')
                         ->label('Time/Q')
-                        ->content(fn () => ($this->record->per_question_seconds ?? '30') . 's'),
-                    
+                        ->content(fn () => ($this->record->per_question_seconds ?? '30').'s'),
+
                     Placeholder::make('duration_days')
                         ->label('Duration')
-                        ->content(fn () => ($this->record->duration_days ?? '7') . ' days'),
-                    
+                        ->content(fn () => ($this->record->duration_days ?? '7').' days'),
+
                     Placeholder::make('tie_breaker')
                         ->label('Tie-Breaker')
                         ->content(fn () => str_replace('_', ' ', $this->record->tie_breaker ?? 'score_then_duration')),
@@ -110,7 +109,7 @@ class ViewTournament extends ViewRecord
                     Placeholder::make('participants_count')
                         ->label('Participants')
                         ->content(fn () => (string) ($this->record->participants_count ?? '0')),
-                    
+
                     Placeholder::make('questions_count')
                         ->label('Questions')
                         ->content(fn () => (string) ($this->record->questions_count ?? '0')),
@@ -124,7 +123,7 @@ class ViewTournament extends ViewRecord
                     Placeholder::make('sponsor_name')
                         ->label('Sponsor Name')
                         ->content(fn () => $this->record->sponsor?->name ?? 'N/A'),
-                    
+
                     Placeholder::make('sponsor_website')
                         ->label('Website')
                         ->content(fn () => $this->record->sponsor?->website_url ?? 'N/A'),

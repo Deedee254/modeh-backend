@@ -6,13 +6,13 @@ use App\Models\Question;
 use App\Models\QuestionFlag;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
-use Illuminate\Notifications\Messages\MailMessage;
 
 class QuestionFlagged extends Notification
 {
     use Queueable;
 
     public $question;
+
     public $flag;
 
     public function __construct(Question $question, QuestionFlag $flag)
@@ -35,7 +35,7 @@ class QuestionFlagged extends Notification
             'question_id' => $this->question->id,
             'flag_id' => $this->flag->id,
             'reason' => $this->flag->reason,
-            'action_url' => "/quiz-master/questions?filter=flagged",
+            'action_url' => '/quiz-master/questions?filter=flagged',
         ];
     }
 }

@@ -2,16 +2,18 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Carbon\Carbon;
 
 class DailyUsageTracking extends Model
 {
     use HasFactory;
 
     protected $table = 'daily_usage_tracking';
+
     protected $fillable = ['user_id', 'subscription_id', 'tracking_date', 'usage_type', 'used'];
+
     protected $casts = [
         'tracking_date' => 'date',
         'used' => 'integer',
@@ -49,6 +51,7 @@ class DailyUsageTracking extends Model
     {
         $tracking = self::getOrCreateToday($userId, $usageType, $subscriptionId);
         $tracking->increment('used', $amount);
+
         return $tracking;
     }
 

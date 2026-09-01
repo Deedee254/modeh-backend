@@ -4,20 +4,23 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\WithdrawalRequestResource\Pages;
 use App\Models\WithdrawalRequest;
-use Filament\Schemas\Schema;
-use Filament\Tables\Table;
-use Filament\Resources\Resource;
-use Filament\Forms\Components\TextInput;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Actions\Action;
+use Filament\Forms\Components\TextInput;
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class WithdrawalRequestResource extends Resource
 {
     protected static ?string $model = WithdrawalRequest::class;
+
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-cog';
+
     protected static \UnitEnum|string|null $navigationGroup = 'User Earnings';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema
@@ -50,7 +53,10 @@ class WithdrawalRequestResource extends Resource
                         $record->processed_by_admin_id = $user->id ?? null;
                         $record->save();
                     });
-                    try { event(new \App\Events\WithdrawalRequestUpdated($record->{'quiz_master_id'}, $record->toArray())); } catch (\Throwable $_) {}
+                    try {
+                        event(new \App\Events\WithdrawalRequestUpdated($record->{'quiz_master_id'}, $record->toArray()));
+                    } catch (\Throwable $_) {
+                    }
                 }),
             Action::make('reject_refund')
                 ->label('Reject + Refund')
@@ -64,15 +70,23 @@ class WithdrawalRequestResource extends Resource
                         $record->save();
 
                         $w = \App\Models\Wallet::where('user_id', $record->{'quiz_master_id'})->lockForUpdate()->first();
-                        if (!$w) {
+                        if (! $w) {
                             $w = \App\Models\Wallet::create(['user_id' => $record->{'quiz_master_id'}, 'available' => 0, 'pending' => 0, 'lifetime_earned' => 0]);
                         }
                         $w->available = bcadd($w->available, $record->amount, 2);
                         $w->save();
                         $wallet = $w;
                     });
-                    try { event(new \App\Events\WithdrawalRequestUpdated($record->{'quiz_master_id'}, $record->toArray())); } catch (\Throwable $_) {}
-                    if ($wallet) { try { event(new \App\Events\WalletUpdated($wallet->toArray(), $record->{'quiz_master_id'})); } catch (\Throwable $_) {} }
+                    try {
+                        event(new \App\Events\WithdrawalRequestUpdated($record->{'quiz_master_id'}, $record->toArray()));
+                    } catch (\Throwable $_) {
+                    }
+                    if ($wallet) {
+                        try {
+                            event(new \App\Events\WalletUpdated($wallet->toArray(), $record->{'quiz_master_id'}));
+                        } catch (\Throwable $_) {
+                        }
+                    }
                 }),
             Action::make('mark_paid')
                 ->label('Mark as Paid')
@@ -86,7 +100,10 @@ class WithdrawalRequestResource extends Resource
                         $record->processed_by_admin_id = $user->id ?? null;
                         $record->save();
                     });
-                    try { event(new \App\Events\WithdrawalRequestUpdated($record->{'quiz_master_id'}, $record->toArray())); } catch (\Throwable $_) {}
+                    try {
+                        event(new \App\Events\WithdrawalRequestUpdated($record->{'quiz_master_id'}, $record->toArray()));
+                    } catch (\Throwable $_) {
+                    }
                 }),
         ]);
     }

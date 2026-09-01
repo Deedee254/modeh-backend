@@ -3,19 +3,19 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Topic;
-use App\Models\Subject;
-use App\Models\Quiz;
-use App\Http\Resources\TopicResource;
 use App\Http\Resources\QuizResource;
+use App\Http\Resources\TopicResource;
+use App\Models\Quiz;
+use App\Models\Subject;
+use App\Models\Topic;
+use App\Models\User;
+use App\Notifications\ResourceRejected;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use App\Models\User;
-use App\Notifications\ResourceRejected;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 
 class TopicController extends Controller
 {
@@ -48,7 +48,7 @@ class TopicController extends Controller
                 Log::warning('Failed to cache data', [
                     'key' => $key,
                     'error' => $e->getMessage(),
-                    'error_type' => get_class($e)
+                    'error_type' => get_class($e),
                 ]);
             }
 
@@ -57,8 +57,9 @@ class TopicController extends Controller
             // If cache retrieval fails, just execute the callback
             Log::warning('Cache operation failed, falling back to direct query', [
                 'key' => $key,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return $callback();
         }
     }
@@ -67,7 +68,7 @@ class TopicController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $cacheKey = 'topics_index_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
+        $cacheKey = 'topics_index_'.md5(serialize($request->all()).($user ? $user->id : 'guest'));
 
         $data = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($request, $user) {
             // OPTIMIZED: Strategy B - Selective fields
@@ -76,7 +77,7 @@ class TopicController extends Controller
                 ->with([
                     'subject:id,name,slug,grade_id',
                     'subject.grade:id,name,slug,level_id',
-                    'representativeQuiz:quizzes.id,quizzes.cover_image,quizzes.topic_id,quizzes.title'
+                    'representativeQuiz:quizzes.id,quizzes.cover_image,quizzes.topic_id,quizzes.title',
                 ])
                 ->withCount('quizzes');
 
@@ -90,14 +91,14 @@ class TopicController extends Controller
                 }
             }
 
-            if (!is_null($request->get('approved'))) {
+            if (! is_null($request->get('approved'))) {
                 $query->where('is_approved', (bool) $request->get('approved'));
             } else {
-                if (!$user) {
+                if (! $user) {
                     $query->where('is_approved', true);
                 } else {
                     $isQuizMaster = in_array($user->role ?? '', ['quiz-master', 'quiz_master'], true) || (method_exists($user, 'quizMasterProfile') && $user->quizMasterProfile()->exists()) || (method_exists($user, 'isQuizMaster') && $user->isQuizMaster());
-                    if (!$user->is_admin && !$isQuizMaster) {
+                    if (! $user->is_admin && ! $isQuizMaster) {
                         $query->where(function ($q) use ($user) {
                             $q->where('is_approved', true)
                                 ->orWhere('created_by', $user->id);
@@ -122,7 +123,7 @@ class TopicController extends Controller
 
             if ($subjectIds = $request->get('subject_ids')) {
                 $ids = array_filter(array_map('trim', explode(',', $subjectIds)));
-                if (!empty($ids)) {
+                if (! empty($ids)) {
                     $query->whereIn('subject_id', $ids);
                 }
             } elseif ($subjectId = $request->get('subject_id')) {
@@ -174,20 +175,21 @@ class TopicController extends Controller
     // Show a single topic (public-safe view)
     public function show(Topic $topic)
     {
-        $cacheKey = 'topic_show_' . $topic->id;
+        $cacheKey = 'topic_show_'.$topic->id;
 
         $cachedData = $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($topic) {
             // OPTIMIZED: Strategy B - Selective fields, Strategy D - Individual item cache
             $topic->load([
                 'subject:id,name,slug,grade_id',
                 'subject.grade:id,name,slug,level_id',
-                'representativeQuiz:quizzes.id,quizzes.cover_image,quizzes.topic_id,quizzes.title'
+                'representativeQuiz:quizzes.id,quizzes.cover_image,quizzes.topic_id,quizzes.title',
             ]);
             $topic->quizzes_count = Quiz::where('topic_id', $topic->id)->count();
 
             if (empty($topic->image) && $topic->representativeQuiz) {
                 $topic->quizzes_cover_image = Storage::url($topic->representativeQuiz->cover_image);
             }
+
             return $topic->toArray();
         });
 
@@ -198,7 +200,7 @@ class TopicController extends Controller
     public function quizzes(Request $request, Topic $topic)
     {
         $user = $request->user();
-        $cacheKey = 'topic_quizzes_' . $topic->id . '_' . md5(serialize($request->all()) . ($user ? $user->id : 'guest'));
+        $cacheKey = 'topic_quizzes_'.$topic->id.'_'.md5(serialize($request->all()).($user ? $user->id : 'guest'));
 
         return $this->safeCacheRemember($cacheKey, now()->addMinutes(10), function () use ($request, $topic, $user) {
             // OPTIMIZED: Strategy B - Selective fields, Strategy C - Pagination limits
@@ -221,14 +223,14 @@ class TopicController extends Controller
                     'visibility',
                     'created_by',
                     'created_at',
-                    'updated_at'
+                    'updated_at',
                 ])
                 ->with([
                     'topic:id,name,slug',
                     'subject:id,name,slug',
                     'grade:id,name,slug',
                     'level:id,name,slug',
-                    'author:id,name,email'
+                    'author:id,name,email',
                 ])
                 ->withCount(['attempts']);
 
@@ -236,7 +238,7 @@ class TopicController extends Controller
                 $query->withExists([
                     'likes as liked' => function ($q) use ($user) {
                         $q->where('user_id', $user->id);
-                    }
+                    },
                 ]);
             }
 
@@ -245,7 +247,7 @@ class TopicController extends Controller
             $data = $query->paginate($perPage);
 
             return [
-                'quizzes' => QuizResource::collection($data)->response()->getData(true)
+                'quizzes' => QuizResource::collection($data)->response()->getData(true),
             ];
         });
     }
@@ -257,7 +259,7 @@ class TopicController extends Controller
             'subject_id' => 'required|exists:subjects,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'image' => 'nullable|file|image|max:5120'
+            'image' => 'nullable|file|image|max:5120',
         ]);
 
         if ($v->fails()) {
@@ -265,7 +267,7 @@ class TopicController extends Controller
         }
 
         $subject = Subject::find($request->subject_id);
-        if (!$subject->is_approved) {
+        if (! $subject->is_approved) {
             // If subject is not approved and auto_approve is false, block
             return response()->json(['message' => 'Subject is not approved'], 403);
         }
@@ -293,13 +295,13 @@ class TopicController extends Controller
                 $topic->save();
             } catch (\Exception $e) {
                 // Image upload failed but topic was created, continue without image
-                Log::warning('Topic image upload failed: ' . $e->getMessage());
+                Log::warning('Topic image upload failed: '.$e->getMessage());
             }
         }
 
         // If not auto-approved but client requested immediate approval request, set approval_requested_at
         // client can send `request_approval=true` in creation payload to immediately request approval
-        if (!$autoApprove && (bool) $request->get('request_approval')) {
+        if (! $autoApprove && (bool) $request->get('request_approval')) {
             $topic->approval_requested_at = now();
             $topic->save();
         }
@@ -317,7 +319,7 @@ class TopicController extends Controller
     public function approve(Request $request, Topic $topic)
     {
         $user = $request->user();
-        if (!method_exists($user, 'isAdmin') && !$user->is_admin) {
+        if (! method_exists($user, 'isAdmin') && ! $user->is_admin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -350,7 +352,7 @@ class TopicController extends Controller
     public function reject(Request $request, Topic $topic)
     {
         $user = $request->user();
-        if (!method_exists($user, 'isAdmin') && !$user->is_admin) {
+        if (! method_exists($user, 'isAdmin') && ! $user->is_admin) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
