@@ -13,7 +13,9 @@ return new class extends Migration
             $table->enum('subscription_type', ['personal', 'institution', 'one_off'])->nullable()->after('subscription_id');
             
             $table->foreign('subscription_id')->references('id')->on('subscriptions')->onDelete('set null');
-            $table->index(['user_id', 'subscription_id']);
+            if (\Illuminate\Support\Facades\DB::getDriverName() !== 'sqlite') {
+                $table->index(['user_id', 'subscription_id']);
+            }
         });
     }
 

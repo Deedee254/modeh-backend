@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class LeaderboardController extends Controller
 {
@@ -43,14 +43,14 @@ class LeaderboardController extends Controller
         $q = $request->get('q');
 
         // Resolve quizId if it's a slug
-        if ($quizId && !is_numeric($quizId)) {
+        if ($quizId && ! is_numeric($quizId)) {
             $quizId = \App\Models\Quiz::where('slug', $quizId)->value('id');
         }
 
         // Resolve start/end dates based on timeframe or specific date
         $startDate = null;
         $endDate = null;
-        
+
         $specificDate = $request->get('date');
         if ($specificDate) {
             $startDate = \Carbon\Carbon::parse($specificDate)->startOfDay();
@@ -64,31 +64,35 @@ class LeaderboardController extends Controller
         }
 
         // Helper to apply common constraints to relationships (timeframe, context)
-        $applyConstraints = function($sub) use ($startDate, $endDate, $quizId, $topicId, $subjectId) {
+        $applyConstraints = function ($sub) use ($startDate, $endDate, $quizId, $topicId, $subjectId) {
             if ($startDate && $endDate) {
                 $sub->whereBetween('created_at', [$startDate, $endDate]);
             } elseif ($startDate) {
                 $sub->where('created_at', '>=', $startDate);
             }
-            
+
             if ($quizId) {
                 $sub->where('quiz_id', $quizId);
             }
             if ($topicId || $subjectId) {
-                $sub->whereHas('quiz', function($q) use ($topicId, $subjectId) {
-                    if ($topicId) $q->where('topic_id', $topicId);
-                    if ($subjectId) $q->where('subject_id', $subjectId);
+                $sub->whereHas('quiz', function ($q) use ($topicId, $subjectId) {
+                    if ($topicId) {
+                        $q->where('topic_id', $topicId);
+                    }
+                    if ($subjectId) {
+                        $q->where('subject_id', $subjectId);
+                    }
                 });
             }
         };
 
         if ($type === 'institutions') {
             $query = \App\Models\Institution::query()->where('is_active', true);
-            
+
             if ($q) {
                 $query->where('name', 'like', "%{$q}%");
             }
-            
+
             $attemptsSub = DB::table('quiz_attempts')
                 ->join('institution_user', 'quiz_attempts.user_id', '=', 'institution_user.user_id')
                 ->whereColumn('institution_user.institution_id', '=', 'institutions.id')
@@ -99,38 +103,46 @@ class LeaderboardController extends Controller
             } elseif ($startDate) {
                 $attemptsSub->where('quiz_attempts.created_at', '>=', $startDate);
             }
-            
+
             if ($quizId) {
                 $attemptsSub->where('quiz_attempts.quiz_id', $quizId);
             }
-            
+
             if ($topicId || $subjectId) {
                 $attemptsSub->join('quizzes', 'quiz_attempts.quiz_id', '=', 'quizzes.id');
-                if ($topicId) $attemptsSub->where('quizzes.topic_id', $topicId);
-                if ($subjectId) $attemptsSub->where('quizzes.subject_id', $subjectId);
+                if ($topicId) {
+                    $attemptsSub->where('quizzes.topic_id', $topicId);
+                }
+                if ($subjectId) {
+                    $attemptsSub->where('quizzes.subject_id', $subjectId);
+                }
             }
 
             if ($levelId || $gradeId) {
                 $attemptsSub->join('quizees', 'quiz_attempts.user_id', '=', 'quizees.user_id');
-                if ($levelId) $attemptsSub->where('quizees.level_id', $levelId);
-                if ($gradeId) $attemptsSub->where('quizees.grade_id', $gradeId);
+                if ($levelId) {
+                    $attemptsSub->where('quizees.level_id', $levelId);
+                }
+                if ($gradeId) {
+                    $attemptsSub->where('quizees.grade_id', $gradeId);
+                }
             }
-            
+
             $query->select(['id', 'name', 'logo_url', 'county']);
             $query->selectSub($attemptsSub, 'points');
 
             $paginated = $query->orderBy('points', 'desc')->paginate($perPage, ['*'], 'page', $page);
-            
+
             $paginated->getCollection()->transform(function ($inst) {
                 return [
                     'id' => $inst->id,
                     'name' => $inst->name,
                     'avatar' => $inst->logo_url,
-                    'points' => (float)($inst->points ?? 0),
+                    'points' => (float) ($inst->points ?? 0),
                     'country' => $inst->county ?? null,
                 ];
             });
-            
+
             return response()->json($paginated);
         }
 
@@ -146,7 +158,7 @@ class LeaderboardController extends Controller
                 ->where('quiz_id', $quizId)
                 ->whereNotNull('score')
                 ->groupBy('user_id');
-            
+
             if ($startDate && $endDate) {
                 $statsSub->whereBetween('created_at', [$startDate, $endDate]);
             } elseif ($startDate) {
@@ -158,34 +170,34 @@ class LeaderboardController extends Controller
                 ->select('user_id', 'score', DB::raw('MIN(total_time_seconds) as min_time'))
                 ->where('quiz_id', $quizId)
                 ->whereNotNull('score');
-            
+
             if ($startDate && $endDate) {
                 $bestTimesSub->whereBetween('created_at', [$startDate, $endDate]);
             } elseif ($startDate) {
                 $bestTimesSub->where('created_at', '>=', $startDate);
             }
-            
+
             $bestTimesSub->groupBy('user_id', 'score');
 
             $query->joinSub($statsSub, 'stats', 'users.id', '=', 'stats.user_id')
-                  ->joinSub($bestTimesSub, 'best_times', function ($join) {
-                      $join->on('users.id', '=', 'best_times.user_id')
-                           ->on('stats.points', '=', 'best_times.score');
-                  })
-                  ->select([
-                      'users.id',
-                      'users.name',
-                      'users.email',
-                      'users.social_avatar',
-                      'users.avatar_url',
-                      'users.created_at',
-                      'users.role',
-                      'stats.points',
-                      'stats.average_score',
-                      'stats.attempts_count',
-                      'best_times.min_time as best_time'
-                  ]);
-            
+                ->joinSub($bestTimesSub, 'best_times', function ($join) {
+                    $join->on('users.id', '=', 'best_times.user_id')
+                        ->on('stats.points', '=', 'best_times.score');
+                })
+                ->select([
+                    'users.id',
+                    'users.name',
+                    'users.email',
+                    'users.social_avatar',
+                    'users.avatar_url',
+                    'users.created_at',
+                    'users.role',
+                    'stats.points',
+                    'stats.average_score',
+                    'stats.attempts_count',
+                    'best_times.min_time as best_time',
+                ]);
+
             // For quiz leaderboard, we don't need additional withAvg/withCount as they are in the join
         } else {
             // Global/Contextual points leaderboard
@@ -200,7 +212,7 @@ class LeaderboardController extends Controller
                     $query->selectRaw('id, name, email, 0 as points, social_avatar, avatar_url, created_at, role');
                 }
             }
-            
+
             // Attach metrics for non-quiz-specific view
             $query->withAvg(['quizAttempts as average_score' => $applyConstraints], 'score');
             $query->withCount(['quizAttempts as attempts_count' => $applyConstraints]);
@@ -215,31 +227,38 @@ class LeaderboardController extends Controller
 
         // Filter by level/grade
         if ($levelId) {
-            $query->whereHas('quizeeProfile', fn($sub) => $sub->where('level_id', $levelId));
+            $query->whereHas('quizeeProfile', fn ($sub) => $sub->where('level_id', $levelId));
         }
         if ($gradeId) {
-            $query->whereHas('quizeeProfile', fn($sub) => $sub->where('grade_id', $gradeId));
+            $query->whereHas('quizeeProfile', fn ($sub) => $sub->where('grade_id', $gradeId));
         }
 
         // Contextual filters (only if quizId is not already filtering via join)
-        if (!$quizId) {
-            if ($topicId) $query->whereHas('quizAttempts', $applyConstraints);
-            if ($subjectId) $query->whereHas('quizAttempts', $applyConstraints);
+        if (! $quizId) {
+            if ($topicId) {
+                $query->whereHas('quizAttempts', $applyConstraints);
+            }
+            if ($subjectId) {
+                $query->whereHas('quizAttempts', $applyConstraints);
+            }
         }
 
         // Validate sort_by
         $allowedSort = ['points', 'name', 'created_at', 'average_score'];
-        if (!in_array($sortBy, $allowedSort)) $sortBy = 'points';
+        if (! in_array($sortBy, $allowedSort)) {
+            $sortBy = 'points';
+        }
 
         // Sorting
         if ($sortBy === 'points') {
-            $query->orderByRaw("points {$sortDir}")
-                  ->orderByRaw("CASE WHEN " . ($quizId ? 'best_time' : '0') . " IS NULL THEN 2147483647 ELSE " . ($quizId ? 'best_time' : '0') . " END ASC")
-                  ->orderBy('name', 'asc');
+            $column = $quizId ? 'best_time' : '0';
+            $query->orderBy('points', $sortDir)
+                ->orderByRaw("CASE WHEN {$column} IS NULL THEN 2147483647 ELSE {$column} END ASC")
+                ->orderBy('name', 'asc');
         } elseif ($sortBy === 'average_score') {
             $query->whereHas('quizAttempts', $applyConstraints)
-                  ->orderByRaw("average_score {$sortDir}")
-                  ->orderBy('attempts_count', 'desc');
+                ->orderBy('average_score', $sortDir)
+                ->orderBy('attempts_count', 'desc');
         } else {
             $query->orderBy($sortBy, $sortDir);
         }
@@ -252,10 +271,10 @@ class LeaderboardController extends Controller
                     'id' => $u->id,
                     'name' => $u->name ?? ($u->email ?? 'Unknown'),
                     'avatar' => $u->avatar,
-                    'points' => (float)($u->points ?? 0),
-                    'average_score' => $u->average_score ? round((float)$u->average_score, 1) : 0,
-                    'attempts_count' => (int)($u->attempts_count ?? 0),
-                    'total_time_seconds' => isset($u->best_time) ? (int)$u->best_time : null,
+                    'points' => (float) ($u->points ?? 0),
+                    'average_score' => $u->average_score ? round((float) $u->average_score, 1) : 0,
+                    'attempts_count' => (int) ($u->attempts_count ?? 0),
+                    'total_time_seconds' => isset($u->best_time) ? (int) $u->best_time : null,
                     'country' => $u->country ?? null,
                     'institution_name' => $u->institutions?->first()?->name ?? null,
                     'institution_county' => $u->institutions?->first()?->county ?? null,
@@ -265,7 +284,7 @@ class LeaderboardController extends Controller
             return response()->json($paginated);
         } catch (\Exception $e) {
             // Log full exception with stack so debugging is easier
-            Log::error('Leaderboard query failed: ' . $e->getMessage(), ['exception' => $e]);
+            Log::error('Leaderboard query failed: '.$e->getMessage(), ['exception' => $e]);
 
             // Return empty result set rather than 500 to avoid breaking public pages
             return response()->json([
@@ -273,7 +292,7 @@ class LeaderboardController extends Controller
                 'total' => 0,
                 'per_page' => $perPage,
                 'current_page' => $page,
-                'last_page' => 1
+                'last_page' => 1,
             ]);
         }
     }
