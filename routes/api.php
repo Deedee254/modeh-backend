@@ -621,10 +621,10 @@ Route::post('/payments/mpesa/callback', [\App\Http\Controllers\Api\PaymentContro
 Route::post('/echo/heartbeat', [\App\Http\Controllers\Api\EchoHeartbeatController::class, 'heartbeat']);
 
 // Echo/WebSocket Testing Endpoints (for development)
-Route::prefix('echo-test')->group(function () {
+Route::prefix('echo-test')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/status', [\App\Http\Controllers\EchoTestController::class, 'getStatus']);
     Route::post('/send', [\App\Http\Controllers\EchoTestController::class, 'sendTestMessage']);
-    Route::post('/send-generic', [\App\Http\Controllers\EchoTestController::class, 'sendGenericBroadcast'])->middleware('auth:sanctum');
+    Route::post('/send-generic', [\App\Http\Controllers\EchoTestController::class, 'sendGenericBroadcast']);
 });
 
 // Broadcasting auth endpoint - moved to API routes for consistency with other API endpoints
