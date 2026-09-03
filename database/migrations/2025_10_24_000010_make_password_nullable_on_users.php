@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Use a raw statement to avoid requiring doctrine/dbal for change()
         // This will work on MySQL. If you use another DB, adjust accordingly.
         DB::statement("ALTER TABLE `users` MODIFY `password` VARCHAR(255) NULL;");
@@ -21,6 +25,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Make password NOT NULL again. Down migration may fail if NULL values exist.
         DB::statement("ALTER TABLE `users` MODIFY `password` VARCHAR(255) NOT NULL;");
     }
