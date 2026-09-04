@@ -12,6 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         // MySQL ENUMs must be redefined via MODIFY. Keep existing values and add 'institution-manager'.
+        if (\DB::getDriverName() === 'sqlite') {
+            return;
+        }
         if (Schema::hasTable('users')) {
             \DB::statement("ALTER TABLE `users` MODIFY `role` ENUM('quizee','quiz-master','admin','institution-manager') NOT NULL DEFAULT 'quizee'");
         }
@@ -22,6 +25,9 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (\DB::getDriverName() === 'sqlite') {
+            return;
+        }
         if (Schema::hasTable('users')) {
             \DB::statement("ALTER TABLE `users` MODIFY `role` ENUM('quizee','quiz-master','admin') NOT NULL DEFAULT 'quizee'");
         }
