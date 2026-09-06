@@ -27,16 +27,18 @@ class UploadController extends Controller
         $rules = ['file' => 'required|file', 'type' => 'nullable|string'];
         switch (strtolower($type)) {
             case 'image':
-                $rules['file'] = 'required|file|image|mimes:jpeg,png,jpg,gif|max:5120'; // 5 MB
+                $rules['file'] = 'required|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120'; // 5 MB
                 break;
             case 'audio':
-                $rules['file'] = 'required|file|mimes:mp3,wav,ogg,m4a|max:15360'; // 15 MB
+                $rules['file'] = 'required|file|mimes:mp3,wav,ogg,m4a,aac|max:15360'; // 15 MB
                 break;
             case 'video':
                 $rules['file'] = 'required|file|mimes:mp4,webm,mov,ogg|max:51200'; // 50 MB
                 break;
             default:
-                $rules['file'] = 'required|file|max:10240'; // 10 MB default
+                // Security: Restrict default uploads to safe document and media extensions to prevent
+                // uploading executable scripts (.php, .phtml, .sh, .exe, .html, .svg, etc.) to public storage.
+                $rules['file'] = 'required|file|mimes:jpeg,png,jpg,gif,webp,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,mp3,wav,ogg,m4a,mp4,webm,mov,zip|max:10240'; // 10 MB default
                 break;
         }
 
