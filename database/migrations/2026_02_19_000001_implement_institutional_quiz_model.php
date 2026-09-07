@@ -34,6 +34,11 @@ return new class extends Migration
             // Drop subscription-related columns if they exist
             if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {
                 $table->dropForeign(['subscription_id']);
+                try {
+                    $table->dropIndex(['user_id', 'subscription_id']);
+                } catch (\Throwable $e) {
+                    // Ignore if index doesn't exist
+                }
                 $table->dropColumn('subscription_id');
             }
             

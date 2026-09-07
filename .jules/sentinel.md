@@ -1,0 +1,4 @@
+## 2025-05-18 - Generic Upload Controller Default Fallback MIME Validation
+**Vulnerability:** `UploadController::store()` relied on a `switch($type)` statement where any `type` other than `image`, `audio`, or `video` fell back to a default rule `required|file|max:10240` without MIME/extension restrictions. This allowed authenticated users to upload arbitrary dangerous files (`.php`, `.html`, `.exe`, `.sh`), introducing Remote Code Execution (RCE) and Stored XSS risks via public storage URLs.
+**Learning:** Generic file upload handlers with dynamic folder types must always enforce strict MIME/extension allowlists even on fallback/default branches.
+**Prevention:** Always define an explicit allowlist of safe extensions (`mimes:jpeg,png,jpg,gif,webp,mp3,wav,ogg,m4a,mp4,webm,mov,pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt`) on any fallback upload validation rule.
