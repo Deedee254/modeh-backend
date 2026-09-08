@@ -27,7 +27,7 @@ class UploadController extends Controller
         $rules = ['file' => 'required|file', 'type' => 'nullable|string'];
         switch (strtolower($type)) {
             case 'image':
-                $rules['file'] = 'required|file|image|mimes:jpeg,png,jpg,gif|max:5120'; // 5 MB
+                $rules['file'] = 'required|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120'; // 5 MB
                 break;
             case 'audio':
                 $rules['file'] = 'required|file|mimes:mp3,wav,ogg,m4a|max:15360'; // 15 MB
@@ -36,7 +36,9 @@ class UploadController extends Controller
                 $rules['file'] = 'required|file|mimes:mp4,webm,mov,ogg|max:51200'; // 50 MB
                 break;
             default:
-                $rules['file'] = 'required|file|max:10240'; // 10 MB default
+                // SECURITY: Restrict allowed file extensions to safe document and media types
+                // Prevents Unrestricted File Upload vulnerabilities (e.g. executable .php scripts or .html XSS payloads)
+                $rules['file'] = 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip,png,jpg,jpeg,webp,mp3,mp4,wav,ogg,webm|max:10240'; // 10 MB default
                 break;
         }
 
@@ -51,14 +53,16 @@ class UploadController extends Controller
 
         // sanitize type into folder name
         $folder = preg_replace('/[^a-z0-9_\-]/i', '_', $type);
-        if (empty($folder)) $folder = 'uploads';
+        if (empty($folder)) {
+            $folder = 'uploads';
+        }
 
         $path = Storage::disk('public')->putFile($folder, $file);
         $url = url(Storage::url($path));
 
         return response()->json([
             'url' => $url,
-            'path' => $path
+            'path' => $path,
         ], 201);
     }
 }
