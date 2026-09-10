@@ -143,7 +143,6 @@ class QuizAnalyticsController extends Controller
                 'average_score' => round((float) $averageScore, 1),
                 'best_score' => round((float) $bestScore, 1),
                 'score' => round((float) $bestScore, 1),
-                'points' => (float) $rows->sum('points_earned'),
             ];
         })->values()->sortByDesc('score')->values()->all();
 
