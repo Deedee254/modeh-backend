@@ -32,145 +32,155 @@ class QuizAnalyticsController extends Controller
     {
         $this->authorize('viewAnalytics', $quiz);
 
-        // Basic aggregates using quiz_attempts table
-        $attemptsQuery = QuizAttempt::query()->where('quiz_id', $quiz->id);
-        $attemptsCount = $attemptsQuery->count();
-
-        // completions: attempts with non-null score
-        $completions = QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('score')->count();
-
-        $avgScore = round(QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('score')->avg('score') ?: 0, 2);
-        $avgTime = round(QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('total_time_seconds')->avg('total_time_seconds') ?: 0, 2);
-
-        // Load quiz questions to compute exact per-question correctness
         $quiz->load('questions');
-        $questions = $quiz->questions;
+        $attempts = QuizAttempt::query()
+            ->where('quiz_id', $quiz->id)
+            ->with('user')
+            ->orderByDesc('created_at')
+            ->get();
 
-        // Initialize per-question counters
-        $perQuestion = [];
-        foreach ($questions as $q) {
-            $perQuestion[$q->id] = ['question_id' => $q->id, 'body' => $q->body, 'attempts_count' => 0, 'correct_count' => 0];
-        }
+        $attemptsCount = $attempts->count();
+        $completions = $attempts->filter(fn ($attempt) => !is_null($attempt->score))->count();
+        $attemptsWithScores = $attempts->filter(fn ($attempt) => $attempt->score !== null);
+        $avgScore = round($attemptsWithScores->avg('score') ?? 0, 2);
+        $avgTime = round($attempts->avg('total_time_seconds') ?? 0, 2);
 
-        // Fetch attempts with answers
-        $attempts = QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('answers')->get();
-        foreach ($attempts as $a) {
-            $answers = $a->answers ?? [];
-            if (!is_array($answers)) continue;
-            foreach ($answers as $ans) {
-                // ans expected shape: ['question_id' => x, 'selected' => ...]
-                $qid = intval($ans['question_id'] ?? 0);
-                if (!$qid || !isset($perQuestion[$qid])) continue;
-                $perQuestion[$qid]['attempts_count'] += 1;
-
-                $selected = $ans['selected'] ?? null;
-                // find question model
-                $qModel = $questions->firstWhere('id', $qid);
-                if (!$qModel) continue;
-                $correctAnswers = is_array($qModel->answers) ? $qModel->answers : json_decode((string) $qModel->answers, true) ?? [];
-
-                // Build option map (id/index -> text) to resolve numeric references and normalize for comparison
-                $optionMap = [];
-                if (is_array($qModel->options)) {
-                    foreach ($qModel->options as $idx => $opt) {
-                        if (is_array($opt)) {
-                            if (isset($opt['id'])) {
-                                $optionMap[(string)$opt['id']] = $opt['text'] ?? $opt['body'] ?? null;
-                            }
-                            if (isset($opt['text']) || isset($opt['body'])) {
-                                $optionMap[(string)$idx] = $opt['text'] ?? $opt['body'] ?? null;
-                            }
-                        }
-                    }
-                }
-
-                $normalizeForCompare = function($val) use ($optionMap) {
-                    if (is_array($val) && (isset($val['body']) || isset($val['text']))) {
-                        $text = $val['text'] ?? $val['body'] ?? '';
-                    } else {
-                        $key = (string)$val;
-                        if ($key !== '' && isset($optionMap[$key])) {
-                            $text = $optionMap[$key];
-                        } else {
-                            $text = (string)$val;
-                        }
-                    }
-                    return strtolower(trim((string)$text));
-                };
-
-                $normalizeArray = function($arr) use ($normalizeForCompare) {
-                    $normalized = array_map($normalizeForCompare, $arr ?: []);
-                    $normalized = array_filter($normalized, function ($v) { return $v !== null && $v !== ''; });
-                    sort($normalized);
-                    return array_values($normalized);
-                };
-
-                $isCorrect = false;
-                if (is_array($selected)) {
-                    $submitted = $normalizeArray($selected);
-                    $correct = $normalizeArray(is_array($correctAnswers) ? $correctAnswers : []);
-                    $isCorrect = ($submitted == $correct);
-                } else {
-                    $submitted = $normalizeForCompare($selected);
-                    $correct = $normalizeArray(is_array($correctAnswers) ? $correctAnswers : []);
-                    $isCorrect = in_array($submitted, $correct);
-                }
-
-                if ($isCorrect) $perQuestion[$qid]['correct_count'] += 1;
+        $medianSeconds = null;
+        if ($attempts->filter(fn ($attempt) => $attempt->total_time_seconds !== null)->isNotEmpty()) {
+            $seconds = $attempts->pluck('total_time_seconds')->filter(fn ($value) => $value !== null)->sort()->values()->all();
+            $count = count($seconds);
+            if ($count > 0) {
+                $mid = intdiv($count, 2);
+                $medianSeconds = $count % 2 === 0
+                    ? (($seconds[$mid - 1] + $seconds[$mid]) / 2)
+                    : $seconds[$mid];
             }
         }
 
-        // Flatten perQuestion and compute rates
-        $perQuestionFlat = [];
-        foreach ($perQuestion as $p) {
-            $attemptsC = $p['attempts_count'];
-            $correctC = $p['correct_count'];
-            $rate = $attemptsC ? round($correctC / $attemptsC, 3) : null;
-            $perQuestionFlat[] = array_merge($p, ['correct_rate' => $rate]);
+        $scoreDistribution = array_fill(0, 11, 0);
+        foreach ($attemptsWithScores as $attempt) {
+            $bucket = min(10, (int) floor((float) ($attempt->score ?? 0) / 10));
+            $scoreDistribution[$bucket]++;
         }
 
-        // Score distribution (deciles: 0-9,10-19,...,100)
-        $distribution = array_fill(0, 11, 0);
-        $scoreRows = QuizAttempt::where('quiz_id', $quiz->id)->whereNotNull('score')->get(['score']);
-        foreach ($scoreRows as $r) {
-            $s = (int)round($r->score);
-            $bucket = min(10, (int)floor($s / 10));
-            $distribution[$bucket]++;
-        }
-
-        // Attempts trend (last 30 days)
         $trendStart = now()->subDays(29)->startOfDay();
-        $rawTrend = \DB::table('quiz_attempts')
-            ->select(\DB::raw("DATE(created_at) as day"), \DB::raw('count(*) as cnt'))
+        $trendRows = DB::table('quiz_attempts')
+            ->select(DB::raw('DATE(created_at) as day'), DB::raw('COUNT(*) as cnt'))
             ->where('quiz_id', $quiz->id)
             ->where('created_at', '>=', $trendStart)
             ->groupBy('day')
             ->orderBy('day')
-            ->pluck('cnt', 'day')
-            ->toArray();
+            ->get();
 
-        // Build an array for last 30 days
-        $trend = [];
+        $trendMap = $trendRows->mapWithKeys(fn ($row) => [(string) $row->day => (int) $row->cnt]);
+        $attemptsTrend = [];
         for ($i = 0; $i < 30; $i++) {
-            $d = $trendStart->copy()->addDays($i)->format('Y-m-d');
-            $trend[] = isset($rawTrend[$d]) ? (int)$rawTrend[$d] : 0;
+            $day = $trendStart->copy()->addDays($i)->format('Y-m-d');
+            $attemptsTrend[] = ['date' => $day, 'value' => (int) ($trendMap[$day] ?? 0)];
         }
 
-        // Top missed questions (lowest correct rate)
-        usort($perQuestionFlat, function($a, $b) {
-            $ra = $a['correct_rate'] ?? 0; $rb = $b['correct_rate'] ?? 0; return $ra <=> $rb;
-        });
-        $topMissed = array_slice($perQuestionFlat, 0, 5);
+        $perQuestionStats = [];
+        foreach ($quiz->questions as $question) {
+            $questionAttempts = 0;
+            $correctCount = 0;
+
+            foreach ($attempts as $attempt) {
+                $answers = is_array($attempt->answers) ? $attempt->answers : json_decode((string) $attempt->answers, true) ?? [];
+                foreach ($answers as $ans) {
+                    if (($ans['question_id'] ?? null) != $question->id) {
+                        continue;
+                    }
+
+                    $questionAttempts++;
+                    $selected = $ans['selected'] ?? null;
+                    $correctAnswers = is_array($question->answers) ? $question->answers : json_decode((string) $question->answers, true) ?? [];
+                    $isCorrect = false;
+
+                    if (is_array($selected)) {
+                        $isCorrect = $selected == $correctAnswers;
+                    } else {
+                        $isCorrect = in_array((string) $selected, array_map('strval', (array) $correctAnswers), true);
+                    }
+
+                    if ($isCorrect) {
+                        $correctCount++;
+                    }
+                }
+            }
+
+            $accuracy = $questionAttempts ? round(($correctCount / $questionAttempts) * 100, 1) : null;
+            $perQuestionStats[] = [
+                'id' => $question->id,
+                'label' => $question->body ?: $question->question ?: 'Question',
+                'body' => $question->body ?: $question->question ?: 'Question',
+                'question_id' => $question->id,
+                'difficulty' => $question->difficulty ?? '—',
+                'accuracy' => $accuracy,
+                'avg_score' => $accuracy,
+                'attempts_count' => $questionAttempts,
+                'correct_count' => $correctCount,
+            ];
+        }
+
+        $completion = [
+            'pass_rate' => $attemptsCount ? round(($completions / $attemptsCount) * 100, 1) : 0,
+            'abandon_rate' => $attemptsCount ? round(((int) $attemptsCount - (int) $completions) / max(1, (int) $attemptsCount) * 100, 1) : 0,
+            'finishers' => $completions,
+            'abandon_points' => [],
+        ];
+
+        $recentAttempts = $attempts->take(8)->map(fn ($attempt) => [
+            'id' => $attempt->id,
+            'user_name' => $attempt->user?->name ?? 'Anonymous',
+            'user' => $attempt->user?->name ?? 'Anonymous',
+            'attempted_at' => $attempt->created_at?->toIso8601String(),
+            'score' => $attempt->score,
+        ])->values()->all();
+
+        $stats = [
+            'totalAttempts' => $attemptsCount,
+            'totalAttemptsTrend' => null,
+            'completionRate' => $attemptsCount ? round(($completions / $attemptsCount) * 100, 1) : 0,
+            'completionRateTrend' => null,
+            'averageScore' => $attemptsWithScores->count() ? round($avgScore, 1) : 0,
+            'averageScoreTrend' => null,
+            'medianCompletionSeconds' => $medianSeconds,
+        ];
+
+        // Keep the legacy analytics keys present so older consumers stay compatible.
+        $legacyPerQuestion = [];
+        foreach ($perQuestionStats as $item) {
+            $legacyPerQuestion[] = [
+                'question_id' => $item['question_id'],
+                'body' => $item['body'],
+                'attempts_count' => $item['attempts_count'],
+                'correct_count' => $item['correct_count'],
+                'correct_rate' => $item['attempts_count'] ? round(($item['correct_count'] / $item['attempts_count']), 3) : null,
+            ];
+        }
+
+        $topMissedQuestions = array_values(array_slice($legacyPerQuestion, 0, 5));
 
         return response()->json([
+            'quiz' => [
+                'id' => $quiz->id,
+                'title' => $quiz->title ?? $quiz->name,
+                'name' => $quiz->title ?? $quiz->name,
+            ],
+            'stats' => $stats,
+            'series' => $attemptsTrend,
+            'completion' => $completion,
+            'questions' => $perQuestionStats,
+            'segments' => [],
+            'recent_attempts' => $recentAttempts,
             'attempts_count' => $attemptsCount,
             'completions' => $completions,
             'avg_score' => $avgScore,
             'avg_time_seconds' => $avgTime,
-            'per_question' => $perQuestionFlat,
-            'score_distribution' => $distribution,
-            'attempts_trend' => $trend,
-            'top_missed_questions' => $topMissed,
+            'per_question' => $legacyPerQuestion,
+            'score_distribution' => $scoreDistribution,
+            'attempts_trend' => $attemptsTrend,
+            'top_missed_questions' => $topMissedQuestions,
         ]);
     }
 
