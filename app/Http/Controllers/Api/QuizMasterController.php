@@ -13,6 +13,103 @@ use Illuminate\Support\Facades\Auth;
 
 class QuizMasterController extends Controller
 {
+    public function leaderboard(Request $request)
+    {
+        $user = $request->user();
+        if (!$user || (string) ($user->role ?? '') !== 'quiz-master') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $page = max(1, (int) $request->get('page', 1));
+        $perPage = max(1, (int) $request->get('per_page', 20));
+        $sortBy = in_array($request->get('sort_by'), ['points', 'average_score', 'best_score', 'attempts_count'], true)
+            ? $request->get('sort_by')
+            : 'points';
+        $sortDir = strtolower((string) $request->get('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $q = trim((string) $request->get('q', ''));
+        $timeframe = (string) $request->get('timeframe', 'all-time');
+
+        $ownedQuizIds = Quiz::query()
+            ->where(function ($query) use ($user) {
+                $query->where('user_id', $user->id)
+                    ->orWhere('created_by', $user->id);
+            })
+            ->pluck('id');
+
+        if ($ownedQuizIds->isEmpty()) {
+            return response()->json([
+                'data' => [],
+                'total' => 0,
+                'per_page' => $perPage,
+                'current_page' => $page,
+                'last_page' => 1,
+            ]);
+        }
+
+        $attemptStats = DB::table('quiz_attempts as qa')
+            ->select(
+                'qa.user_id',
+                DB::raw('SUM(qa.points_earned) as points'),
+                DB::raw('AVG(qa.score) as average_score'),
+                DB::raw('MAX(qa.score) as best_score'),
+                DB::raw('COUNT(*) as attempts_count')
+            )
+            ->whereIn('qa.quiz_id', $ownedQuizIds)
+            ->groupBy('qa.user_id');
+
+        if ($timeframe === 'daily') {
+            $attemptStats->where('qa.created_at', '>=', now()->startOfDay());
+        } elseif ($timeframe === 'weekly') {
+            $attemptStats->where('qa.created_at', '>=', now()->startOfWeek());
+        } elseif ($timeframe === 'monthly') {
+            $attemptStats->where('qa.created_at', '>=', now()->startOfMonth());
+        }
+
+        $query = User::query()
+            ->where('role', 'quizee')
+            ->joinSub($attemptStats, 'stats', 'users.id', '=', 'stats.user_id')
+            ->select([
+                'users.id',
+                'users.name',
+                'users.email',
+                'users.avatar_url',
+                'users.social_avatar',
+                'users.created_at',
+                'stats.points',
+                'stats.average_score',
+                'stats.best_score',
+                'stats.attempts_count',
+            ]);
+
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('users.name', 'like', "%{$q}%")
+                    ->orWhere('users.email', 'like', "%{$q}%");
+            });
+        }
+
+        $allowedSorts = ['points', 'average_score', 'best_score', 'attempts_count'];
+        $sortTerm = in_array($sortBy, $allowedSorts, true) ? $sortBy : 'points';
+        $query->orderByRaw("stats.{$sortTerm} {$sortDir}")
+            ->orderBy('users.name', 'asc');
+
+        $paginated = $query->paginate($perPage, ['*'], 'page', $page);
+
+        $paginated->getCollection()->transform(function ($row) {
+            return [
+                'id' => $row->id,
+                'name' => $row->name ?? ($row->email ?? 'Unknown'),
+                'avatar' => $row->avatar_url ?? $row->social_avatar,
+                'points' => (float) ($row->points ?? 0),
+                'average_score' => $row->average_score !== null ? round((float) $row->average_score, 1) : 0,
+                'best_score' => $row->best_score !== null ? round((float) $row->best_score, 1) : 0,
+                'attempts_count' => (int) ($row->attempts_count ?? 0),
+            ];
+        });
+
+        return response()->json($paginated);
+    }
+
     /**
      * Display a listing of public quiz master profiles.
      */

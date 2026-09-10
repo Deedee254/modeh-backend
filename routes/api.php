@@ -608,6 +608,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/battles/{battle}/solo-complete', [\App\Http\Controllers\Api\BattleController::class, 'soloComplete']);
 
     // Quiz Master Analytics
+    Route::get('/quiz-master/leaderboard', [\App\Http\Controllers\Api\QuizMasterController::class, 'leaderboard']);
     Route::get('/quiz-master/analytics', [\App\Http\Controllers\Api\DashboardAnalyticsController::class, 'index']);
     Route::get('/quiz-master/analytics/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'show']);
     Route::get('/quiz-master/analytics/quizzes/{quiz}/export/csv', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportCsv']);

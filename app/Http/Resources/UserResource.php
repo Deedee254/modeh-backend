@@ -61,10 +61,17 @@ class UserResource extends JsonResource
         ];
 
         // Add profile data - unified field for both Quizee and QuizMaster
+        $profile = null;
         if ($this->relationLoaded('quizeeProfile') && $this->quizeeProfile) {
-            $payload['profile'] = $this->quizeeProfile;
+            $profile = $this->quizeeProfile;
         } elseif ($this->relationLoaded('quizMasterProfile') && $this->quizMasterProfile) {
-            $payload['profile'] = $this->quizMasterProfile;
+            $profile = $this->quizMasterProfile;
+        }
+
+        if ($profile) {
+            $payload['profile'] = $profile;
+            $payload['grade_id'] = $profile->grade_id ?? $profile->grade?->id ?? $this->grade_id ?? null;
+            $payload['level_id'] = $profile->level_id ?? $profile->level?->id ?? $this->level_id ?? null;
         }
 
         // Add institutions if loaded
