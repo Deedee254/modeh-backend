@@ -129,6 +129,29 @@ class QuizAnalyticsController extends Controller
             'abandon_points' => [],
         ];
 
+        // Per-quiz leaderboard by best score, average score and attempts count.
+        $leaderboard = $attempts->groupBy('user_id')->map(function ($rows, $userId) {
+            $user = $rows->first()?->user;
+            $scores = $rows->pluck('score')->filter(fn ($value) => $value !== null)->values()->all();
+            $bestScore = $scores ? max($scores) : 0;
+            $averageScore = $rows->avg('score') ?? 0;
+            return [
+                'user_id' => $userId,
+                'user_name' => $user?->name ?? 'Anonymous',
+                'user' => $user?->name ?? 'Anonymous',
+                'attempts_count' => $rows->count(),
+                'average_score' => round((float) $averageScore, 1),
+                'best_score' => round((float) $bestScore, 1),
+                'score' => round((float) $bestScore, 1),
+                'points' => (float) $rows->sum('points_earned'),
+            ];
+        })->values()->sortByDesc('score')->values()->all();
+
+        $rankedLeaderboard = [];
+        foreach ($leaderboard as $index => $row) {
+            $rankedLeaderboard[] = array_merge($row, ['rank' => $index + 1]);
+        }
+
         $recentAttempts = $attempts->take(8)->map(fn ($attempt) => [
             'id' => $attempt->id,
             'user_name' => $attempt->user?->name ?? 'Anonymous',
@@ -173,6 +196,7 @@ class QuizAnalyticsController extends Controller
             'questions' => $perQuestionStats,
             'segments' => [],
             'recent_attempts' => $recentAttempts,
+            'leaderboard' => $rankedLeaderboard,
             'attempts_count' => $attemptsCount,
             'completions' => $completions,
             'avg_score' => $avgScore,
