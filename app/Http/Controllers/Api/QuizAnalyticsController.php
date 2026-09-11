@@ -35,9 +35,66 @@ class QuizAnalyticsController extends Controller
         $quiz->load('questions');
         $attempts = QuizAttempt::query()
             ->where('quiz_id', $quiz->id)
-            ->with('user')
+            ->with(['user.institutions', 'user.quizeeProfile.institution', 'institution'])
             ->orderByDesc('created_at')
             ->get();
+
+        $resolveInstitution = function ($attempt) {
+            // 1. Check attempt's institution
+            if ($attempt->institution) {
+                return [
+                    'id' => $attempt->institution->id,
+                    'name' => $attempt->institution->name,
+                    'county' => $attempt->institution->county ?? null,
+                ];
+            }
+
+            // 2. Check user's assigned institutions
+            $user = $attempt->user;
+            if ($user && $user->institutions && $user->institutions->isNotEmpty()) {
+                $inst = $user->institutions->first();
+                return [
+                    'id' => $inst->id,
+                    'name' => $inst->name,
+                    'county' => $inst->county ?? null,
+                ];
+            }
+
+            // 3. Check quizee profile institution relation or text column
+            $quizee = $user?->quizeeProfile;
+            if ($quizee) {
+                if ($quizee->institution && $quizee->institution instanceof \App\Models\Institution) {
+                    return [
+                        'id' => $quizee->institution->id,
+                        'name' => $quizee->institution->name,
+                        'county' => $quizee->institution->county ?? null,
+                    ];
+                }
+                if (!empty($quizee->institution_id)) {
+                    $inst = \App\Models\Institution::find($quizee->institution_id);
+                    if ($inst) {
+                        return [
+                            'id' => $inst->id,
+                            'name' => $inst->name,
+                            'county' => $inst->county ?? null,
+                        ];
+                    }
+                }
+                if (!empty($quizee->institution) && is_string($quizee->institution)) {
+                    return [
+                        'id' => null,
+                        'name' => $quizee->institution,
+                        'county' => null,
+                    ];
+                }
+            }
+
+            return [
+                'id' => null,
+                'name' => null,
+                'county' => null,
+            ];
+        };
 
         $attemptsCount = $attempts->count();
         $completions = $attempts->filter(fn ($attempt) => !is_null($attempt->score))->count();
@@ -79,6 +136,7 @@ class QuizAnalyticsController extends Controller
             $attemptsTrend[] = ['date' => $day, 'value' => (int) ($trendMap[$day] ?? 0)];
         }
 
+        $markingService = new \App\Services\QuestionMarkingService();
         $perQuestionStats = [];
         foreach ($quiz->questions as $question) {
             $questionAttempts = 0;
@@ -86,20 +144,47 @@ class QuizAnalyticsController extends Controller
 
             foreach ($attempts as $attempt) {
                 $answers = is_array($attempt->answers) ? $attempt->answers : json_decode((string) $attempt->answers, true) ?? [];
+                if (empty($answers)) continue;
+
+                $foundAnswer = false;
+                $selected = null;
+                $explicitCorrect = null;
+
+                // Check format 1: list of objects [{question_id: x, selected: y, ...}]
                 foreach ($answers as $ans) {
-                    if (($ans['question_id'] ?? null) != $question->id) {
-                        continue;
+                    if (is_array($ans) && isset($ans['question_id']) && (int)$ans['question_id'] === (int)$question->id) {
+                        $foundAnswer = true;
+                        $selected = $ans['selected'] ?? null;
+                        if (isset($ans['is_correct'])) {
+                            $explicitCorrect = (bool)$ans['is_correct'];
+                        } elseif (isset($ans['correct'])) {
+                            $explicitCorrect = (bool)$ans['correct'];
+                        }
+                        break;
                     }
+                }
 
+                // Check format 2: associative array keyed by question_id => answer
+                if (!$foundAnswer) {
+                    if (array_key_exists($question->id, $answers)) {
+                        $foundAnswer = true;
+                        $selected = $answers[$question->id];
+                    } elseif (array_key_exists((string)$question->id, $answers)) {
+                        $foundAnswer = true;
+                        $selected = $answers[(string)$question->id];
+                    }
+                    if (is_array($selected) && (isset($selected['is_correct']) || isset($selected['correct']))) {
+                        $explicitCorrect = (bool)($selected['is_correct'] ?? $selected['correct']);
+                        $selected = $selected['selected'] ?? $selected;
+                    }
+                }
+
+                if ($foundAnswer) {
                     $questionAttempts++;
-                    $selected = $ans['selected'] ?? null;
-                    $correctAnswers = is_array($question->answers) ? $question->answers : json_decode((string) $question->answers, true) ?? [];
-                    $isCorrect = false;
-
-                    if (is_array($selected)) {
-                        $isCorrect = $selected == $correctAnswers;
+                    if ($explicitCorrect !== null) {
+                        $isCorrect = $explicitCorrect;
                     } else {
-                        $isCorrect = in_array((string) $selected, array_map('strval', (array) $correctAnswers), true);
+                        $isCorrect = $markingService->isAnswerCorrect($selected, $question->answers, $question);
                     }
 
                     if ($isCorrect) {
@@ -108,41 +193,65 @@ class QuizAnalyticsController extends Controller
                 }
             }
 
-            $accuracy = $questionAttempts ? round(($correctCount / $questionAttempts) * 100, 1) : null;
+            $passRate = $questionAttempts ? round(($correctCount / $questionAttempts) * 100, 1) : 0;
             $perQuestionStats[] = [
                 'id' => $question->id,
                 'label' => $question->body ?: $question->question ?: 'Question',
                 'body' => $question->body ?: $question->question ?: 'Question',
                 'question_id' => $question->id,
                 'difficulty' => $question->difficulty ?? '—',
-                'accuracy' => $accuracy,
-                'avg_score' => $accuracy,
+                'pass_rate' => $passRate,
+                'accuracy' => $passRate,
+                'avg_score' => $passRate,
                 'attempts_count' => $questionAttempts,
                 'correct_count' => $correctCount,
             ];
         }
 
+        // Calculate actual overall quiz pass rate: attempts with score >= 50%
+        $passCount = $attemptsWithScores->filter(fn ($attempt) => (float)($attempt->score ?? 0) >= 50.0)->count();
+        $overallPassRate = $attemptsWithScores->count() ? round(($passCount / $attemptsWithScores->count()) * 100, 1) : 0;
+
         $completion = [
-            'pass_rate' => $attemptsCount ? round(($completions / $attemptsCount) * 100, 1) : 0,
+            'pass_rate' => $overallPassRate,
+            'pass_count' => $passCount,
+            'total_scored' => $attemptsWithScores->count(),
             'abandon_rate' => $attemptsCount ? round(((int) $attemptsCount - (int) $completions) / max(1, (int) $attemptsCount) * 100, 1) : 0,
             'finishers' => $completions,
             'abandon_points' => [],
         ];
 
         // Per-quiz leaderboard by best score, average score and attempts count.
-        $leaderboard = $attempts->groupBy('user_id')->map(function ($rows, $userId) {
+        $leaderboard = $attempts->groupBy('user_id')->map(function ($rows, $userId) use ($resolveInstitution) {
             $user = $rows->first()?->user;
             $scores = $rows->pluck('score')->filter(fn ($value) => $value !== null)->values()->all();
             $bestScore = $scores ? max($scores) : 0;
             $averageScore = $rows->avg('score') ?? 0;
+
+            $instInfo = ['id' => null, 'name' => null, 'county' => null];
+            foreach ($rows as $att) {
+                $info = $resolveInstitution($att);
+                if (!empty($info['name'])) {
+                    $instInfo = $info;
+                    break;
+                }
+            }
+            if (empty($instInfo['name']) && $rows->first()) {
+                $instInfo = $resolveInstitution($rows->first());
+            }
+
             return [
                 'user_id' => $userId,
                 'user_name' => $user?->name ?? 'Anonymous',
                 'user' => $user?->name ?? 'Anonymous',
+                'avatar' => $user?->avatar,
                 'attempts_count' => $rows->count(),
                 'average_score' => round((float) $averageScore, 1),
                 'best_score' => round((float) $bestScore, 1),
                 'score' => round((float) $bestScore, 1),
+                'institution_id' => $instInfo['id'],
+                'institution_name' => $instInfo['name'],
+                'institution_county' => $instInfo['county'],
             ];
         })->values()->sortByDesc('score')->values()->all();
 
@@ -151,13 +260,24 @@ class QuizAnalyticsController extends Controller
             $rankedLeaderboard[] = array_merge($row, ['rank' => $index + 1]);
         }
 
-        $recentAttempts = $attempts->take(8)->map(fn ($attempt) => [
-            'id' => $attempt->id,
-            'user_name' => $attempt->user?->name ?? 'Anonymous',
-            'user' => $attempt->user?->name ?? 'Anonymous',
-            'attempted_at' => $attempt->created_at?->toIso8601String(),
-            'score' => $attempt->score,
-        ])->values()->all();
+        $allResults = $attempts->map(function ($attempt) use ($resolveInstitution) {
+            $user = $attempt->user;
+            $instInfo = $resolveInstitution($attempt);
+
+            return [
+                'id' => $attempt->id,
+                'user_id' => $attempt->user_id,
+                'user_name' => $user?->name ?? 'Anonymous',
+                'user' => $user?->name ?? 'Anonymous',
+                'avatar' => $user?->avatar,
+                'attempted_at' => $attempt->created_at?->toIso8601String(),
+                'score' => $attempt->score,
+                'total_time_seconds' => $attempt->total_time_seconds,
+                'institution_id' => $instInfo['id'],
+                'institution_name' => $instInfo['name'],
+                'institution_county' => $instInfo['county'],
+            ];
+        })->values()->all();
 
         $stats = [
             'totalAttempts' => $attemptsCount,
@@ -194,8 +314,15 @@ class QuizAnalyticsController extends Controller
             'completion' => $completion,
             'questions' => $perQuestionStats,
             'segments' => [],
-            'recent_attempts' => $recentAttempts,
+            'recent_attempts' => $allResults,
+            'all_results' => $allResults,
             'leaderboard' => $rankedLeaderboard,
+            'institutions' => collect($rankedLeaderboard)
+                ->pluck('institution_name')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
             'attempts_count' => $attemptsCount,
             'completions' => $completions,
             'avg_score' => $avgScore,
