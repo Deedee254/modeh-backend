@@ -32,6 +32,14 @@ class UserController extends Controller
             Auth::guard('web')->login($user);
         }
 
+        // Always ensure profile completion status is up-to-date
+        $previousStatus = (bool)$user->is_profile_completed;
+        $currentStatus = app(OnboardingService::class)->syncProfileCompletionStatus($user);
+        if ($previousStatus !== $currentStatus) {
+            Cache::forget("user_me_{$user->id}");
+            SessionUserCacheService::invalidateSessionCache($user, $request);
+        }
+
         // PHASE 2: THREE-TIER CACHE STRATEGY
         // 1. Check session cache first (fastest, 5-10ms, no DB hit)
         // 2. Fall back to Redis cache (fast, 20-50ms, no DB hit)

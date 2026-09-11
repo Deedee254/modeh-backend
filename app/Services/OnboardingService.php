@@ -158,12 +158,10 @@ class OnboardingService
                               $roleSelected &&
                               $onboarding->grade_selected;
             } elseif ($user->role === 'quiz-master') {
-                // Quiz masters must have: institution, role, and subjects
+                // Quiz masters must have: role, and subjects (institution is optional for independent quiz masters)
                 // Auto-detect role selection if role is set on the user model
                 $roleSelected = $onboarding->role_selected || !empty($user->role);
-                $isComplete = $onboarding->institution_added &&
-                              $roleSelected &&
-                              $onboarding->subject_selected;
+                $isComplete = $roleSelected && $onboarding->subject_selected;
             } else {
                 // Default: institution + role
                 $isComplete = $onboarding->institution_added &&
@@ -231,7 +229,7 @@ class OnboardingService
         } elseif ($user->role === 'quiz-master') {
             $subjects = optional($user->quizMasterProfile)->subjects;
             $hasSubjects = ($subjects && is_array($subjects) && count($subjects) > 0) || $onboarding->subject_selected;
-            $isComplete = $hasInstitution && $user->role && $hasSubjects;
+            $isComplete = !empty($user->role) && $hasSubjects;
         } elseif ($user->role === 'parent') {
             $isComplete = true; // Parents are always complete after role selection
         } else {
