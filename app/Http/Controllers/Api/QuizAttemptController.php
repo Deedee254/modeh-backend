@@ -487,6 +487,11 @@ class QuizAttemptController extends Controller
 	        return response()->json([
 	            'ok' => true,
 	            'results' => $results,
+                	'quiz_id' => $quiz->id,
+                	'quiz' => [
+                	    'id' => $quiz->id,
+                	    'title' => $quiz->title,
+                	],
 	            'score' => $score,
 	            'attempt_id' => $attempt->id ?? null,
 	            // If payment required, don't show the points they would earn
