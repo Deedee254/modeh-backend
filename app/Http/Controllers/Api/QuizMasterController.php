@@ -418,6 +418,47 @@ class QuizMasterController extends Controller
     }
 
     /**
+     * Return aggregate stats for the authenticated quiz master's own profile page.
+     * Exposed as GET /api/quiz-master/stats (authenticated, quiz-master only).
+     */
+    public function stats(Request $request)
+    {
+        $user = $request->user();
+        if (!$user || $user->role !== 'quiz-master') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Quizzes created by this user
+        $quizzesCreated = Quiz::where('user_id', $user->id)
+            ->orWhere('created_by', $user->id)
+            ->count();
+
+        // Total questions across all of this quiz master's quizzes
+        $questionsCreated = DB::table('questions')
+            ->whereIn('quiz_id', function ($sub) use ($user) {
+                $sub->select('id')->from('quizzes')
+                    ->where('user_id', $user->id)
+                    ->orWhere('created_by', $user->id);
+            })
+            ->count();
+
+        // Distinct students (quizees) who have attempted any of this quiz master's quizzes
+        $studentsReached = QuizAttempt::whereIn('quiz_id', function ($sub) use ($user) {
+                $sub->select('id')->from('quizzes')
+                    ->where('user_id', $user->id)
+                    ->orWhere('created_by', $user->id);
+            })
+            ->distinct('user_id')
+            ->count('user_id');
+
+        return response()->json([
+            'quizzes_created'   => $quizzesCreated,
+            'questions_created' => $questionsCreated,
+            'students_reached'  => $studentsReached,
+        ]);
+    }
+
+    /**
      * Get statistics for a quizee relative to this quiz master's quizzes.
      */
     public function quizeeStats(Request $request, User $user)
