@@ -118,6 +118,8 @@ class UserResource extends JsonResource
             } elseif ($this->role === 'quiz-master' && $quizMaster) {
                 $hasInstitution = !empty($quizMaster->institution) || !empty($quizMaster->institution_id) || !empty($quizMaster->verified_institution_id);
             }
+        }
+
         // For quiz-master, institution is optional (independent quiz creators)
         if ($this->role !== 'quiz-master' && !$hasInstitution) {
             $missing[] = 'institution';
