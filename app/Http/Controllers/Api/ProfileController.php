@@ -93,7 +93,10 @@ class ProfileController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json([
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors()
+            ], 422);
         }
         
         // Only update fields that were actually provided in the request
@@ -150,6 +153,7 @@ class ProfileController extends Controller
         }
 
         // Return updated user with relationships
+        $user->unsetRelation('quizMasterProfile');
         $user->load(['quizMasterProfile.grade', 'quizMasterProfile.level', 'quizMasterProfile.institution']);
         
         // Sync profile completion status
@@ -194,7 +198,10 @@ class ProfileController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json([
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors()
+            ], 422);
         }
         
         // Only update fields that were actually provided in the request
@@ -249,6 +256,7 @@ class ProfileController extends Controller
         }
 
         // Return updated user with relationships using UserResource for clean response
+        $user->unsetRelation('quizeeProfile');
         $user->load(['quizeeProfile.grade', 'quizeeProfile.level', 'quizeeProfile.institution']);
         
         // Sync profile completion status
