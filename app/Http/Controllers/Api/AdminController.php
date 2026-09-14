@@ -12,6 +12,7 @@ use App\Models\MpesaTransaction;
 use App\Models\Invoice;
 use App\Services\WalletService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Gate;
@@ -22,7 +23,7 @@ class AdminController extends Controller
     {
         // Try default auth user (session) then sanctum token user
         /** @var \App\Models\User|null $user */
-        $user = auth()->user() ?? auth('sanctum')->user();
+        $user = Auth::user() ?? Auth::guard('sanctum')->user();
 
         // Allow explicit admin role
         if ($user && ($user->is_admin ?? false)) {
@@ -442,7 +443,7 @@ class AdminController extends Controller
     public function approveWithdrawal(Request $request, int $withdrawalId)
     {
         /** @var \App\Models\User|null $user */
-        $user = auth()->user() ?? auth('sanctum')->user();
+        $user = Auth::user() ?? Auth::guard('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -474,7 +475,7 @@ class AdminController extends Controller
     public function rejectWithdrawal(Request $request, int $withdrawalId)
     {
         /** @var \App\Models\User|null $user */
-        $user = auth()->user() ?? auth('sanctum')->user();
+        $user = Auth::user() ?? Auth::guard('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -537,7 +538,7 @@ class AdminController extends Controller
     public function markWithdrawalAsPaid(Request $request, int $withdrawalId)
     {
         /** @var \App\Models\User|null $user */
-        $user = auth()->user() ?? auth('sanctum')->user();
+        $user = Auth::user() ?? Auth::guard('sanctum')->user();
         if (!$user || !$user->is_admin) {
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -603,7 +604,7 @@ class AdminController extends Controller
         // Require admin only for updates (POST/PUT).
         if ($request->method() !== 'GET') {
             /** @var \App\Models\User|null $user */
-            $user = auth()->user() ?? auth('sanctum')->user();
+            $user = Auth::user() ?? Auth::guard('sanctum')->user();
             if (!$user || !$user->is_admin) {
                 return response()->json(['ok' => false, 'message' => 'Unauthorized'], 403);
             }
@@ -638,6 +639,7 @@ class AdminController extends Controller
                     'auto_approve_topics' => $auto_approve_topics,
                     'auto_approve_quizzes' => $auto_approve_quizzes,
                     'auto_approve_questions' => $auto_approve_questions,
+                    'approvals_enabled' => !(bool) $auto_approve_quizzes,
                     'mpesa_active' => $mpesaSetting ? (boolean) ($mpesaSetting->is_active ?? true) : true,
                     'default_quiz_price' => $defaultQuizPrice,
                     'default_battle_price' => $defaultBattlePrice,
@@ -650,6 +652,7 @@ class AdminController extends Controller
         if ($request->method() === 'POST' || $request->method() === 'PUT') {
             $validated = $request->validate([
                 'revenue_share' => 'sometimes|numeric|min:0|max:100',
+                'approvals_enabled' => 'sometimes|boolean',
                 'auto_approve_topics' => 'sometimes|boolean',
                 'auto_approve_quizzes' => 'sometimes|boolean',
                 'auto_approve_questions' => 'sometimes|boolean',
@@ -671,10 +674,11 @@ class AdminController extends Controller
                 }
             }
 
-            if (isset($validated['auto_approve_topics']) || isset($validated['auto_approve_quizzes']) || isset($validated['auto_approve_questions'])) {
+            if (isset($validated['auto_approve_topics']) || isset($validated['auto_approve_quizzes']) || isset($validated['auto_approve_questions']) || isset($validated['approvals_enabled'])) {
                 $siteSetting = \App\Models\SiteSetting::current() ?: new \App\Models\SiteSetting();
                 if (isset($validated['auto_approve_topics'])) $siteSetting->auto_approve_topics = $validated['auto_approve_topics'];
                 if (isset($validated['auto_approve_quizzes'])) $siteSetting->auto_approve_quizzes = $validated['auto_approve_quizzes'];
+                elseif (isset($validated['approvals_enabled'])) $siteSetting->auto_approve_quizzes = !(bool) $validated['approvals_enabled'];
                 if (isset($validated['auto_approve_questions'])) $siteSetting->auto_approve_questions = $validated['auto_approve_questions'];
                 $siteSetting->save();
             }
@@ -709,13 +713,17 @@ class AdminController extends Controller
             } catch (\Throwable $e) {
             }
 
+            $currentSiteSetting = \App\Models\SiteSetting::current();
+            $nextApprovalState = (bool) ($validated['approvals_enabled'] ?? (!($currentSiteSetting?->auto_approve_quizzes ?? true)));
+
             return response()->json([
                 'ok' => true,
                 'message' => 'Settings updated successfully',
                 'settings' => [
                     'revenue_share' => (float) ($validated['revenue_share'] ?? ($mpesaForResponse?->revenue_share ?? 0)),
-                    'approvals_enabled' => (boolean) ($validated['approvals_enabled'] ?? true),
-                    'mpesa_active' => (boolean) ($validated['mpesa_active'] ?? true),
+                    'approvals_enabled' => $nextApprovalState,
+                    'auto_approve_quizzes' => ! $nextApprovalState,
+                    'mpesa_active' => (boolean) ($validated['mpesa_active'] ?? ($mpesaForResponse?->is_active ?? true)),
                     'default_quiz_price' => (float) ($validated['default_quiz_price'] ?? ($pricingSnapshot?->default_quiz_one_off_price ?? 0)),
                     'default_battle_price' => (float) ($validated['default_battle_price'] ?? ($pricingSnapshot?->default_battle_one_off_price ?? 0)),
                     'default_quiz_time_limit' => (integer) ($validated['default_quiz_time_limit'] ?? 30),
