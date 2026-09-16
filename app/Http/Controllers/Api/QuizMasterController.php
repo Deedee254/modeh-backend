@@ -90,7 +90,8 @@ class QuizMasterController extends Controller
 
         $allowedSorts = ['points', 'average_score', 'best_score', 'attempts_count'];
         $sortTerm = in_array($sortBy, $allowedSorts, true) ? $sortBy : 'points';
-        $query->orderByRaw("stats.{$sortTerm} {$sortDir}")
+        // Use standard Eloquent orderBy instead of orderByRaw to avoid raw SQL string interpolation
+        $query->orderBy("stats.{$sortTerm}", $sortDir)
             ->orderBy('users.name', 'asc');
 
         $paginated = $query->paginate($perPage, ['*'], 'page', $page);
