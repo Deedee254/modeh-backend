@@ -221,13 +221,24 @@ class GuestQuizController extends Controller
             $result['results'] = $this->formatResultsWithExplanations($scoringResult['results'] ?? [], $questions);
         }
 
+        $eligibleAd = null;
+        if ($isUnlocked) {
+            try {
+                $matchingService = app(\App\Services\AdMatchingService::class);
+                $eligibleAd = $matchingService->formatAdPayload($matchingService->findEligibleAd($quiz));
+            } catch (\Throwable $e) {
+                Log::warning('Failed to resolve eligible ad for guest: ' . $e->getMessage());
+            }
+        }
+
         return response()->json([
             'success' => true,
             'attempt_id' => $guestAttempt->id,
             'requires_payment' => $requiresPayment,
             'locked' => !$isUnlocked,
             'price' => $price,
-            'attempt' => $result
+            'attempt' => $result,
+            'eligible_ad' => $eligibleAd,
         ]);
     }
 

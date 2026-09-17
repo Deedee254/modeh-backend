@@ -236,4 +236,17 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     {
         return $this->hasOne(NotificationPreference::class);
     }
+
+    /**
+     * Ads created by this user (advertiser/admin).
+     */
+    public function ads()
+    {
+        return $this->hasMany(\App\Models\Ad::class);
+    }
+
+    public function isAdvertiser(): bool
+    {
+        return ($this->role ?? '') === 'advertiser';
+    }
 }

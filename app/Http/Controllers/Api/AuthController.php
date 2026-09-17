@@ -404,6 +404,60 @@ class AuthController extends Controller
         ], 201);
     }
 
+    public function registerAdvertiser(Request $request)
+    {
+        $existingUser = User::where('email', $request->email)->first();
+        if ($existingUser) {
+            $existingUser->tokens()->delete();
+            return response()->json([
+                'message' => 'User already exists',
+                'user' => $existingUser,
+                'isNewUser' => false,
+                'token' => $existingUser->createToken('auth')->plainTextToken
+            ], 409);
+        }
+
+        $v = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|min:6',
+            'phone' => ['nullable', 'string', 'max:25'],
+            'bio' => 'nullable|string|max:500',
+        ]);
+
+        if ($v->fails()) {
+            return response()->json(['errors' => $v->errors()], 422);
+        }
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'role' => 'advertiser',
+            'phone' => $request->phone,
+            'bio' => $request->bio,
+        ]);
+
+        $request->session()->regenerate();
+        $onboarding = $user->onboarding ?? $user->onboarding()->create([]);
+        $onboarding->update(['role_selected' => true]);
+
+        Auth::login($user, remember: false);
+        $token = $user->createToken('nuxt-auth')->plainTextToken;
+        SessionUserCacheService::cacheUserInSession($user, $request);
+
+        return response()->json([
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => 'advertiser',
+            'avatar' => $user->getAttribute('avatar'),
+            'user' => $user,
+            'message' => 'Advertiser registration successful. You are now logged in.',
+            'token' => $token
+        ], 201);
+    }
+
     /**
      * Sync social login from Nuxt-Auth.
      * POST /api/auth/social-sync

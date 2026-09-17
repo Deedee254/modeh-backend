@@ -59,6 +59,7 @@ Route::bind('battle', function ($value) {
 Route::post('/register/quizee', [AuthController::class, 'registerquizee'])->middleware('web', 'throttle:5,1');
 Route::post('/register/quiz-master', [AuthController::class, 'registerQuizMaster'])->middleware('web', 'throttle:5,1');
 Route::post('/register/institution-manager', [AuthController::class, 'registerInstitutionManager'])->middleware('web', 'throttle:5,1');
+Route::post('/register/advertiser', [AuthController::class, 'registerAdvertiser'])->middleware('web', 'throttle:5,1');
 Route::post('/register/parent', [\App\Http\Controllers\Api\ParentController::class, 'register'])->middleware('web', 'throttle:5,1');
 
 // Public helper for frontend to confirm verification status of an email address
@@ -729,3 +730,36 @@ Route::post('/broadcasting/auth', function (Request $request) {
         return response()->json(['error' => 'Broadcasting auth failed', 'message' => $e->getMessage()], 500);
     }
 })->middleware(['auth:sanctum']); // Authenticate via Sanctum (CORS is handled globally)
+
+// ==========================================
+// Ads Routes (Public, Admin, Advertiser)
+// ==========================================
+use App\Http\Controllers\Api\AdController;
+use App\Http\Controllers\Api\Admin\AdminAdController;
+use App\Http\Controllers\Api\Advertiser\AdvertiserAdController;
+
+// Public ad delivery and engagement tracking
+Route::get('/ads/eligible', [AdController::class, 'getEligible']);
+Route::post('/ads/{ad}/impression', [AdController::class, 'recordImpression']);
+Route::post('/ads/{ad}/click', [AdController::class, 'recordClick']);
+
+// Admin ad management routes
+Route::prefix('admin/ads')->group(function () {
+    Route::get('/', [AdminAdController::class, 'index']);
+    Route::get('/form-data', [AdminAdController::class, 'formData']);
+    Route::post('/', [AdminAdController::class, 'store']);
+    Route::get('/{ad}', [AdminAdController::class, 'show']);
+    Route::put('/{ad}', [AdminAdController::class, 'update']);
+    Route::patch('/{ad}/toggle-status', [AdminAdController::class, 'toggleStatus']);
+    Route::delete('/{ad}', [AdminAdController::class, 'destroy']);
+});
+
+// Advertiser ad management routes
+Route::prefix('advertiser/ads')->group(function () {
+    Route::get('/', [AdvertiserAdController::class, 'index']);
+    Route::get('/form-data', [AdvertiserAdController::class, 'formData']);
+    Route::post('/', [AdvertiserAdController::class, 'store']);
+    Route::put('/{ad}', [AdvertiserAdController::class, 'update']);
+    Route::patch('/{ad}/toggle-status', [AdvertiserAdController::class, 'toggleStatus']);
+    Route::delete('/{ad}', [AdvertiserAdController::class, 'destroy']);
+});

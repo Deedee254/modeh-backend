@@ -523,6 +523,16 @@ class QuizAttemptController extends Controller
             // Calculate rank/percentile for the result modal
             $rankInfo = $this->calculateRankAndPercentile($attempt);
 
+            $eligibleAd = null;
+            if (!$requiresPayment) {
+                try {
+                    $matchingService = app(\App\Services\AdMatchingService::class);
+                    $eligibleAd = $matchingService->formatAdPayload($matchingService->findEligibleAd($quiz));
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Failed to resolve eligible ad: ' . $e->getMessage());
+                }
+            }
+
 	        return response()->json([
 	            'ok' => true,
 	            'results' => $results,
@@ -543,6 +553,7 @@ class QuizAttemptController extends Controller
                 'rank' => $rankInfo['rank'],
                 'total_participants' => $rankInfo['total_participants'],
                 'percentile' => $rankInfo['percentile'],
+                'eligible_ad' => $eligibleAd,
 	        ]);
 	    }
 
