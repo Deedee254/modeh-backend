@@ -13,6 +13,7 @@ use App\Models\Topic;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class AdvertiserAdController extends Controller
 {
@@ -83,6 +84,35 @@ class AdvertiserAdController extends Controller
     }
 
     /**
+     * Upload an ad creative file (image or video)
+     */
+    public function uploadMedia(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:jpeg,png,jpg,gif,webp,svg,mp4,webm,mov,ogg|max:102400',
+        ]);
+
+        $file = $request->file('file');
+        $mime = $file->getMimeType() ?: '';
+        $ext = strtolower($file->getClientOriginalExtension());
+        $isVideo = str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm', 'mov', 'ogg']);
+        $mediaType = $isVideo ? 'video' : 'image';
+
+        $path = Storage::disk('public')->putFile('ads/creatives', $file);
+        $storageUrl = Storage::url($path);
+        $url = url($storageUrl);
+
+        return response()->json([
+            'ok' => true,
+            'url' => $url,
+            'path' => $storageUrl,
+            'media_type' => $mediaType,
+            'file_name' => $file->getClientOriginalName(),
+            'file_size' => $file->getSize(),
+        ], 201);
+    }
+
+    /**
      * Create a new Ad campaign
      */
     public function store(Request $request): JsonResponse
@@ -92,8 +122,9 @@ class AdvertiserAdController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'media_type' => 'required|in:image,video',
-            'media_url' => 'required|string',
+            'media_type' => 'nullable|in:image,video',
+            'media_url' => 'required_without:media_file|nullable|string',
+            'media_file' => 'nullable|file|mimes:jpeg,png,jpg,gif,webp,svg,mp4,webm,mov,ogg|max:102400',
             'destination_url' => 'nullable|url',
             'cta_text' => 'nullable|string|max:50',
             'duration_seconds' => 'required|integer|min:3|max:60',
@@ -104,13 +135,23 @@ class AdvertiserAdController extends Controller
             'targets.*.target_id' => 'required_with:targets|integer',
         ]);
 
+        if ($request->hasFile('media_file')) {
+            $file = $request->file('media_file');
+            $mime = $file->getMimeType() ?: '';
+            $ext = strtolower($file->getClientOriginalExtension());
+            $isVideo = str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm', 'mov', 'ogg']);
+            $validated['media_type'] = $isVideo ? 'video' : 'image';
+            $path = Storage::disk('public')->putFile('ads/creatives', $file);
+            $validated['media_url'] = url(Storage::url($path));
+        }
+
         DB::beginTransaction();
         try {
             $ad = Ad::create([
                 'user_id' => $user->id,
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
-                'media_type' => $validated['media_type'],
+                'media_type' => $validated['media_type'] ?? 'image',
                 'media_url' => $validated['media_url'],
                 'destination_url' => $validated['destination_url'] ?? null,
                 'cta_text' => $validated['cta_text'] ?: 'Learn More',
@@ -161,8 +202,9 @@ class AdvertiserAdController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'media_type' => 'required|in:image,video',
-            'media_url' => 'required|string',
+            'media_type' => 'nullable|in:image,video',
+            'media_url' => 'required_without:media_file|nullable|string',
+            'media_file' => 'nullable|file|mimes:jpeg,png,jpg,gif,webp,svg,mp4,webm,mov,ogg|max:102400',
             'destination_url' => 'nullable|url',
             'cta_text' => 'nullable|string|max:50',
             'duration_seconds' => 'required|integer|min:3|max:60',
@@ -174,13 +216,23 @@ class AdvertiserAdController extends Controller
             'targets.*.target_id' => 'required_with:targets|integer',
         ]);
 
+        if ($request->hasFile('media_file')) {
+            $file = $request->file('media_file');
+            $mime = $file->getMimeType() ?: '';
+            $ext = strtolower($file->getClientOriginalExtension());
+            $isVideo = str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm', 'mov', 'ogg']);
+            $validated['media_type'] = $isVideo ? 'video' : 'image';
+            $path = Storage::disk('public')->putFile('ads/creatives', $file);
+            $validated['media_url'] = url(Storage::url($path));
+        }
+
         DB::beginTransaction();
         try {
             $ad->update([
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
-                'media_type' => $validated['media_type'],
-                'media_url' => $validated['media_url'],
+                'media_type' => $validated['media_type'] ?? $ad->media_type,
+                'media_url' => $validated['media_url'] ?? $ad->media_url,
                 'destination_url' => $validated['destination_url'] ?? null,
                 'cta_text' => $validated['cta_text'] ?: 'Learn More',
                 'duration_seconds' => $validated['duration_seconds'],

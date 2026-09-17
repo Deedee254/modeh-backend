@@ -747,6 +747,7 @@ Route::post('/ads/{ad}/click', [AdController::class, 'recordClick']);
 Route::prefix('admin/ads')->group(function () {
     Route::get('/', [AdminAdController::class, 'index']);
     Route::get('/form-data', [AdminAdController::class, 'formData']);
+    Route::post('/upload-media', [AdminAdController::class, 'uploadMedia']);
     Route::post('/', [AdminAdController::class, 'store']);
     Route::get('/{ad}', [AdminAdController::class, 'show']);
     Route::put('/{ad}', [AdminAdController::class, 'update']);
@@ -758,6 +759,7 @@ Route::prefix('admin/ads')->group(function () {
 Route::prefix('advertiser/ads')->group(function () {
     Route::get('/', [AdvertiserAdController::class, 'index']);
     Route::get('/form-data', [AdvertiserAdController::class, 'formData']);
+    Route::post('/upload-media', [AdvertiserAdController::class, 'uploadMedia']);
     Route::post('/', [AdvertiserAdController::class, 'store']);
     Route::put('/{ad}', [AdvertiserAdController::class, 'update']);
     Route::patch('/{ad}/toggle-status', [AdvertiserAdController::class, 'toggleStatus']);
