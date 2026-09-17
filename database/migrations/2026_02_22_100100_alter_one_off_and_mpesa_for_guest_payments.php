@@ -17,12 +17,16 @@ return new class extends Migration
             }
 
             // Make user_id nullable for guest purchases.
-            DB::statement('ALTER TABLE one_off_purchases MODIFY user_id BIGINT UNSIGNED NULL');
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement('ALTER TABLE one_off_purchases MODIFY user_id BIGINT UNSIGNED NULL');
+            }
         }
 
         if (Schema::hasTable('mpesa_transactions')) {
             // Allow M-PESA transaction rows for guest purchases.
-            DB::statement('ALTER TABLE mpesa_transactions MODIFY user_id BIGINT UNSIGNED NULL');
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement('ALTER TABLE mpesa_transactions MODIFY user_id BIGINT UNSIGNED NULL');
+            }
         }
     }
 

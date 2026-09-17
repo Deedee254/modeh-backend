@@ -25,6 +25,10 @@ return new class extends Migration
         // Use a transaction and UPDATE ... JOIN statements to safely fill missing IDs.
         // Each statement only updates rows where the target column is NULL so it is safe
         // to re-run multiple times (idempotent).
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::transaction(function () {
             // Strategy 1: Fill grade_id from quiz for questions that have a quiz_id but no grade_id
             DB::statement("

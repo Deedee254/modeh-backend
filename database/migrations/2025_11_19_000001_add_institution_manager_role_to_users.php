@@ -11,9 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // MySQL ENUMs must be redefined via MODIFY. Keep existing values and add 'institution-manager'.
         if (Schema::hasTable('users')) {
-            \DB::statement("ALTER TABLE `users` MODIFY `role` ENUM('quizee','quiz-master','admin','institution-manager') NOT NULL DEFAULT 'quizee'");
+            if (\DB::getDriverName() === 'sqlite') {
+                // SQLite handles string/enum columns gracefully without needing MODIFY
+            } else {
+                \DB::statement("ALTER TABLE `users` MODIFY `role` ENUM('quizee','quiz-master','admin','institution-manager') NOT NULL DEFAULT 'quizee'");
+            }
         }
     }
 
@@ -23,7 +26,11 @@ return new class extends Migration
     public function down(): void
     {
         if (Schema::hasTable('users')) {
-            \DB::statement("ALTER TABLE `users` MODIFY `role` ENUM('quizee','quiz-master','admin') NOT NULL DEFAULT 'quizee'");
+            if (\DB::getDriverName() === 'sqlite') {
+                // SQLite
+            } else {
+                \DB::statement("ALTER TABLE `users` MODIFY `role` ENUM('quizee','quiz-master','admin') NOT NULL DEFAULT 'quizee'");
+            }
         }
     }
 };
