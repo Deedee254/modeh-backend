@@ -338,6 +338,7 @@ class QuizAnalyticsController extends Controller
     public function exportCsv(Request $request, Quiz $quiz)
     {
         $this->authorize('viewAnalytics', $quiz);
+        $detailedReport = $this->buildDetailedReport($quiz);
         $filename = "quiz-{$quiz->id}-analytics.csv";
         $headers = [
             'Content-Type' => 'text/csv',
@@ -411,6 +412,7 @@ class QuizAnalyticsController extends Controller
             $rows[] = [$q->id, $q->body, $attemptCount, $correctCount, $rate];
         }
 
+        $rows = array_merge([$detailedReport['headers']], $detailedReport['rows']);
         $callback = function() use ($rows) {
             $FH = fopen('php://output', 'w');
             foreach ($rows as $r) {
@@ -422,6 +424,90 @@ class QuizAnalyticsController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
+    private function buildDetailedReport(Quiz $quiz): array
+    {
+        $quiz->load('questions');
+        $attempts = QuizAttempt::query()
+            ->where('quiz_id', $quiz->id)
+            ->with(['user.institutions', 'user.quizeeProfile.institution', 'institution'])
+            ->orderBy('created_at')
+            ->get();
+
+        $resolveInstitution = function ($attempt): string {
+            if ($attempt->institution) return (string) $attempt->institution->name;
+            if ($attempt->user?->institutions?->isNotEmpty()) return (string) $attempt->user->institutions->first()->name;
+            $quizee = $attempt->user?->quizeeProfile;
+            if ($quizee?->institution instanceof \App\Models\Institution) return (string) $quizee->institution->name;
+            return is_string($quizee?->institution) ? $quizee->institution : '';
+        };
+        $formatAnswer = function ($value): string {
+            if (is_array($value)) $value = $value['text'] ?? $value['body'] ?? $value['selected'] ?? $value;
+            if (is_array($value)) return implode(' | ', array_map(static fn ($item) => is_scalar($item) ? (string) $item : json_encode($item), $value));
+            return $value === null ? '' : (string) $value;
+        };
+        $markingService = new \App\Services\QuestionMarkingService();
+        $rows = [];
+        $participants = [];
+
+        foreach ($attempts as $attempt) {
+            $answers = is_array($attempt->answers) ? $attempt->answers : [];
+            $participants[] = [
+                'attempt_id' => $attempt->id,
+                'participant' => $attempt->user?->name ?? 'Anonymous',
+                'institution' => $resolveInstitution($attempt),
+                'attempted_at' => $attempt->created_at?->toIso8601String() ?? '',
+                'score' => $attempt->score,
+                'time_seconds' => $attempt->total_time_seconds,
+            ];
+            foreach ($quiz->questions as $question) {
+                $selected = null;
+                $foundAnswer = false;
+                $explicitCorrect = null;
+                foreach ($answers as $answer) {
+                    if (is_array($answer) && (int) ($answer['question_id'] ?? 0) === (int) $question->id) {
+                        $foundAnswer = true;
+                        $selected = $answer['selected'] ?? $answer['answer'] ?? null;
+                        $explicitCorrect = $answer['is_correct'] ?? $answer['correct'] ?? null;
+                        break;
+                    }
+                }
+                if (!$foundAnswer && array_key_exists($question->id, $answers)) {
+                    $foundAnswer = true;
+                    $selected = $answers[$question->id];
+                } elseif (!$foundAnswer && array_key_exists((string) $question->id, $answers)) {
+                    $foundAnswer = true;
+                    $selected = $answers[(string) $question->id];
+                }
+                if (is_array($selected) && (array_key_exists('selected', $selected) || array_key_exists('answer', $selected))) {
+                    $explicitCorrect = $selected['is_correct'] ?? $selected['correct'] ?? $explicitCorrect;
+                    $selected = $selected['selected'] ?? $selected['answer'];
+                }
+                $isCorrect = $foundAnswer && ($explicitCorrect !== null
+                    ? (bool) $explicitCorrect
+                    : $markingService->isAnswerCorrect($selected, $question->answers, $question));
+                $rows[] = [
+                    $attempt->id,
+                    $attempt->user?->name ?? 'Anonymous',
+                    $resolveInstitution($attempt),
+                    $attempt->created_at?->toIso8601String() ?? '',
+                    $attempt->score,
+                    $attempt->total_time_seconds,
+                    $question->id,
+                    $question->body ?: $question->question ?: 'Question',
+                    $foundAnswer ? $formatAnswer($selected) : '',
+                    $formatAnswer($question->answers),
+                    $foundAnswer ? ($isCorrect ? 'Yes' : 'No') : 'Not answered',
+                ];
+            }
+        }
+
+        return [
+            'headers' => ['attempt_id', 'participant', 'institution', 'attempted_at', 'overall_score', 'time_seconds', 'question_id', 'question', 'submitted_answer', 'correct_answer', 'correct'],
+            'rows' => $rows,
+            'participants' => $participants,
+        ];
+    }
+
     // Server-side PDF export using DOMPDF
     public function exportPdf(Request $request, Quiz $quiz)
     {
@@ -429,6 +515,7 @@ class QuizAnalyticsController extends Controller
 
         // Reuse the existing show() to gather analytics data
         $analyticsResponse = $this->show($request, $quiz)->getData(true);
+        $analyticsResponse['detailed_report'] = $this->buildDetailedReport($quiz);
 
         // Resolve a logo from several likely locations (backend public, frontend public)
         // Prefer explicit backend public logo at /public/modeh-logo.png, fall back to other candidates

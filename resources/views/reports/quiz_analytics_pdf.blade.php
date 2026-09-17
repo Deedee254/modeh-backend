@@ -22,10 +22,10 @@
     .kpi .card { background:#f7f7f9; border-radius:6px; padding:10px 12px; flex:1; }
     .kpi .card .value { font-size:18px; font-weight:700; color: #111 }
     .kpi .card .label { color:#666; font-size:11px }
-    .kpi .card.accent { border-left:6px solid {{ $brandColor ?? '#7c3aed' }}; }
+    .kpi .card.accent { border-left:6px solid var(--brand-color); }
         table { border-collapse: collapse; width:100%; margin-top:8px; }
         table th, table td { border:1px solid #ddd; padding:8px; text-align:left; vertical-align:top; }
-    table thead th { background: {{ $brandColor ?? '#7c3aed' }}; color: #fff; }
+    table thead th { background: var(--brand-color); color: #fff; }
 
         .question-text { max-width:600px; white-space:normal; word-wrap:break-word; }
 
@@ -33,7 +33,7 @@
 
     </style>
 </head>
-<body>
+<body style="--brand-color: {{ $brandColor ?? '#7c3aed' }};">
 <header>
     <div class="header-inner">
         @if(!empty($logoData))
@@ -86,6 +86,52 @@
                     <td>{{ $q['attempts_count'] ?? 0 }}</td>
                     <td>{{ $q['correct_count'] ?? 0 }}</td>
                     <td>{{ isset($q['correct_rate']) ? number_format($q['correct_rate']*100,1) . '%' : '-' }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+
+    <div class="page-break"></div>
+
+    <h3>Participant results</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Attempt</th><th>Participant</th><th>Institution</th>
+                <th>Attempted at</th><th>Mark</th><th>Time (s)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($analytics['detailed_report']['participants'] ?? [] as $participant)
+                <tr>
+                    <td>{{ $participant['attempt_id'] }}</td>
+                    <td>{{ $participant['participant'] }}</td>
+                    <td>{{ $participant['institution'] ?: '-' }}</td>
+                    <td>{{ $participant['attempted_at'] ?: '-' }}</td>
+                    <td>{{ $participant['score'] !== null ? $participant['score'] . '%' : '-' }}</td>
+                    <td>{{ $participant['time_seconds'] ?? '-' }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+
+    <div class="page-break"></div>
+
+    <h3>Attempt results</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Attempt</th><th>Participant</th><th>Institution</th><th>Score</th>
+                <th>Question</th><th>Submitted answer</th><th>Correct answer</th><th>Result</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($analytics['detailed_report']['rows'] ?? [] as $row)
+                <tr>
+                    <td>{{ $row[0] }}</td><td>{{ $row[1] }}</td><td>{{ $row[2] ?: '-' }}</td>
+                    <td>{{ $row[4] !== null ? $row[4] . '%' : '-' }}</td>
+                    <td class="question-text">{{ $row[7] }}</td><td>{{ $row[8] ?: '-' }}</td>
+                    <td>{{ $row[9] ?: '-' }}</td><td>{{ $row[10] }}</td>
                 </tr>
             @endforeach
         </tbody>
