@@ -29,35 +29,37 @@ return new class extends Migration
             }
         });
 
-        // Remove subscription tracking from quiz_attempts (no longer used in new model)
-        Schema::table('quiz_attempts', function (Blueprint $table) {
-            // Drop subscription-related columns if they exist
-            if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {
-                $table->dropForeign(['subscription_id']);
-                $table->dropColumn('subscription_id');
-            }
-            
-            if (Schema::hasColumn('quiz_attempts', 'subscription_type')) {
-                $table->dropColumn('subscription_type');
-            }
+        if (DB::getDriverName() !== 'sqlite') {
+            // Remove subscription tracking from quiz_attempts (no longer used in new model)
+            Schema::table('quiz_attempts', function (Blueprint $table) {
+                // Drop subscription-related columns if they exist
+                if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {
+                    $table->dropForeign(['subscription_id']);
+                    $table->dropColumn('subscription_id');
+                }
 
-            // Add columns to track payment/access for this attempt
-            if (!Schema::hasColumn('quiz_attempts', 'paid_for')) {
-                // Whether this attempt was paid for (one-off payment or free institutional access)
-                $table->boolean('paid_for')->default(false)->after('quiz_id');
-            }
+                if (Schema::hasColumn('quiz_attempts', 'subscription_type')) {
+                    $table->dropColumn('subscription_type');
+                }
 
-            if (!Schema::hasColumn('quiz_attempts', 'institution_access')) {
-                // If paid_for=false, was this free institutional access? (or free public quiz)
-                $table->boolean('institution_access')->default(false)->after('paid_for');
-            }
+                // Add columns to track payment/access for this attempt
+                if (!Schema::hasColumn('quiz_attempts', 'paid_for')) {
+                    // Whether this attempt was paid for (one-off payment or free institutional access)
+                    $table->boolean('paid_for')->default(false)->after('quiz_id');
+                }
 
-            if (!Schema::hasColumn('quiz_attempts', 'institution_id')) {
-                // Which institution (if any) was used for free access
-                $table->unsignedBigInteger('institution_id')->nullable()->after('institution_access');
-                $table->foreign('institution_id')->references('id')->on('institutions')->onDelete('set null');
-            }
-        });
+                if (!Schema::hasColumn('quiz_attempts', 'institution_access')) {
+                    // If paid_for=false, was this free institutional access? (or free public quiz)
+                    $table->boolean('institution_access')->default(false)->after('paid_for');
+                }
+
+                if (!Schema::hasColumn('quiz_attempts', 'institution_id')) {
+                    // Which institution (if any) was used for free access
+                    $table->unsignedBigInteger('institution_id')->nullable()->after('institution_access');
+                    $table->foreign('institution_id')->references('id')->on('institutions')->onDelete('set null');
+                }
+            });
+        }
     }
 
     /**

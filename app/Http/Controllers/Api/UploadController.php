@@ -49,8 +49,9 @@ class UploadController extends Controller
         $file = $request->file('file');
         $type = $request->get('type') ?: 'uploads';
 
-        // sanitize type into folder name
-        $folder = preg_replace('/[^a-z0-9_\-]/i', '_', $type);
+        // Sanitize type into folder name and remove path traversal sequences/slashes to ensure defense in depth
+        $cleanType = str_replace(['..', '/', '\\'], '', $type);
+        $folder = preg_replace('/[^a-z0-9_\-]/i', '_', $cleanType);
         if (empty($folder)) $folder = 'uploads';
 
         $path = Storage::disk('public')->putFile($folder, $file);
