@@ -50,6 +50,13 @@ class GuestQuizController extends Controller
             }
         }
 
+        if ($quiz->isDeadlinePassed()) {
+            return response()->json([
+                'error' => 'The deadline for this quiz has passed.',
+                'code' => 'DEADLINE_PASSED'
+            ], 403);
+        }
+
         // Load questions and taxonomy metadata
         $quiz->load(['questions', 'topic.subject', 'subject', 'grade.level']);
 
@@ -70,6 +77,8 @@ class GuestQuizController extends Controller
                 'per_question_seconds' => $quiz->per_question_seconds,
                 'use_per_question_timer' => (bool)$quiz->use_per_question_timer,
                 'attempts_allowed' => $quiz->attempts_allowed,
+                'deadline' => $quiz->deadline ? $quiz->deadline->toISOString() : null,
+                'is_closed' => $quiz->isDeadlinePassed(),
                 'shuffle_questions' => (bool)$quiz->shuffle_questions,
                 'shuffle_answers' => (bool)$quiz->shuffle_answers,
                 'shuffle_seed' => $shuffleSeed,
@@ -117,6 +126,13 @@ class GuestQuizController extends Controller
                     'code' => 'INSTITUTIONAL_QUIZ_ACCESS_DENIED'
                 ], 403);
             }
+        }
+
+        if ($quiz->isDeadlinePassed()) {
+            return response()->json([
+                'error' => 'The deadline for this quiz has passed.',
+                'code' => 'DEADLINE_PASSED'
+            ], 403);
         }
 
         // Validate submission

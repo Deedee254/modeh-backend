@@ -14,6 +14,7 @@ use App\Services\WalletService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class WalletController extends Controller
@@ -950,7 +951,7 @@ class WalletController extends Controller
 
             $resolved = $query->getModel()::query()
                 ->when(is_numeric($value), fn ($q) => $q->orWhere('id', (int) $value))
-                ->when(method_exists($query->getModel(), 'getRouteKeyName') || \Schema::hasColumn($query->getModel()->getTable(), 'slug'), fn ($q) => $q->orWhere('slug', $value))
+                ->when(method_exists($query->getModel(), 'getRouteKeyName') || Schema::hasColumn($query->getModel()->getTable(), 'slug'), fn ($q) => $q->orWhere('slug', $value))
                 ->orWhere('name', $value)
                 ->pluck('id')
                 ->all();

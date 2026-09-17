@@ -50,6 +50,8 @@ class QuizResource extends JsonResource
             'per_question_seconds' => $this->per_question_seconds,
             'use_per_question_timer' => $this->use_per_question_timer,
             'attempts_allowed' => $this->attempts_allowed,
+            'deadline' => $this->deadline ? $this->deadline->toISOString() : null,
+            'is_closed' => $this->isDeadlinePassed(),
             'shuffle_questions' => $this->shuffle_questions,
             'shuffle_answers' => $this->shuffle_answers,
             'visibility' => $this->visibility,

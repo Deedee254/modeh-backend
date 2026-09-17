@@ -132,6 +132,9 @@ class QuizMasterController extends Controller
             }
         });
 
+        // Keep newly registered quiz masters on the first page consistently.
+        $query->orderByDesc('users.created_at')->orderByDesc('users.id');
+
         // If slug is provided, filter by slug - extract ID from slug pattern (e.g., "quiz-master-one" -> find by name/pattern)
         if ($request->has('slug') && $request->slug) {
             // The slug format is typically something like "quiz-master-one"

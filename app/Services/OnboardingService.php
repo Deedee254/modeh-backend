@@ -266,8 +266,7 @@ class OnboardingService
             ->first();
 
         if ($existingInstitution) {
-            // Institution exists - automatically link it
-            $profile->update(['institution_id' => $existingInstitution->id]);
+            $this->requestInstitutionApproval($user, $profile, $profileType, $existingInstitution);
             return;
         }
 
@@ -295,6 +294,43 @@ class OnboardingService
     }
 
     /**
+     * Request access to an existing institution, unless the user is already an active member.
+     */
+    public function requestInstitutionApproval(User $user, $profile, string $profileType, Institution $institution): void
+    {
+        $isActiveMember = DB::table('institution_user')
+            ->where('institution_id', $institution->id)
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->exists();
+
+        if ($isActiveMember) {
+            $profile->update(['institution_id' => $institution->id]);
+            return;
+        }
+
+        $existingRequest = InstitutionApprovalRequest::where('user_id', $user->id)
+            ->where('profile_type', $profileType)
+            ->where('institution_id', $institution->id)
+            ->where('status', 'pending')
+            ->first();
+
+        if (!$existingRequest) {
+            InstitutionApprovalRequest::create([
+                'institution_name' => $institution->name,
+                'institution_id' => $institution->id,
+                'user_id' => $user->id,
+                'profile_type' => $profileType,
+                'profile_id' => $profile->id,
+                'status' => 'pending',
+            ]);
+        }
+
+        // The institution becomes the verified profile institution only after approval.
+        $profile->update(['institution_id' => null]);
+    }
+
+    /**
      * Handle institution step for onboarding - works for both quizee and quiz-master
      * Supports branch_id to link user to a specific sub-institution/branch
      */
@@ -315,7 +351,13 @@ class OnboardingService
 
         // Link to existing institution or store as text
         if ($institutionId) {
-            $updateData = ['institution_id' => $institutionId];
+            $institution = Institution::find($institutionId);
+            if (!$institution) {
+                return;
+            }
+
+            $this->requestInstitutionApproval($user, $profile, $profileType, $institution);
+            $updateData = [];
             
             // If branch_id is provided, also store it (for multi-branch institutions)
             if ($branchId) {

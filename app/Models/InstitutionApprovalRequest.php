@@ -10,6 +10,7 @@ class InstitutionApprovalRequest extends Model
 
     protected $fillable = [
         'institution_name',
+        'institution_id',
         'institution_location',
         'user_id',
         'profile_type',

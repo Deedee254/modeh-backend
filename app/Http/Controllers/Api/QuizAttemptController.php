@@ -137,6 +137,18 @@ class QuizAttemptController extends Controller
         }
 
         // --- TAKING THE QUIZ ---
+        if ($request->input('mode') === 'take' && $quiz->isDeadlinePassed()) {
+            $isOwnerOrAdmin = false;
+            if ($user) {
+                $isOwnerOrAdmin = ($quiz->created_by && (string) $quiz->created_by === (string) $user->id)
+                    || ($quiz->user_id && (string) $quiz->user_id === (string) $user->id)
+                    || ($user->is_admin ?? false);
+            }
+            if (!$isOwnerOrAdmin) {
+                return response()->json(['message' => 'The deadline for this quiz has passed.', 'code' => 'DEADLINE_PASSED'], 403);
+            }
+        }
+
         // For students (or owners in take mode), prepare the questions (shuffle, hide answers, etc.)
         $quiz->load(['topic.subject', 'subject', 'grade.level', 'questions', 'author']);
         $shuffleSeed = (string)$request->input('shuffle_seed', bin2hex(random_bytes(4)));
@@ -169,6 +181,8 @@ class QuizAttemptController extends Controller
                 'per_question_seconds' => $quiz->per_question_seconds,
                 'use_per_question_timer' => (bool)$quiz->use_per_question_timer,
                 'attempts_allowed' => $quiz->attempts_allowed,
+                'deadline' => $quiz->deadline ? $quiz->deadline->toISOString() : null,
+                'is_closed' => $quiz->isDeadlinePassed(),
                 'shuffle_questions' => (bool)$quiz->shuffle_questions,
                 'shuffle_answers' => (bool)$quiz->shuffle_answers,
                 'shuffle_seed' => $shuffleSeed,
@@ -263,6 +277,14 @@ class QuizAttemptController extends Controller
         $access = QuizAccessService::checkAccess($quiz, $user);
         QuizAccessService::logAccess($quiz, $user, $access);
 
+        $access['deadline'] = $quiz->deadline ? $quiz->deadline->toISOString() : null;
+        $access['is_closed'] = $quiz->isDeadlinePassed();
+        if ($access['is_closed']) {
+            $access['can_access'] = false;
+            $access['message'] = 'The deadline for this quiz has passed.';
+            $access['code'] = 'DEADLINE_PASSED';
+        }
+
         return response()->json($access, ($access['can_access'] ?? false) ? 200 : 403);
     }
 
@@ -276,6 +298,15 @@ class QuizAttemptController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
         }
 
+        if ($quiz->isDeadlinePassed()) {
+            return response()->json([
+                'ok' => false,
+                'requires_payment' => false,
+                'message' => 'The deadline for this quiz has passed.',
+                'code' => 'DEADLINE_PASSED'
+            ], 403);
+        }
+
         $result = $this->validateQuizAccess($quiz, $user);
         return response()->json($result, ($result['ok'] ?? false) ? 200 : 403);
     }
@@ -285,6 +316,14 @@ class QuizAttemptController extends Controller
 	        $user = $request->user();
 	        if (!$user) {
 	            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+	        }
+
+	        if ($quiz->isDeadlinePassed()) {
+	            return response()->json([
+	                'ok' => false,
+	                'message' => 'The deadline for this quiz has passed.',
+	                'code' => 'DEADLINE_PASSED'
+	            ], 403);
 	        }
 
 	        // Validate that the user can take this quiz (institutional membership checks).
@@ -516,6 +555,14 @@ class QuizAttemptController extends Controller
 	        $user = $request->user();
 	        if (!$user)
 	            return response()->json(['ok' => false, 'message' => 'Unauthenticated'], 401);
+
+	        if ($quiz->isDeadlinePassed()) {
+	            return response()->json([
+	                'ok' => false,
+	                'message' => 'The deadline for this quiz has passed.',
+	                'code' => 'DEADLINE_PASSED'
+	            ], 403);
+	        }
 
 	        // Only enforce institutional membership rules. Do not require payment to start an attempt.
 	        $accessResult = QuizAccessService::checkAccess($quiz, $user);

@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Cache;
 
 class ProfileController extends Controller
 {
-    protected $onboardingService;
+    protected OnboardingService $onboardingService;
 
     public function __construct(OnboardingService $onboardingService)
     {
@@ -134,6 +134,13 @@ class ProfileController extends Controller
             $profile->update($updateData);
         }
 
+        if ($request->filled('institution_id')) {
+            $institution = Institution::find($request->input('institution_id'));
+            if ($institution) {
+                $this->onboardingService->requestInstitutionApproval($user, $profile, 'quiz-master', $institution);
+            }
+        }
+
         if ($request->has('institution') && $request->filled('institution') && !$request->filled('institution_id')) {
             $this->onboardingService->createApprovalRequestIfNeeded(
                 $user,
@@ -235,6 +242,13 @@ class ProfileController extends Controller
         // Only update if there are fields to update
         if (!empty($updateData)) {
             $profile->update($updateData);
+        }
+
+        if ($request->filled('institution_id')) {
+            $institution = Institution::find($request->input('institution_id'));
+            if ($institution) {
+                $this->onboardingService->requestInstitutionApproval($user, $profile, 'quizee', $institution);
+            }
         }
 
         if ($request->has('institution') && $request->filled('institution') && !$request->filled('institution_id')) {

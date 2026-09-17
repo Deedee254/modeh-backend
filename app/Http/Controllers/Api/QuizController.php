@@ -142,9 +142,9 @@ class QuizController extends Controller
 
     private function normalizeUpdateRequestData(Request $request): void
     {
-        // Normalize empty-string inputs (common from browser selects) to null for nullable numeric fields
-        foreach (['subject_id', 'grade_id', 'timer_seconds', 'per_question_seconds', 'attempts_allowed', 'scheduled_at'] as $k) {
-            if ($request->has($k) && $request->get($k) === '') {
+        // Normalize empty-string inputs (common from browser selects) to null for nullable numeric/date fields
+        foreach (['subject_id', 'grade_id', 'timer_seconds', 'per_question_seconds', 'attempts_allowed', 'scheduled_at', 'deadline'] as $k) {
+            if ($request->exists($k) && $request->get($k) === '') {
                 $request->merge([$k => null]);
             }
         }
@@ -180,6 +180,7 @@ class QuizController extends Controller
             'per_question_seconds' => 'sometimes|nullable|integer|min:10',
             'use_per_question_timer' => 'sometimes|boolean',
             'attempts_allowed' => 'sometimes|nullable|integer|min:0',
+            'deadline' => 'sometimes|nullable|date',
             'shuffle_questions' => 'sometimes|boolean',
             'shuffle_answers' => 'sometimes|boolean',
             'visibility' => 'sometimes|string|in:draft,published,scheduled',
@@ -201,10 +202,14 @@ class QuizController extends Controller
 
     private function updateBasicFields(Quiz $quiz, Request $request): void
     {
-        $fields = ['title', 'description', 'youtube_url', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'is_draft', 'one_off_price'];
+        $fields = ['title', 'description', 'youtube_url', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'deadline', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'is_draft', 'one_off_price'];
         foreach ($fields as $f) {
-            if ($request->has($f)) {
-                $quiz->{$f} = $request->get($f);
+            if ($request->exists($f)) {
+                $val = $request->get($f);
+                if ($f === 'deadline' && $val) {
+                    $val = \Carbon\Carbon::parse($val);
+                }
+                $quiz->{$f} = $val;
             }
         }
     }
@@ -817,9 +822,9 @@ class QuizController extends Controller
     {
         $user = $request->user();
 
-        // Normalize empty-string inputs (common from browser selects) to null for nullable numeric fields
-        foreach (['subject_id', 'grade_id', 'timer_seconds', 'per_question_seconds', 'attempts_allowed', 'scheduled_at'] as $k) {
-            if ($request->has($k) && $request->get($k) === '') {
+        // Normalize empty-string inputs (common from browser selects) to null for nullable numeric/date fields
+        foreach (['subject_id', 'grade_id', 'timer_seconds', 'per_question_seconds', 'attempts_allowed', 'scheduled_at', 'deadline'] as $k) {
+            if ($request->exists($k) && $request->get($k) === '') {
                 $request->merge([$k => null]);
             }
         }
@@ -852,6 +857,7 @@ class QuizController extends Controller
             'per_question_seconds' => 'nullable|integer|min:10',
             'use_per_question_timer' => 'nullable|boolean',
             'attempts_allowed' => 'nullable|integer|min:1',
+            'deadline' => 'nullable|date',
             'shuffle_questions' => 'nullable|boolean',
             'shuffle_answers' => 'nullable|boolean',
             'visibility' => 'nullable|string|in:draft,published,scheduled',
@@ -973,6 +979,7 @@ class QuizController extends Controller
             'per_question_seconds' => $request->get('per_question_seconds') ?? null,
             'use_per_question_timer' => (bool) $request->get('use_per_question_timer', false),
             'attempts_allowed' => $request->get('attempts_allowed') ?? null,
+            'deadline' => $request->get('deadline') ? \Carbon\Carbon::parse($request->get('deadline')) : null,
             'shuffle_questions' => (bool) $request->get('shuffle_questions', false),
             'shuffle_answers' => (bool) $request->get('shuffle_answers', false),
             'visibility' => $request->get('visibility', 'published'),

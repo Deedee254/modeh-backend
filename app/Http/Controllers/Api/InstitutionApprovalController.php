@@ -23,8 +23,11 @@ class InstitutionApprovalController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $requests = InstitutionApprovalRequest::where('institution_name', $institution->name)
-            ->orWhere('institution_name', $institution->slug)
+        $requests = InstitutionApprovalRequest::where(function ($query) use ($institution) {
+                $query->where('institution_id', $institution->id)
+                    ->orWhere('institution_name', $institution->name)
+                    ->orWhere('institution_name', $institution->slug);
+            })
             ->where('status', 'pending')
             ->with('user', 'quizee', 'quizMaster')
             ->orderByDesc('created_at')
@@ -48,7 +51,9 @@ class InstitutionApprovalController extends Controller
             return response()->json(['message' => 'Request already processed'], 422);
         }
 
-        $institution = $this->findOrCreateInstitution($approvalRequest->institution_name);
+        $institution = $approvalRequest->institution_id
+            ? Institution::findOrFail($approvalRequest->institution_id)
+            : $this->findOrCreateInstitution($approvalRequest->institution_name);
         $approvalRequest->approve($institution->id, $user->id);
 
         // Add user to institution if not already member

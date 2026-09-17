@@ -51,10 +51,10 @@ class Quiz extends Model
 {
     use HasFactory, \App\Traits\SeedableShuffle;
     
-    protected $appends = ['price'];
+    protected $appends = ['price', 'is_closed'];
 
     // Include user_id so tests and factory-created quizzes can set the owning user
-    protected $fillable = ['topic_id', 'subject_id', 'grade_id', 'level_id', 'user_id', 'created_by', 'title', 'slug', 'description', 'youtube_url', 'cover_image', 'is_paid', 'one_off_price', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'difficulty', 'is_approved', 'is_draft', 'approval_requested_at', 'institution_id', 'is_institutional'];
+    protected $fillable = ['topic_id', 'subject_id', 'grade_id', 'level_id', 'user_id', 'created_by', 'title', 'slug', 'description', 'youtube_url', 'cover_image', 'is_paid', 'one_off_price', 'timer_seconds', 'per_question_seconds', 'use_per_question_timer', 'attempts_allowed', 'deadline', 'shuffle_questions', 'shuffle_answers', 'visibility', 'scheduled_at', 'difficulty', 'is_approved', 'is_draft', 'approval_requested_at', 'institution_id', 'is_institutional'];
 
     protected $casts = [
         'is_paid' => 'boolean',
@@ -66,6 +66,7 @@ class Quiz extends Model
         'difficulty' => 'float',
         'approval_requested_at' => 'datetime',
         'scheduled_at' => 'datetime',
+        'deadline' => 'datetime',
         'one_off_price' => 'decimal:2',
     ];
 
@@ -286,6 +287,21 @@ class Quiz extends Model
         return $prepared;
     }
 
+    /**
+     * Determine if the deadline for this quiz has passed.
+     */
+    public function isDeadlinePassed(): bool
+    {
+        return $this->deadline !== null && now()->gt($this->deadline);
+    }
+
+    /**
+     * Accessor for is_closed.
+     */
+    public function getIsClosedAttribute(): bool
+    {
+        return $this->isDeadlinePassed();
+    }
 }
 
 
