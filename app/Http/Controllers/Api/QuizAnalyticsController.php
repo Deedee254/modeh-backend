@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\DB;
 
 class QuizAnalyticsController extends Controller
 {
+    private const MAX_PDF_ATTEMPTS = 200;
+    private const MAX_PDF_QUESTIONS = 200;
+
     // Require authentication (quiz owner or admin)
     public function __construct()
     {
@@ -28,15 +31,20 @@ class QuizAnalyticsController extends Controller
      *   per_question: [{ question_id, correct_count, attempts_count, correct_rate }]
      * }
      */
-    public function show(Request $request, Quiz $quiz)
+    public function show(Request $request, Quiz $quiz, bool $forPdf = false)
     {
         $this->authorize('viewAnalytics', $quiz);
 
-        $quiz->load('questions');
+        $quiz->load($forPdf ? ['questions' => function ($query) {
+            $query->limit(self::MAX_PDF_QUESTIONS);
+        }] : 'questions');
         $attempts = QuizAttempt::query()
             ->where('quiz_id', $quiz->id)
             ->with(['user.institutions', 'user.quizeeProfile.institution', 'institution'])
             ->orderByDesc('created_at')
+            ->when($forPdf, function ($query) {
+                $query->limit(self::MAX_PDF_ATTEMPTS);
+            })
             ->get();
 
         $resolveInstitution = function ($attempt) {
@@ -426,11 +434,14 @@ class QuizAnalyticsController extends Controller
 
     private function buildDetailedReport(Quiz $quiz): array
     {
-        $quiz->load('questions');
+        $quiz->load(['questions' => function ($query) {
+            $query->limit(self::MAX_PDF_QUESTIONS);
+        }]);
         $attempts = QuizAttempt::query()
             ->where('quiz_id', $quiz->id)
             ->with(['user.institutions', 'user.quizeeProfile.institution', 'institution'])
             ->orderBy('created_at')
+            ->limit(self::MAX_PDF_ATTEMPTS)
             ->get();
 
         $resolveInstitution = function ($attempt): string {
@@ -514,7 +525,7 @@ class QuizAnalyticsController extends Controller
         $this->authorize('viewAnalytics', $quiz);
 
         // Reuse the existing show() to gather analytics data
-        $analyticsResponse = $this->show($request, $quiz)->getData(true);
+        $analyticsResponse = $this->show($request, $quiz, true)->getData(true);
         $analyticsResponse['detailed_report'] = $this->buildDetailedReport($quiz);
 
         // Resolve a logo from several likely locations (backend public, frontend public)
@@ -563,13 +574,7 @@ class QuizAnalyticsController extends Controller
         ])->render();
 
         // Enable remote assets just in case, and render
-        $options = new \Dompdf\Options();
-        $options->set('isRemoteEnabled', true);
-        $dompdf = new \Dompdf\Dompdf($options);
-        $dompdf->loadHtml($html);
-        $dompdf->setPaper('A4', 'portrait');
-        $dompdf->render();
-        $pdf = $dompdf->output();
+        $pdf = app(\App\Services\PdfRenderService::class)->render($html);
 
         $filename = "quiz-{$quiz->id}-analytics.pdf";
         return response($pdf, 200, [

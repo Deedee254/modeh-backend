@@ -25,17 +25,20 @@ use App\Events\BattleStatusUpdated;
 
 class BattleController extends Controller
 {
-    protected $achievementService;
-    protected $questionMarkingService;
+    protected AchievementService $achievementService;
+    protected QuestionMarkingService $questionMarkingService;
 
-    public function __construct(AchievementService $achievementService)
+    public function __construct(
+        AchievementService $achievementService,
+        QuestionMarkingService $questionMarkingService
+    )
     {
         $this->achievementService = $achievementService;
-        $this->questionMarkingService = new QuestionMarkingService();
+        $this->questionMarkingService = $questionMarkingService;
     }
 
 
-    private function userHasBattlePurchase($user, Battle $battle): bool
+    private function userHasBattlePurchase(User $user, Battle $battle): bool
     {
         return OneOffPurchase::where('user_id', $user->id)
             ->where('item_type', 'battle')
@@ -388,7 +391,7 @@ class BattleController extends Controller
      * Normalize question answers into an array safely.
      * Accepts arrays, JSON strings, objects with toArray, or other scalars.
      */
-    private function normalizeAnswers($answers): array
+    private function normalizeAnswers(mixed $answers): array
     {
         if (is_array($answers)) return $answers;
         if (is_object($answers) && method_exists($answers, 'toArray')) {
@@ -1128,7 +1131,7 @@ class BattleController extends Controller
         $fakeAttempt->battle = $battle; 
 
         // Generate report using the generic logic in PerformanceReportController
-        $reportController = new \App\Http\Controllers\Api\PerformanceReportController(app(\App\Services\QuizMarkingService::class));
+        $reportController = new \App\Http\Controllers\Api\PerformanceReportController(app(QuestionMarkingService::class));
         $report = $reportController->generateAnalysis($fakeAttempt);
 
         $html = view('reports.performance_report_pdf', [
@@ -1139,15 +1142,10 @@ class BattleController extends Controller
             'brandColor' => '#7c3aed',
         ])->render();
 
-        $options = new \Dompdf\Options();
-        $options->set('isRemoteEnabled', true);
-        $dompdf = new \Dompdf\Dompdf($options);
-        $dompdf->loadHtml($html);
-        $dompdf->setPaper('A4', 'portrait');
-        $dompdf->render();
+        $pdf = app(\App\Services\PdfRenderService::class)->render($html);
 
         $filename = "battle-report-{$battle->id}.pdf";
-        return response($dompdf->output(), 200, [
+        return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => "attachment; filename={$filename}"
         ]);

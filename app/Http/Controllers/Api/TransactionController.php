@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class TransactionController extends Controller
 {
@@ -22,7 +24,7 @@ class TransactionController extends Controller
             'sort_order' => 'string|in:asc,desc',
         ]);
 
-        $query = Invoice::where('user_id', (auth()->id() ?? auth('sanctum')->id()));
+        $query = Invoice::where('user_id', (Auth::id() ?? Auth::guard('sanctum')->id()));
 
         // Filter by type
         if ($request->filled('type')) {
@@ -74,7 +76,7 @@ class TransactionController extends Controller
     $cutoffDate = now()->addDays($daysAhead);
 
         // Get active subscriptions renewing soon based on ends_at date
-        $renewals = Invoice::where('user_id', (auth()->id() ?? auth('sanctum')->id()))
+        $renewals = Invoice::where('user_id', (Auth::id() ?? Auth::guard('sanctum')->id()))
             ->where('invoiceable_type', 'App\\Models\\Subscription')
             ->where('status', 'paid')
             ->with('invoiceable')
@@ -100,7 +102,8 @@ class TransactionController extends Controller
      */
     public function show(Invoice $invoice)
     {
-        $user = auth('sanctum')->user() ?? auth()->user();
+        /** @var User|null $user */
+        $user = Auth::guard('sanctum')->user() ?? Auth::user();
         
         if (!$user) {
             return response()->json(['error' => 'Unauthenticated'], 401);
@@ -121,7 +124,8 @@ class TransactionController extends Controller
      */
     public function download(Invoice $invoice)
     {
-        $user = auth('sanctum')->user() ?? auth()->user();
+        /** @var User|null $user */
+        $user = Auth::guard('sanctum')->user() ?? Auth::user();
         
         if (!$user) {
             return response()->json(['error' => 'Unauthenticated'], 401);

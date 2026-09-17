@@ -515,15 +515,10 @@ class TournamentController extends Controller
             'brandColor' => '#7c3aed',
         ])->render();
 
-        $options = new \Dompdf\Options();
-        $options->set('isRemoteEnabled', true);
-        $dompdf = new \Dompdf\Dompdf($options);
-        $dompdf->loadHtml($html);
-        $dompdf->setPaper('A4', 'portrait');
-        $dompdf->render();
+        $pdf = app(\App\Services\PdfRenderService::class)->render($html);
 
         $filename = "tournament-report-attempt-{$attempt->id}.pdf";
-        return response($dompdf->output(), 200, [
+        return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => "attachment; filename={$filename}"
         ]);
