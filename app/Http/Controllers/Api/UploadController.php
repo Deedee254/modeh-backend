@@ -40,7 +40,8 @@ class UploadController extends Controller
                 $rules['file'] = 'required|file|mimes:jpeg,png,jpg,gif,webp,svg,mp4,webm,mov,ogg|max:102400'; // 100 MB
                 break;
             default:
-                $rules['file'] = 'required|file|max:102400'; // 100 MB default
+                // Restrict allowed extensions to safe media and document mime types
+                $rules['file'] = 'required|file|mimes:jpeg,png,jpg,gif,webp,mp3,wav,ogg,m4a,mp4,webm,mov,avi,mkv,pdf,doc,docx,xls,xlsx,csv,txt|max:102400';
                 break;
         }
 
@@ -55,7 +56,9 @@ class UploadController extends Controller
 
         // sanitize type into folder name
         $folder = preg_replace('/[^a-z0-9_\-]/i', '_', $type);
-        if (empty($folder)) $folder = 'uploads';
+        if (empty($folder)) {
+            $folder = 'uploads';
+        }
 
         $path = Storage::disk('public')->putFile($folder, $file);
         $storageUrl = Storage::url($path);
