@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             QuizeeSeeder::class,
             QuizMasterSeeder::class,
             AdminSeeder::class,
+            AdAccountSeeder::class,
             BadgeSeeder::class,
             AchievementSeeder::class,
             LevelAchievementsSeeder::class,

@@ -736,6 +736,7 @@ Route::post('/broadcasting/auth', function (Request $request) {
 // ==========================================
 use App\Http\Controllers\Api\AdController;
 use App\Http\Controllers\Api\Admin\AdminAdController;
+use App\Http\Controllers\Api\Admin\AdminAdvertiserController;
 use App\Http\Controllers\Api\Advertiser\AdvertiserAdController;
 
 // Public ad delivery and engagement tracking
@@ -753,6 +754,13 @@ Route::prefix('admin/ads')->group(function () {
     Route::put('/{ad}', [AdminAdController::class, 'update']);
     Route::patch('/{ad}/toggle-status', [AdminAdController::class, 'toggleStatus']);
     Route::delete('/{ad}', [AdminAdController::class, 'destroy']);
+});
+
+// Admin advertiser/ad manager accounts
+Route::prefix('admin/advertisers')->group(function () {
+    Route::get('/', [AdminAdvertiserController::class, 'index']);
+    Route::post('/', [AdminAdvertiserController::class, 'store']);
+    Route::post('/{user}/reset-password', [AdminAdvertiserController::class, 'resetPassword']);
 });
 
 // Advertiser ad management routes

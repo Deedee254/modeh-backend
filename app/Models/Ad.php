@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class Ad extends Model
 {
@@ -33,6 +35,26 @@ class Ad extends Model
         'impressions_count' => 'integer',
         'clicks_count' => 'integer',
     ];
+
+    /**
+     * Return a browser-ready URL for both legacy paths and newly uploaded URLs.
+     */
+    public function getMediaUrlAttribute(?string $value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        if (Str::startsWith($value, ['http://', 'https://', '//'])) {
+            return $value;
+        }
+
+        if (Str::startsWith($value, ['/storage/', 'storage/'])) {
+            return url('/' . ltrim($value, '/'));
+        }
+
+        return url(Storage::disk('public')->url(ltrim($value, '/')));
+    }
 
     public function user()
     {
