@@ -18,6 +18,9 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (\Illuminate\Support\Facades\DB::getDriverName() === 'sqlite') {
+            return;
+        }
         if (!Schema::hasTable('questions')) {
             return;
         }
@@ -84,6 +87,9 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (\Illuminate\Support\Facades\DB::getDriverName() === 'sqlite') {
+            return;
+        }
         // This migration fills in missing data, not structural changes
         // Rolling back would lose data, so we don't provide a down() method
         // If needed, restore from backup or manually revert specific records

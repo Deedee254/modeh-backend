@@ -9,6 +9,9 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (\Illuminate\Support\Facades\DB::getDriverName() === 'sqlite') {
+            return;
+        }
         if (Schema::hasTable('one_off_purchases')) {
             if (!Schema::hasColumn('one_off_purchases', 'guest_identifier')) {
                 Schema::table('one_off_purchases', function (Blueprint $table) {
@@ -28,6 +31,9 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (\Illuminate\Support\Facades\DB::getDriverName() === 'sqlite') {
+            return;
+        }
         if (Schema::hasTable('one_off_purchases')) {
             if (Schema::hasColumn('one_off_purchases', 'guest_identifier')) {
                 Schema::table('one_off_purchases', function (Blueprint $table) {

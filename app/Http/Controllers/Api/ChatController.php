@@ -157,7 +157,9 @@ class ChatController extends Controller
         $request->validate([
             'content' => 'required|string',
             'recipient_id' => 'nullable|integer',
-            'group_id' => 'nullable|integer'
+            'group_id' => 'nullable|integer',
+            'attachments' => 'nullable|array',
+            'attachments.*' => 'file|mimes:jpeg,png,jpg,gif,webp,pdf,doc,docx,xls,xlsx,txt,mp3,wav,mp4,webm|max:20480',
         ]);
 
         $fromId = $request->user()->id;
