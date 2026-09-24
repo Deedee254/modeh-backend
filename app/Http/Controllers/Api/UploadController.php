@@ -39,8 +39,14 @@ class UploadController extends Controller
             case 'ads':
                 $rules['file'] = 'required|file|mimes:jpeg,png,jpg,gif,webp,svg,mp4,webm,mov,ogg|max:102400'; // 100 MB
                 break;
+            case 'document':
+            case 'doc':
+            case 'documents':
+                $rules['file'] = 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip|max:51200'; // 50 MB
+                break;
             default:
-                $rules['file'] = 'required|file|max:102400'; // 100 MB default
+                // Restrict allowed file extensions to prevent execution of uploaded script files (e.g. .php, .sh, .exe, .html)
+                $rules['file'] = 'required|file|mimes:jpeg,png,jpg,gif,webp,svg,mp3,wav,ogg,m4a,mp4,webm,mov,avi,mkv,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip|max:102400';
                 break;
         }
 

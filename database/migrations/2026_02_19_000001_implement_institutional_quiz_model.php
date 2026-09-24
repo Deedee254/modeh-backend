@@ -33,12 +33,16 @@ return new class extends Migration
         Schema::table('quiz_attempts', function (Blueprint $table) {
             // Drop subscription-related columns if they exist
             if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {
-                $table->dropForeign(['subscription_id']);
-                $table->dropColumn('subscription_id');
+                if (DB::getDriverName() !== 'sqlite') {
+                    $table->dropForeign(['subscription_id']);
+                    $table->dropColumn('subscription_id');
+                }
             }
             
             if (Schema::hasColumn('quiz_attempts', 'subscription_type')) {
-                $table->dropColumn('subscription_type');
+                if (DB::getDriverName() !== 'sqlite') {
+                    $table->dropColumn('subscription_type');
+                }
             }
 
             // Add columns to track payment/access for this attempt
