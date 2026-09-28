@@ -228,6 +228,22 @@ class AdvertiserAdController extends Controller
 
         DB::beginTransaction();
         try {
+            $isActive = $ad->is_active;
+            $status = $ad->status;
+
+            if ($user->isAdmin()) {
+                $isActive = $validated['is_active'] ?? $ad->is_active;
+                $status = $isActive ? 'active' : 'paused';
+            } else {
+                if ($ad->status === 'pending_approval') {
+                    $status = 'pending_approval';
+                    $isActive = false;
+                } else {
+                    $isActive = $validated['is_active'] ?? $ad->is_active;
+                    $status = $isActive ? 'active' : 'paused';
+                }
+            }
+
             $ad->update([
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
@@ -238,8 +254,8 @@ class AdvertiserAdController extends Controller
                 'duration_seconds' => $validated['duration_seconds'],
                 'skip_after_seconds' => $validated['skip_after_seconds'] ?? null,
                 'target_type' => $validated['target_type'],
-                'is_active' => $validated['is_active'] ?? $ad->is_active,
-                'status' => ($validated['is_active'] ?? $ad->is_active) ? 'active' : 'paused',
+                'is_active' => $isActive,
+                'status' => $status,
             ]);
 
             $ad->targets()->delete();
@@ -278,6 +294,13 @@ class AdvertiserAdController extends Controller
         $user = $request->user();
         if ($ad->user_id !== $user->id && !$user->isAdmin()) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        if ($ad->status === 'pending_approval' && !$user->isAdmin()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'This campaign is pending admin approval and cannot be activated yet.',
+            ], 422);
         }
 
         $ad->is_active = !$ad->is_active;
