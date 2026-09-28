@@ -274,7 +274,7 @@ class AdvertiserAdController extends Controller
             return response()->json([
                 'ok' => true,
                 'message' => 'Campaign updated successfully',
-                'ad' => $ad->load('targets'),
+                'ad' => $ad->fresh()->load('targets'),
             ]);
 
         } catch (\Throwable $e) {
@@ -292,7 +292,7 @@ class AdvertiserAdController extends Controller
     public function toggleStatus(Request $request, Ad $ad): JsonResponse
     {
         $user = $request->user();
-        if ($ad->user_id !== $user->id && !$user->isAdmin()) {
+        if (!$user || ($ad->user_id !== $user->id && !$user->isAdmin())) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
@@ -320,15 +320,35 @@ class AdvertiserAdController extends Controller
     public function destroy(Request $request, Ad $ad): JsonResponse
     {
         $user = $request->user();
-        if ($ad->user_id !== $user->id && !$user->isAdmin()) {
+        if (!$user || ($ad->user_id !== $user->id && !$user->isAdmin())) {
             return response()->json(['ok' => false, 'message' => 'Forbidden'], 403);
         }
 
-        $ad->delete();
+        try {
+            DB::beginTransaction();
+            $ad->targets()->delete();
 
-        return response()->json([
-            'ok' => true,
-            'message' => 'Campaign deleted successfully',
-        ]);
+            $rawPath = $ad->getRawOriginal('media_url');
+            if ($rawPath) {
+                $cleanPath = ltrim(\Illuminate\Support\Str::after($rawPath, '/storage/'), '/');
+                if ($cleanPath && Storage::disk('public')->exists($cleanPath)) {
+                    Storage::disk('public')->delete($cleanPath);
+                }
+            }
+
+            $ad->delete();
+            DB::commit();
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Campaign deleted successfully',
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to delete campaign: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

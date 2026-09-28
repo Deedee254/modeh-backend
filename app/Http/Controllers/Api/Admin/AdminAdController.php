@@ -284,7 +284,7 @@ class AdminAdController extends Controller
             return response()->json([
                 'ok' => true,
                 'message' => 'Ad updated successfully',
-                'ad' => $ad->load('targets'),
+                'ad' => $ad->fresh()->load('targets'),
             ]);
 
         } catch (\Throwable $e) {
@@ -333,11 +333,31 @@ class AdminAdController extends Controller
      */
     public function destroy(Ad $ad): JsonResponse
     {
-        $ad->delete();
+        try {
+            DB::beginTransaction();
+            $ad->targets()->delete();
 
-        return response()->json([
-            'ok' => true,
-            'message' => 'Ad deleted successfully',
-        ]);
+            $rawPath = $ad->getRawOriginal('media_url');
+            if ($rawPath) {
+                $cleanPath = ltrim(\Illuminate\Support\Str::after($rawPath, '/storage/'), '/');
+                if ($cleanPath && Storage::disk('public')->exists($cleanPath)) {
+                    Storage::disk('public')->delete($cleanPath);
+                }
+            }
+
+            $ad->delete();
+            DB::commit();
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Ad deleted successfully',
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'ok' => false,
+                'message' => 'Failed to delete ad: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

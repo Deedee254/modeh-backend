@@ -747,7 +747,7 @@ Route::post('/ads/{ad}/impression', [AdController::class, 'recordImpression'])->
 Route::post('/ads/{ad}/click', [AdController::class, 'recordClick'])->middleware('throttle:60,1');
 
 // Admin ad management routes
-Route::prefix('admin/ads')->group(function () {
+Route::prefix('admin/ads')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/', [AdminAdController::class, 'index']);
     Route::get('/form-data', [AdminAdController::class, 'formData']);
     Route::post('/upload-media', [AdminAdController::class, 'uploadMedia']);
@@ -760,14 +760,14 @@ Route::prefix('admin/ads')->group(function () {
 });
 
 // Admin advertiser/ad manager accounts
-Route::prefix('admin/advertisers')->group(function () {
+Route::prefix('admin/advertisers')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/', [AdminAdvertiserController::class, 'index']);
     Route::post('/', [AdminAdvertiserController::class, 'store']);
     Route::post('/{user}/reset-password', [AdminAdvertiserController::class, 'resetPassword']);
 });
 
 // Advertiser ad management routes
-Route::prefix('advertiser/ads')->group(function () {
+Route::prefix('advertiser/ads')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/', [AdvertiserAdController::class, 'index']);
     Route::get('/form-data', [AdvertiserAdController::class, 'formData']);
     Route::post('/upload-media', [AdvertiserAdController::class, 'uploadMedia']);
