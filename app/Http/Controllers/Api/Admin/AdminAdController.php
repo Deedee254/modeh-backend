@@ -141,7 +141,7 @@ class AdminAdController extends Controller
             'destination_url' => 'nullable|url',
             'cta_text' => 'nullable|string|max:50',
             'duration_seconds' => 'required|integer|min:3|max:120',
-            'skip_after_seconds' => 'nullable|integer|min:0|max:60',
+            'skip_after_seconds' => 'nullable|integer|min:0|max:60|lte:duration_seconds',
             'target_type' => 'required|in:all,quiz,taxonomy',
             'is_active' => 'boolean',
             'status' => 'nullable|in:draft,pending_approval,active,paused,completed',
@@ -158,7 +158,7 @@ class AdminAdController extends Controller
             $isVideo = str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm', 'mov', 'ogg']);
             $validated['media_type'] = $isVideo ? 'video' : 'image';
             $path = Storage::disk('public')->putFile('ads/creatives', $file);
-            $validated['media_url'] = url(Storage::url($path));
+            $validated['media_url'] = Storage::url($path);
         }
 
         DB::beginTransaction();
@@ -230,7 +230,7 @@ class AdminAdController extends Controller
             'destination_url' => 'nullable|url',
             'cta_text' => 'nullable|string|max:50',
             'duration_seconds' => 'required|integer|min:3|max:120',
-            'skip_after_seconds' => 'nullable|integer|min:0|max:60',
+            'skip_after_seconds' => 'nullable|integer|min:0|max:60|lte:duration_seconds',
             'target_type' => 'required|in:all,quiz,taxonomy',
             'is_active' => 'boolean',
             'status' => 'nullable|in:draft,pending_approval,active,paused,completed',
@@ -247,7 +247,7 @@ class AdminAdController extends Controller
             $isVideo = str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm', 'mov', 'ogg']);
             $validated['media_type'] = $isVideo ? 'video' : 'image';
             $path = Storage::disk('public')->putFile('ads/creatives', $file);
-            $validated['media_url'] = url(Storage::url($path));
+            $validated['media_url'] = Storage::url($path);
         }
 
         DB::beginTransaction();
@@ -309,6 +309,22 @@ class AdminAdController extends Controller
             'ok' => true,
             'is_active' => $ad->is_active,
             'status' => $ad->status,
+        ]);
+    }
+
+    /**
+     * Approve a pending ad campaign
+     */
+    public function approve(Ad $ad): JsonResponse
+    {
+        $ad->is_active = true;
+        $ad->status = 'active';
+        $ad->save();
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Ad campaign approved and activated successfully',
+            'ad' => $ad->load('targets'),
         ]);
     }
 

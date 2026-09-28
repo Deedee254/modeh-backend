@@ -7,6 +7,14 @@ use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Color;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 class QuizAnalyticsController extends Controller
 {
@@ -581,5 +589,406 @@ class QuizAnalyticsController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => "attachment; filename={$filename}"
         ]);
+    }
+
+    /**
+     * Export all quiz attempts results to an Excel spreadsheet (.xlsx),
+     * with the top scoring participants ranked at the top.
+     */
+    public function exportExcel(Request $request, Quiz $quiz)
+    {
+        $this->authorize('viewAnalytics', $quiz);
+
+        // Fetch ALL attempts for this quiz without artificial pagination
+        $attempts = QuizAttempt::query()
+            ->where('quiz_id', $quiz->id)
+            ->with(['user.institutions', 'user.quizeeProfile.institution', 'institution'])
+            ->get();
+
+        $resolveInstitution = function ($attempt): array {
+            if ($attempt->institution) {
+                return [
+                    'name' => (string) $attempt->institution->name,
+                    'county' => (string) ($attempt->institution->county ?? ''),
+                ];
+            }
+            $user = $attempt->user;
+            if ($user && $user->institutions && $user->institutions->isNotEmpty()) {
+                $inst = $user->institutions->first();
+                return [
+                    'name' => (string) $inst->name,
+                    'county' => (string) ($inst->county ?? ''),
+                ];
+            }
+            $quizee = $user?->quizeeProfile;
+            if ($quizee) {
+                if ($quizee->institution && $quizee->institution instanceof \App\Models\Institution) {
+                    return [
+                        'name' => (string) $quizee->institution->name,
+                        'county' => (string) ($quizee->institution->county ?? ''),
+                    ];
+                }
+                if (!empty($quizee->institution_id)) {
+                    $inst = \App\Models\Institution::find($quizee->institution_id);
+                    if ($inst) {
+                        return [
+                            'name' => (string) $inst->name,
+                            'county' => (string) ($inst->county ?? ''),
+                        ];
+                    }
+                }
+                if (!empty($quizee->institution) && is_string($quizee->institution)) {
+                    return [
+                        'name' => $quizee->institution,
+                        'county' => '',
+                    ];
+                }
+            }
+            return [
+                'name' => 'Independent',
+                'county' => '',
+            ];
+        };
+
+        // Filter by institution if specified in query
+        $institutionFilter = $request->query('institution');
+        if ($institutionFilter && $institutionFilter !== 'all') {
+            $attempts = $attempts->filter(function ($attempt) use ($resolveInstitution, $institutionFilter) {
+                $inst = $resolveInstitution($attempt);
+                if ($institutionFilter === '__independent__') {
+                    return empty($inst['name']) || $inst['name'] === 'Independent';
+                }
+                return strcasecmp($inst['name'], $institutionFilter) === 0;
+            });
+        }
+
+        // Sort attempts: THE TOP BEING THE TOP (highest score at the top, faster time as tie-breaker)
+        $sortedAttempts = $attempts->sort(function ($a, $b) {
+            // Completed attempts (with score) come before incomplete
+            if ($a->score === null && $b->score !== null) return 1;
+            if ($a->score !== null && $b->score === null) return -1;
+            if ($a->score === null && $b->score === null) return 0;
+
+            $scoreA = (float) $a->score;
+            $scoreB = (float) $b->score;
+            if ($scoreB !== $scoreA) {
+                return $scoreB <=> $scoreA;
+            }
+
+            // Tie-breaker 1: Faster completion time ranks higher
+            $timeA = $a->total_time_seconds ?? PHP_INT_MAX;
+            $timeB = $b->total_time_seconds ?? PHP_INT_MAX;
+            if ($timeA !== $timeB) {
+                return $timeA <=> $timeB;
+            }
+
+            // Tie-breaker 2: Earlier attempt date ranks higher
+            return $a->created_at <=> $b->created_at;
+        })->values();
+
+        $formatDuration = function ($seconds): string {
+            if ($seconds === null || $seconds < 0) return '—';
+            $s = (int) $seconds;
+            if ($s < 60) return "{$s}s";
+            $m = intdiv($s, 60);
+            $rem = $s % 60;
+            return $rem > 0 ? "{$m}m {$rem}s" : "{$m}m";
+        };
+
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getProperties()
+            ->setCreator('Modeh Platform')
+            ->setTitle("Quiz Analytics - " . ($quiz->title ?? $quiz->name))
+            ->setSubject('Quiz Attempts Results');
+
+        // =========================================================
+        // Sheet 1: Attempts Results (Ranked with Top on Top)
+        // =========================================================
+        $sheet1 = $spreadsheet->getActiveSheet();
+        $sheet1->setTitle('Attempts Results');
+
+        // Banner Header
+        $quizTitle = $quiz->title ?? $quiz->name ?? "Quiz #{$quiz->id}";
+        $sheet1->setCellValue('A1', 'QUIZ ATTEMPTS RESULTS - RANKED');
+        $sheet1->mergeCells('A1:K1');
+        $sheet1->getStyle('A1')->getFont()->setBold(true)->setSize(14)->setColor(new Color(Color::COLOR_WHITE));
+        $sheet1->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF065F46'); // Dark emerald
+        $sheet1->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet1->getRowDimension(1)->setRowHeight(32);
+
+        $sheet1->setCellValue('A2', "Quiz: {$quizTitle} | Total Attempts: {$sortedAttempts->count()} | Exported: " . now()->format('Y-m-d H:i:s'));
+        $sheet1->mergeCells('A2:K2');
+        $sheet1->getStyle('A2')->getFont()->setSize(10)->setItalic(true)->setColor(new Color('FF374151'));
+        $sheet1->getStyle('A2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF0FDF4'); // Mint
+        $sheet1->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet1->getRowDimension(2)->setRowHeight(20);
+
+        // Column Headers
+        $headers = [
+            'Rank',
+            'Participant Name',
+            'Email',
+            'Institution',
+            'County',
+            'Score (%)',
+            'Points Earned',
+            'Time Spent',
+            'Time (Seconds)',
+            'Attempt Date & Time',
+            'Status',
+        ];
+
+        $headerRow = 3;
+        foreach ($headers as $colIdx => $header) {
+            $colLetter = Coordinate::stringFromColumnIndex($colIdx + 1);
+            $sheet1->setCellValue("{$colLetter}{$headerRow}", $header);
+        }
+
+        $headerRange = "A{$headerRow}:K{$headerRow}";
+        $sheet1->getStyle($headerRange)->getFont()->setBold(true)->setColor(new Color(Color::COLOR_WHITE));
+        $sheet1->getStyle($headerRange)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF059669'); // Emerald 600
+        $sheet1->getStyle($headerRange)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet1->getRowDimension($headerRow)->setRowHeight(24);
+
+        // Data Rows
+        $rowNum = $headerRow + 1;
+        foreach ($sortedAttempts as $idx => $attempt) {
+            $rank = $idx + 1;
+            $user = $attempt->user;
+            $inst = $resolveInstitution($attempt);
+            $isComplete = $attempt->score !== null;
+
+            $sheet1->setCellValue("A{$rowNum}", $rank);
+            $sheet1->setCellValue("B{$rowNum}", $user?->name ?? 'Anonymous');
+            $sheet1->setCellValue("C{$rowNum}", $user?->email ?? '—');
+            $sheet1->setCellValue("D{$rowNum}", $inst['name'] ?: 'Independent');
+            $sheet1->setCellValue("E{$rowNum}", $inst['county'] ?: '—');
+            $sheet1->setCellValue("F{$rowNum}", $isComplete ? round((float) $attempt->score, 1) : '—');
+            $sheet1->setCellValue("G{$rowNum}", $attempt->points_earned !== null ? (float) $attempt->points_earned : 0);
+            $sheet1->setCellValue("H{$rowNum}", $formatDuration($attempt->total_time_seconds));
+            $sheet1->setCellValue("I{$rowNum}", $attempt->total_time_seconds !== null ? (int) $attempt->total_time_seconds : '—');
+            $sheet1->setCellValue("J{$rowNum}", $attempt->created_at ? $attempt->created_at->format('Y-m-d H:i:s') : '—');
+            $sheet1->setCellValue("K{$rowNum}", $isComplete ? 'Completed' : 'Incomplete');
+
+            // Zebra striping
+            $bgColor = ($rowNum % 2 === 0) ? 'FFF8FAFC' : 'FFFFFFFF';
+            $sheet1->getStyle("A{$rowNum}:K{$rowNum}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($bgColor);
+
+            // Alignment
+            $sheet1->getStyle("A{$rowNum}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet1->getStyle("F{$rowNum}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet1->getStyle("G{$rowNum}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet1->getStyle("H{$rowNum}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet1->getStyle("I{$rowNum}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet1->getStyle("J{$rowNum}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet1->getStyle("K{$rowNum}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            // Subtle podium badges for top 3
+            if ($rank === 1) {
+                $sheet1->getStyle("A{$rowNum}:B{$rowNum}")->getFont()->setBold(true);
+                $sheet1->getStyle("A{$rowNum}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFEF3C7'); // Gold
+            } elseif ($rank === 2) {
+                $sheet1->getStyle("A{$rowNum}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE2E8F0'); // Silver
+            } elseif ($rank === 3) {
+                $sheet1->getStyle("A{$rowNum}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFFEDD5'); // Bronze
+            }
+
+            $rowNum++;
+        }
+
+        $lastRow = max($rowNum - 1, $headerRow);
+        $sheet1->setAutoFilter("A{$headerRow}:K{$lastRow}");
+        $sheet1->freezePane("A" . ($headerRow + 1));
+
+        $thinBorders = [
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['argb' => 'FFE2E8F0'],
+                ],
+            ],
+        ];
+        $sheet1->getStyle("A{$headerRow}:K{$lastRow}")->applyFromArray($thinBorders);
+
+        foreach (range(1, 11) as $colIdx) {
+            $colLetter = Coordinate::stringFromColumnIndex($colIdx);
+            $sheet1->getColumnDimension($colLetter)->setAutoSize(true);
+        }
+
+        // =========================================================
+        // Sheet 2: Unique Participants Leaderboard (Best Score)
+        // =========================================================
+        $sheet2 = $spreadsheet->createSheet();
+        $sheet2->setTitle('Quizee Leaderboard');
+
+        $sheet2->setCellValue('A1', 'QUIZEE LEADERBOARD - BEST SCORES');
+        $sheet2->mergeCells('A1:I1');
+        $sheet2->getStyle('A1')->getFont()->setBold(true)->setSize(14)->setColor(new Color(Color::COLOR_WHITE));
+        $sheet2->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF065F46');
+        $sheet2->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet2->getRowDimension(1)->setRowHeight(32);
+
+        $leaderboardHeaders = [
+            'Rank',
+            'Participant Name',
+            'Email',
+            'Institution',
+            'County',
+            'Best Score (%)',
+            'Average Score (%)',
+            'Total Attempts',
+            'Last Attempted',
+        ];
+
+        foreach ($leaderboardHeaders as $colIdx => $header) {
+            $colLetter = Coordinate::stringFromColumnIndex($colIdx + 1);
+            $sheet2->setCellValue("{$colLetter}2", $header);
+        }
+
+        $sheet2->getStyle('A2:I2')->getFont()->setBold(true)->setColor(new Color(Color::COLOR_WHITE));
+        $sheet2->getStyle('A2:I2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF059669');
+        $sheet2->getStyle('A2:I2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet2->getRowDimension(2)->setRowHeight(24);
+
+        $leaderboardGroups = $attempts->groupBy('user_id')->map(function ($userAttempts) use ($resolveInstitution) {
+            $first = $userAttempts->first();
+            $user = $first->user;
+            $inst = $resolveInstitution($first);
+
+            $completed = $userAttempts->filter(fn ($a) => $a->score !== null);
+            $bestScore = $completed->isNotEmpty() ? $completed->max('score') : null;
+            $avgScore = $completed->isNotEmpty() ? round($completed->avg('score'), 1) : null;
+            $fastestTime = $completed->isNotEmpty() ? $completed->min('total_time_seconds') : null;
+            $lastAttempt = $userAttempts->sortByDesc('created_at')->first();
+
+            return [
+                'user_id' => $first->user_id,
+                'name' => $user?->name ?? 'Anonymous',
+                'email' => $user?->email ?? '—',
+                'institution' => $inst['name'] ?: 'Independent',
+                'county' => $inst['county'] ?: '—',
+                'best_score' => $bestScore,
+                'average_score' => $avgScore,
+                'fastest_time' => $fastestTime,
+                'total_attempts' => $userAttempts->count(),
+                'last_attempt_at' => $lastAttempt?->created_at ? $lastAttempt->created_at->format('Y-m-d H:i:s') : '—',
+            ];
+        })->sort(function ($a, $b) {
+            if ($a['best_score'] === null && $b['best_score'] !== null) return 1;
+            if ($a['best_score'] !== null && $b['best_score'] === null) return -1;
+            if ($a['best_score'] === null && $b['best_score'] === null) return 0;
+
+            if ((float) $b['best_score'] !== (float) $a['best_score']) {
+                return (float) $b['best_score'] <=> (float) $a['best_score'];
+            }
+
+            $timeA = $a['fastest_time'] ?? PHP_INT_MAX;
+            $timeB = $b['fastest_time'] ?? PHP_INT_MAX;
+            return $timeA <=> $timeB;
+        })->values();
+
+        $lRow = 3;
+        foreach ($leaderboardGroups as $idx => $entry) {
+            $rank = $idx + 1;
+            $sheet2->setCellValue("A{$lRow}", $rank);
+            $sheet2->setCellValue("B{$lRow}", $entry['name']);
+            $sheet2->setCellValue("C{$lRow}", $entry['email']);
+            $sheet2->setCellValue("D{$lRow}", $entry['institution']);
+            $sheet2->setCellValue("E{$lRow}", $entry['county']);
+            $sheet2->setCellValue("F{$lRow}", $entry['best_score'] !== null ? round((float) $entry['best_score'], 1) : '—');
+            $sheet2->setCellValue("G{$lRow}", $entry['average_score'] !== null ? round((float) $entry['average_score'], 1) : '—');
+            $sheet2->setCellValue("H{$lRow}", $entry['total_attempts']);
+            $sheet2->setCellValue("I{$lRow}", $entry['last_attempt_at']);
+
+            $bgColor = ($lRow % 2 === 0) ? 'FFF8FAFC' : 'FFFFFFFF';
+            $sheet2->getStyle("A{$lRow}:I{$lRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($bgColor);
+
+            $sheet2->getStyle("A{$lRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet2->getStyle("F{$lRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet2->getStyle("G{$lRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            $sheet2->getStyle("H{$lRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet2->getStyle("I{$lRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            if ($rank === 1) {
+                $sheet2->getStyle("A{$lRow}:B{$lRow}")->getFont()->setBold(true);
+                $sheet2->getStyle("A{$lRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFEF3C7');
+            } elseif ($rank === 2) {
+                $sheet2->getStyle("A{$lRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE2E8F0');
+            } elseif ($rank === 3) {
+                $sheet2->getStyle("A{$lRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFFEDD5');
+            }
+
+            $lRow++;
+        }
+
+        $lastLRow = max($lRow - 1, 2);
+        $sheet2->setAutoFilter("A2:I{$lastLRow}");
+        $sheet2->freezePane('A3');
+        $sheet2->getStyle("A2:I{$lastLRow}")->applyFromArray($thinBorders);
+
+        foreach (range(1, 9) as $colIdx) {
+            $colLetter = Coordinate::stringFromColumnIndex($colIdx);
+            $sheet2->getColumnDimension($colLetter)->setAutoSize(true);
+        }
+
+        // =========================================================
+        // Sheet 3: Quiz Overview & Analytics Summary
+        // =========================================================
+        $sheet3 = $spreadsheet->createSheet();
+        $sheet3->setTitle('Quiz Summary');
+
+        $sheet3->setCellValue('A1', 'QUIZ ANALYTICS SUMMARY');
+        $sheet3->mergeCells('A1:B1');
+        $sheet3->getStyle('A1')->getFont()->setBold(true)->setSize(14)->setColor(new Color(Color::COLOR_WHITE));
+        $sheet3->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF065F46');
+        $sheet3->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet3->getRowDimension(1)->setRowHeight(32);
+
+        $completionsCount = $attempts->filter(fn ($a) => $a->score !== null)->count();
+        $totalCount = $attempts->count();
+        $avgScoreAll = $completionsCount ? round($attempts->filter(fn ($a) => $a->score !== null)->avg('score'), 1) : 0;
+        $compRate = $totalCount ? round(($completionsCount / $totalCount) * 100, 1) : 0;
+
+        $summaryData = [
+            'Quiz ID' => $quiz->id,
+            'Quiz Title' => $quizTitle,
+            'Total Attempts' => $totalCount,
+            'Completed Attempts' => $completionsCount,
+            'Completion Rate' => "{$compRate}%",
+            'Average Score' => "{$avgScoreAll}%",
+            'Unique Participants' => $leaderboardGroups->count(),
+            'Export Generated At' => now()->format('Y-m-d H:i:s'),
+        ];
+
+        $sRow = 2;
+        foreach ($summaryData as $key => $val) {
+            $sheet3->setCellValue("A{$sRow}", $key);
+            $sheet3->setCellValue("B{$sRow}", $val);
+            $sheet3->getStyle("A{$sRow}")->getFont()->setBold(true);
+            $sheet3->getStyle("A{$sRow}:B{$sRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($sRow % 2 === 0 ? 'FFF8FAFC' : 'FFFFFFFF');
+            $sRow++;
+        }
+
+        $sheet3->getStyle("A2:B" . ($sRow - 1))->applyFromArray($thinBorders);
+        $sheet3->getColumnDimension('A')->setAutoSize(true);
+        $sheet3->getColumnDimension('B')->setAutoSize(true);
+
+        // Set default active sheet to Attempts Results (the top being the top)
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = new Xlsx($spreadsheet);
+        $slug = Str::slug($quiz->title ?: "quiz-{$quiz->id}");
+        $filename = "{$slug}-attempts-results.xlsx";
+
+        $headers = [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'max-age=0, no-cache, no-store, must-revalidate',
+            'Pragma' => 'public',
+        ];
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, $headers);
     }
 }

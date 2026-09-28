@@ -128,7 +128,7 @@ class AdvertiserAdController extends Controller
             'destination_url' => 'nullable|url',
             'cta_text' => 'nullable|string|max:50',
             'duration_seconds' => 'required|integer|min:3|max:60',
-            'skip_after_seconds' => 'nullable|integer|min:0|max:30',
+            'skip_after_seconds' => 'nullable|integer|min:0|max:30|lte:duration_seconds',
             'target_type' => 'required|in:all,quiz,taxonomy',
             'targets' => 'nullable|array',
             'targets.*.target_type' => 'required_with:targets|in:quiz,subject,topic,grade,level',
@@ -142,7 +142,7 @@ class AdvertiserAdController extends Controller
             $isVideo = str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm', 'mov', 'ogg']);
             $validated['media_type'] = $isVideo ? 'video' : 'image';
             $path = Storage::disk('public')->putFile('ads/creatives', $file);
-            $validated['media_url'] = url(Storage::url($path));
+            $validated['media_url'] = Storage::url($path);
         }
 
         DB::beginTransaction();
@@ -158,8 +158,8 @@ class AdvertiserAdController extends Controller
                 'duration_seconds' => $validated['duration_seconds'],
                 'skip_after_seconds' => $validated['skip_after_seconds'] ?? null,
                 'target_type' => $validated['target_type'],
-                'is_active' => true,
-                'status' => 'active',
+                'is_active' => false,
+                'status' => 'pending_approval',
             ]);
 
             if (!empty($validated['targets']) && $validated['target_type'] !== 'all') {
@@ -176,7 +176,7 @@ class AdvertiserAdController extends Controller
 
             return response()->json([
                 'ok' => true,
-                'message' => 'Campaign created successfully',
+                'message' => 'Campaign submitted successfully and is pending admin approval.',
                 'ad' => $ad->load('targets'),
             ], 201);
 
@@ -208,7 +208,7 @@ class AdvertiserAdController extends Controller
             'destination_url' => 'nullable|url',
             'cta_text' => 'nullable|string|max:50',
             'duration_seconds' => 'required|integer|min:3|max:60',
-            'skip_after_seconds' => 'nullable|integer|min:0|max:30',
+            'skip_after_seconds' => 'nullable|integer|min:0|max:30|lte:duration_seconds',
             'target_type' => 'required|in:all,quiz,taxonomy',
             'is_active' => 'boolean',
             'targets' => 'nullable|array',
@@ -223,7 +223,7 @@ class AdvertiserAdController extends Controller
             $isVideo = str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'webm', 'mov', 'ogg']);
             $validated['media_type'] = $isVideo ? 'video' : 'image';
             $path = Storage::disk('public')->putFile('ads/creatives', $file);
-            $validated['media_url'] = url(Storage::url($path));
+            $validated['media_url'] = Storage::url($path);
         }
 
         DB::beginTransaction();

@@ -280,6 +280,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Exports (throttled)
     Route::get('/quizzes/{quiz}/export/csv', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportCsv'])->middleware('throttle:10,1');
     Route::get('/quizzes/{quiz}/export/pdf', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportPdf'])->middleware('throttle:5,1');
+    Route::get('/quizzes/{quiz}/export/excel', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportExcel'])->middleware('throttle:10,1');
     // Get users who have liked a quiz (public endpoint)
     Route::get('/quizzes/{quiz}/likers', [\App\Http\Controllers\Api\InteractionController::class, 'quizLikers']);
 
@@ -616,6 +617,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/quiz-master/analytics/quizzes/{quiz}', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'show']);
     Route::get('/quiz-master/analytics/quizzes/{quiz}/export/csv', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportCsv']);
     Route::get('/quiz-master/analytics/quizzes/{quiz}/export/pdf', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportPdf']);
+    Route::get('/quiz-master/analytics/quizzes/{quiz}/export/excel', [\App\Http\Controllers\Api\QuizAnalyticsController::class, 'exportExcel']);
 });
 
 // Public webhook for mpesa callbacks
@@ -741,8 +743,8 @@ use App\Http\Controllers\Api\Advertiser\AdvertiserAdController;
 
 // Public ad delivery and engagement tracking
 Route::get('/ads/eligible', [AdController::class, 'getEligible']);
-Route::post('/ads/{ad}/impression', [AdController::class, 'recordImpression']);
-Route::post('/ads/{ad}/click', [AdController::class, 'recordClick']);
+Route::post('/ads/{ad}/impression', [AdController::class, 'recordImpression'])->middleware('throttle:60,1');
+Route::post('/ads/{ad}/click', [AdController::class, 'recordClick'])->middleware('throttle:60,1');
 
 // Admin ad management routes
 Route::prefix('admin/ads')->group(function () {
@@ -753,6 +755,7 @@ Route::prefix('admin/ads')->group(function () {
     Route::get('/{ad}', [AdminAdController::class, 'show']);
     Route::put('/{ad}', [AdminAdController::class, 'update']);
     Route::patch('/{ad}/toggle-status', [AdminAdController::class, 'toggleStatus']);
+    Route::patch('/{ad}/approve', [AdminAdController::class, 'approve']);
     Route::delete('/{ad}', [AdminAdController::class, 'destroy']);
 });
 
