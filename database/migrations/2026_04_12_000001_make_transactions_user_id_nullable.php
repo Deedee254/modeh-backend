@@ -25,7 +25,13 @@ return new class extends Migration
             $table->dropForeign(['user_id']);
         });
 
-        DB::statement('ALTER TABLE transactions MODIFY user_id BIGINT UNSIGNED NULL');
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE transactions MODIFY user_id BIGINT UNSIGNED NULL');
+        } else {
+            Schema::table('transactions', function (Blueprint $table) {
+                $table->unsignedBigInteger('user_id')->nullable()->change();
+            });
+        }
 
         Schema::table('transactions', function (Blueprint $table) {
             $table->foreign('user_id')->references('id')->on('users')->nullOnDelete();
@@ -51,7 +57,13 @@ return new class extends Migration
             $table->dropForeign(['user_id']);
         });
 
-        DB::statement('ALTER TABLE transactions MODIFY user_id BIGINT UNSIGNED NOT NULL');
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE transactions MODIFY user_id BIGINT UNSIGNED NOT NULL');
+        } else {
+            Schema::table('transactions', function (Blueprint $table) {
+                $table->unsignedBigInteger('user_id')->nullable(false)->change();
+            });
+        }
 
         Schema::table('transactions', function (Blueprint $table) {
             $table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
