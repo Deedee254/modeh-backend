@@ -30,17 +30,21 @@ return new class extends Migration
         });
 
         // Remove subscription tracking from quiz_attempts (no longer used in new model)
-        Schema::table('quiz_attempts', function (Blueprint $table) {
-            // Drop subscription-related columns if they exist
-            if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {
-                $table->dropForeign(['subscription_id']);
-                $table->dropColumn('subscription_id');
-            }
-            
-            if (Schema::hasColumn('quiz_attempts', 'subscription_type')) {
-                $table->dropColumn('subscription_type');
-            }
+        if (DB::getDriverName() !== 'sqlite') {
+            Schema::table('quiz_attempts', function (Blueprint $table) {
+                // Drop subscription-related columns if they exist
+                if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {
+                    $table->dropForeign(['subscription_id']);
+                    $table->dropColumn('subscription_id');
+                }
 
+                if (Schema::hasColumn('quiz_attempts', 'subscription_type')) {
+                    $table->dropColumn('subscription_type');
+                }
+            });
+        }
+
+        Schema::table('quiz_attempts', function (Blueprint $table) {
             // Add columns to track payment/access for this attempt
             if (!Schema::hasColumn('quiz_attempts', 'paid_for')) {
                 // Whether this attempt was paid for (one-off payment or free institutional access)
