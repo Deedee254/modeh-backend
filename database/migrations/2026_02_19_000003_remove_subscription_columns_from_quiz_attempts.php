@@ -11,8 +11,12 @@ return new class extends Migration
         Schema::table('quiz_attempts', function (Blueprint $table) {
             // Drop old subscription tracking columns (if they exist)
             if (Schema::hasColumn('quiz_attempts', 'subscription_id')) {
-                $table->dropForeign(['subscription_id']);
-                $table->dropIndex(['user_id', 'subscription_id']);
+                try {
+                    $table->dropIndex(['user_id', 'subscription_id']);
+                } catch (\Throwable $_) {}
+                try {
+                    $table->dropForeign(['subscription_id']);
+                } catch (\Throwable $_) {}
                 $table->dropColumn(['subscription_id', 'subscription_type']);
             }
         });

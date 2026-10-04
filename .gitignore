@@ -24,6 +24,5 @@ Homestead.yaml
 Thumbs.db
 # Ignore development scripts, test artifacts and tools archives
 /scripts/
-/tests/
 tools.zip
 tools/
